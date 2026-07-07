@@ -1,0 +1,19 @@
+# General guidelines
+
+- Never use emdashes
+- Write code that is easy to read and maintain
+- Separating concerns into their own independent modules is a good practice
+- Any code file cannot be more than 1000 lines long
+- Debug artifacts NEVER go in tracked paths. Put all debug screenshots / captured frame sequences under `screenshots/` (gitignored); `*.log`, `*.mp4`, and loose root-level `*.png` are gitignored too. Don't leave scratch files in the repo root or `src/`, and clean up temps before finishing.
+- NEVER hardcode per-file / per-background solutions, and NEVER ship a fragile heuristic to guess what the game does. The renderer must reproduce the game's ACTUAL dynamic mechanism (RE it from the DLLs / confirm via the afp_hook on the live game). If the game varies behaviour per file/state in a way we genuinely cannot derive, do NOT bake in a guess - expose it as an explicit option in the UI (and CLI), defaulting to the game's real default, so the user controls it. Verify any render fix against EVERY affected background (e.g. a mask change must keep bg_0001's trail clipped AND bg_0009's bundles uncut), not just the one you were debugging.
+- NEVER detect loop points, animation end, "is it done", or ANY playback state by COMPARING RENDERED PIXELS (frame-to-frame or frame-vs-frame0 MAD / bit-identical checks). ALWAYS rely on afp's OWN state as the ground truth: `cur`/`total`/flags from `afp_get_layer_info` (modern avs2) or `afp_mc_get_param` current_frame / labels / loop_count (DDR libafp), plus the finished (`0x20000000`) / wrapped (`0x40000000`) / set_complete (`0x80000000`) latches. Pixel comparison is fragile, content-dependent, and resolution/fps-dependent - it caused the bg_common loop-count bug (a pixel "visible loop" spanned 2 master cycles and doubled the output). loop_count counts afp MASTER CYCLES (`cur >= N*total`). There are two sanctioned pixel comparisons, both documented: the explicit, user-opted-in "Blend loop seam" synthesis (for backgrounds afp exposes no loop for), and the DDR content-loop fallback (a drifting scene's visible loop is a perceptual match that afp state cannot express - see docs/loop.md for why joint playhead phases cannot replace it). Everything else, including the export idle-stop, keys off afp playhead state.
+- ALWAYS report progress for any operation that can take more than an instant - it must NEVER look stuck/frozen. Prefer a determinate progress bar when you know the total (e.g. `X / N`); if you don't know the total, show the CURRENT ITEM being processed (the file/dir/frame), not a bare static label. A spinner or animated indeterminate bar alone is not enough - it must be paired with a changing detail (current item, or a climbing count). NEVER show a frozen `0/0`, an empty label, or just "Scanning..." with no detail. This applies to EVERY long-running path: boot phases, directory scans, IFS/package/companion loads, texture loads, video export capture + encode, and the .arc / customize extractors. Background workers publish progress into a status struct (mutex-guarded) that the GUI polls each frame; long render-thread work uses the loading overlay (BeginLoad/UpdateLoadStage/EndLoad). When you add a new operation, wire its progress reporting in the SAME change.
+- When updating documentation, don't hesitate to run extra agents to verify it is correct by doing extra RE work around the feature. When you can, leave pointers on how to find this piece of code (do not put raw offsets because they will change with every new game build). If you are unsure about a feature, leave do more RE work and search online to verify it.
+
+# Resolutions
+
+When testing or debugging, ALWAYS use a proper render resolution for the game so that the content is not getting cut off.
+- SDVX - 1080x1920
+- IIDX - 1920x1080
+- DDR - 1280x720
+- GD - 3840x2160

@@ -1,0 +1,14 @@
+build/
+bin/
+/captures/
+
+screenshots/
+*.log
+*.mp4
+/*.png
+
+__pycache__/
+*.pyc
+
+/local_baselines/
+/.idea/

@@ -1,0 +1,10 @@
+layer mode=0 hsv=-
+blend mode=0 flags=0
+draw prim=5 vc=4 tex=-1 ps=- xy=[9.5,20.5..109.5,120.5] uv=[0.0000,0.0000..1.0000,1.0000] c0=FFFFFFFF
+blend mode=1 flags=0
+draw prim=4 vc=6 tex=-1 ps=- xy=[199.5,39.5..327.5,103.5] uv=[0.0000,0.0000..0.5000,0.5000] c0=FFB06040
+mask op=0 layer=1 rect=[0,0 0x0]
+mask op=1 layer=1 rect=[8,16 32x64]
+draw prim=5 vc=4 tex=-1 ps=- xy=[9.5,20.5..109.5,120.5] uv=[0.0000,0.0000..1.0000,1.0000] c0=FFFFFFFF
+mask op=2 layer=1 rect=[0,0 0x0]
+layercmd cmd=0x5 sub=2

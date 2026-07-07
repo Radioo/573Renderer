@@ -1,0 +1,43 @@
+name: Quality gates
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+concurrency:
+  group: quality-gates-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  gates:
+    name: Gates (fast, no toolchain)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install pinned lint tooling
+        run: pip install clang-format==19.1.7 libclang==18.1.1
+
+      - name: File length gate
+        run: python tools/ci/check_file_length.py
+
+      - name: No-comments gate
+        run: python tools/ci/check_no_comments.py
+
+      - name: GUI-isolation gate
+        run: python tools/ci/check_gui_isolation.py
+
+      - name: Format gate
+        run: python tools/ci/run_format.py

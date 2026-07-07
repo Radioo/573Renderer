@@ -1,0 +1,120 @@
+name: Build renderer
+
+on:
+  push:
+    branches: [master]
+    tags: ['v*']
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+concurrency:
+  group: build-renderer-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    name: Build (Windows x64, RelWithDebInfo)
+    runs-on: windows-2022
+    defaults:
+      run:
+        shell: pwsh
+
+    env:
+      VCPKG_BINARY_SOURCES: "clear;files,${{ github.workspace }}/vcpkg_cache,readwrite"
+      VCPKG_DEFAULT_TRIPLET: x64-windows-static
+      VCPKG_FEATURE_FLAGS: "manifests,binarycaching"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Resolve vcpkg revision
+        id: vcpkg-rev
+        run: |
+          $sha = (git -C vendor/vcpkg rev-parse HEAD).Trim()
+          "sha=$sha" >> $env:GITHUB_OUTPUT
+          Write-Host "vcpkg submodule @ $sha"
+
+      - name: Enable MSVC dev cmd (x64)
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Cache vcpkg.exe
+        id: cache-vcpkg-bin
+        uses: actions/cache@v4
+        with:
+          path: vendor/vcpkg/vcpkg.exe
+          key: vcpkg-bin-${{ runner.os }}-${{ steps.vcpkg-rev.outputs.sha }}-${{ hashFiles('vendor/vcpkg/bootstrap-vcpkg.bat', 'vendor/vcpkg/scripts/bootstrap.ps1') }}
+
+      - name: Bootstrap vcpkg
+        if: steps.cache-vcpkg-bin.outputs.cache-hit != 'true'
+        run: .\vendor\vcpkg\bootstrap-vcpkg.bat -disableMetrics
+
+      - name: Print toolchain versions
+        run: |
+          .\vendor\vcpkg\vcpkg.exe version
+          cmake --version
+          ninja --version
+          cl.exe 2>&1 | Select-Object -First 1
+
+      - name: Cache vcpkg binary archives
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/vcpkg_cache
+          key: vcpkg-archives-${{ runner.os }}-${{ steps.vcpkg-rev.outputs.sha }}-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json') }}
+          restore-keys: |
+            vcpkg-archives-${{ runner.os }}-${{ steps.vcpkg-rev.outputs.sha }}-
+            vcpkg-archives-${{ runner.os }}-
+
+      - name: Configure (CMake + Ninja)
+        run: cmake --preset ci
+
+      - name: Build
+        run: cmake --build --preset ci
+
+      - name: Test
+        run: ctest --test-dir build -LE local_dll --output-on-failure
+
+      - name: clang-tidy (migrated scope)
+        run: |
+          pip install clang-tidy==21.1.6
+          python tools/ci/run_tidy.py
+
+      - name: Verify build output
+        run: |
+          if (!(Test-Path bin\573Renderer.exe)) {
+            throw "bin\573Renderer.exe not produced by build"
+          }
+          $size = (Get-Item bin\573Renderer.exe).Length
+          Write-Host "573Renderer.exe: $size bytes"
+          if ($size -lt 1MB) {
+            throw "573Renderer.exe is suspiciously small ($size bytes) - link probably failed"
+          }
+
+      - name: Upload artefact
+        uses: actions/upload-artifact@v4
+        with:
+          name: renderer-win64-${{ github.sha }}
+          path: |
+            bin/573Renderer.exe
+            bin/573Renderer.pdb
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            bin/573Renderer.exe
+            bin/573Renderer.pdb
+          generate_release_notes: true
+          fail_on_unmatched_files: true

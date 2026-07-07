@@ -1,0 +1,31 @@
+Checks: >
+  bugprone-*,
+  clang-analyzer-*,
+  concurrency-*,
+  cppcoreguidelines-*,
+  misc-*,
+  modernize-*,
+  performance-*,
+  portability-*,
+  readability-*,
+  -modernize-use-trailing-return-type,
+  -readability-identifier-length,
+  -readability-magic-numbers,
+  -cppcoreguidelines-avoid-magic-numbers,
+  -bugprone-easily-swappable-parameters,
+  -misc-non-private-member-variables-in-classes,
+  -portability-avoid-pragma-once,
+  -cppcoreguidelines-owning-memory,
+  -bugprone-suspicious-stringview-data-usage,
+  -misc-no-recursion,
+  -clang-analyzer-optin.core.EnumCastOutOfRange
+WarningsAsErrors: '*'
+HeaderFilterRegex: '[/\\]src[/\\](formats|media|cli|settings|state)[/\\]'
+FormatStyle: file
+CheckOptions:
+  readability-function-size.LineThreshold: 60
+  readability-function-size.ParameterThreshold: 8
+  readability-braces-around-statements.ShortStatementLines: 2
+  readability-function-cognitive-complexity.IgnoreMacros: true
+  cppcoreguidelines-avoid-do-while.IgnoreMacros: true
+  misc-include-cleaner.IgnoreHeaders: '[Uu]nknwnbase\.h;stdio\.h;string\.h;[Ww]innt\.h;[Cc]onsoleapi\.h;[Ww]indows\.h;[Mm]inwindef\.h;[Ll]ibloaderapi\.h;[Ww]in[Bb]ase\.h;[Pp]rocessenv\.h;[Ee]rrhandlingapi\.h;[Ff]ileapi\.h;[Hh]andleapi\.h;combaseapi\.h;memoryapi\.h;objbase\.h;processthreadsapi\.h;synchapi\.h;sysinfoapi\.h;timeapi\.h;winerror\.h;wingdi\.h;[Ww]in[Nn]ls\.h;[Ww]in[Uu]ser\.h;[Ww][Tt]ypesbase\.h;wtypes\.h;oleauto\.h;shellapi\.h;debugapi\.h;profileapi\.h;stringapiset\.h;timezoneapi\.h;namedpipeapi\.h;securitybaseapi\.h;ioapiset\.h;winreg\.h;wincon\.h;realtimeapiset\.h;windef\.h;minwinbase\.h;d3d9types\.h;d3d9caps\.h;intsafe\.h;excpt\.h'

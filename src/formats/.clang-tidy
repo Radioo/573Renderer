@@ -1,0 +1,5 @@
+InheritParentConfig: true
+Checks: 'cppcoreguidelines-pro-type-vararg,cppcoreguidelines-pro-type-reinterpret-cast,cppcoreguidelines-pro-type-cstyle-cast,cppcoreguidelines-pro-type-union-access,cppcoreguidelines-pro-bounds-pointer-arithmetic,cppcoreguidelines-pro-bounds-array-to-pointer-decay,cppcoreguidelines-pro-bounds-constant-array-index,cppcoreguidelines-avoid-c-arrays,modernize-avoid-c-arrays,cppcoreguidelines-avoid-non-const-global-variables,cppcoreguidelines-no-malloc,cppcoreguidelines-macro-usage,performance-no-int-to-ptr,cppcoreguidelines-pro-type-const-cast'
+CheckOptions:
+  misc-const-correctness.AnalyzePointers: true
+  readability-function-size.ParameterThreshold: 8
