@@ -1,6 +1,7 @@
 build/
 bin/
 /captures/
+/.tidycache/
 
 screenshots/
 *.log
