@@ -83,7 +83,16 @@ jobs:
       - name: Test
         run: ctest --test-dir build -LE local_dll --output-on-failure
 
-      - name: clang-tidy (migrated scope)
+      - name: Cache clang-tidy results
+        uses: actions/cache@v4
+        with:
+          path: .tidycache
+          key: tidy-cache-${{ runner.os }}-${{ hashFiles('.clang-tidy', 'tools/ci/run_tidy.py') }}-${{ github.sha }}
+          restore-keys: |
+            tidy-cache-${{ runner.os }}-${{ hashFiles('.clang-tidy', 'tools/ci/run_tidy.py') }}-
+            tidy-cache-${{ runner.os }}-
+
+      - name: clang-tidy (cached, whole tree)
         run: |
           pip install clang-tidy==21.1.6
           python tools/ci/run_tidy.py
