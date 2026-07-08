@@ -2,6 +2,7 @@
 
 - Never use emdashes
 - Write code that is easy to read and maintain
+- NO COMMENTS in tracked source. The whole repo is comment-free and this is CI-enforced by `tools/ci/check_no_comments.py` (catch-all across .cpp/.h/.py/.cmake/.yml/.json/CMakeLists/.clang-*, exemptions only in `tools/ci/no_comments_exempt.json`). Any new or edited file MUST land comment-free: move unique RE facts and load-bearing design rationale into the relevant `docs/*.md` file in the SAME change (docs/ is the single source of truth). See docs/comment_migration.md.
 - Separating concerns into their own independent modules is a good practice
 - Any code file cannot be more than 1000 lines long
 - Debug artifacts NEVER go in tracked paths. Put all debug screenshots / captured frame sequences under `screenshots/` (gitignored); `*.log`, `*.mp4`, and loose root-level `*.png` are gitignored too. Don't leave scratch files in the repo root or `src/`, and clean up temps before finishing.

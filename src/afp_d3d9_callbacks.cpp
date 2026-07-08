@@ -56,7 +56,8 @@ void ResetMaskWrite() {
 void __cdecl SetLayer(unsigned int blend_mode, int zero, const unsigned char* hsv_desc) {
     (void)zero;
     g_last_setlayer_blend = (int)blend_mode;
-    if (reinterpret_cast<uintptr_t>(hsv_desc) >= 0x800000000000ULL) hsv_desc = nullptr;
+    const auto hsv_addr = reinterpret_cast<uintptr_t>(hsv_desc);
+    if (hsv_addr < 0x10000ULL || hsv_addr >= 0x800000000000ULL) hsv_desc = nullptr;
     g_gpu.hsv_desc_ptr = hsv_desc;
     if (hsv_desc != nullptr) memcpy(g_gpu.hsv_captured, hsv_desc, 16);
     static int hsv_log = 0;
