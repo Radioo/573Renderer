@@ -85,6 +85,44 @@ vtable methods on the AFPU effect object receive this pointer as their 2nd
 positional arg, and it is large enough to hold a device-pointer alias at
 +0x18000.
 
+### 2.1.1 SetLayer (slot 0x020) has NO HSV-descriptor argument
+
+`AfpD3D9::SetLayer` is typed `(unsigned blend_mode, int zero, const unsigned char* hsv_desc)`,
+but afp-core only ever passes `blend_mode`. The other two "arguments" are stale registers, and
+dereferencing the third one crashed IIDX 33's `fcombo06` full-combo animation (an AV reading
+address `0x1` inside the `memcpy(g_gpu.hsv_captured, hsv_desc, 16)` at the top of SetLayer,
+recurring every frame once a particle layer appeared ~frame 1820).
+
+RE proof (afp-core 2.14.18, IIDX 33; find it without offsets):
+
+- The slot-0x020 thunk is a one-instruction `jmp qword ptr [G]`, where `G` is the live callback
+  global for SetLayer. To locate it: `afp_backend_call_set_mask` (the only nicely-named backend
+  wrapper) ends in `call qword ptr [Gmask]`; the SetLayer global sits one pointer above the
+  set_mask global (render_ctx slot 0x020 vs 0x018). Take xrefs of that global to reach the thunk,
+  then xrefs of the thunk to reach the single call site.
+- That call site is the per-layer render body (the function `afp_do_sort_render` -> its sorted-list
+  walker calls once per layer; the body starts by testing `layer[0] & 1`, calls the layer-state
+  helper, then invokes the SetLayer thunk). The relevant sequence is:
+
+  ```
+  call    <layer_state_helper>        ; sub_180008AB0 -> tail-calls a fn that writes only RAX
+  movzx   ecx, word ptr [layer+0Ch]   ; ECX = blend_mode  <-- the ONLY argument set up
+  call    <setlayer_thunk>            ; jmp [SetLayer global]
+  ```
+
+  RDX and R8 are never loaded before this `call`, and the layer-state helper's tail call
+  (`dword_... = a1 | global; return a1 | global;`) writes only RAX. So R8 (where the SysV/MS x64
+  ABI would place the 3rd arg) holds whatever leaked from earlier code. In the crash register dump
+  `r8 = 0x0000000000000001` and `rax = 0x0000800000000000` (the leftover compare constant from the
+  guard on the line above), which is exactly SetLayer reading `hsv_desc == 0x1`.
+
+Consequence: the "HSV descriptor" read here is not real afp data. Every sampled descriptor was an
+identity block (`hue=sat=val=0`, so `HsvFilterActive` is false and the value is discarded anyway);
+it is only ever a crash risk. The guard therefore accepts `hsv_desc` ONLY when it is a canonical,
+mappable user-space address (`0x10000 <= p < 0x800000000000`; Windows never maps the low 64 KB and
+user addresses never reach 2^47), and treats anything else as "no filter". Do not "fix" this by
+trying to recover an HSV descriptor from afp here - afp does not pass one at this slot.
+
 ### 2.2 The two screen-geometry code paths (slot 12/13 vs ctx +0x60/+0x68)
 
 afp-core's per-frame setup (the `afp_do_sort_render` pre-pass) reads SLOT 12 /
