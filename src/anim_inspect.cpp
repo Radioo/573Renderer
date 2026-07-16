@@ -6,6 +6,7 @@
 #include "render_live.h"
 #include "render_seh.h"
 #include "state/app_state.h"
+#include "state/ifs_catalog.h"
 #include "support/log.h"
 
 #include <cstdint>
@@ -101,12 +102,12 @@ bool WriteJson(const std::string& out_path, const std::string& ifs_name,
     j += "{\n  \"ifs\": \"" + JsonEscape(ifs_name) + "\",\n  \"anims\": [\n";
     for (size_t i = 0; i < infos.size(); ++i) {
         const AnimInfo& a = infos[i];
-        j += "    {\"name\": \"" + JsonEscape(a.name) + "\", \"ok\": " + (a.ok ? "true" : "false");
+        j += R"(    {"name": ")" + JsonEscape(a.name) + R"(", "ok": )" + (a.ok ? "true" : "false");
         if (a.ok) {
-            j += ", \"total_frames\": " + std::to_string(a.total_frames) + ", \"labels\": [";
+            j += R"(, "total_frames": )" + std::to_string(a.total_frames) + R"(, "labels": [)";
             for (size_t k = 0; k < a.labels.size(); ++k) {
-                j += "{\"name\": \"" + JsonEscape(a.labels[k].name) +
-                     "\", \"frame\": " + std::to_string(a.labels[k].frame) + "}";
+                j += R"({"name": ")" + JsonEscape(a.labels[k].name) + R"(", "frame": )" +
+                     std::to_string(a.labels[k].frame) + "}";
                 if (k + 1 < a.labels.size()) j += ", ";
             }
             j += "]";

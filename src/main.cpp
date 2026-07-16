@@ -332,6 +332,13 @@ int RunQproCliAndExit(const Cli::Options& cli, const std::string& initial_dir, b
     return 0;
 }
 
+int RunAnimInspectAndExit(const Cli::Options& cli, bool have_gui) {
+    int const rc = AnimInspect::Run(cli.dump_anim_info);
+    ShutdownEngineStack();
+    if (have_gui) GuiThread::Stop();
+    return rc;
+}
+
 std::vector<std::string> CollectCliArgs(int& argc, std::vector<char*>& argv_ptrs) {
     std::vector<std::string> args_utf8 = Utf8Args(argc);
     argv_ptrs.reserve(argc);
@@ -405,12 +412,7 @@ int WINAPI WinMain(HINSTANCE hInstance, [[maybe_unused]] HINSTANCE hPrevInstance
 
     MountStartupContent(state, cli);
 
-    if (!cli.dump_anim_info.empty()) {
-        int const rc = AnimInspect::Run(cli.dump_anim_info);
-        ShutdownEngineStack();
-        if (have_gui) GuiThread::Stop();
-        return rc;
-    }
+    if (!cli.dump_anim_info.empty()) return RunAnimInspectAndExit(cli, have_gui);
 
     if (cli.headless) {
         LOG("Main", "Headless mode - exiting after init.");
