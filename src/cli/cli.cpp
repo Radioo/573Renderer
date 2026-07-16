@@ -167,6 +167,12 @@ constexpr const char* kUsage =
     "                          Use --animation subbg_0001 --submonitor-clip subbg_usr.\n"
     "  --submonitor-dwell-frames <N>  Hold per frame (default 720).\n"
     "  --submonitor-fade-frames <N>   Fade in/out length (default 120).\n"
+    "  --dump-anim-info <out.json>\n"
+    "                          After the startup --ifs loads, switch to every\n"
+    "                          animation the IFS lists, read its master-clip\n"
+    "                          total frame count and timeline labels from the\n"
+    "                          game's own afp engine, write them as JSON, and\n"
+    "                          exit. Use with --no-gui --game-dir --ifs.\n"
     "  --help                  Show this message.\n";
 
 enum class Handled : std::uint8_t { Ok, Error, NotMine };
@@ -295,7 +301,7 @@ constexpr std::array<BoolOpt, 14> kBoolOpts = {{
     {.name = "--export-sw", .member = &Options::export_prefer_hardware, .value = false},
 }};
 
-constexpr std::array<StringOpt, 28> kStringOpts = {{
+constexpr std::array<StringOpt, 29> kStringOpts = {{
     {.name = "--game-dir", .member = &Options::game_dir},
     {.name = "--profile", .member = &Options::game_profile},
     {.name = "--ifs", .member = &Options::startup_ifs},
@@ -320,6 +326,7 @@ constexpr std::array<StringOpt, 28> kStringOpts = {{
     {.name = "--screenshot-prefix", .member = &Options::screenshot_prefix},
     {.name = "--export", .member = &Options::export_path},
     {.name = "--export-dump-frames", .member = &Options::export_dump_frames_dir},
+    {.name = "--dump-anim-info", .member = &Options::dump_anim_info},
     {.name = "--cmd-trace", .member = &Options::cmd_trace_path},
     {.name = "--submonitor-clip", .member = &Options::submonitor_clip},
     {.name = "--submonitor-fade-in-label", .member = &Options::submonitor_fade_in_label},

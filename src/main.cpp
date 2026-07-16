@@ -17,6 +17,7 @@
 #include "qpro_dll.h"
 #include "cli/tool_command.h"
 #include "tool_commands.h"
+#include "anim_inspect.h"
 #include "qpro_extract.h"
 #include <atomic>
 #include <cstdlib>
@@ -403,6 +404,13 @@ int WINAPI WinMain(HINSTANCE hInstance, [[maybe_unused]] HINSTANCE hPrevInstance
     if (WantsQproCliMode(cli)) return RunQproCliAndExit(cli, initial_dir, have_gui);
 
     MountStartupContent(state, cli);
+
+    if (!cli.dump_anim_info.empty()) {
+        int const rc = AnimInspect::Run(cli.dump_anim_info);
+        ShutdownEngineStack();
+        if (have_gui) GuiThread::Stop();
+        return rc;
+    }
 
     if (cli.headless) {
         LOG("Main", "Headless mode - exiting after init.");

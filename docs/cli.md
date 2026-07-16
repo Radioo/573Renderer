@@ -74,6 +74,25 @@ Konami's subbg_*.png never contain one).
 - qpro options are the CLI face of the IIDX qpro extractor (see the qpro
   docs in the parent RE repo); `--qpro-only` takes part labels whose layer
   suffix is ignored, other parts stay in the manifest but are skipped.
+- `--dump-anim-info <out.json>`: one-shot metadata dump handled by
+  `AnimInspect::Run` (src/anim_inspect.cpp) right after the startup
+  `--ifs` mounts, before the render loop would start; the process exits
+  with the dump's status. For every animation the IFS's afplist.xml
+  declares it switches the master stream (`Runtime::SwitchAnimation`,
+  which is synchronous - the GUI reads labels the same way right after a
+  switch), ticks `afp_do_update` twice so the clip tree settles, then
+  reads the master clip's total frame count (`afp_mc_set 0x1011`) and
+  timeline labels (`0x101F` count + `0x1020` name/frame) from the game's
+  own afp engine. Output JSON: `{"ifs": ..., "anims": [{"name", "ok",
+  "total_frames", "labels": [{"name", "frame"}]}]}`; an entry that fails
+  to switch (afplist names that are not playable animations) gets
+  `"ok": false` and no fields. This replaced the SDVX metadata
+  extractor's bemaniutils dependency (afputils `list --include-frames`
+  and the SWF `end`-label read): the values come from the game's libafp
+  instead of a reimplementation, e.g. the submonitor pan anims report
+  total 4800 and the collab scrolls carry their `end` label. Typical
+  invocation: `--no-gui --game-dir <dir> --profile sdvx7 --ifs
+  <submon.ifs> --dump-anim-info out.json`.
 
 ## PrintUsage
 

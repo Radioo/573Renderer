@@ -135,6 +135,7 @@ add_executable(renderer WIN32
     src/gui/gui_setup_view.cpp
     src/gui/gui_thread.cpp
     src/ifs_inspect.cpp
+    src/anim_inspect.cpp
     src/avs_xml.cpp
     src/native_dialog.cpp
     src/export.cpp

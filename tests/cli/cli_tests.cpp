@@ -55,6 +55,13 @@ TEST_CASE("Parse handles flags and string options") {
     CHECK(r.opts.goto_label == "loop");
 }
 
+TEST_CASE("Parse handles dump-anim-info") {
+    const ParseResult r = Run({"--dump-anim-info", "out.json"});
+    REQUIRE(r.ok);
+    CHECK(r.opts.dump_anim_info == "out.json");
+    CHECK(Run({}).opts.dump_anim_info.empty());
+}
+
 TEST_CASE("Parse rejects unknown arguments") {
     const ParseResult r = Run({"--frobnicate"});
     CHECK_FALSE(r.ok);
