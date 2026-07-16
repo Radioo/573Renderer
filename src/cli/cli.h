@@ -45,6 +45,7 @@ struct Options {
     std::string screenshot_prefix = "screenshots/auto_f";
     std::string export_path;
     std::string export_dump_frames_dir;
+    std::string dump_anim_info;
     std::string cmd_trace_path;
     std::string submonitor_clip = "subbg_usr/bg_usr";
     std::string submonitor_fade_in_label = "fade_in";
