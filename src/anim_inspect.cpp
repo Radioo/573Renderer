@@ -63,7 +63,8 @@ std::string JsonEscape(const std::string& s) {
 void TickAfp(int frames) {
     if (g_afp.afp_do_update == nullptr) return;
     for (int i = 0; i < frames; ++i) {
-        const RenderSeh::FaultReport r = RenderSeh::SafeCallUpdate(g_afp.afp_do_update, 1.0F / 120.0F);
+        const RenderSeh::FaultReport r =
+            RenderSeh::SafeCallUpdate(g_afp.afp_do_update, 1.0F / 120.0F);
         if (r.faulted) {
             LOG("AnimInspect", "afp_do_update faulted (0x%08lx) during inspect tick",
                 static_cast<unsigned long>(r.code));
