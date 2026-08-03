@@ -19,3 +19,4 @@ When testing or debugging, ALWAYS use a proper render resolution for the game so
 - IIDX - 1920x1080
 - DDR - 1280x720
 - GD - 3840x2160
+- JB (T44) - 1080x1920
