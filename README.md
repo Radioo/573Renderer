@@ -15,6 +15,7 @@ Supported games (one profile entry each, see `docs/game_profiles.md`):
 - SOUND VOLTEX 7 (NABLA) - always rendered at its native 1080x1920 portrait
 - DanceDanceRevolution World (legacy AFP 2.13.7)
 - GITADORA DELTA
+- jubeat (T44) - native 1080x1920 portrait at 60 Hz
 
 Capabilities:
 

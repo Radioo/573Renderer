@@ -71,6 +71,21 @@ constexpr DllOffsetSet kGitadoraDeltaOffsets = {
     .afpu_world_mat = 0,
 };
 
+constexpr DllOffsetSet kT44Offsets = {
+    .afp_callback_table = 0xE0E08,
+    .afp_render_flags = 0xE1134,
+    .afp_nearfar_slot = 0xE0E70,
+    .afpu_data_struct = 0x281F0,
+    .afpu_render_context = 0x28880,
+    .afpu_set_screen_rect_fn = 0x18810,
+    .afp_table_b_count = 0,
+    .afpu_shapes_a = 0,
+    .afpu_shapes_b = 0,
+    .afpu_drawn = 0,
+    .afpu_world_mat_type = 0,
+    .afpu_world_mat = 0,
+};
+
 const std::vector<Profile> kProfiles = {
     Profile{
         .name = "IIDX 33 (Sparkle Shower)",
@@ -132,6 +147,30 @@ const std::vector<Profile> kProfiles = {
         .default_render_w = 3840,
         .default_render_h = 2160,
         .offsets = kGitadoraDeltaOffsets,
+
+        .call_afp_set_stream_nr = true,
+        .call_afp_stream_create_test = false,
+        .call_afp_render_init = false,
+        .call_afpu_render_init = true,
+        .call_afpu_set_config = true,
+        .call_afpu_set_flag_setup = true,
+        .call_afpu_boot = true,
+        .afpu_set_config_safe_clean_pos = true,
+        .call_afp_set_flag_setup = true,
+        .apply_iidx_data_segment_patches = true,
+        .afp_set_afp_data_wide_args = false,
+        .afp_set_verbose_wide_args = false,
+        .skip_explicit_afp_set_afp_data = true,
+    },
+    Profile{
+        .name = "jubeat (T44)",
+        .slug = "t44",
+        .dir_substring = "t44",
+        .game_dll = "jubeat2019.dll",
+        .afp = AfpOrdinals{},
+        .default_render_w = 1080,
+        .default_render_h = 1920,
+        .offsets = kT44Offsets,
 
         .call_afp_set_stream_nr = true,
         .call_afp_stream_create_test = false,

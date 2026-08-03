@@ -185,6 +185,25 @@ the "draw_primitive called before set_draw_rect" assert string + flag xref):
 | afpu_render_context     | 0x2A8A8 | in afpu_render_init                        |
 | afpu_set_screen_rect_fn | 0x15720 | afpu set_draw_rect                          |
 
+jubeat T44 (`kT44Offsets`; afp-core 2.14.19 / afp-utils 1.2.20 - one point
+release after IIDX 33's 2.14.18 / 1.2.19, same XCd229cc / XE592acd export
+scheme. Derived by decompiling afp_set_afp_data (afp-core ord 0x000) and
+afpu_render_init (afp-utils ord 0x070); every data-segment global matches
+IIDX 33 exactly, only the set-screen-rect FUNCTION moved. Found by taking
+IIDX's known set-rect body (store int[4] into the rect globals at
+data-struct+0x630, OR 1 into the flag byte, zero the counter) and locating
+the identical body in the T44 build via a data xref to the first rect
+global):
+
+| field                   | value   | note                                     |
+|-------------------------|---------|-------------------------------------------|
+| afp_callback_table      | 0xE0E08 | same as IIDX 33                            |
+| afp_render_flags        | 0xE1134 | same as IIDX 33                            |
+| afp_nearfar_slot        | 0xE0E70 | = table + 0x68                             |
+| afpu_data_struct        | 0x281F0 | same as IIDX 33                            |
+| afpu_render_context     | 0x28880 | same as IIDX 33                            |
+| afpu_set_screen_rect_fn | 0x18810 | IIDX 33 has 0x18550; body is identical     |
+
 ## AfpOrdinals - the afp-core ordinal map
 
 Defaults match IIDX 33 (Sparkle Shower), the first / primary RE target. Any
@@ -357,7 +376,7 @@ afp_boot.cpp; false = skip.
   to) - it relies solely on afpu_render_init's internal rebind. True = match the game: skip both, but keep the slot 12/13
   (screen-size / near-far) re-patch.
 
-## The four shipped profiles
+## The five shipped profiles
 
 ### IIDX 33 (Sparkle Shower) - slug `iidx33`, dir hint "iidx"
 
@@ -466,3 +485,50 @@ three fields; per-gate provenance:
 - `skip_explicit_afp_set_afp_data = true` - match gdxg: rely on
   afpu_render_init's internal afp_set_afp_data (rebind path, 0x800 left set);
   skip the renderer's memcpy-path call.
+
+### jubeat (T44) - slug `t44`, dir hint "t44"
+
+Game DLL jubeat2019.dll; default DLL names (avs2-core / afp-core / afp-utils)
+are correct. afp-core 2.14.19 / afp-utils 1.2.20. Native render is 1080x1920
+PORTRAIT at 60 Hz - both hardcoded in the game's InitD3D routine (find it via
+the "InitD3D" log-tag string): the default mode constant packs 1080/1920, the
+fullscreen mode enumeration filters adapter modes on RefreshRate == 60, and
+FullScreen_RefreshRateInHz is set to 60. Renderable content is loose .ifs
+under data/graphics (per-scene t44_*.ifs plus common/marker and common/font).
+
+The entire afp bring-up lives in ONE game function - find it via the xref to
+the afp_boot import (afp-core name suffix 000002); every gate below is read
+straight off that decompile. The sequence: afp_boot(cfg),
+afp_set_stream_nr(2048), afp_set_verbose(1), afp_set_flag 16/8/65537, build a
+property with /config/render/max_nr_masks = 16, afpu_boot(config_node, data)
+2-arg, afpu_render_init(cfg), afpu memory-hook install (afpu name suffix
+000006 - optional allocator callbacks, defaults are fine so the renderer
+skips it), D3D shader/texture setup, afpu_set_config(1, 4096),
+afpu_set_flag 4/8/16, afpu_set_config(2, 10).
+
+Gate set == GITADORA DELTA's exactly; per-gate provenance:
+
+- `call_afp_set_stream_nr = true` - game calls afp_set_stream_nr(2048).
+- `call_afp_stream_create_test = false` - diagnostic probe; skip for safety.
+- `call_afp_render_init = false` - the boot function never calls afp-core
+  0x00f; the game touches it only inside a device-reset helper pair
+  (afp_render_init -> per-stream afp_do_update -> afp_render_destroy).
+- `call_afpu_render_init = true` - game calls afpu_render_init(cfg).
+- `call_afpu_set_config = true` - game calls (1, 4096) and (2, 10), the same
+  values the renderer passes.
+- `call_afpu_set_flag_setup = true` - game calls afpu 0x003 with 4/8/16.
+- `call_afpu_boot = true` - game calls afpu_boot(config, data) 2-arg with
+  /config/render/max_nr_masks = 16, exactly the property the renderer builds.
+- `afpu_set_config_safe_clean_pos = true` - game never calls set_config(3),
+  so pass 0.
+- `call_afp_set_flag_setup = true` - game calls 16/8/65537 (the bm2dx
+  triple).
+- `apply_iidx_data_segment_patches = true` - T44 offsets are correct; needed
+  for the poke + slot re-patch.
+- `afp_set_afp_data_wide_args = false` - afpu_render_init's internal
+  afp_set_afp_data call is 1-arg.
+- `afp_set_verbose_wide_args = false` - game calls afp_set_verbose(1) 1-arg.
+- `legacy_afp` / `scan_arc_containers` stay false (modern path, loose .ifs).
+- `skip_explicit_afp_set_afp_data = true` - the game never even imports
+  afp-core 0x000; like gdxg it relies solely on afpu_render_init's internal
+  rebind-path call.
