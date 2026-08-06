@@ -3,8 +3,8 @@
 #include "avs_funcs.h"
 #include "afp_funcs.h"
 #include "afpu_funcs.h"
+#include "backend/afp_render_context.h"
 #include "game_runtime.h"
-#include "render_backend.h"
 
 #include <cstdint>
 #include <string>

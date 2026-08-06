@@ -262,8 +262,32 @@ frame source with a null-backend stub. Verified: pixel net byte-identical,
 live DDR authored-loop export (bg_0009, 1373 frames), modern label export
 (select_bg_vi hologram 'loop', 299 frames), blend-loop export smoke.
 
+P19 (GPU hygiene + closure): the three AFP shaders left `D3D9State` (now
+compiled by `Render::CompileAfpShaders` into GpuContext from
+`AfpD3D9::Init`, see docs/d3d9_backend.md); `AfpRenderContext` moved to
+src/backend/afp_render_context.h; `D3D9State::Init` is engine-agnostic.
+Grep-zero audit result: raw `0xFFFFFFFC` exists only at its two constant
+definitions; `RenderLive::Inspect`, `IsDdrMode`, `legacy_afp` (as a profile
+field), and `App::Request` are gone. Exactly two documented `g_afp` reads
+remain in generic TUs, both AFP-family CLI features routed through
+`Runtime::Active()`: render_loop's inline `--animation-label` arm and
+ApplyCliOverrides' `--afp-speed`; they move with a future autopilot/CLI
+ownership pass. The PHYSICAL relocation of the pre-P14 AFP TUs (afp_boot,
+afp_anim, afp_packages, afp_d3d9*, afp_ddr_*, qpro_*, mc_control,
+ifs_inspect, engine_session/app_globals/avs_* and the game_runtime files)
+under src/backend/ subdirectories is deliberately NOT done: the ownership
+boundary is enforced by the `Backend::IBackend` seam and this audit, not by
+folders, and the move would churn 40+ files plus every src/ path in these
+docs for zero behavioral value. Do it, if ever, as a standalone mechanical
+commit with a full doc-path sweep.
+
 Deferred deliberately (each is a seam with NO consumer today; cutting them
 now would be speculative generality):
+- The P16b state-block migration (IfsConfig / LiveState / AFP telemetry
+  fields into a `BackendUiState` the AFP panels fetch): deferred until the
+  first non-AFP backend lands - its real needs should shape the split, and
+  today every reader of that state is an AFP-registered panel already gated
+  by the P17 registry, so the generality would be speculative.
 - qpro RenderService seam: revisit with the multi-package "Scene designer"
   work.
 - Formal per-panel view-model structs: panels are already thin; add VMs when

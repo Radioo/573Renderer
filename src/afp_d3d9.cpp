@@ -1,4 +1,5 @@
 #include "gpu_context.h"
+#include "backend/afp_shaders.h"
 #include "render_backend.h"
 #include "render_executor.h"
 #include "support/log.h"
@@ -10,15 +11,12 @@
 #include "afp_d3d9_internal.h"
 
 namespace AfpD3D9 {
-void Init(IDirect3DDevice9* device, int screen_w, int screen_h, IDirect3DVertexShader9* vs,
-          IDirect3DPixelShader9* hsl_ps, IDirect3DPixelShader9* add_ps) {
+void Init(IDirect3DDevice9* device, int screen_w, int screen_h) {
     g_gpu.device = device;
     g_gpu.screen_w = screen_w;
     g_gpu.screen_h = screen_h;
     g_gpu.draw_count = 0;
-    g_gpu.afp_vs = vs;
-    g_gpu.afp_hsl_ps = hsl_ps;
-    g_gpu.afp_add_ps = add_ps;
+    Render::CompileAfpShaders(device, g_gpu);
 
     g_gpu.afpu_base = GetModuleHandleA("afp-utils.dll");
 

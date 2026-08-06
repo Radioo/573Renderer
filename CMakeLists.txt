@@ -112,6 +112,7 @@ add_executable(renderer WIN32
     src/backend/afp_family_backend.cpp
     src/backend/afp_family_frame.cpp
     src/backend/afp_capture_drivers.cpp
+    src/backend/afp_shaders.cpp
     src/backend/afp_modern_backend.cpp
     src/backend/afp_ddr_backend.cpp
     src/render_loop.cpp

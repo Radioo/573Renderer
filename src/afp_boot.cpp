@@ -8,6 +8,7 @@
 #include "support/log.h"
 #include "dll_offsets.h"
 #include "backend/afp_profiles.h"
+#include "backend/afp_render_context.h"
 #include "render_backend.h"
 #include <cstdlib>
 #include <cstddef>
@@ -286,7 +287,7 @@ void RepatchScreenStubs(HMODULE afp_base, bool can_patch, const AfpProfiles::Dll
 
 void BindD3D9AndDataSegment(EngineSession& es, D3D9State& d3d) {
     AfpuFuncs const& afpu = es.afpu;
-    AfpD3D9::Init(d3d.device, d3d.width, d3d.height, d3d.afp_vs, d3d.afp_hsl_ps, d3d.afp_add_ps);
+    AfpD3D9::Init(d3d.device, d3d.width, d3d.height);
     AfpD3D9::SetStateCtx(&es.render_ctx);
     AfpD3D9::SetAfpuTexSlotResolver(afpu.afpuloc_get_texture_data_size);
 
