@@ -10,7 +10,7 @@
 #include <utility>
 #include <vector>
 
-#include "qpro_model.h"
+#include "state/commands.h"
 #include "state/fifo_queue.h"
 #include "state/boot_lifecycle.h"
 #include "state/live_controls.h"
@@ -19,63 +19,10 @@
 
 namespace App {
 
-struct Request {
-    std::string ifs_path;
-    std::string game_dir;
-    std::string game_profile;
-    std::string qpro_out_dir;
-    std::string animation_name;
-    std::string animation_label;
-    std::string goto_label_name;
-    std::string export_output_path;
-    std::string export_dump_frames_dir;
-    QproModel::PartSelection qpro_part_sel;
-    QproModel::CategorySel qpro_parts;
-    int render_width = 0;
-    int render_height = 0;
-    int qpro_fps = 60;
-    int companion_index = -1;
-    int seek_to_frame = 0;
-    int export_fps = 30;
-    int export_quality = 60;
-    int export_keyframe_interval = 0;
-    int export_max_frames = 0;
-    int export_loop_count = 1;
-    int export_blend_frames = 15;
-    int export_format = 0;
-    int export_width = 0;
-    int export_height = 0;
-    int export_crop_x = 0;
-    int export_crop_y = 0;
-    int export_crop_w = 0;
-    int export_crop_h = 0;
-    float export_bg_r = 0.0F;
-    float export_bg_g = 0.0F;
-    float export_bg_b = 0.0F;
-    bool load_new_ifs = false;
-    bool ifs_from_arc = false;
-    bool set_game_dir = false;
-    bool start_qpro_extract = false;
-    bool qpro_hue_scope = true;
-    bool start_qpro_scan = false;
-    bool switch_animation = false;
-    bool goto_label = false;
-    bool seek_frame = false;
-    bool set_paused = false;
-    bool paused_value = false;
-    bool toggle_companion = false;
-    bool force_replay = false;
-    bool start_export = false;
-    bool export_blend_loop = false;
-    bool export_bg_transparent = true;
-    bool export_prefer_hardware = true;
-    bool cancel_export = false;
-};
-
 class State {
 public:
-    std::optional<Request> TakeRequest();
-    void PostRequest(Request r);
+    std::optional<Command> TakeCommand();
+    void PostCommand(Command c);
 
     IfsConfig& MutConfig(const std::string& filename);
     const IfsConfig* FindConfig(const std::string& filename) const;
@@ -116,8 +63,8 @@ public:
     [[nodiscard]] std::string GetGameProfileSlug() const;
     void SetGameProfileSlug(std::string slug);
 
-    [[nodiscard]] bool IsDdrMode() const;
-    void SetIsDdrMode(bool on);
+    [[nodiscard]] std::string ActiveBackendId() const;
+    void SetActiveBackendId(std::string id);
 
     [[nodiscard]] BootState GetBootState() const;
     void SetBootState(BootState s);
@@ -167,7 +114,7 @@ public:
 
 private:
     mutable std::mutex mu_;
-    FifoQueue<Request> pending_;
+    FifoQueue<Command> pending_;
     IfsCatalog catalog_;
     BootLifecycle boot_;
     LiveControls live_;

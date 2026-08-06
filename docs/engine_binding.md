@@ -750,11 +750,13 @@ one D3D9 device, one AFP render context), defined `inline` so main.cpp, boot.cpp
 render_loop.cpp all see the SAME instance - these used to be file-statics in main.cpp before it
 was split for the 1000-line file limit.
 
-`g_ddr_mode`: true when the active profile uses the legacy AFP 2.13.7 (DDR World) render path
-(DdrAfp) instead of the modern afp-core path (AfpManager). Set by BootFromGameDir from
-`profile->legacy_afp`. The boot and render loop read this to route IFS-load and per-frame render
-to the right backend; in DDR mode the modern g_afp / g_afpu tables stay null so the modern
-per-frame code blocks self-skip on their null checks.
+Backend routing history: the old `g_ddr_mode` global (and later the
+`profile->legacy_afp` flag) chose between the legacy AFP 2.13.7 (DDR World)
+path (DdrAfp) and the modern afp-core path (AfpManager). Both are gone: the
+choice is `Profile::backend_id` resolved by the `Backend::CreateActive`
+registry (docs/backend.md). The load-bearing mechanism is unchanged: in DDR
+mode the modern g_afp / g_afpu tables stay null so any modern per-frame code
+self-skips on its null checks.
 
 ComPtr (com_ptr.h) is a minimal COM release guard for D3D9 interfaces, not a full CComPtr.
 Contract worth keeping: `operator&` Resets (releases) before handing out the address (for

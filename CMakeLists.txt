@@ -107,11 +107,21 @@ add_executable(renderer WIN32
     src/main.cpp
     src/tool_commands.cpp
     src/boot.cpp
+    src/backend/backend_registry.cpp
+    src/backend/afp_profiles.cpp
+    src/backend/afp_family_backend.cpp
+    src/backend/afp_family_frame.cpp
+    src/backend/afp_capture_drivers.cpp
+    src/backend/afp_shaders.cpp
+    src/backend/afp_modern_backend.cpp
+    src/backend/afp_ddr_backend.cpp
     src/render_loop.cpp
     src/render_loop_requests.cpp
     src/render_executor.cpp
     src/render_live.cpp
     src/game_runtime.cpp
+    src/game_runtime_modern.cpp
+    src/game_runtime_ddr.cpp
     src/render_seh.cpp
     src/window.cpp
     src/avs_boot.cpp
@@ -126,10 +136,14 @@ add_executable(renderer WIN32
     src/mc_control.cpp
     src/gui/gui_window.cpp
     src/gui/gui_panels.cpp
-    src/gui/gui_renderer_tab.cpp
+    src/gui/panel_registry.cpp
+    src/gui/gui_style.cpp
+    src/gui/gui_widgets.cpp
+    src/gui/gui_scene_panel.cpp
+    src/gui/gui_inspector.cpp
+    src/gui/gui_timeline.cpp
     src/gui/gui_qpro_panel.cpp
     src/gui/gui_splitter.cpp
-    src/gui/gui_live_controls.cpp
     src/gui/gui_export_panel.cpp
     src/gui/gui_loading_overlay.cpp
     src/gui/gui_setup_view.cpp
@@ -139,7 +153,6 @@ add_executable(renderer WIN32
     src/avs_xml.cpp
     src/native_dialog.cpp
     src/export.cpp
-    src/export_ddr.cpp
     src/video_encoder.cpp
     src/video_encoder_codecs.cpp
     src/media_sink.cpp
@@ -298,6 +311,22 @@ add_executable(local_dll_tests
 target_include_directories(local_dll_tests PRIVATE src)
 target_link_libraries(local_dll_tests PRIVATE Catch2::Catch2WithMain r573_support r573_state)
 catch_discover_tests(local_dll_tests DISCOVERY_MODE POST_BUILD PROPERTIES LABELS local_dll)
+
+add_executable(export_capture_tests
+    tests/export/export_capture_tests.cpp
+    src/export.cpp
+    src/media_sink.cpp
+    src/video_encoder.cpp
+    src/video_encoder_codecs.cpp
+)
+target_include_directories(export_capture_tests PRIVATE src)
+target_include_directories(export_capture_tests SYSTEM PRIVATE ${FFMPEG_INCLUDE_DIRS})
+target_link_libraries(export_capture_tests PRIVATE Catch2::Catch2WithMain r573_media_format
+                                                   r573_state r573_loop r573_formats r573_support
+                                                   ${FFMPEG_LIBRARIES} bcrypt.lib ws2_32.lib
+                                                   secur32.lib mfuuid.lib strmiids.lib
+                                                   windowscodecs.lib ole32.lib)
+catch_discover_tests(export_capture_tests DISCOVERY_MODE POST_BUILD PROPERTIES LABELS ci)
 
 add_executable(media_encode_tests
     tests/media/media_encode_tests.cpp

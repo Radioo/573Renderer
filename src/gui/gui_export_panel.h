@@ -3,7 +3,9 @@
 namespace Panels {
 namespace Export {
 
-void RenderPanel();
+void RequestOpen();
+
+void RenderModal();
 
 }
 }

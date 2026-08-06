@@ -19,12 +19,6 @@ struct D3D9State {
     int width = 1280;
     int height = 720;
 
-    IDirect3DVertexShader9* afp_vs = nullptr;
-
-    IDirect3DPixelShader9* afp_hsl_ps = nullptr;
-
-    IDirect3DPixelShader9* afp_add_ps = nullptr;
-
     IDirect3DTexture9* afp_texture = nullptr;
 
     IDirect3DSurface9* backbuffer = nullptr;
@@ -53,24 +47,8 @@ struct D3D9State {
 
 void D3D9State_RequestScreenshot(const char* path);
 
-struct AfpRenderContext {
-    static constexpr size_t kDeviceOffset = 0x18000;
-    static constexpr size_t kSize = 0x20000;
-    uint8_t data[kSize];
-
-    void InitZero() { memset(data, 0, sizeof(data)); }
-    uint32_t& Flags() { return *(uint32_t*)&data[0]; }
-    void*& FnAt(int offset) { return *(void**)&data[offset]; }
-
-    IDirect3DDevice9*& DeviceAt() {
-        return *reinterpret_cast<IDirect3DDevice9**>(&data[kDeviceOffset]);
-    }
-};
-
 namespace AfpD3D9 {
-void Init(IDirect3DDevice9* device, int screen_w, int screen_h,
-          IDirect3DVertexShader9* vs = nullptr, IDirect3DPixelShader9* hsl_ps = nullptr,
-          IDirect3DPixelShader9* add_ps = nullptr);
+void Init(IDirect3DDevice9* device, int screen_w, int screen_h);
 
 void SetStateCtx(void* ctx);
 

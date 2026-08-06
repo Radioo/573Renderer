@@ -1,7 +1,5 @@
 #pragma once
 
-namespace App {
-struct Request;
-}
+#include "state/commands.h"
 
-void DispatchAppRequest(const App::Request& req_obj);
+void DispatchAppCommand(const App::Command& cmd);

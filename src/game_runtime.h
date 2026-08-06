@@ -15,7 +15,6 @@ struct Label {
 
 struct RootRedrive {
     bool replayed = false;
-    bool reset_flag_dance = false;
     uint32_t new_stream_id = 0;
 };
 
@@ -36,9 +35,19 @@ public:
 
     virtual bool HasRenderableScene(uint32_t modern_stream_id) = 0;
 
-    virtual void RenderFrame(float dt) = 0;
+    virtual void RenderFrame(float dt, uint32_t modern_stream_id, int frame_count) = 0;
 
     virtual void ReprobeVariantSlots(uint32_t modern_stream_id) = 0;
+
+    virtual void ApplyContinuousLoop(uint32_t modern_stream_id, int continuous_mode) = 0;
+
+    virtual void ApplyMasterScale(uint32_t modern_stream_id) = 0;
+
+    virtual void ApplyVariantSlots(uint32_t modern_stream_id) = 0;
+
+    virtual void ApplySublayerOverrides(uint32_t modern_stream_id) = 0;
+
+    virtual void ForceReplayMaster() = 0;
 
     virtual bool LoadScene(const std::string& mount_path, const std::string& ifs_path) = 0;
 

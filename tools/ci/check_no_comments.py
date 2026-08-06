@@ -1,12 +1,19 @@
 import fnmatch
 import json
 import pathlib
+import re
 import subprocess
 import sys
 import tokenize
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 EXEMPT_PATH = pathlib.Path(__file__).resolve().parent / "no_comments_exempt.json"
+
+CPP_TOKEN_RE = re.compile(r'R"(?P<d>[^()\\\s]{0,16})\((?s:.)*?\)(?P=d)"'
+                          r'|"(?:\\.|[^"\\\n])*"'
+                          r"|'(?:\\.|[^'\\\n])*'"
+                          r'|//[^\n]*'
+                          r'|(?s:/\*.*?\*/)')
 
 
 def tracked_files():
@@ -22,13 +29,15 @@ def is_exempt(rel, exempt):
 
 
 def cpp_comments(path):
-    import clang.cindex
-    index = clang.cindex.Index.create()
-    tu = index.parse(str(path), args=["-x", "c++", "-std=c++20", "-fsyntax-only"],
-                     options=clang.cindex.TranslationUnit.PARSE_DETAILED_PROCESSING_RECORD)
-    for tok in tu.get_tokens(extent=tu.cursor.extent):
-        if tok.kind == clang.cindex.TokenKind.COMMENT:
-            yield tok.location.line, tok.spelling
+    text = path.read_text(encoding="utf-8", errors="replace")
+    last_pos = 0
+    last_line = 1
+    for m in CPP_TOKEN_RE.finditer(text):
+        tok = m.group(0)
+        if tok.startswith("//") or tok.startswith("/*"):
+            last_line += text.count("\n", last_pos, m.start())
+            last_pos = m.start()
+            yield last_line, tok.splitlines()[0]
 
 
 def python_comments(path):

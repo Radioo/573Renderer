@@ -86,6 +86,16 @@ external callers use `render_backend.h`.
 
 ## AFP vertex format and vertex shader
 
+Shader ownership (P19): the three AFP shaders (the game's vertex shader
+below, the HSV hue-filter ps_2_b, and the additive-coverage ps_2_b) are
+compiled by `Render::CompileAfpShaders(device, gpu)` in
+src/backend/afp_shaders.* (the STATE stays lib-visible via the
+`gpu.afp_*` GpuContext members that render_executor reads; the compile TU
+is exe-side raw COM/vtable code that src/render/'s strict tidy profile
+forbids), called from `AfpD3D9::Init` during the modern AFP boot. They live ONLY in GpuContext now; `D3D9State` carries no
+shader members and its `Init` is engine-agnostic, so a non-AFP backend
+inherits a clean device (DDR never had them: its `g_gpu.afp_*` stay null).
+
 - AFP vertex = 24 bytes: `float3 pos, DWORD ARGB diffuse, float2 uv` =
   `D3DFVF_XYZ | D3DFVF_DIFFUSE | D3DFVF_TEX1`. AFP subtracts 0.5 from each
   position component (see half-pixel section).
@@ -103,6 +113,9 @@ external callers use `render_backend.h`.
   c0..c3 = transposed layer matrix, c4 = per-shape RGBA color multiplier.
 
 ## AfpRenderContext (the 128 KB render ctx)
+
+The struct lives in src/backend/afp_render_context.h (P19; it is pure AFP
+ABI and was misplaced in render_backend.h - engine_session.h embeds it).
 
 One 0x20000-byte allocation passed to `afp_boot()` / `afpu_render_init()`
 plays two roles, mirroring the game's wiring:
@@ -909,7 +922,11 @@ the bm2dx scene-teardown path):
   on the white fallback - visible but unambiguous, never the previous
   IFS's content.
 
-### Companions (locale overlay IFSes)
+### Companions (co-present overlay packages)
+
+The locale-overlay feature (GUI-selectable `<base>_{j,a,k}.ifs`) was
+removed; this machinery (`AfpManager::LoadCompanion` and friends) remains
+in use by the qpro pipeline, which loads several packages co-present.
 
 - Mount sequence mirrors LoadBootIfses: MountFsRoot for the companion's
   parent dir under a private VFS alias, MountIfsImage, afpu_ngp_read_local,

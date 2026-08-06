@@ -3,14 +3,15 @@
 #include "avs_funcs.h"
 #include "afp_funcs.h"
 #include "afpu_funcs.h"
-#include "render_backend.h"
+#include "backend/afp_render_context.h"
+#include "game_runtime.h"
 
 #include <cstdint>
 #include <string>
 #include <vector>
 
-namespace GameProfile {
-struct Profile;
+namespace AfpProfiles {
+struct AfpConfig;
 }
 
 struct CompanionRecord {
@@ -29,10 +30,10 @@ struct EngineSession {
 
     AfpRenderContext render_ctx;
 
-    const GameProfile::Profile* active_profile = nullptr;
+    const AfpProfiles::AfpConfig* active_cfg = nullptr;
     bool afp_booted = false;
     uint32_t pkg_id = 0;
-    uint32_t stream_id = 0xFFFFFFFC;
+    uint32_t stream_id = Runtime::kModernNoStream;
     std::vector<uint32_t> extra_streams;
     std::string anim_name;
     std::vector<uint32_t> persistent_pkg_ids;

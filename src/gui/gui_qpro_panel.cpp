@@ -6,6 +6,7 @@
 
 #include "gui_panels_internal.h"
 #include "gui_window.h"
+#include "../backend/afp_commands.h"
 #include "../state/app_state.h"
 #include "../native_dialog.h"
 #include "../qpro_extract.h"
@@ -92,9 +93,7 @@ void DrawScanButton(bool busy, const QproExtract::ScanResult& scan) {
     ImGui::BeginDisabled(busy || scan.running);
     if (ImGui::Button("Scan parts from bm2dx.dll")) {
         QproExtract::MarkScanRunning();
-        App::Request r;
-        r.start_qpro_scan = true;
-        App::Global().PostRequest(std::move(r));
+        App::Global().PostCommand(AfpCmd::Wrap(AfpCmd::QproStartScan{}));
     }
     ImGui::EndDisabled();
     if (ImGui::IsItemHovered()) {
@@ -284,19 +283,18 @@ void DrawExtractButton(App::State& state, const QproExtract::Status& st, bool an
     if (ImGui::Button("Choose output folder + extract...", ImVec2(280, 32))) {
         std::string const picked = NativeDialog::BrowseForFolder(Gui::GetHwnd(), "");
         if (!picked.empty()) {
-            App::Request r;
-            r.start_qpro_extract = true;
-            r.qpro_out_dir = picked;
-            r.qpro_hue_scope = s_scope_hue;
-            r.qpro_fps = s_qpro_fps;
-            r.qpro_parts.head = s_ex_head;
-            r.qpro_parts.hand = s_ex_hand;
-            r.qpro_parts.hair = s_ex_hair;
-            r.qpro_parts.face = s_ex_face;
-            r.qpro_parts.body = s_ex_body;
-            r.qpro_parts.back = s_ex_back;
-            if (nsel >= 0) r.qpro_part_sel = BuildSelection();
-            state.PostRequest(std::move(r));
+            AfpCmd::QproStartExtract r;
+            r.out_dir = picked;
+            r.hue_scope = s_scope_hue;
+            r.fps = s_qpro_fps;
+            r.parts.head = s_ex_head;
+            r.parts.hand = s_ex_hand;
+            r.parts.hair = s_ex_hair;
+            r.parts.face = s_ex_face;
+            r.parts.body = s_ex_body;
+            r.parts.back = s_ex_back;
+            if (nsel >= 0) r.part_sel = BuildSelection();
+            state.PostCommand(AfpCmd::Wrap(std::move(r)));
         }
     }
     ImGui::EndDisabled();

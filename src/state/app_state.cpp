@@ -1,4 +1,5 @@
 #include "state/app_state.h"
+#include "state/commands.h"
 
 #include "settings/settings.h"
 #include "state/boot_lifecycle.h"
@@ -35,12 +36,12 @@ bool SaveCurrentSettings() {
     return Settings::SaveAtomic(c);
 }
 
-std::optional<Request> State::TakeRequest() {
+std::optional<Command> State::TakeCommand() {
     return pending_.Take();
 }
 
-void State::PostRequest(Request r) {
-    pending_.Post(std::move(r));
+void State::PostCommand(Command c) {
+    pending_.Post(std::move(c));
 }
 
 IfsConfig& State::MutConfig(const std::string& filename) {
@@ -177,12 +178,12 @@ void State::SetGameProfileSlug(std::string slug) {
     boot_.SetGameProfileSlug(std::move(slug));
 }
 
-bool State::IsDdrMode() const {
-    return boot_.IsDdrMode();
+std::string State::ActiveBackendId() const {
+    return boot_.ActiveBackendId();
 }
 
-void State::SetIsDdrMode(bool on) {
-    boot_.SetIsDdrMode(on);
+void State::SetActiveBackendId(std::string id) {
+    boot_.SetActiveBackendId(std::move(id));
 }
 
 BootState State::GetBootState() const {

@@ -1,5 +1,6 @@
 #include "gui_export_panel.h"
 #include "../state/app_state.h"
+#include "../state/commands.h"
 #include "../video_encoder.h"
 #include "imgui.h"
 #include "media/media_format.h"
@@ -73,7 +74,7 @@ void DrawFilenameAndFormat() {
     ImGui::TextDisabled("%s", shown_ext);
 
     ImGui::SetNextItemWidth(-FLT_MIN);
-    if (ImGui::BeginCombo("format##exp_fmt", MediaSink::FormatLabel(current_format))) {
+    if (ImGui::BeginCombo("##exp_fmt", MediaSink::FormatLabel(current_format))) {
         for (int i = 0; i < MediaSink::kFormatCount; i++) {
             MediaSink::Format const f = MediaSink::FromIndex(i);
             bool const selected = (i == g_format_idx);
@@ -121,7 +122,7 @@ void DrawFpsQualitySliders() {
     }
     ImGui::SameLine();
     ImGui::SetNextItemWidth(-FLT_MIN);
-    ImGui::SliderInt("quality##exp_q", &g_quality, 0, 100, "quality %d");
+    ImGui::SliderInt("##exp_q", &g_quality, 0, 100, "quality %d");
     if (ImGui::IsItemHovered()) {
         ImGui::SetTooltip("Output quality. 0 = smallest file with strong\n"
                           "artifacts, 100 = near lossless. Default 60.\n"
@@ -215,13 +216,6 @@ void DrawLoopControls() {
                               "seam mismatch. 0 = no crossfade (hard cut at the best frame).");
         }
     }
-}
-
-void DrawFpsQualityFrameCap(MediaSink::Format current_format) {
-    DrawFpsQualitySliders();
-    DrawKeyframeIntervalControl(current_format);
-    DrawFrameLimitControls();
-    DrawLoopControls();
 }
 
 struct ResPreset {
@@ -377,7 +371,39 @@ void DrawOutputResolution(App::State& state) {
     DrawScaleButtons(w_disp, h_disp);
 }
 
-void DrawCrop(App::State& state) {
+bool DrawCropPickButtons(App::State& state, bool pick_mode, int* xywh, bool& changed) {
+    bool close_for_pick = false;
+    if (pick_mode) {
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.65F, 0.45F, 0.15F, 1.0F));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.75F, 0.55F, 0.22F, 1.0F));
+        if (ImGui::Button("Picking...##crop_pick", ImVec2(110, 0))) {
+            state.SetCropPickMode(false);
+        }
+        ImGui::PopStyleColor(2);
+    } else {
+        if (ImGui::Button("Pick region##crop_pick", ImVec2(110, 0))) {
+            state.SetCropPickMode(true);
+            close_for_pick = true;
+        }
+    }
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("Click to arm crop-selection mode, then\n"
+                          "click-and-drag on the render window to\n"
+                          "draw a rectangle. Esc cancels. This dialog\n"
+                          "reopens once the region is picked; the export\n"
+                          "will encode only pixels inside the rect.");
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Clear##crop_clear", ImVec2(70, 0))) {
+        state.SetCropRect({});
+        state.SetCropPickMode(false);
+        xywh[0] = xywh[1] = xywh[2] = xywh[3] = 0;
+        changed = true;
+    }
+    return close_for_pick;
+}
+
+bool DrawCrop(App::State& state) {
     App::CropRect const rect = state.GetCropRect();
     int xywh[4] = {rect.x, rect.y, rect.w, rect.h};
     const bool pick_mode = state.GetCropPickMode();
@@ -400,31 +426,7 @@ void DrawCrop(App::State& state) {
         if (i < 3) ImGui::SameLine();
     }
 
-    if (pick_mode) {
-        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.65F, 0.45F, 0.15F, 1.0F));
-        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.75F, 0.55F, 0.22F, 1.0F));
-        if (ImGui::Button("Picking...##crop_pick", ImVec2(110, 0))) {
-            state.SetCropPickMode(false);
-        }
-        ImGui::PopStyleColor(2);
-    } else {
-        if (ImGui::Button("Pick region##crop_pick", ImVec2(110, 0))) {
-            state.SetCropPickMode(true);
-        }
-    }
-    if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("Click to arm crop-selection mode, then\n"
-                          "click-and-drag on the render window to\n"
-                          "draw a rectangle. Esc cancels. The export\n"
-                          "will encode only pixels inside the rect.");
-    }
-    ImGui::SameLine();
-    if (ImGui::Button("Clear##crop_clear", ImVec2(70, 0))) {
-        state.SetCropRect({});
-        state.SetCropPickMode(false);
-        xywh[0] = xywh[1] = xywh[2] = xywh[3] = 0;
-        changed = true;
-    }
+    bool const close_for_pick = DrawCropPickButtons(state, pick_mode, xywh, changed);
 
     if (changed) {
         App::CropRect r;
@@ -434,6 +436,7 @@ void DrawCrop(App::State& state) {
         r.h = (std::max)(0, xywh[3]);
         state.SetCropRect(r);
     }
+    return close_for_pick;
 }
 
 void DrawHwAccelTooltip(MediaSink::Format current_format, bool hw_available, bool is_h264) {
@@ -512,30 +515,29 @@ void DrawBackgroundAndHw(MediaSink::Format current_format, bool hw_available) {
 }
 
 void PostStartRequest(App::State& state, MediaSink::Format current_format, bool hw_applies) {
-    App::Request r;
-    r.start_export = true;
-    r.export_output_path = MediaSink::MakeOutputPath(g_stem_buf, current_format);
-    r.export_fps = g_fps;
-    r.export_quality = g_quality;
-    r.export_keyframe_interval = g_keyframe_interval;
-    r.export_max_frames = g_limit_frames ? g_max_frames : 0;
-    r.export_loop_count = g_loop_count;
-    r.export_blend_loop = g_blend_loop;
-    r.export_blend_frames = g_blend_frames;
-    r.export_bg_transparent = g_bg_transparent;
-    r.export_bg_r = g_bg_rgb[0];
-    r.export_bg_g = g_bg_rgb[1];
-    r.export_bg_b = g_bg_rgb[2];
-    r.export_width = g_out_w;
-    r.export_height = g_out_h;
+    App::ExportRequest r;
+    r.output_path = MediaSink::MakeOutputPath(g_stem_buf, current_format);
+    r.fps = g_fps;
+    r.quality = g_quality;
+    r.keyframe_interval = g_keyframe_interval;
+    r.max_frames = g_limit_frames ? g_max_frames : 0;
+    r.loop_count = g_loop_count;
+    r.blend_loop = g_blend_loop;
+    r.blend_frames = g_blend_frames;
+    r.bg_transparent = g_bg_transparent;
+    r.bg_r = g_bg_rgb[0];
+    r.bg_g = g_bg_rgb[1];
+    r.bg_b = g_bg_rgb[2];
+    r.width = g_out_w;
+    r.height = g_out_h;
     App::CropRect const cr = state.GetCropRect();
-    r.export_crop_x = cr.x;
-    r.export_crop_y = cr.y;
-    r.export_crop_w = cr.w;
-    r.export_crop_h = cr.h;
-    r.export_format = g_format_idx;
-    r.export_prefer_hardware = g_prefer_hw && hw_applies;
-    state.PostRequest(std::move(r));
+    r.crop_x = cr.x;
+    r.crop_y = cr.y;
+    r.crop_w = cr.w;
+    r.crop_h = cr.h;
+    r.format = g_format_idx;
+    r.prefer_hardware = g_prefer_hw && hw_applies;
+    state.PostCommand(App::Cmd::StartExport{.req = std::move(r)});
 }
 
 void DrawStartAndStatus(App::State& state, const App::ExportState& ex, bool busy,
@@ -547,14 +549,18 @@ void DrawStartAndStatus(App::State& state, const App::ExportState& ex, bool busy
                                             current_format == MediaSink::Format::MP4_H264);
             const bool hw_applies = hw_available && format_can_use_hw;
             PostStartRequest(state, current_format, hw_applies);
+            ImGui::CloseCurrentPopup();
         }
     } else {
         if (ImGui::Button("Cancel", ImVec2(120, 0))) {
-            App::Request r;
-            r.cancel_export = true;
-            state.PostRequest(std::move(r));
+            state.PostCommand(App::Cmd::CancelExport{});
         }
     }
+    ImGui::SameLine();
+    if (ImGui::Button("Close", ImVec2(90, 0))) {
+        ImGui::CloseCurrentPopup();
+    }
+    ImGui::SameLine();
 
     switch (ex.phase) {
     case App::ExportPhase::Idle:
@@ -584,16 +590,35 @@ void DrawStartAndStatus(App::State& state, const App::ExportState& ex, bool busy
     }
 }
 
+bool g_open_requested = false;
+bool g_reopen_after_pick = false;
+
 }
 
-void RenderPanel() {
+void RequestOpen() {
+    g_open_requested = true;
+}
+
+void RenderModal() {
     auto& state = App::Global();
+
+    if (g_reopen_after_pick && !state.GetCropPickMode()) {
+        g_reopen_after_pick = false;
+        g_open_requested = true;
+    }
+    if (g_open_requested) {
+        ImGui::OpenPopup("Export");
+        g_open_requested = false;
+    }
+
+    ImGuiViewport* vp = ImGui::GetMainViewport();
+    ImGui::SetNextWindowPos(vp->GetCenter(), ImGuiCond_Always, ImVec2(0.5F, 0.5F));
+    ImGui::SetNextWindowSizeConstraints(ImVec2(620, 0), ImVec2(620, vp->WorkSize.y - 48.0F));
+    if (!ImGui::BeginPopupModal("Export", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) return;
+
     App::ExportState const ex = state.GetExport();
     const bool busy =
         (ex.phase == App::ExportPhase::Capturing || ex.phase == App::ExportPhase::Encoding);
-
-    ImGui::Separator();
-    ImGui::TextColored(ImVec4(0.92F, 0.92F, 0.93F, 1.00F), "Export");
 
     MaybeRegenerateStem(state);
 
@@ -603,13 +628,30 @@ void RenderPanel() {
 
     if (busy) ImGui::BeginDisabled();
     DrawFilenameAndFormat();
-    DrawFpsQualityFrameCap(current_format);
+    DrawFpsQualitySliders();
     DrawOutputResolution(state);
-    DrawCrop(state);
     DrawBackgroundAndHw(current_format, hw_available);
+
+    ImGui::Spacing();
+    bool close_for_pick = false;
+    if (ImGui::CollapsingHeader("Advanced")) {
+        DrawKeyframeIntervalControl(current_format);
+        DrawFrameLimitControls();
+        DrawLoopControls();
+        close_for_pick = DrawCrop(state);
+    }
     if (busy) ImGui::EndDisabled();
 
+    ImGui::Spacing();
+    ImGui::Separator();
+    ImGui::Spacing();
     DrawStartAndStatus(state, ex, busy, current_format, hw_available);
+
+    if (close_for_pick) {
+        g_reopen_after_pick = true;
+        ImGui::CloseCurrentPopup();
+    }
+    ImGui::EndPopup();
 }
 
 }

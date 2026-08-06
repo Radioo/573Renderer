@@ -3,7 +3,6 @@
 #include "afp_boot.h"
 #include "app_globals.h"
 #include "game_runtime.h"
-#include "render_live.h"
 #include "render_seh.h"
 #include "state/app_state.h"
 #include "state/ifs_catalog.h"
@@ -24,7 +23,7 @@ struct AnimInfo {
     std::string name;
     uint32_t total_frames = 0;
     bool ok = false;
-    std::vector<RenderLive::Inspect::Label> labels;
+    std::vector<Runtime::Label> labels;
 };
 
 std::string JsonEscape(const std::string& s) {
@@ -91,7 +90,7 @@ AnimInfo InspectOne(const std::string& name) {
         return info;
     }
     info.total_frames = total;
-    info.labels = RenderLive::Inspect::EnumerateLabels(g_afp, sid);
+    info.labels = Runtime::Active().EnumerateLabels(g_afp, sid);
     info.ok = true;
     return info;
 }

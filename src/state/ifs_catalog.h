@@ -18,20 +18,11 @@ struct VariantSlot {
     bool is_valid = false;
 };
 
-struct CompanionIfs {
-    std::string path;
-    std::string suffix;
-    std::string display_name;
-    uint32_t pkg_id = 0;
-    bool loaded = false;
-};
-
 struct IfsConfig {
     std::string filename;
     std::vector<std::string> bitmap_names;
     std::vector<std::string> anim_names;
     std::vector<VariantSlot> slots;
-    std::vector<CompanionIfs> companions;
     std::vector<std::pair<std::string, bool>> sublayer_overrides;
 };
 

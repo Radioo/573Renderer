@@ -40,7 +40,7 @@ Konami's subbg_*.png never contain one).
   0.5 or everything animates 2x too fast.
 - `--seek-frame`: CAfpViewerScene LEFT/RIGHT seek = `afp_mc_control 0xF08`;
   pauses on seek like the debug scene. `--goto-label` posts the live
-  goto-label request (backend-agnostic via the RenderLive::Inspect seam,
+  goto-label request (backend-agnostic via `Runtime::Active().GotoLabel`,
   modern 0xF09 / DDR afp_mc_op).
 - `--filter` = debug viewer F7 (afp-core set-filter ord 0x032, id
   0x80000000|1); `--show-mc-names` = F3 DISP MC; `--mc-name-type` = F6.

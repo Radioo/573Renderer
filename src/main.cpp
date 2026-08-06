@@ -2,11 +2,11 @@
 #include "gpu_context.h"
 #include "state/live_controls.h"
 #include "support/log.h"
-#include "avs_boot.h"
-#include "afp_boot.h"
+#include "backend/backend.h"
 #include "game_runtime.h"
 #include "render_backend.h"
 #include "state/app_state.h"
+#include "state/commands.h"
 #include "cli/cli.h"
 #include "settings/settings.h"
 #include "gui/gui_thread.h"
@@ -25,6 +25,7 @@
 #include <filesystem>
 #include <functional>
 #include <utility>
+#include <variant>
 #include <vector>
 #include <windows.h>
 #include <mmsystem.h>
@@ -247,13 +248,10 @@ bool ParseCliOrReport(int argc, char** argv, const std::vector<std::string>& arg
 }
 
 void PostInitialBootRequest(const std::string& game_dir, int rw, int rh) {
-    App::Request r;
-    r.set_game_dir = true;
-    r.game_dir = game_dir;
-    r.render_width = rw;
-    r.render_height = rh;
-    r.game_profile = App::Global().GetGameProfileSlug();
-    App::Global().PostRequest(std::move(r));
+    App::Global().PostCommand(App::Cmd::BootGame{.game_dir = game_dir,
+                                                 .profile_slug = App::Global().GetGameProfileSlug(),
+                                                 .render_width = rw,
+                                                 .render_height = rh});
 }
 
 void RaiseGuiWindow() {
@@ -282,16 +280,17 @@ bool WaitForFirstBoot(HINSTANCE hInstance, const Cli::Options& cli, bool have_gu
                       App::State& state, int& exit_rc) {
     exit_rc = -1;
     while (!state.ShouldExit().load(std::memory_order_acquire)) {
-        auto req = state.TakeRequest();
-        if (req && req->set_game_dir && !req->game_dir.empty()) {
-            LOG("Boot", "Set-game-dir request for '%s'", req->game_dir.c_str());
-            int rw = req->render_width;
-            int rh = req->render_height;
+        auto cmd = state.TakeCommand();
+        const auto* boot = cmd ? std::get_if<App::Cmd::BootGame>(&*cmd) : nullptr;
+        if (boot != nullptr && !boot->game_dir.empty()) {
+            LOG("Boot", "Set-game-dir request for '%s'", boot->game_dir.c_str());
+            int rw = boot->render_width;
+            int rh = boot->render_height;
             if (rw <= 0 || rh <= 0) state.GetRenderSize(rw, rh);
-            std::string slug = req->game_profile;
+            std::string slug = boot->profile_slug;
             if (slug.empty()) slug = state.GetGameProfileSlug();
-            if (BootFromGameDir(hInstance, req->game_dir, !cli.headless, cli.boot_ifses, rw, rh,
-                                slug)) {
+            if (BootFromGameDir(hInstance, boot->game_dir, !cli.headless, cli.boot_ifses, rw, rh,
+                                slug, &cli)) {
                 return true;
             }
             if (!have_gui) {
@@ -318,8 +317,7 @@ bool WaitForFirstBoot(HINSTANCE hInstance, const Cli::Options& cli, bool have_gu
 namespace {
 
 void ShutdownEngineStack() {
-    AfpManager::Shutdown(g_engine);
-    AvsManager::Shutdown(g_avs);
+    Backend::Active()->Shutdown();
     g_d3d.Shutdown();
     Log::Shutdown();
 }

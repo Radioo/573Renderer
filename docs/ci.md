@@ -21,8 +21,12 @@ commit lands; a stale build never gives useful information.
 The configure/build steps run `cmake --preset ci` / `cmake --build --preset
 ci`, so CI uses exactly the knobs in `CMakePresets.json` (same generator,
 build type, triplet, toolchain, overlay ports as local builds - see
-`docs/build.md`). The `ci` preset additionally sets
-`CMAKE_COMPILE_WARNING_AS_ERROR=ON`. The build dir is `build/` at the repo
+`docs/build.md`). `CMAKE_COMPILE_WARNING_AS_ERROR=ON` lives in the BASE
+preset, so dev and ci compile with identical flags. It used to be ci-only,
+which let a benign-looking C4324 (struct padding from a needless
+`alignas(16)` in gpu_context.h) print in every local build while failing
+only in CI; the local gate must never be laxer than CI. If a preset ever
+diverges again, the divergence itself is the bug. The build dir is `build/` at the repo
 root, same as local, which simplifies reproducing CI failures.
 
 ## Caching (the entire design of this workflow)
@@ -74,3 +78,41 @@ structured to pay that only when the dependency set actually changes.
 Tests that need the proprietary game DLLs or real game data can never run
 hosted. They are excluded by CTest label (`ctest -LE local_dll` in CI); the
 DLL-dependent tiers run manually on the owner machine.
+
+## Local aggregate gate: tools/checks.sh
+
+`bash tools/checks.sh` is the one-command local equivalent of every hosted
+gate and is the required exit criterion for any refactor slice: it runs
+build.bat (dev preset), `ctest -L ci` (locating ctest.exe next to the
+cmake.exe recorded in build/CMakeCache.txt, since the VS-bundled toolchain
+is not on the Git Bash PATH), then the five gate scripts
+(check_file_length, check_no_comments, check_gui_isolation, run_format,
+run_tidy), and prints `ALL CHECKS PASSED` only if every step succeeded.
+run_tidy needs the pip-pinned clang-tidy (see docs/tidy_migration.md) and
+the build dir's compile_commands.json, which the build step guarantees.
+
+Gate latency is a design requirement: an incremental `checks.sh` run is
+seconds, not minutes.
+
+- check_no_comments lexes C++ with a regex tokenizer (raw strings, string
+  and char literals consumed first, then `//` and `/* */` tokens) instead
+  of a libclang parse. The old libclang version parsed every TU and took
+  minutes for the whole tree; the tokenizer does all files in well under a
+  second and ignores comment-lookalikes inside strings (`https://...`,
+  raw-string bodies). Digit separators (`1'000'000`) are consumed by the
+  char-literal branch, which cannot produce a false comment.
+- build.bat skips `cmake --preset dev` when `build/CMakeCache.txt` exists:
+  ninja re-runs CMake itself when configure inputs change (CMakeLists,
+  presets, and vcpkg.json via the toolchain's CMAKE_CONFIGURE_DEPENDS), so
+  the explicit configure only pays off on a fresh build dir.
+- run_tidy analyses changed files only (content-hash cache); run_format
+  checks the whole tree but clang-format is fast. ctest -L ci is ~2.5s.
+- checks.sh invokes build.bat as `MSYS_NO_PATHCONV=1 cmd.exe /c
+  <absolute-windows-path>` (cygpath). The old `//c build.bat` form passed
+  `//c` through literally once MSYS_NO_PATHCONV disabled slash conversion,
+  so cmd exited 0 WITHOUT running the build and `set -e` never tripped.
+  checks.sh therefore also greps the build output for the "Build
+  successful" marker and hard-fails if it is absent: a silently skipped
+  build must never produce ALL CHECKS PASSED.
+- Steady-state full gate: ~5s; with one changed TU: ~7-8s. If it drifts
+  back toward minutes, time the stages individually before guessing.

@@ -1,4 +1,4 @@
-# Export pipeline (src/export.*, src/export_ddr.cpp, src/video_encoder.*, src/media_sink.*)
+# Export pipeline (src/export.*, src/backend/afp_capture_drivers.*, src/video_encoder.*, src/media_sink.*)
 
 Capture-and-encode pipeline driven from the main render thread. The format
 vocabulary (MediaSink::Format enum values, tokens, aliases, extensions,
@@ -6,13 +6,27 @@ WritesDirectory, MakeOutputPath) is documented in docs/media_formats.md and is
 NOT repeated here; this file covers the capture state machine, loop/stop
 detection, compositing rules, and the encoder/sink internals.
 
+Ownership split (P18): export.cpp owns the GENERIC half - session lifecycle,
+sink open/submit/finish, bg composite, crop, frame dump, blend-loop
+compose - and has zero AFP or D3D9 link dependencies. The CAPTURE-CONTROL
+half is the backend's `Export::ICaptureDriver`
+(src/backend/afp_capture_drivers.*): `BeginCapture` performs the playback
+setup described in section 4, `TickCapture` performs the per-tick
+readback + loop/stop flow described in section 5 (calling back into
+`SubmitOneFrame` / `FinishAndEncode` / `FailSession`), and `EndCapture`
+restores the continuous-loop override and pause-defend. The old
+`Session.ddr` flow flag and export_ddr.cpp are gone; where the sections
+below say "the DDR path" or "the modern path" they now mean the respective
+driver. The hosted `export_capture_tests` (label ci) exercise the generic
+half with a synthetic frame source.
+
 ## 1. Public surface and call flow
 
 Three entry points, called by the main loop between afp_do_update and
 EndFrame:
 
 - `Export::HandleStartRequest` (dispatch from main.cpp's request handler, the
-  same spot that handles toggle_companion / force_replay / switch_animation;
+  same spot that handles force_replay / switch_animation;
   kept as free functions so per-session state stays private to export.cpp)
   -> StartSession. How the root timeline is driven depends on RootLoopMode:
   in Force mode (or a label/blend export) it force-replays / drives the root
@@ -43,10 +57,10 @@ external encoder such as avifenc.exe.
 ## 2. Session state (export_internal.h)
 
 `Export::Session` / the single `g_sess` live in export_internal.h so the DDR
-content-loop detector (export_ddr.cpp) shares the same state and the
+content-loop detector (the DDR capture driver) shares the same state and the
 SubmitOneFrame helper, mirroring the renderer's other `*_internal.h` split
 pattern (afp_d3d9_internal.h etc.). Not a public API - only export.cpp and
-export_ddr.cpp include it. The Session owns the capture side (D3D9 readback,
+the capture drivers include it. The Session owns the capture side (D3D9 readback,
 bg-colour composite, reference dump for diff tests) and delegates the
 FFmpeg / libaom / libvpx / NVENC muxing to MediaSink.
 
@@ -84,7 +98,7 @@ Field semantics worth preserving:
 - Crop rect (`crop_x/y/w/h`): applied BEFORE the output-size scale, so
   crop_w x crop_h is the encoder's src dimensions and out_width/out_height
   still drive the final scale (defaulting to crop size when zero).
-- `format` mirrors App::Request::export_format (the canonical enum, see
+- `format` mirrors App::ExportRequest::format (the canonical enum, see
   MediaSink::Format). `prefer_hw` asks the sink to try NVENC for the video
   backends (no-op for PNG / VP9 / WebP). `using_hw` is only populated after
   Sink::Open returns, so it can be published to the GUI progress pane.
@@ -140,7 +154,7 @@ and clamps to 255; output alpha is forced to 255.
 
 ## 4. Start modes (StartSession)
 
-Session parameters are copied from App::Request with defaults: fps 60 if
+Session parameters are copied from App::ExportRequest with defaults: fps 60 if
 unset, quality 60 if outside 0..100, loop_count 1 minimum, blend_frames 15
 default. All loop/blend/content-detector bookkeeping is reset explicitly
 because g_sess is reused across sessions.
@@ -378,7 +392,7 @@ Order per frame: opaque-bg composite (if bg not transparent) -> crop (clamped
 against the actual w/h so a stale crop cannot overflow; minimum 1x1) ->
 optional reference dump -> blend-mode buffering OR sink open-on-first-frame +
 SubmitFrame. It lives at Export scope (not file-local) because the DDR
-delayed-submit path in export_ddr.cpp shares it. A sink error calls
+delayed-submit path in the DDR capture driver shares it. A sink error calls
 FailSession; callers must check g_sess.active afterwards.
 
 The reference dump (DumpBgraReference) writes a tight BGRA blob with a
@@ -390,7 +404,7 @@ Blend mode buffers the post-crop RGBA frame instead of encoding (cap: 3000
 frames, ~50 s at 60fps, bounding RAM at enc_w*enc_h*4 per frame; past the cap
 buffering stops and the normal stop logic finalises what is in hand).
 
-## 7. DDR loop detection (export_ddr.cpp)
+## 7. DDR loop detection (backend/afp_capture_drivers.cpp, DDR driver)
 
 Split out of export.cpp for the 1000-line limit and to isolate the
 DDR-specific (partly pixel-based) logic. This is the ONE place the renderer

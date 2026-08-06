@@ -114,13 +114,11 @@ into GpuContext (`g_gpu.d3d`; the shim reference stays in app_globals.h).
   would break; switching it is a separate, higher-risk slice (qpro-regression
   surface) not a capacity bump. Documented rather than half-shipped.
 - Consumer conversion (modules take EngineSession& / GpuContext& explicitly),
-  then shim deletion. Export's public surface converted (the P8 ExportSession
-  seam, deferred from P6): `Export::OnMainLoopTick(EngineSession&, D3D9State&)`
-  and `HandleStartRequest(req, EngineSession&, D3D9State&)` - the internal
-  helpers keep their table params via `es.afp`/`es.afpu`/`es.afpu_dll`
-  forwarding, so the change is signature-only (byte-verified 12/12 SDVX export
-  frames across the stash-dance). export.h no longer pulls the loose
-  afp_funcs/afpu_funcs/dll_loader headers - engine_session.h is the seam.
+  then shim deletion. Export's surface has since moved PAST the
+  EngineSession-taking stage: P18 removed the engine from export.h entirely
+  (`OnMainLoopTick(D3D9State&)` / `HandleStartRequest(req, D3D9State&)`);
+  the engine access lives in the backend capture drivers, which use the
+  family globals like the rest of the AFP family.
 
 ## Exit criteria trace (from the plan)
 
@@ -144,7 +142,7 @@ the session threads Publish / Init / StartDdrPlayback / StartModernPlayback /
 ForceContinuousLoopOverride / Start-Cancel-FailSession / OpenSinkForFirstFrame
 / SubmitOneFrame / CaptureFrame / BlendComposeAndSubmit / FinishAndEncode /
 TickDdrCapture / MaybeDumpTick / HitSafetyCap / BuildModernTick and
-export_ddr.cpp's HandleDdrLoopFrame (whose DdrLoopDetector submit lambda now
+the DDR capture driver's HandleDdrLoopFrame (whose DdrLoopDetector submit lambda now
 CAPTURES the session instead of reading the global - SubmitFn is a
 std::function, so the capture is free). The five public entry points
 (OnMainLoopTick, HandleStartRequest, HandleCancelRequest, IsCapturing,
@@ -165,7 +163,7 @@ export smoke through the loop-detection path (authored-loop detect -> capture
   scale, not a branch). Proven in practice by GITADORA DELTA landing as a
   pure profile entry.
 - "GUI panels hold zero business logic": audited - panels read App state,
-  draw, and post App::Requests; their only computations call the TESTED
+  draw, and post App::Commands; their only computations call the TESTED
   r573_media_format lib (DeriveExportStem / MakeOutputPath). ImGui usage is
   100% confined to src/gui/ and gated (tools/ci/check_gui_isolation.py).
 - "File-length baseline empty": met - the baseline mechanism is deleted and a
@@ -174,13 +172,123 @@ export smoke through the loop-detection path (authored-loop detect -> capture
   encoder Open functions, MediaSink as the Sink strategy, ExportSession
   ownership threaded (above).
 
+## P11-P12 (backend abstraction program, in progress)
+
+P11 (mechanical enablers): `tools/checks.sh` aggregate gate created;
+`RenderLive::Inspect` (9 pure forwards) collapsed into direct
+`Runtime::Active()` calls; the raw `0xFFFFFFFC` literal retired behind
+`Runtime::kModernNoStream` (engine) / `App::kNoActiveStream` (state+gui).
+Verified byte-identical on the 3-game pixel net.
+
+P12 (runtime symmetry): the five engine bypasses moved behind `IGameRuntime` -
+the modern `afp_do_sort_render` (now `ModernRuntime::RenderFrame`, fixing the
+modern/DDR render asymmetry), the continuous-loop flag-dance
+(`ApplyContinuousLoop`, latch is a runtime member), `ApplyMasterScale`,
+`ApplyVariantSlots`/`ApplySublayerOverrides` (out of boot.cpp), and the
+`force_replay` request handler (`ForceReplayMaster`, out of
+render_loop_requests.cpp; the `toggle_companion` handler moved the same way
+and was later removed with the locale-overlay feature).
+Every DDR override is the old implicit no-op (sentinel self-skip, null fn
+pointer, or empty vector), verified byte-identical. game_runtime.cpp split
+into game_runtime.cpp (selection) + game_runtime_internal.h (class decls) +
+game_runtime_modern.cpp + game_runtime_ddr.cpp. Remaining known direct
+AfpManager reads in generic code (`GatherAutopilotInputs`,
+`AdvanceFrame`'s `StreamId()`, `CallAfpUpdateGuarded`) are scheduled to move
+with the CLI-autopilot split in the backend-seam phase (P14), where they
+become AFP-family code instead of gaining odd interface methods.
+
+P13 (typed commands): the flat ~50-field `App::Request` died. `App::Command`
+variant + `Cmd::BackendCommand{std::any}` + `AfpCmd::Any` (see
+docs/state.md "Command semantics"); the dispatcher is a `std::visit` visitor
+pair; `app_state.h` no longer includes qpro_model.h (that coupling now lives
+only in `backend/afp_commands.h`; P14 did the relocation).
+Export start carries a generic `App::ExportRequest`. Verified byte-identical.
+
+P14 (backend seam lift): `Backend::IBackend` (src/backend/) is the generic
+engine surface; `AfpFamilyBackend` + `AfpModernBackend`/`AfpDdrBackend`
+absorbed DLL discovery/loading, AVS boot, the engine boot fork, persistent
+boot IFSes, the content scan thread, arc staging + content load, the whole
+per-frame AdvanceFrame housekeeping (loop statics are members now), scene
+render, the submonitor machinery, the autopilot engine inputs, and AFP
+command dispatch. boot.cpp shrank to profile resolve + window/device +
+settings + orchestration; render_loop.cpp is backend-neutral except
+`Export::OnMainLoopTick(g_engine, g_d3d)` (P18 cuts it) and the inline
+`--animation-label` arm. `IGameRuntime` demoted to family-internal. The
+window+device creation moved ahead of DLL/AVS boot (documented in
+docs/backend.md). Verified byte-identical + DLL tier. The
+`GatherAutopilotInputs`/`AdvanceFrame`/`CallAfpUpdateGuarded` residue listed
+under P12 is now resolved (all family code).
+
+P15 (profile split): `GameProfile::Profile` is identity-only (name, slug,
+dir_substring, backend_id, game_dll, default render size); the AFP engine
+config (DLL names, offsets, boot-gate bools, scan_arc_containers,
+time_scale) moved to the slug-keyed `AfpProfiles::AfpConfig` table
+(src/backend/afp_profiles.*), resolved by the family backend at Boot.
+`legacy_afp` deleted (backend_id + registry table); the never-read
+`Profile::afp` AfpOrdinals member and `kSkip` deleted;
+`EngineSession::active_profile` renamed `active_cfg`
+(`AfpManager::SetActiveConfig`); `ActiveOffsets` moved to `AfpProfiles`.
+dll_contract_tests now assert backend_id. Verified byte-identical + DLL
+tier.
+
+P16 slice 1 (capability surface): `IsDdrMode`/`SetIsDdrMode` deleted;
+`BootLifecycle::ActiveBackendId` (seeded from `Backend::Active()->Id()`) is
+the GUI's backend signal, and `Status::scene_loaded` is the generic
+scene-mounted flag (the GUI no longer interprets `Status::stream_id`).
+Verified byte-identical. The REMAINDER of the original P16 (moving
+IfsConfig/LiveState/labels/mc_tree/AFP export knobs into a
+`BackendUiState` block so generic `Status` is fully backend-neutral, and
+the IfsCatalog -> ContentCatalog rename) is deliberately deferred until
+after the P17 panel registry: P17 only needs the backend id + scene flag,
+and the state-block move is a large mechanical migration with no
+user-visible payoff until the first non-AFP backend lands.
+
+P17 (panel registry): the GUI tab bar and right-pane stack are
+registry-driven per backend (src/gui/panel_registry.*, see docs/gui.md
+2.0). Intended visible diffs (renders byte-identical, verified): qpro tab
+only for iidx33; DDR loses the do-nothing loop/scale rows, the variants
+editor, and the sub-layers section; the Setup view's arc/customize
+extractors show only for ddrworld and the qpro render preset only for
+iidx33.
+
+P18 (export capture seam): `Export::ICaptureDriver`
+(BeginCapture/TickCapture/EndCapture) with the two AFP drivers in
+src/backend/afp_capture_drivers.*; `Session.ddr` deleted; export_ddr.cpp
+absorbed into the DDR driver; `export.h` lost `EngineSession&` and
+export.cpp lost every AFP and D3D9 LINK dependency (the offscreen readback
+lives in the drivers), which landed the long-deferred CaptureSource seam
+WITH its first consumer: the hosted `export_capture_tests` ci tier drives
+SubmitOneFrame/FinishAndEncode (blend compose + crop) from a synthetic
+frame source with a null-backend stub. Verified: pixel net byte-identical,
+live DDR authored-loop export (bg_0009, 1373 frames), modern label export
+(select_bg_vi hologram 'loop', 299 frames), blend-loop export smoke.
+
+P19 (GPU hygiene + closure): the three AFP shaders left `D3D9State` (now
+compiled by `Render::CompileAfpShaders` into GpuContext from
+`AfpD3D9::Init`, see docs/d3d9_backend.md); `AfpRenderContext` moved to
+src/backend/afp_render_context.h; `D3D9State::Init` is engine-agnostic.
+Grep-zero audit result: raw `0xFFFFFFFC` exists only at its two constant
+definitions; `RenderLive::Inspect`, `IsDdrMode`, `legacy_afp` (as a profile
+field), and `App::Request` are gone. Exactly two documented `g_afp` reads
+remain in generic TUs, both AFP-family CLI features routed through
+`Runtime::Active()`: render_loop's inline `--animation-label` arm and
+ApplyCliOverrides' `--afp-speed`; they move with a future autopilot/CLI
+ownership pass. The PHYSICAL relocation of the pre-P14 AFP TUs (afp_boot,
+afp_anim, afp_packages, afp_d3d9*, afp_ddr_*, qpro_*, mc_control,
+ifs_inspect, engine_session/app_globals/avs_* and the game_runtime files)
+under src/backend/ subdirectories is deliberately NOT done: the ownership
+boundary is enforced by the `Backend::IBackend` seam and this audit, not by
+folders, and the move would churn 40+ files plus every src/ path in these
+docs for zero behavioral value. Do it, if ever, as a standalone mechanical
+commit with a full doc-path sweep.
+
 Deferred deliberately (each is a seam with NO consumer today; cutting them
 now would be speculative generality):
-- CaptureSource seam: the capture already funnels through ONE call
-  (D3D9State::ReadOffscreenBGRA in Export::CaptureFrame); introduce the
-  injection point together with the first export-loop test that needs a fake
-  frame source (blocked on the export.cpp link web: AfpManager / RenderLive /
-  Runtime symbols).
+- The P16b state-block migration (IfsConfig / LiveState / AFP telemetry
+  fields into a `BackendUiState` the AFP panels fetch): deferred until the
+  first non-AFP backend lands - its real needs should shape the split, and
+  today every reader of that state is an AFP-registered panel already gated
+  by the P17 registry, so the generality would be speculative.
 - qpro RenderService seam: revisit with the multi-package "Scene designer"
   work.
 - Formal per-panel view-model structs: panels are already thin; add VMs when

@@ -2,55 +2,93 @@
 
 #include "state/app_state.h"
 #include "state/boot_lifecycle.h"
+#include "state/commands.h"
 #include "state/ifs_catalog.h"
 
 #include <string>
 #include <utility>
+#include <variant>
 #include <vector>
 
-TEST_CASE("TakeRequest returns nothing when no request is pending") {
-    App::State s;
-    CHECK_FALSE(s.TakeRequest().has_value());
+namespace {
+
+std::string TakenLoadPath(App::State& s) {
+    auto cmd = s.TakeCommand();
+    if (!cmd) return {};
+    const auto* load = std::get_if<App::Cmd::LoadContent>(&*cmd);
+    return load != nullptr ? load->path : std::string{};
 }
 
-TEST_CASE("PostRequest then TakeRequest hands over the request once") {
-    App::State s;
-    App::Request r;
-    r.load_new_ifs = true;
-    r.ifs_path = "a.ifs";
-    s.PostRequest(r);
-
-    const App::Request taken = s.TakeRequest().value_or(App::Request{});
-    CHECK(taken.load_new_ifs);
-    CHECK(taken.ifs_path == "a.ifs");
-    CHECK_FALSE(s.TakeRequest().has_value());
 }
 
-TEST_CASE("PostRequest queues requests in FIFO order without dropping any") {
+TEST_CASE("TakeCommand returns nothing when no command is pending") {
     App::State s;
-    App::Request first;
-    first.ifs_path = "first.ifs";
-    App::Request second;
-    second.ifs_path = "second.ifs";
-    s.PostRequest(first);
-    s.PostRequest(second);
+    CHECK_FALSE(s.TakeCommand().has_value());
+}
 
-    CHECK(s.TakeRequest().value_or(App::Request{}).ifs_path == "first.ifs");
-    CHECK(s.TakeRequest().value_or(App::Request{}).ifs_path == "second.ifs");
-    CHECK_FALSE(s.TakeRequest().has_value());
+TEST_CASE("PostCommand then TakeCommand hands over the command once") {
+    App::State s;
+    s.PostCommand(App::Cmd::LoadContent{.path = "a.ifs", .from_arc = true});
+
+    auto cmd = s.TakeCommand();
+    REQUIRE(cmd.has_value());
+    const auto* load = std::get_if<App::Cmd::LoadContent>(&*cmd);
+    REQUIRE(load != nullptr);
+    CHECK(load->path == "a.ifs");
+    CHECK(load->from_arc);
+    CHECK_FALSE(s.TakeCommand().has_value());
+}
+
+TEST_CASE("PostCommand queues commands in FIFO order without dropping any") {
+    App::State s;
+    s.PostCommand(App::Cmd::LoadContent{.path = "first.ifs"});
+    s.PostCommand(App::Cmd::LoadContent{.path = "second.ifs"});
+
+    CHECK(TakenLoadPath(s) == "first.ifs");
+    CHECK(TakenLoadPath(s) == "second.ifs");
+    CHECK_FALSE(s.TakeCommand().has_value());
 }
 
 TEST_CASE("A burst of posts drains one per take in order") {
     App::State s;
     for (int i = 0; i < 8; i++) {
-        App::Request r;
-        r.ifs_path = std::to_string(i);
-        s.PostRequest(r);
+        s.PostCommand(App::Cmd::LoadContent{.path = std::to_string(i)});
     }
     for (int i = 0; i < 8; i++) {
-        CHECK(s.TakeRequest().value_or(App::Request{}).ifs_path == std::to_string(i));
+        CHECK(TakenLoadPath(s) == std::to_string(i));
     }
-    CHECK_FALSE(s.TakeRequest().has_value());
+    CHECK_FALSE(s.TakeCommand().has_value());
+}
+
+TEST_CASE("Command variants round-trip their payloads through the queue") {
+    App::State s;
+    App::Cmd::BootGame boot_cmd;
+    boot_cmd.game_dir = "F:/game";
+    boot_cmd.profile_slug = "sdvx7";
+    s.PostCommand(std::move(boot_cmd));
+    App::ExportRequest exp_req;
+    exp_req.output_path = "out.webm";
+    exp_req.fps = 60;
+    s.PostCommand(App::Cmd::StartExport{.req = std::move(exp_req)});
+    s.PostCommand(App::Cmd::CancelExport{});
+
+    auto boot = s.TakeCommand();
+    REQUIRE(boot.has_value());
+    const auto* b = std::get_if<App::Cmd::BootGame>(&*boot);
+    REQUIRE(b != nullptr);
+    CHECK(b->game_dir == "F:/game");
+    CHECK(b->profile_slug == "sdvx7");
+
+    auto exp = s.TakeCommand();
+    REQUIRE(exp.has_value());
+    const auto* e = std::get_if<App::Cmd::StartExport>(&*exp);
+    REQUIRE(e != nullptr);
+    CHECK(e->req.output_path == "out.webm");
+    CHECK(e->req.fps == 60);
+
+    auto cancel = s.TakeCommand();
+    REQUIRE(cancel.has_value());
+    CHECK(std::holds_alternative<App::Cmd::CancelExport>(*cancel));
 }
 
 TEST_CASE("MutConfig creates and FindConfig locates by filename") {
@@ -171,6 +209,13 @@ TEST_CASE("SetRenderSize ignores non-positive values") {
     s.GetRenderSize(w, h);
     CHECK(w == 1080);
     CHECK(h == 1920);
+}
+
+TEST_CASE("ActiveBackendId is empty before boot and round-trips") {
+    App::State s;
+    CHECK(s.ActiveBackendId().empty());
+    s.SetActiveBackendId("afp_modern");
+    CHECK(s.ActiveBackendId() == "afp_modern");
 }
 
 TEST_CASE("Defaults match the documented boot state") {

@@ -3,10 +3,12 @@
 #include "afpu_funcs.h"
 #include "avs_funcs.h"
 #include "engine_session.h"
+#include "game_runtime.h"
 #include "support/dll_loader.h"
 #include "support/log.h"
 #include "dll_offsets.h"
-#include "game_profile.h"
+#include "backend/afp_profiles.h"
+#include "backend/afp_render_context.h"
 #include "render_backend.h"
 #include <cstdlib>
 #include <cstddef>
@@ -16,8 +18,8 @@
 #include <windows.h>
 #include "app_globals.h"
 
-void AfpManager::SetActiveProfile(const GameProfile::Profile* p) {
-    g_engine.active_profile = p;
+void AfpManager::SetActiveConfig(const AfpProfiles::AfpConfig* cfg) {
+    g_engine.active_cfg = cfg;
 }
 
 namespace {
@@ -91,15 +93,14 @@ void RunAfpCoreBoot(EngineSession& es) {
     LOG("AFP", "Setting verbose=1...");
     if (afp.afp_set_verbose != nullptr) {
         const uint32_t verbose_flags =
-            ((es.active_profile != nullptr) && es.active_profile->afp_set_verbose_wide_args)
-                ? 0x10000U
-                : 0U;
+            ((es.active_cfg != nullptr) && es.active_cfg->afp_set_verbose_wide_args) ? 0x10000U
+                                                                                     : 0U;
         afp.afp_set_verbose(1, verbose_flags);
     }
 
-    if ((es.active_profile != nullptr) && !es.active_profile->call_afp_set_flag_setup) {
+    if ((es.active_cfg != nullptr) && !es.active_cfg->call_afp_set_flag_setup) {
         LOG("AFP", "Skipping afp_set_flag setup triple (gated off by profile '%s')",
-            es.active_profile->slug);
+            es.active_cfg->slug);
     } else if (afp.afp_set_flag != nullptr) {
         afp.afp_set_flag(16, 0);
         afp.afp_set_flag(8, 0);
@@ -139,8 +140,8 @@ void RunAfpuBoot(EngineSession& es) {
     SetF32(0x3C, 1.0F);
     SetU32(0x40, 2U);
 
-    if ((es.active_profile != nullptr) && !es.active_profile->call_afpu_boot) {
-        LOG("AFP", "Skipping afpu_boot (gated off by profile '%s')", es.active_profile->slug);
+    if ((es.active_cfg != nullptr) && !es.active_cfg->call_afpu_boot) {
+        LOG("AFP", "Skipping afpu_boot (gated off by profile '%s')", es.active_cfg->slug);
     } else {
         LOG("AFP", "Calling afpu_boot...");
         int const ret = afpu.afpu_boot(afpu_config, afpu_data);
@@ -151,13 +152,13 @@ void RunAfpuBoot(EngineSession& es) {
 
 void PatchNearFarSlot(EngineSession& es) {
     DllLoader const& afp_dll = es.afp_dll;
-    if ((es.active_profile != nullptr) && !es.active_profile->apply_iidx_data_segment_patches) {
+    if ((es.active_cfg != nullptr) && !es.active_cfg->apply_iidx_data_segment_patches) {
         LOG("AFP", "Skipping nearfar callback patch (gated off by profile '%s')",
-            es.active_profile->slug);
+            es.active_cfg->slug);
     } else {
         HMODULE afp_base = afp_dll.Module();
-        const uintptr_t nearfar_off = (es.active_profile != nullptr)
-                                          ? es.active_profile->offsets.afp_nearfar_slot
+        const uintptr_t nearfar_off = (es.active_cfg != nullptr)
+                                          ? es.active_cfg->offsets.afp_nearfar_slot
                                           : DllOffsets::AfpCore::kNearFarSlot;
         void** nearfar_slot = DllOffsets::At<void*>(afp_base, nearfar_off);
         DWORD old_protect = 0;
@@ -179,17 +180,16 @@ void RunRenderInits(EngineSession& es) {
     AfpuFuncs const& afpu = es.afpu;
     AfpRenderContext& render_ctx = es.render_ctx;
     int ret = 0;
-    if ((es.active_profile != nullptr) && !es.active_profile->call_afp_render_init) {
-        LOG("AFP", "Skipping afp_render_init (gated off by profile '%s')", es.active_profile->slug);
+    if ((es.active_cfg != nullptr) && !es.active_cfg->call_afp_render_init) {
+        LOG("AFP", "Skipping afp_render_init (gated off by profile '%s')", es.active_cfg->slug);
     } else {
         LOG("AFP", "Calling afp_render_init...");
         afp.afp_render_init();
         LOG("AFP", "afp_render_init completed!");
     }
 
-    if ((es.active_profile != nullptr) && !es.active_profile->call_afpu_render_init) {
-        LOG("AFP", "Skipping afpu_render_init (gated off by profile '%s')",
-            es.active_profile->slug);
+    if ((es.active_cfg != nullptr) && !es.active_cfg->call_afpu_render_init) {
+        LOG("AFP", "Skipping afpu_render_init (gated off by profile '%s')", es.active_cfg->slug);
     } else {
         LOG("AFP", "Calling afpu_render_init...");
         ret = afpu.afpu_render_init(&render_ctx);
@@ -200,7 +200,7 @@ void RunRenderInits(EngineSession& es) {
 }
 
 void ClearRenderFlag0x800(const EngineSession& es, HMODULE afp_base, bool can_patch,
-                          bool skip_set_data, const GameProfile::DllOffsetSet& off) {
+                          bool skip_set_data, const AfpProfiles::DllOffsetSet& off) {
     DWORD old_protect = 0;
     if (can_patch && !skip_set_data) {
         auto* flags_ptr = DllOffsets::At<uint32_t>(afp_base, off.afp_render_flags);
@@ -215,15 +215,15 @@ void ClearRenderFlag0x800(const EngineSession& es, HMODULE afp_base, bool can_pa
         LOG("AFP",
             "Leaving afp-core 0x800 flag SET (profile '%s' uses afpu_render_init's "
             "internal afp_set_afp_data rebind path)",
-            es.active_profile->slug);
+            es.active_cfg->slug);
     } else {
         LOG("AFP", "Skipping afp-core 0x800 flag clear (gated off by profile '%s')",
-            es.active_profile->slug);
+            es.active_cfg->slug);
     }
 }
 
 void CallSetAfpData(EngineSession& es, HMODULE afpu_base, bool can_patch, bool skip_set_data,
-                    const GameProfile::DllOffsetSet& off) {
+                    const AfpProfiles::DllOffsetSet& off) {
     AfpFuncs const& afp = es.afp;
     AfpRenderContext& render_ctx = es.render_ctx;
     if (can_patch && !skip_set_data) {
@@ -233,14 +233,14 @@ void CallSetAfpData(EngineSession& es, HMODULE afpu_base, bool can_patch, bool s
             uint64_t const a2 = 0;
             uint64_t a3 = 0;
             void* a4 = nullptr;
-            if ((es.active_profile != nullptr) && es.active_profile->afp_set_afp_data_wide_args) {
+            if ((es.active_cfg != nullptr) && es.active_cfg->afp_set_afp_data_wide_args) {
                 a3 = 0x320;
                 a4 = &render_ctx;
             }
             set_data(afpu_data_ptr, a2, a3, a4);
             LOG("AFP", "Called afp_set_afp_data(afpu+0x%X, ...) (wide=%d)",
                 (unsigned)off.afpu_data_struct,
-                es.active_profile && es.active_profile->afp_set_afp_data_wide_args);
+                es.active_cfg && es.active_cfg->afp_set_afp_data_wide_args);
         } else {
             LOG("AFP", "ERROR: Could not find afp_set_afp_data export!");
         }
@@ -248,15 +248,14 @@ void CallSetAfpData(EngineSession& es, HMODULE afpu_base, bool can_patch, bool s
         LOG("AFP",
             "Skipping explicit afp_set_afp_data (profile '%s' relies on "
             "afpu_render_init's internal call)",
-            es.active_profile->slug);
+            es.active_cfg->slug);
     } else {
-        LOG("AFP", "Skipping afp_set_afp_data (gated off by profile '%s')",
-            es.active_profile->slug);
+        LOG("AFP", "Skipping afp_set_afp_data (gated off by profile '%s')", es.active_cfg->slug);
     }
 }
 
 void VerifyCallbackTable(HMODULE afp_base, HMODULE afpu_base, bool can_patch,
-                         const GameProfile::DllOffsetSet& off) {
+                         const AfpProfiles::DllOffsetSet& off) {
     if (can_patch) {
         void** afp_table = DllOffsets::At<void*>(afp_base, off.afp_callback_table);
         LOG("AFP",
@@ -269,7 +268,7 @@ void VerifyCallbackTable(HMODULE afp_base, HMODULE afpu_base, bool can_patch,
     }
 }
 
-void RepatchScreenStubs(HMODULE afp_base, bool can_patch, const GameProfile::DllOffsetSet& off) {
+void RepatchScreenStubs(HMODULE afp_base, bool can_patch, const AfpProfiles::DllOffsetSet& off) {
     if (can_patch) {
         void** afp_table = DllOffsets::At<void*>(afp_base, off.afp_callback_table);
         DWORD old_protect2 = 0;
@@ -288,20 +287,20 @@ void RepatchScreenStubs(HMODULE afp_base, bool can_patch, const GameProfile::Dll
 
 void BindD3D9AndDataSegment(EngineSession& es, D3D9State& d3d) {
     AfpuFuncs const& afpu = es.afpu;
-    AfpD3D9::Init(d3d.device, d3d.width, d3d.height, d3d.afp_vs, d3d.afp_hsl_ps, d3d.afp_add_ps);
+    AfpD3D9::Init(d3d.device, d3d.width, d3d.height);
     AfpD3D9::SetStateCtx(&es.render_ctx);
     AfpD3D9::SetAfpuTexSlotResolver(afpu.afpuloc_get_texture_data_size);
 
     HMODULE afp_base = es.afp_dll.Module();
     HMODULE afpu_base = es.afpu_dll.Module();
     const bool can_patch =
-        (es.active_profile == nullptr) || es.active_profile->apply_iidx_data_segment_patches;
+        (es.active_cfg == nullptr) || es.active_cfg->apply_iidx_data_segment_patches;
     const bool skip_set_data =
-        (es.active_profile != nullptr) && es.active_profile->skip_explicit_afp_set_afp_data;
-    const auto& off = (es.active_profile != nullptr) ? es.active_profile->offsets
-                                                     : GameProfile::kFallbackIidxOffsets;
+        (es.active_cfg != nullptr) && es.active_cfg->skip_explicit_afp_set_afp_data;
+    const auto& off =
+        (es.active_cfg != nullptr) ? es.active_cfg->offsets : AfpProfiles::kFallbackIidxOffsets;
 
-    GameProfile::SetActiveOffsets(off);
+    AfpProfiles::SetActiveOffsets(off);
     AfpD3D9::SetAfpuSetScreenRectFnOffset(off.afpu_set_screen_rect_fn);
 
     ClearRenderFlag0x800(es, afp_base, can_patch, skip_set_data, off);
@@ -318,21 +317,19 @@ void ConfigureAfpu(EngineSession& es) {
         if (ver != nullptr) LOG("AFP", "AFPU Version: %s", ver);
     }
 
-    if ((es.active_profile != nullptr) && !es.active_profile->call_afpu_set_config) {
-        LOG("AFP", "Skipping afpu_set_config (gated off by profile '%s')", es.active_profile->slug);
+    if ((es.active_cfg != nullptr) && !es.active_cfg->call_afpu_set_config) {
+        LOG("AFP", "Skipping afpu_set_config (gated off by profile '%s')", es.active_cfg->slug);
     } else if (afpu.afpu_set_config != nullptr) {
         afpu.afpu_set_config(1, 4096);
         afpu.afpu_set_config(2, 10);
         const int clean_pos =
-            ((es.active_profile != nullptr) && es.active_profile->afpu_set_config_safe_clean_pos)
-                ? 0
-                : 1;
+            ((es.active_cfg != nullptr) && es.active_cfg->afpu_set_config_safe_clean_pos) ? 0 : 1;
         afpu.afpu_set_config(3, clean_pos);
         LOG("AFP", "afpu_set_config: buffer=4096, quality=10, clean_pos=%d", clean_pos);
     }
-    if ((es.active_profile != nullptr) && !es.active_profile->call_afpu_set_flag_setup) {
+    if ((es.active_cfg != nullptr) && !es.active_cfg->call_afpu_set_flag_setup) {
         LOG("AFP", "Skipping afpu_set_flag setup triple (gated off by profile '%s')",
-            es.active_profile->slug);
+            es.active_cfg->slug);
     } else if (afpu.afpu_set_flag != nullptr) {
         afpu.afpu_set_flag(4, 4);
         afpu.afpu_set_flag(8, 8);
@@ -342,9 +339,8 @@ void ConfigureAfpu(EngineSession& es) {
 
 void SetStreamNrGuarded(const EngineSession& es) {
     AfpFuncs const& afp = es.afp;
-    if ((es.active_profile != nullptr) && !es.active_profile->call_afp_set_stream_nr) {
-        LOG("AFP", "Skipping afp_set_stream_nr (gated off by profile '%s')",
-            es.active_profile->slug);
+    if ((es.active_cfg != nullptr) && !es.active_cfg->call_afp_set_stream_nr) {
+        LOG("AFP", "Skipping afp_set_stream_nr (gated off by profile '%s')", es.active_cfg->slug);
     } else {
         LOG("AFP", "Setting stream_nr=4096...");
         if (afp.afp_set_stream_nr != nullptr) {
@@ -364,14 +360,14 @@ void SetStreamNrGuarded(const EngineSession& es) {
 
 void ProbeStreamCreateGuarded(const EngineSession& es) {
     AfpFuncs const& afp = es.afp;
-    if ((es.active_profile != nullptr) && !es.active_profile->call_afp_stream_create_test) {
+    if ((es.active_cfg != nullptr) && !es.active_cfg->call_afp_stream_create_test) {
         LOG("AFP", "Skipping test stream_create probe (gated off by profile '%s')",
-            es.active_profile->slug);
+            es.active_cfg->slug);
     } else {
         __try {
             uint32_t const test_stream = afp.afp_stream_create();
             LOG("AFP", "Test stream_create = 0x%08x", test_stream);
-            if (test_stream != 0xFFFFFFFC && (int)test_stream >= 0) {
+            if (test_stream != Runtime::kModernNoStream && (int)test_stream >= 0) {
                 afp.afp_stream_destroy(5, test_stream, 0);
                 LOG("AFP", "Stream creation works!");
             } else {

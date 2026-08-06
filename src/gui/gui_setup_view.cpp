@@ -2,8 +2,10 @@
 #include <cfloat>
 #include <utility>
 #include "gui_setup_view.h"
+#include "gui_style.h"
 #include "gui_window.h"
 #include "../state/app_state.h"
+#include "../state/commands.h"
 #include "../arc_extract.h"
 #include "../customize_extract.h"
 #include "../game_profile.h"
@@ -24,6 +26,13 @@ char g_dir_buf[1024] = {};
 std::string g_last_state_value;
 bool g_initial_sync_done = false;
 
+std::string EffectiveSetupSlug(App::State& state) {
+    std::string explicit_slug = state.GetGameProfileSlug();
+    if (!explicit_slug.empty()) return explicit_slug;
+    const GameProfile::Profile* auto_pick = GameProfile::AutoDetect(g_dir_buf);
+    return auto_pick != nullptr ? auto_pick->slug : std::string{};
+}
+
 void PersistSetup(App::State& state, const char* dir_value) {
     if ((dir_value != nullptr) && state.GameDir() != dir_value) {
         state.SetGameDir(dir_value);
@@ -41,19 +50,21 @@ void SyncDirBufFromState(const std::string& cur_dir) {
 }
 
 void DrawHeaderCard() {
-    ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.14F, 0.14F, 0.16F, 1.0F));
-    ImGui::BeginChild("setup_card", ImVec2(0, 62), 1, ImGuiWindowFlags_NoScrollbar);
-    ImGui::TextColored(ImVec4(0.75F, 0.85F, 1.0F, 1.0F), "573Renderer");
+    Gui::PushHeaderFont();
+    ImGui::TextColored(ImGui::GetStyleColorVec4(ImGuiCol_CheckMark), "573Renderer");
+    ImGui::PopFont();
     ImGui::TextDisabled("Select a Konami game installation directory to begin.");
-    ImGui::EndChild();
-    ImGui::PopStyleColor();
+    ImGui::Spacing();
+    ImGui::Separator();
     ImGui::Spacing();
 }
 
 void DrawErrorBanner(App::BootState bs, const std::string& err) {
     if (bs != App::BootState::Failed || err.empty()) return;
     ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.35F, 0.18F, 0.20F, 1.0F));
-    ImGui::BeginChild("setup_err", ImVec2(0, 56), 1);
+    ImGui::BeginChild("setup_err", ImVec2(0, 0),
+                      ImGuiChildFlags_Borders | ImGuiChildFlags_AutoResizeY,
+                      ImGuiWindowFlags_NoScrollbar);
     ImGui::TextColored(ImVec4(1.00F, 0.85F, 0.60F, 1.0F), "Last attempt failed:");
     ImGui::TextWrapped("%s", err.c_str());
     ImGui::EndChild();
@@ -151,10 +162,11 @@ void DrawRenderFps(App::State& state) {
 
     ImGui::SameLine();
     const int kQuick[] = {30, 60, 120, 144};
+    const float quick_w = ImGui::CalcTextSize("144").x + (ImGui::GetStyle().FramePadding.x * 2.0F);
     for (int const q : kQuick) {
         char b[24];
         snprintf(b, sizeof(b), "%d##fps_%d", q, q);
-        if (ImGui::SmallButton(b)) {
+        if (ImGui::Button(b, ImVec2(quick_w, 0))) {
             fps = q;
             changed = true;
         }
@@ -178,16 +190,18 @@ struct RenderPreset {
 
 void DrawRenderPresetCombo(App::State& state, int rw, int rh) {
     static const RenderPreset kPresets[] = {
-        {.label = "3840x2160 (4K)", .w = 3840, .h = 2160},
-        {.label = "1920x1080", .w = 1920, .h = 1080},
-        {.label = "1280x720", .w = 1280, .h = 720},
-        {.label = "1080x1920", .w = 1080, .h = 1920},
-        {.label = "720x1280", .w = 720, .h = 1280},
+        {.label = "3840x2160 (GITADORA 4K)", .w = 3840, .h = 2160},
+        {.label = "1920x1080 (IIDX)", .w = 1920, .h = 1080},
+        {.label = "1280x720 (DDR)", .w = 1280, .h = 720},
+        {.label = "1080x1920 (SDVX / jubeat portrait)", .w = 1080, .h = 1920},
+        {.label = "720x1280 (SDVX old-era)", .w = 720, .h = 1280},
         {.label = "520x704 (qpro avatar)", .w = 520, .h = 704},
         {.label = "Custom", .w = 0, .h = 0},
     };
     const int kPresetCount = (int)(sizeof(kPresets) / sizeof(kPresets[0]));
     const int kCustomIdx = kPresetCount - 1;
+    const int kQproIdx = kCustomIdx - 1;
+    const bool show_qpro_preset = (EffectiveSetupSlug(state) == "iidx33");
 
     static int shown_idx = -1;
     static int last_rw = -1;
@@ -210,6 +224,7 @@ void DrawRenderPresetCombo(App::State& state, int rw, int rh) {
     ImGui::SetNextItemWidth(-120.0F);
     if (ImGui::BeginCombo("##render_preset", kPresets[shown_idx].label)) {
         for (int i = 0; i < kPresetCount; i++) {
+            if (i == kQproIdx && !show_qpro_preset && i != shown_idx) continue;
             bool const selected = (i == shown_idx);
             if (ImGui::Selectable(kPresets[i].label, selected)) {
                 shown_idx = i;
@@ -358,11 +373,10 @@ void DrawLoadButton(App::State& state, App::BootState bs) {
     const bool boot_in_flight = (bs == App::BootState::Booting);
     ImGui::BeginDisabled(boot_in_flight || g_dir_buf[0] == '\0');
     if (ImGui::Button("Load", ImVec2(160, 32))) {
-        App::Request r;
-        r.set_game_dir = true;
+        App::Cmd::BootGame r;
         r.game_dir = g_dir_buf;
         state.GetRenderSize(r.render_width, r.render_height);
-        state.PostRequest(std::move(r));
+        state.PostCommand(std::move(r));
         state.SetBootError({});
     }
     ImGui::EndDisabled();
@@ -390,6 +404,19 @@ void RenderView() {
                  ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
                      ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoBringToFrontOnFocus);
 
+    const float card_w = 640.0F;
+    const float avail_w = ImGui::GetContentRegionAvail().x;
+    const float indent = avail_w > card_w ? (avail_w - card_w) * 0.5F : 0.0F;
+    const float avail_h = ImGui::GetContentRegionAvail().y;
+    ImGui::Dummy(ImVec2(0, avail_h > 560.0F ? (avail_h - 560.0F) * 0.35F : 0.0F));
+
+    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indent);
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, ImGui::GetStyleColorVec4(ImGuiCol_PopupBg));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(22, 18));
+    ImGui::BeginChild("setup_card", ImVec2(card_w, 0),
+                      ImGuiChildFlags_Borders | ImGuiChildFlags_AutoResizeY,
+                      ImGuiWindowFlags_NoScrollbar);
+
     DrawHeaderCard();
     DrawErrorBanner(bs, err);
     DrawGameDirInput(state);
@@ -397,8 +424,14 @@ void RenderView() {
     DrawRenderFps(state);
     DrawRenderResolution(state);
     DrawLoadButton(state, bs);
-    DrawArcExtractor();
-    DrawCustomizeExtractor();
+    if (EffectiveSetupSlug(state) == "ddrworld") {
+        DrawArcExtractor();
+        DrawCustomizeExtractor();
+    }
+
+    ImGui::EndChild();
+    ImGui::PopStyleVar();
+    ImGui::PopStyleColor();
 
     ImGui::End();
 }

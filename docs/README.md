@@ -9,7 +9,8 @@ documents, which are THE source of truth. Start here to find the right one.
 | doc | read it when |
 |-----|--------------|
 | [boot_and_render_loop.md](boot_and_render_loop.md) | you need the big picture: main(), boot sequence, the per-frame loop, autopilot gates, window/WndProc contracts |
-| [game_runtime.md](game_runtime.md) | working across the two engine generations (modern avs2 afp-core vs DDR AFP 2.13.7) - the `Runtime::IGameRuntime` seam |
+| [backend.md](backend.md) | the `Backend::IBackend` seam: what generic code may touch, what the AFP family owns, and what a future non-AFP backend implements |
+| [game_runtime.md](game_runtime.md) | working across the two engine generations (modern avs2 afp-core vs DDR AFP 2.13.7) - the `Runtime::IGameRuntime` seam, now internal to the AFP family |
 | [game_profiles.md](game_profiles.md) | adding or debugging a game: the per-game data table (boot quirks, DLL names, offsets, detection) |
 | [ownership.md](ownership.md) | who owns which state: EngineSession / GpuContext / ExportSession, the P6/P8 seams, and what was deliberately deferred |
 

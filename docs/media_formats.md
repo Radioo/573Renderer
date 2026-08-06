@@ -11,8 +11,8 @@ existing `MediaSink::` call sites are unchanged.
 ## Stability contract
 
 Enum integer values are STABLE and serialized into
-`App::Request::export_format` (an int, kept trivially copyable for the
-cross-thread request struct). Renaming or reordering is a breaking change;
+`App::ExportRequest::format` (an int, kept trivially copyable for the
+cross-thread command payload). Renaming or reordering is a breaking change;
 the enum is append-only. `FromIndex` clamps out-of-range input to AVIF so a
 corrupt request degrades gracefully instead of asserting.
 

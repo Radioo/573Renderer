@@ -8,6 +8,8 @@
 
 namespace App {
 
+inline constexpr uint32_t kNoActiveStream = 0xFFFFFFFC;
+
 struct SubLayerNode {
     std::string name;
     std::string path;
@@ -40,8 +42,9 @@ struct Status {
     double fps_measured = 0.0;
     uint64_t ifs_size_bytes = 0;
     uint64_t load_time_ms = 0;
-    uint32_t stream_id = 0xFFFFFFFC;
+    uint32_t stream_id = kNoActiveStream;
     int frame_count = 0;
+    bool scene_loaded = false;
     bool label_playback_active = false;
 };
 
