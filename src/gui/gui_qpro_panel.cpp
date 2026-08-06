@@ -6,7 +6,7 @@
 
 #include "gui_panels_internal.h"
 #include "gui_window.h"
-#include "../state/afp_commands.h"
+#include "../backend/afp_commands.h"
 #include "../state/app_state.h"
 #include "../native_dialog.h"
 #include "../qpro_extract.h"

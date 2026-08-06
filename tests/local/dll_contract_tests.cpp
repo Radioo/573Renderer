@@ -53,21 +53,21 @@ TEST_CASE("game profile auto-detection identifies the real installs") {
         const GameProfile::Profile* p = GameProfile::AutoDetect(d);
         REQUIRE(p != nullptr);
         CHECK(std::string(p->slug) == "iidx33");
-        CHECK(!p->legacy_afp);
+        CHECK(std::string(p->backend_id) == "afp_modern");
         checked++;
     }
     if (const std::string d = EnvDir("R573_SDVX_DIR"); !d.empty()) {
         const GameProfile::Profile* p = GameProfile::AutoDetect(d);
         REQUIRE(p != nullptr);
         CHECK(std::string(p->slug) == "sdvx7");
-        CHECK(!p->legacy_afp);
+        CHECK(std::string(p->backend_id) == "afp_modern");
         checked++;
     }
     if (const std::string d = EnvDir("R573_DDR_DIR"); !d.empty()) {
         const GameProfile::Profile* p = GameProfile::AutoDetect(d);
         REQUIRE(p != nullptr);
         CHECK(std::string(p->slug) == "ddrworld");
-        CHECK(p->legacy_afp);
+        CHECK(std::string(p->backend_id) == "afp_ddr");
         checked++;
     }
     if (checked == 0) SKIP("no R573_*_DIR set");

@@ -44,6 +44,7 @@ struct Status {
     uint64_t load_time_ms = 0;
     uint32_t stream_id = kNoActiveStream;
     int frame_count = 0;
+    bool scene_loaded = false;
     bool label_playback_active = false;
 };
 

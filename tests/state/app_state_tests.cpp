@@ -211,6 +211,13 @@ TEST_CASE("SetRenderSize ignores non-positive values") {
     CHECK(h == 1920);
 }
 
+TEST_CASE("ActiveBackendId is empty before boot and round-trips") {
+    App::State s;
+    CHECK(s.ActiveBackendId().empty());
+    s.SetActiveBackendId("afp_modern");
+    CHECK(s.ActiveBackendId() == "afp_modern");
+}
+
 TEST_CASE("Defaults match the documented boot state") {
     App::State s;
     CHECK(s.GetBootState() == App::BootState::WaitingForDir);

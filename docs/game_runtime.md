@@ -7,10 +7,13 @@ renderer drives:
   IIDX, SDVX, and GITADORA;
 - the LEGACY DDR path (`DdrAfp`), AFP 2.13.7.
 
-One instance is selected once at boot (`Runtime::SelectRuntime(legacy_ddr)`,
-called from `BootFromGameDir` right after `g_ddr_mode` is set from the
-profile's `legacy_afp` flag) and reached everywhere via `Runtime::Active()`.
-Before selection it defaults to the modern runtime.
+One instance is selected once at boot (`Runtime::SelectRuntime`, called
+from the backend constructors in `Backend::CreateActive` - see
+docs/backend.md) and reached via `Runtime::Active()`. Before selection it
+defaults to the modern runtime. Since P14 `IGameRuntime` is an
+AFP-family-internal seam: generic code (boot.cpp, render_loop, the
+dispatcher) talks to `Backend::IBackend`, and the AFP family delegates to
+the runtime.
 
 ## Why it exists
 

@@ -202,8 +202,47 @@ P13 (typed commands): the flat ~50-field `App::Request` died. `App::Command`
 variant + `Cmd::BackendCommand{std::any}` + `AfpCmd::Any` (see
 docs/state.md "Command semantics"); the dispatcher is a `std::visit` visitor
 pair; `app_state.h` no longer includes qpro_model.h (that coupling now lives
-only in `state/afp_commands.h`, which P14 relocates under the backend dir).
+only in `backend/afp_commands.h`; P14 did the relocation).
 Export start carries a generic `App::ExportRequest`. Verified byte-identical.
+
+P14 (backend seam lift): `Backend::IBackend` (src/backend/) is the generic
+engine surface; `AfpFamilyBackend` + `AfpModernBackend`/`AfpDdrBackend`
+absorbed DLL discovery/loading, AVS boot, the engine boot fork, persistent
+boot IFSes, the content scan thread, arc staging + content load, the whole
+per-frame AdvanceFrame housekeeping (loop statics are members now), scene
+render, the submonitor machinery, the autopilot engine inputs, and AFP
+command dispatch. boot.cpp shrank to profile resolve + window/device +
+settings + orchestration; render_loop.cpp is backend-neutral except
+`Export::OnMainLoopTick(g_engine, g_d3d)` (P18 cuts it) and the inline
+`--animation-label` arm. `IGameRuntime` demoted to family-internal. The
+window+device creation moved ahead of DLL/AVS boot (documented in
+docs/backend.md). Verified byte-identical + DLL tier. The
+`GatherAutopilotInputs`/`AdvanceFrame`/`CallAfpUpdateGuarded` residue listed
+under P12 is now resolved (all family code).
+
+P15 (profile split): `GameProfile::Profile` is identity-only (name, slug,
+dir_substring, backend_id, game_dll, default render size); the AFP engine
+config (DLL names, offsets, boot-gate bools, scan_arc_containers,
+time_scale) moved to the slug-keyed `AfpProfiles::AfpConfig` table
+(src/backend/afp_profiles.*), resolved by the family backend at Boot.
+`legacy_afp` deleted (backend_id + registry table); the never-read
+`Profile::afp` AfpOrdinals member and `kSkip` deleted;
+`EngineSession::active_profile` renamed `active_cfg`
+(`AfpManager::SetActiveConfig`); `ActiveOffsets` moved to `AfpProfiles`.
+dll_contract_tests now assert backend_id. Verified byte-identical + DLL
+tier.
+
+P16 slice 1 (capability surface): `IsDdrMode`/`SetIsDdrMode` deleted;
+`BootLifecycle::ActiveBackendId` (seeded from `Backend::Active()->Id()`) is
+the GUI's backend signal, and `Status::scene_loaded` is the generic
+scene-mounted flag (the GUI no longer interprets `Status::stream_id`).
+Verified byte-identical. The REMAINDER of the original P16 (moving
+IfsConfig/LiveState/labels/mc_tree/AFP export knobs into a
+`BackendUiState` block so generic `Status` is fully backend-neutral, and
+the IfsCatalog -> ContentCatalog rename) is deliberately deferred until
+after the P17 panel registry: P17 only needs the backend id + scene flag,
+and the state-block move is a large mechanical migration with no
+user-visible payoff until the first non-AFP backend lands.
 
 Deferred deliberately (each is a seam with NO consumer today; cutting them
 now would be speculative generality):

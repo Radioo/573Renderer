@@ -13,7 +13,7 @@ never overwrite each other, and the render thread takes one command per
 frame in post order.
 
 Known design debts scheduled for later phases (do not "fix" casually):
-the qpro command payloads couple `state/afp_commands.h` to qpro_model.h (a
+the qpro command payloads couple `backend/afp_commands.h` to qpro_model.h (a
 later phase moves qpro behind a RenderService seam; the coupling no longer
 touches app_state.h);
 `ShouldExit` is atomic so both threads can flip it without the mutex - the
@@ -26,8 +26,8 @@ only the render window close does.
 commands; backend-specific commands travel as
 `Cmd::BackendCommand{std::any}` whose payload is a backend-defined closed
 variant. The AFP family's variant is `AfpCmd::Any`
-(`state/afp_commands.h`, scheduled to move under the backend directory with
-the P14 seam lift); `AfpCmd::Wrap(cmd)` builds the wrapped `App::Command`.
+(`backend/afp_commands.h`); `AfpCmd::Wrap(cmd)` builds the wrapped
+`App::Command`.
 Posting is `State::PostCommand`, draining is `State::TakeCommand`
 (`std::optional`, one per render-loop tick). The dispatcher
 (`render_loop_requests.cpp DispatchAppCommand`) is a pair of `std::visit`
@@ -209,10 +209,14 @@ sentinel so the pipeline's test is one comparison.
 
 ## Misc invariants
 
-- `IsDdrMode` is boot-seeded ONCE (from the profile in BootFromGameDir)
-  before the GUI reads it - it exists so GUI TUs can branch on
-  capabilities without including app_globals.h (which drags windows.h /
-  d3d9 through render_backend.h). It dies with g_ddr_mode in P5.
+- `ActiveBackendId` (BootLifecycle) is boot-seeded ONCE (from
+  `Backend::Active()->Id()` in BootFromGameDir) before the GUI reads it -
+  it exists so GUI TUs can key panel visibility off the backend without
+  including engine headers. It replaced the old `IsDdrMode` bool in P16;
+  the P17 panel registry keys its per-backend panel sets on it.
+- `Status::scene_loaded` is the generic "a scene is mounted and renderable"
+  flag published by whichever backend publishes `Status`; the GUI never
+  interprets `Status::stream_id` (an AFP diagnostic) anymore.
 - `SetMasterScale` clamps to 0.1..8.0 (matrix stays numerically sane;
   beyond 8x the layer exceeds any plausible viewport). See
   docs/settings.md for what master scale is.

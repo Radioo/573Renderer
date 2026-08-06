@@ -63,8 +63,8 @@ public:
     [[nodiscard]] std::string GetGameProfileSlug() const;
     void SetGameProfileSlug(std::string slug);
 
-    [[nodiscard]] bool IsDdrMode() const;
-    void SetIsDdrMode(bool on);
+    [[nodiscard]] std::string ActiveBackendId() const;
+    void SetActiveBackendId(std::string id);
 
     [[nodiscard]] BootState GetBootState() const;
     void SetBootState(BootState s);

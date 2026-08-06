@@ -40,8 +40,8 @@ public:
     [[nodiscard]] std::string GetGameProfileSlug() const;
     void SetGameProfileSlug(std::string slug);
 
-    [[nodiscard]] bool IsDdrMode() const;
-    void SetIsDdrMode(bool on);
+    [[nodiscard]] std::string ActiveBackendId() const;
+    void SetActiveBackendId(std::string id);
 
     [[nodiscard]] LoadProgress GetLoadProgress() const;
     void SetLoadProgress(LoadProgress p);
@@ -58,9 +58,9 @@ private:
     std::string game_dir_;
     std::string boot_error_;
     std::string game_profile_slug_;
+    std::string active_backend_id_;
     LoadProgress progress_;
     BootState boot_state_{BootState::WaitingForDir};
-    bool is_ddr_mode_{false};
 };
 
 }

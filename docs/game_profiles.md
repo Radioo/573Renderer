@@ -3,6 +3,37 @@
 The game-profile system encodes what differs between Konami game versions so
 the renderer can boot the right ordinals + defaults per game.
 
+## P15 split: identity vs engine config
+
+Since P15 the old flat Profile struct is TWO slug-keyed tables:
+
+- `GameProfile::Profile` (src/game_profile.{h,cpp}) is pure IDENTITY:
+  `{name, slug, dir_substring, backend_id, game_dll, default_render_w/h}`.
+  It is what selection (AutoDetect / BySlug / the Setup combo), the backend
+  registry, and the window-size default consume. It contains ZERO
+  engine-ABI data, so a future non-AFP backend adds identity rows without
+  touching anything AFP.
+- `AfpProfiles::AfpConfig` (src/backend/afp_profiles.{h,cpp}) is the AFP
+  family's engine config: DLL names, `DllOffsetSet`, the boot-call gate
+  bools, `scan_arc_containers`, `time_scale`. `AfpFamilyBackend::Boot`
+  resolves it by slug (`AfpProfiles::For`); a modern/DDR profile without a
+  config row fails the boot with a clear error. `ActiveOffsets` /
+  `SetActiveOffsets` / `kFallbackIidxOffsets` moved into this namespace
+  too, and `EngineSession::active_profile` became `active_cfg`
+  (`AfpManager::SetActiveConfig`).
+- `legacy_afp` is DELETED: the backend choice is `Profile::backend_id`
+  ("afp_modern" / "afp_ddr"), resolved by the `Backend::CreateActive`
+  registry table. The old `Profile::afp` AfpOrdinals member and
+  `GameProfile::kSkip` were removed outright: nothing ever read them (the
+  real ordinals live in afp_funcs.h's DLL_LOAD lines; the reference table
+  stays in docs/engine_binding.md).
+
+"New modern-AFP game" is now: one identity row in game_profile.cpp + one
+config row in afp_profiles.cpp. "New backend" is: identity rows with a new
+backend_id + a registry entry + that backend's own config table. The field
+documentation below (ordinals, offsets, boot gates) describes the AfpConfig
+fields unless it names identity fields.
+
 ## Why it exists
 
 IIDX 33's afp-core.dll and SDVX 7 NABLA's afp-core.dll both ship the same
@@ -47,19 +78,18 @@ above. Registry order drives the GUI dropdown display order; most-likely
 profiles go first. `AutoDetect` and `BySlug` return nullptr on no match. The
 registry is constructed at static init and never empty.
 
-Adding a profile:
+Adding a modern-AFP profile:
 
-1. Append a brace-init entry in game_profile.cpp.
-2. Set name / slug / dir_substring uniquely (the "Auto" UI option picks it up
-   if dir_substring is unique enough).
-3. Override any AfpOrdinals field that diverges from IIDX 33; leave the rest
-   as struct defaults (which match IIDX 33). Optionally tweak defaults
-   (render size, data layout).
-4. RE the new game's `afp_set_afp_data` (afp-core ord 0x000) and
+1. Append an identity row in game_profile.cpp (name / slug / dir_substring
+   unique enough for the "Auto" UI option; backend_id "afp_modern"; the
+   game_dll used for the presence probe; default render size).
+2. Append a matching AfpConfig row (same slug) in
+   src/backend/afp_profiles.cpp: gate bools + offsets.
+3. RE the new game's `afp_set_afp_data` (afp-core ord 0x000) and
    `afpu_render_init` (afp-utils ord 0x070) to derive a new DllOffsetSet
    constant (see below).
-5. When adding a NEW ordinal field to AfpOrdinals, ALSO update afp_funcs.h's
-   Load() to read from the profile's value rather than a hard-coded literal.
+4. If the new build moves an ordinal, update afp_funcs.h's DLL_LOAD line
+   (the ordinal reference table is docs/engine_binding.md).
 
 The registry uses C++20 designated initializers ON PURPOSE: field-name typos
 surface as compiler errors instead of silently misaligned positional brace

@@ -3,8 +3,8 @@
 #include "afp_funcs.h"
 #include "afpu_funcs.h"
 #include "avs_funcs.h"
+#include "backend/afp_profiles.h"
 #include "support/dll_loader.h"
-#include "game_profile.h"
 #include "render_backend.h"
 #include <string>
 #include <vector>
@@ -12,7 +12,7 @@
 struct EngineSession;
 
 namespace AfpManager {
-void SetActiveProfile(const GameProfile::Profile* p);
+void SetActiveConfig(const AfpProfiles::AfpConfig* cfg);
 
 bool Boot(EngineSession& es, D3D9State& d3d);
 

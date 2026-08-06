@@ -8,7 +8,7 @@
 #include "avs_xml.h"
 #include "ifs_inspect.h"
 #include "support/log.h"
-#include "game_profile.h"
+#include "backend/afp_profiles.h"
 #include "render_backend.h"
 #include <cstdint>
 #include <cstdio>
@@ -355,7 +355,7 @@ void AfpManager::UnloadPackages(EngineSession& es) {
         enum_streams("post-sweep");
 
         HMODULE afp_core = GetModuleHandleA("afp-core.dll");
-        const uintptr_t table_b_off = GameProfile::ActiveOffsets().afp_table_b_count;
+        const uintptr_t table_b_off = AfpProfiles::ActiveOffsets().afp_table_b_count;
         if ((afp_core != nullptr) && (table_b_off != 0U)) {
             auto* table_b_count =
                 reinterpret_cast<uint16_t*>(reinterpret_cast<uint8_t*>(afp_core) + table_b_off);

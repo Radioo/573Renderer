@@ -3,7 +3,7 @@
 #include "render_executor.h"
 #include "support/log.h"
 #include "dll_offsets.h"
-#include "game_profile.h"
+#include "backend/afp_profiles.h"
 #include <cstdint>
 #include <cstdio>
 #include <d3d9.h>
@@ -200,7 +200,7 @@ void __cdecl EndRender() {
     static int prev_shapes_a = 0;
     static int prev_drawn = 0;
     if (frame < 10) {
-        const auto& off = GameProfile::ActiveOffsets();
+        const auto& off = AfpProfiles::ActiveOffsets();
         if ((g_gpu.afpu_base != nullptr) && (off.afpu_shapes_a != 0U) &&
             (off.afpu_shapes_b != 0U) && (off.afpu_drawn != 0U)) {
             int const shapes_b = *DllOffsets::At<int>(g_gpu.afpu_base, off.afpu_shapes_b);

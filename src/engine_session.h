@@ -10,8 +10,8 @@
 #include <string>
 #include <vector>
 
-namespace GameProfile {
-struct Profile;
+namespace AfpProfiles {
+struct AfpConfig;
 }
 
 struct CompanionRecord {
@@ -30,7 +30,7 @@ struct EngineSession {
 
     AfpRenderContext render_ctx;
 
-    const GameProfile::Profile* active_profile = nullptr;
+    const AfpProfiles::AfpConfig* active_cfg = nullptr;
     bool afp_booted = false;
     uint32_t pkg_id = 0;
     uint32_t stream_id = Runtime::kModernNoStream;

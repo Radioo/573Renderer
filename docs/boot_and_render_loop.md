@@ -281,12 +281,20 @@ for un-RE'd games; per-profile offsets normally make it safe).
 
 ## 4. Boot orchestration (BootFromGameDir) and IFS load path
 
+Since P14 the steps below are split across the seam (see docs/backend.md):
+boot.cpp keeps steps 1, 5, and 8's settings/Ready flip; the AFP family
+backend owns steps 2-4 and 6-7 plus the scan thread
+(`Backend::Active()->Boot` / `StartContentScan`). Step 5 (window + device)
+now runs BEFORE steps 2-4 rather than between 4 and 6 - neither side
+depends on the other, and the change is verified byte-identical. The
+mechanism documentation below is unchanged; only file ownership moved.
+
 ### 4.1 BootFromGameDir step order
 
 1. Resolve GameProfile: explicit slug (request / settings.ini) beats
    auto-detect from the directory path, beats built-in default (IIDX 33).
-   `g_ddr_mode = profile->legacy_afp` routes everything to the DDR
-   (legacy AFP 2.13.7) path; it is mirrored into App::State
+   `profile->legacy_afp` selects the backend (`Backend::CreateActive`,
+   whose constructor selects the runtime); it is mirrored into App::State
    (`SetIsDdrMode`) BEFORE the Ready flip so GUI TUs read it correctly.
 2. Discover DLL dir. Candidates in order: `<game>/modules`,
    `<game>/contents/modules`, `<game>` itself (portable layouts). All three

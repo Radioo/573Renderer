@@ -70,6 +70,7 @@ bool DdrRuntime::LoadScene(const std::string& mount_path, const std::string& ifs
         App::Status st = state.GetStatus();
         st.current_ifs_path = ifs_path;
         st.stream_id = DdrAfp::LayerId();
+        st.scene_loaded = true;
         st.playing_animation = DdrAfp::ActiveClip();
         st.labels.clear();
         for (auto& l : DdrAfp::EnumerateLabels())
@@ -149,6 +150,7 @@ void DdrRuntime::SwitchAnimation(const std::string& name,
     App::Status st = App::Global().GetStatus();
     if (DdrAfp::SwitchClip(name)) {
         st.stream_id = DdrAfp::LayerId();
+        st.scene_loaded = true;
         st.playing_animation = DdrAfp::ActiveClip();
         st.active_label.clear();
         st.label_playback_active = false;

@@ -178,12 +178,12 @@ void State::SetGameProfileSlug(std::string slug) {
     boot_.SetGameProfileSlug(std::move(slug));
 }
 
-bool State::IsDdrMode() const {
-    return boot_.IsDdrMode();
+std::string State::ActiveBackendId() const {
+    return boot_.ActiveBackendId();
 }
 
-void State::SetIsDdrMode(bool on) {
-    boot_.SetIsDdrMode(on);
+void State::SetActiveBackendId(std::string id) {
+    boot_.SetActiveBackendId(std::move(id));
 }
 
 BootState State::GetBootState() const {

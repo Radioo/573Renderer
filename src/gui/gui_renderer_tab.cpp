@@ -41,7 +41,7 @@ void RenderRightPane() {
     }
     {
         auto st = App::Global().GetStatus();
-        const bool loaded = (st.stream_id != App::kNoActiveStream);
+        const bool loaded = st.scene_loaded;
         if (loaded) {
             ImGui::Spacing();
             LiveControls::RenderSeekControls();

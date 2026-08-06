@@ -107,6 +107,12 @@ add_executable(renderer WIN32
     src/main.cpp
     src/tool_commands.cpp
     src/boot.cpp
+    src/backend/backend_registry.cpp
+    src/backend/afp_profiles.cpp
+    src/backend/afp_family_backend.cpp
+    src/backend/afp_family_frame.cpp
+    src/backend/afp_modern_backend.cpp
+    src/backend/afp_ddr_backend.cpp
     src/render_loop.cpp
     src/render_loop_requests.cpp
     src/render_executor.cpp

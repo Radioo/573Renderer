@@ -48,14 +48,14 @@ void BootLifecycle::SetGameProfileSlug(std::string slug) {
     game_profile_slug_ = std::move(slug);
 }
 
-bool BootLifecycle::IsDdrMode() const {
+std::string BootLifecycle::ActiveBackendId() const {
     const std::scoped_lock lk(mu_);
-    return is_ddr_mode_;
+    return active_backend_id_;
 }
 
-void BootLifecycle::SetIsDdrMode(bool on) {
+void BootLifecycle::SetActiveBackendId(std::string id) {
     const std::scoped_lock lk(mu_);
-    is_ddr_mode_ = on;
+    active_backend_id_ = std::move(id);
 }
 
 LoadProgress BootLifecycle::GetLoadProgress() const {

@@ -6,7 +6,7 @@
 #include "app_globals.h"
 #include "avs_boot.h"
 #include "export.h"
-#include "game_profile.h"
+#include "backend/afp_profiles.h"
 #include "ifs_inspect.h"
 #include "mc_control.h"
 #include "render_backend.h"
@@ -63,6 +63,7 @@ void PublishSceneStatus(App::State& state, const std::string& ifs_path,
                               .count();
     }
     st.stream_id = AfpManager::StreamId();
+    st.scene_loaded = (st.stream_id != kModernNoStream);
     st.playing_animation = AfpManager::AnimName();
     st.labels.clear();
     for (auto& l : AfpManager::EnumerateLabels(g_afp))
@@ -73,6 +74,7 @@ void PublishSceneStatus(App::State& state, const std::string& ifs_path,
 void PublishReplayedStatus(uint32_t sid) {
     App::Status st = App::Global().GetStatus();
     st.stream_id = sid;
+    st.scene_loaded = (sid != kModernNoStream);
     st.playing_animation = AfpManager::AnimName();
     App::Global().SetStatus(st);
 }
@@ -82,7 +84,7 @@ void LogAfpuWorldMatOnce() {
     if (logged_pre_state) return;
     logged_pre_state = true;
     HMODULE afpu_mod = GetModuleHandleA("afp-utils.dll");
-    const auto& off = GameProfile::ActiveOffsets();
+    const auto& off = AfpProfiles::ActiveOffsets();
     if ((afpu_mod != nullptr) && (off.afpu_world_mat_type != 0U) && (off.afpu_world_mat != 0U)) {
         uint8_t const mat_type = *((uint8_t*)afpu_mod + off.afpu_world_mat_type);
         auto* mat = (float*)((uint8_t*)afpu_mod + off.afpu_world_mat);
@@ -408,6 +410,7 @@ void ModernRuntime::SwitchAnimation(const std::string& name, const std::string& 
         if (!label.empty()) AfpManager::GotoLabel(g_afp, label);
         App::Status st = App::Global().GetStatus();
         st.stream_id = AfpManager::StreamId();
+        st.scene_loaded = (st.stream_id != kModernNoStream);
         st.playing_animation = AfpManager::AnimName();
         st.active_label = label;
         st.label_playback_active = !label.empty();

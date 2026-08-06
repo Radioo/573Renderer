@@ -3,7 +3,7 @@
 #include "gui_export_panel.h"
 #include "gui_loading_overlay.h"
 #include "gui_setup_view.h"
-#include "../state/afp_commands.h"
+#include "../backend/afp_commands.h"
 #include "../state/app_state.h"
 #include "../state/commands.h"
 #include "../support/log.h"

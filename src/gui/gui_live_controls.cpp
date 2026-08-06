@@ -1,5 +1,5 @@
 #include "gui_live_controls.h"
-#include "../state/afp_commands.h"
+#include "../backend/afp_commands.h"
 #include "../state/app_state.h"
 #include "imgui.h"
 #include "state/telemetry.h"
@@ -265,7 +265,7 @@ void DrawMcNamesList(const App::Status& status) {
 void RenderOverridePanel() {
     auto& state = App::Global();
     auto status = state.GetStatus();
-    const bool ddr = state.IsDdrMode();
+    const bool ddr = (state.ActiveBackendId() == "afp_ddr");
 
     ImGui::TextDisabled("For: %s", status.playing_animation.empty()
                                        ? "(no animation playing)"
@@ -349,7 +349,7 @@ void RenderSubLayerNode(App::State& state, const std::string& active, const App:
 
 void RenderSubLayersPanel() {
     auto& state = App::Global();
-    if (state.IsDdrMode()) {
+    if (state.ActiveBackendId() == "afp_ddr") {
         ImGui::TextDisabled("Sub-layer toggles are unavailable for DDR (no enumerate).");
         return;
     }

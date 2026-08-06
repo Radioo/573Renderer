@@ -8,18 +8,14 @@
 #include <ios>
 #include <atomic>
 #include "support/log.h"
+#include "backend/backend.h"
 #include "loop/cli_autopilot.h"
 #include "loop/frame_pacer.h"
-#include "loop/submonitor_cycler.h"
 #include "window.h"
-#include "afp_funcs.h"
-#include "avs_boot.h"
-#include "afp_boot.h"
 #include "game_runtime.h"
 #include "export.h"
 #include "render_backend.h"
-#include "mc_control.h"
-#include "state/afp_commands.h"
+#include "backend/afp_commands.h"
 #include "state/app_state.h"
 #include "state/commands.h"
 #include "cli/cli.h"
@@ -28,8 +24,6 @@
 #include "render_loop.h"
 #include "render_loop_requests.h"
 #include "render/command_list.h"
-#include "render_live.h"
-#include "render_seh.h"
 #include <algorithm>
 #include <filesystem>
 #include <fstream>
@@ -103,13 +97,7 @@ void LogAutopilotPlans(const Cli::Options& cli) {
 Loop::AutopilotInputs GatherAutopilotInputs(const Cli::Options& cli, int frame_count) {
     Loop::AutopilotInputs in;
     in.frame = frame_count;
-    in.clip_live = Runtime::Active().HaveActiveClip(AfpManager::StreamId());
-    in.active_clip_matches =
-        !cli.animation_name.empty() && Runtime::Active().ActiveClipName() == cli.animation_name;
-    in.anim_name_matches =
-        !cli.animation_name.empty() && AfpManager::AnimName() == cli.animation_name;
-    in.modern_stream_valid = AfpManager::StreamId() != Runtime::kModernNoStream;
-    in.scene_renderable = Runtime::Active().HasRenderableScene(AfpManager::StreamId());
+    Backend::Active()->FillAutopilotInputs(in);
     if (!cli.goto_label.empty()) {
         App::Status const st = App::Global().GetStatus();
         in.label_applied = st.label_playback_active && st.active_label == cli.goto_label;
@@ -119,105 +107,6 @@ Loop::AutopilotInputs GatherAutopilotInputs(const Cli::Options& cli, int frame_c
         in.export_finished = ph == App::ExportPhase::Done || ph == App::ExportPhase::Failed;
     }
     return in;
-}
-
-std::vector<McControl::ImageSlot> DecodeSubmonitorFrames(const Cli::Options& cli, int& decoded) {
-    std::vector<McControl::ImageSlot> slots;
-    slots.reserve(cli.submonitor_frames.size());
-    decoded = 0;
-    for (const auto& f : cli.submonitor_frames) {
-        int w = 0;
-        int h = 0;
-        int const slot = AfpD3D9::LoadExternalImageSlot(f, w, h);
-        if (slot < 0) {
-            LOG("Main", "submonitor: FAILED to decode frame '%s'", f.c_str());
-        } else {
-            decoded++;
-        }
-        slots.push_back({.slot = slot, .w = w, .h = h});
-    }
-    return slots;
-}
-
-void BindSubmonitorFade(const Cli::Options& cli, uint32_t sid,
-                        const std::vector<McControl::ImageSlot>& slots, int decoded,
-                        std::vector<McControl::ImageSlot>& sm_slots, int& sm_base_mc) {
-    int const bound = McControl::BindClipImages(g_afp, sid, cli.submonitor_clip.c_str(),
-                                                slots.data(), (int)slots.size());
-    sm_base_mc = McControl::FindClip(g_afp, sid, cli.submonitor_clip.c_str());
-    if (bound > 0 && sm_base_mc >= 0 && decoded > 0) {
-        sm_slots = slots;
-        McControl::SetClipVisible(g_afp, sid, "license_usr", false);
-        Runtime::Active().GotoLabel(g_afp, cli.submonitor_fade_in_label);
-        LOG("Main",
-            "submonitor slideshow-fade: %d/%zu frames on "
-            "'%s' (mc=%d), dwell=%d fade=%d -> fade cycle",
-            decoded, cli.submonitor_frames.size(), cli.submonitor_clip.c_str(), sm_base_mc,
-            cli.submonitor_dwell_frames, cli.submonitor_fade_frames);
-    } else {
-        LOG("Main",
-            "submonitor slideshow-fade: clip '%s' not found "
-            "or 0 decoded (bound=%d mc=%d) - cannot fade.",
-            cli.submonitor_clip.c_str(), bound, sm_base_mc);
-    }
-}
-
-void BindSubmonitorSlideshow(const Cli::Options& cli, uint32_t sid,
-                             const std::vector<McControl::ImageSlot>& slots, int decoded,
-                             std::vector<McControl::ImageSlot>& sm_slots, int& sm_base_mc,
-                             int& sm_overlay_mc) {
-    int ids[8];
-    int const ns = McControl::ResolveSiblings(g_afp, sid, cli.submonitor_clip.c_str(), ids, 8);
-    if (ns >= 2 && decoded > 0) {
-        sm_slots = slots;
-        sm_base_mc = cli.submonitor_swap_layers ? ids[1] : ids[0];
-        sm_overlay_mc = cli.submonitor_swap_layers ? ids[0] : ids[1];
-        McControl::BindImageToMc(g_afp, sm_base_mc, sm_slots[0]);
-        McControl::BindImageToMc(g_afp, sm_overlay_mc, sm_slots[1 % (int)sm_slots.size()]);
-        LOG("Main",
-            "submonitor slideshow: %d/%zu frames, %d "
-            "sibling layers (base mc=%d overlay mc=%d), loop=%d "
-            "frames -> cross-fade cycle",
-            decoded, cli.submonitor_frames.size(), ns, sm_base_mc, sm_overlay_mc,
-            cli.submonitor_loop_frames);
-    } else {
-        LOG("Main",
-            "submonitor slideshow: clip '%s' has %d "
-            "sibling(s) (<2) or 0 decoded - cannot cross-fade.",
-            cli.submonitor_clip.c_str(), ns);
-    }
-}
-
-void BindSubmonitorStatic(const Cli::Options& cli, uint32_t sid,
-                          const std::vector<McControl::ImageSlot>& slots, int decoded) {
-    int const bound = McControl::BindClipImages(g_afp, sid, cli.submonitor_clip.c_str(),
-                                                slots.data(), (int)slots.size());
-    LOG("Main",
-        "submonitor: decoded %d/%zu frame(s), bound %d to "
-        "clip '%s' on stream 0x%08x",
-        decoded, cli.submonitor_frames.size(), bound, cli.submonitor_clip.c_str(), sid);
-    if (bound == 0) {
-        LOG("Main",
-            "submonitor: bound 0 frames - clip '%s' not "
-            "found or has no child layers in this animation; the "
-            "export will be empty. Check --submonitor-clip / "
-            "--animation.",
-            cli.submonitor_clip.c_str());
-    }
-}
-
-void BindSubmonitor(const Cli::Options& cli, std::vector<McControl::ImageSlot>& sm_slots,
-                    int& sm_base_mc, int& sm_overlay_mc) {
-    const uint32_t sid = AfpManager::StreamId();
-    int decoded = 0;
-    const std::vector<McControl::ImageSlot> slots = DecodeSubmonitorFrames(cli, decoded);
-    if (cli.submonitor_slideshow_fade) {
-        BindSubmonitorFade(cli, sid, slots, decoded, sm_slots, sm_base_mc);
-    } else if (cli.submonitor_slideshow) {
-        BindSubmonitorSlideshow(cli, sid, slots, decoded, sm_slots, sm_base_mc, sm_overlay_mc);
-    } else {
-        BindSubmonitorStatic(cli, sid, slots, decoded);
-    }
 }
 
 void PostCliExportRequest(const Cli::Options& cli) {
@@ -248,87 +137,11 @@ void PostCliExportRequest(const Cli::Options& cli) {
     App::Global().PostCommand(App::Cmd::StartExport{.req = std::move(r)});
 }
 
-void TickSubmonitorCyclers(const Cli::Options& cli, uint32_t stream_id,
-                           const std::vector<McControl::ImageSlot>& sm_slots, int sm_base_mc,
-                           int sm_overlay_mc, Loop::DissolveCycler& sm_dissolve,
-                           Loop::FadeCycler& sm_fade) {
-    if (cli.submonitor_slideshow && sm_base_mc >= 0 && !sm_slots.empty() &&
-        cli.submonitor_loop_frames > 0) {
-        uint32_t cur = 0;
-        uint32_t total = 0;
-        if (Runtime::Active().ReadPlayhead(stream_id, &cur, &total, nullptr)) {
-            const Loop::DissolveCycler::Tick tick = sm_dissolve.Advance(cur, total);
-            if (tick.cycle_changed) {
-                int const n = (int)sm_slots.size();
-                McControl::BindImageToMc(g_afp, sm_base_mc, sm_slots[tick.cycle % n]);
-                McControl::BindImageToMc(g_afp, sm_overlay_mc, sm_slots[(tick.cycle + 1) % n]);
-                LOG("Main", "submonitor slideshow: cycle %d -> base frame %d, overlay frame %d",
-                    tick.cycle, tick.cycle % n, (tick.cycle + 1) % n);
-            }
-        }
-    }
-
-    if (cli.submonitor_slideshow_fade && sm_base_mc >= 0 && !sm_slots.empty() &&
-        cli.submonitor_dwell_frames > 0 && cli.submonitor_fade_frames > 0) {
-        const int n = (int)sm_slots.size();
-        const Loop::FadeCycler::Tick tick = sm_fade.Advance();
-        if (tick.fade_in) {
-            McControl::BindImageToMc(g_afp, sm_base_mc, sm_slots[tick.cycle % n]);
-            Runtime::Active().GotoLabel(g_afp, cli.submonitor_fade_in_label);
-            LOG("Main", "submonitor fade: frame %d (cycle %d) fade-in", tick.cycle % n, tick.cycle);
-        } else if (tick.fade_out) {
-            Runtime::Active().GotoLabel(g_afp, cli.submonitor_fade_out_label);
-            LOG("Main", "submonitor fade: frame %d fade-out", tick.cycle % n);
-        }
-        McControl::SetClipVisible(g_afp, stream_id, "license_usr", false);
-    }
-}
-
-uint32_t ApplyLoopHousekeeping(const Cli::Options& cli, uint32_t stream_id, bool exporting) {
-    static int loop_cooldown = 0;
-    static uint32_t loop_last_sid = Runtime::kModernNoStream;
-    static int frames_since_switch = 0;
-    if (stream_id != loop_last_sid) {
-        loop_cooldown = 0;
-        loop_last_sid = stream_id;
-        frames_since_switch = 0;
-    } else {
-        frames_since_switch++;
-    }
-    if (loop_cooldown > 0) loop_cooldown--;
-
-    const auto live_ov = App::Global().GetLiveOverrides();
-
-    if (!exporting && (g_d3d.device != nullptr)) {
-        g_d3d.clear_color = (live_ov.bg_color_index >= 0 && live_ov.bg_color_index < 5)
-                                ? App::State::kBgPresets[live_ov.bg_color_index]
-                                : 0x00000000U;
-    }
-
-    int eff_cont = live_ov.continuous_loop_mode;
-    if (eff_cont == 0) eff_cont = 1;
-    if (cli.submonitor_slideshow_fade) eff_cont = -1;
-
-    Runtime::Active().ApplyContinuousLoop(stream_id, eff_cont);
-
-    RenderLive::PublishLiveState(g_afp, stream_id, frames_since_switch, exporting);
-
-    const Runtime::RootRedrive rr = Runtime::Active().MaybeRedriveRootLoop(
-        stream_id, loop_cooldown, frames_since_switch, live_ov.trim_frames);
-    if (rr.replayed) {
-        stream_id = rr.new_stream_id;
-        loop_last_sid = stream_id;
-        frames_since_switch = 0;
-        loop_cooldown = 10;
-    }
-    return stream_id;
-}
-
-void RenderOneFrame(const Cli::Options& cli, float dt, uint32_t stream_id, int frame_count) {
+void RenderOneFrame(const Cli::Options& cli, float dt, int frame_count) {
     if (g_d3d.device != nullptr) {
         g_d3d.BeginFrame();
 
-        Runtime::Active().RenderFrame(dt, stream_id, frame_count);
+        Backend::Active()->RenderScene(dt, frame_count);
 
         Export::OnMainLoopTick(g_engine, g_d3d);
 
@@ -399,16 +212,6 @@ void LogAutopilotExit(const Cli::Options& cli, int frame_count) {
     }
 }
 
-void CallAfpUpdateGuarded(float dt, int frame_count) {
-    if (!AfpManager::IsBooted() || (g_afp.afp_do_update == nullptr)) return;
-    static bool logged_update_fault = false;
-    const RenderSeh::FaultReport ur = RenderSeh::SafeCallUpdate(g_afp.afp_do_update, dt);
-    if (ur.faulted && !logged_update_fault) {
-        LOG("AFP", "afp_do_update threw 0x%08lx at frame %d", (unsigned long)ur.code, frame_count);
-        logged_update_fault = true;
-    }
-}
-
 void PaceFrame(Loop::FramePacer& pacer, bool exporting) {
     if (exporting) {
         pacer.AnchorTo(QpcNow());
@@ -429,8 +232,7 @@ void PaceFrame(Loop::FramePacer& pacer, bool exporting) {
 
 void ExecuteAutopilotActions(const Loop::AutopilotActions& act, const Cli::Options& cli,
                              const std::string& auto_swap_path, bool auto_swap_from_arc,
-                             int frame_count, std::vector<McControl::ImageSlot>& sm_slots,
-                             int& sm_base_mc, int& sm_overlay_mc) {
+                             int frame_count) {
     if (act.post_anim_switch) {
         LOG("Main", "posting --animation switch: '%s' (current='%s')", cli.animation_name.c_str(),
             Runtime::Active().ActiveClipName().c_str());
@@ -449,7 +251,7 @@ void ExecuteAutopilotActions(const Loop::AutopilotActions& act, const Cli::Optio
     }
 
     if (act.bind_submonitor) {
-        BindSubmonitor(cli, sm_slots, sm_base_mc, sm_overlay_mc);
+        Backend::Active()->BindSubmonitor();
     }
 
     if (act.post_seek) {
@@ -500,41 +302,19 @@ Loop::CliAutopilot MakeAutopilot(const Cli::Options& cli, const std::string& aut
                                .exit_after_frames = cli.exit_after_frames});
 }
 
-struct SubmonitorBinding {
-    std::vector<McControl::ImageSlot> slots;
-    int base_mc;
-    int overlay_mc;
-    Loop::DissolveCycler dissolve;
-    Loop::FadeCycler fade;
-};
-
 struct FrameTickResult {
     float dt;
     bool exporting;
 };
 
-FrameTickResult AdvanceFrame(const Cli::Options& cli, float frame_seconds, int frame_count,
-                             SubmonitorBinding& sm) {
+FrameTickResult AdvanceFrame(const Cli::Options& cli, float frame_seconds, int frame_count) {
     const bool exporting = Export::IsCapturing();
     const int capture_fps = exporting ? Export::TargetFps() : 0;
     float const dt = capture_fps > 0 ? (1.0F / (float)capture_fps) : frame_seconds;
-    uint32_t stream_id = AfpManager::StreamId();
-    stream_id = Runtime::Active().ActiveClipId(stream_id);
 
-    CallAfpUpdateGuarded(dt, frame_count);
+    Backend::Active()->AdvanceFrame(dt, frame_count, exporting);
 
-    TickSubmonitorCyclers(cli, stream_id, sm.slots, sm.base_mc, sm.overlay_mc, sm.dissolve,
-                          sm.fade);
-
-    if ((frame_count % 120) == 60) Runtime::Active().ReprobeVariantSlots(stream_id);
-
-    stream_id = ApplyLoopHousekeeping(cli, stream_id, exporting);
-
-    Runtime::Active().ApplyVariantSlots(stream_id);
-    Runtime::Active().ApplySublayerOverrides(stream_id);
-    Runtime::Active().ApplyMasterScale(stream_id);
-
-    if (g_d3d.device != nullptr) RenderOneFrame(cli, dt, stream_id, frame_count);
+    if (g_d3d.device != nullptr) RenderOneFrame(cli, dt, frame_count);
     return {.dt = dt, .exporting = exporting};
 }
 
@@ -545,8 +325,7 @@ void ShutdownAfterLoop(const Cli::Options& cli, const Render::RenderCommandList&
     LOG("Shutdown", "Cleaning up...");
     App::Global().ShouldExit().store(true, std::memory_order_release);
     if (have_gui) GuiThread::Stop();
-    Runtime::Active().Shutdown();
-    AvsManager::Shutdown(g_avs);
+    Backend::Active()->Shutdown();
     g_d3d.Shutdown();
     Log::Shutdown();
 }
@@ -580,12 +359,6 @@ int RunRenderLoop(const Cli::Options& cli, bool have_gui) {
     const std::string auto_swap_path = ResolveAutoSwapPlan(cli, state, auto_swap_from_arc);
     Loop::CliAutopilot autopilot = MakeAutopilot(cli, auto_swap_path);
     LogAutopilotPlans(cli);
-    SubmonitorBinding sm{
-        .slots = {},
-        .base_mc = -1,
-        .overlay_mc = -1,
-        .dissolve = Loop::DissolveCycler(cli.submonitor_loop_frames),
-        .fade = Loop::FadeCycler(cli.submonitor_fade_frames, cli.submonitor_dwell_frames)};
 
     Render::RenderCommandList cmd_list;
     ArmCommandTaps(cli, cmd_list);
@@ -596,14 +369,13 @@ int RunRenderLoop(const Cli::Options& cli, bool have_gui) {
             LogAutopilotExit(cli, frame_count);
             break;
         }
-        ExecuteAutopilotActions(act, cli, auto_swap_path, auto_swap_from_arc, frame_count, sm.slots,
-                                sm.base_mc, sm.overlay_mc);
+        ExecuteAutopilotActions(act, cli, auto_swap_path, auto_swap_from_arc, frame_count);
 
         if (auto cmd = App::Global().TakeCommand()) {
             DispatchAppCommand(*cmd);
         }
 
-        const FrameTickResult tick = AdvanceFrame(cli, kFrameSeconds, frame_count, sm);
+        const FrameTickResult tick = AdvanceFrame(cli, kFrameSeconds, frame_count);
 
         frame_count++;
 

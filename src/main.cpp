@@ -2,8 +2,7 @@
 #include "gpu_context.h"
 #include "state/live_controls.h"
 #include "support/log.h"
-#include "avs_boot.h"
-#include "afp_boot.h"
+#include "backend/backend.h"
 #include "game_runtime.h"
 #include "render_backend.h"
 #include "state/app_state.h"
@@ -291,7 +290,7 @@ bool WaitForFirstBoot(HINSTANCE hInstance, const Cli::Options& cli, bool have_gu
             std::string slug = boot->profile_slug;
             if (slug.empty()) slug = state.GetGameProfileSlug();
             if (BootFromGameDir(hInstance, boot->game_dir, !cli.headless, cli.boot_ifses, rw, rh,
-                                slug)) {
+                                slug, &cli)) {
                 return true;
             }
             if (!have_gui) {
@@ -318,8 +317,7 @@ bool WaitForFirstBoot(HINSTANCE hInstance, const Cli::Options& cli, bool have_gu
 namespace {
 
 void ShutdownEngineStack() {
-    AfpManager::Shutdown(g_engine);
-    AvsManager::Shutdown(g_avs);
+    Backend::Active()->Shutdown();
     g_d3d.Shutdown();
     Log::Shutdown();
 }
