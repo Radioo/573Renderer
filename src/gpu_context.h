@@ -63,7 +63,7 @@ struct GpuContext {
     uintptr_t afpu_set_screen_rect_off = DllOffsets::AfpUtils::kSetScreenRectFn;
     void* state_ctx = nullptr;
     uint32_t (*afpu_get_tex_slot)(uint32_t tex_id) = nullptr;
-    alignas(16) float current_matrix[16] = {};
+    float current_matrix[16] = {};
     bool current_matrix_ready = false;
     float afp_render_x_offset = 0.0f;
 };

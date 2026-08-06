@@ -21,8 +21,12 @@ commit lands; a stale build never gives useful information.
 The configure/build steps run `cmake --preset ci` / `cmake --build --preset
 ci`, so CI uses exactly the knobs in `CMakePresets.json` (same generator,
 build type, triplet, toolchain, overlay ports as local builds - see
-`docs/build.md`). The `ci` preset additionally sets
-`CMAKE_COMPILE_WARNING_AS_ERROR=ON`. The build dir is `build/` at the repo
+`docs/build.md`). `CMAKE_COMPILE_WARNING_AS_ERROR=ON` lives in the BASE
+preset, so dev and ci compile with identical flags. It used to be ci-only,
+which let a benign-looking C4324 (struct padding from a needless
+`alignas(16)` in gpu_context.h) print in every local build while failing
+only in CI; the local gate must never be laxer than CI. If a preset ever
+diverges again, the divergence itself is the bug. The build dir is `build/` at the repo
 root, same as local, which simplifies reproducing CI failures.
 
 ## Caching (the entire design of this workflow)
