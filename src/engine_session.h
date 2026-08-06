@@ -3,6 +3,7 @@
 #include "avs_funcs.h"
 #include "afp_funcs.h"
 #include "afpu_funcs.h"
+#include "game_runtime.h"
 #include "render_backend.h"
 
 #include <cstdint>
@@ -32,7 +33,7 @@ struct EngineSession {
     const GameProfile::Profile* active_profile = nullptr;
     bool afp_booted = false;
     uint32_t pkg_id = 0;
-    uint32_t stream_id = 0xFFFFFFFC;
+    uint32_t stream_id = Runtime::kModernNoStream;
     std::vector<uint32_t> extra_streams;
     std::string anim_name;
     std::vector<uint32_t> persistent_pkg_ids;

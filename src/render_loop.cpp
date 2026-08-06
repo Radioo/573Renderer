@@ -16,21 +16,20 @@
 #include "avs_boot.h"
 #include "afp_boot.h"
 #include "game_runtime.h"
-#include "game_profile.h"
 #include "export.h"
 #include "render_backend.h"
 #include "mc_control.h"
+#include "state/afp_commands.h"
 #include "state/app_state.h"
+#include "state/commands.h"
 #include "cli/cli.h"
 #include "gui/gui_thread.h"
 #include "app_globals.h"
-#include "boot.h"
 #include "render_loop.h"
 #include "render_loop_requests.h"
 #include "render/command_list.h"
 #include "render_live.h"
 #include "render_seh.h"
-#include "afp_ddr.h"
 #include <algorithm>
 #include <filesystem>
 #include <fstream>
@@ -104,12 +103,12 @@ void LogAutopilotPlans(const Cli::Options& cli) {
 Loop::AutopilotInputs GatherAutopilotInputs(const Cli::Options& cli, int frame_count) {
     Loop::AutopilotInputs in;
     in.frame = frame_count;
-    in.clip_live = RenderLive::Inspect::HaveActiveClip(AfpManager::StreamId());
+    in.clip_live = Runtime::Active().HaveActiveClip(AfpManager::StreamId());
     in.active_clip_matches =
         !cli.animation_name.empty() && Runtime::Active().ActiveClipName() == cli.animation_name;
     in.anim_name_matches =
         !cli.animation_name.empty() && AfpManager::AnimName() == cli.animation_name;
-    in.modern_stream_valid = AfpManager::StreamId() != 0xFFFFFFFC;
+    in.modern_stream_valid = AfpManager::StreamId() != Runtime::kModernNoStream;
     in.scene_renderable = Runtime::Active().HasRenderableScene(AfpManager::StreamId());
     if (!cli.goto_label.empty()) {
         App::Status const st = App::Global().GetStatus();
@@ -149,7 +148,7 @@ void BindSubmonitorFade(const Cli::Options& cli, uint32_t sid,
     if (bound > 0 && sm_base_mc >= 0 && decoded > 0) {
         sm_slots = slots;
         McControl::SetClipVisible(g_afp, sid, "license_usr", false);
-        RenderLive::Inspect::GotoLabel(g_afp, cli.submonitor_fade_in_label);
+        Runtime::Active().GotoLabel(g_afp, cli.submonitor_fade_in_label);
         LOG("Main",
             "submonitor slideshow-fade: %d/%zu frames on "
             "'%s' (mc=%d), dwell=%d fade=%d -> fade cycle",
@@ -224,30 +223,29 @@ void BindSubmonitor(const Cli::Options& cli, std::vector<McControl::ImageSlot>& 
 void PostCliExportRequest(const Cli::Options& cli) {
     LOG("Main", "posting --export request: '%s' fps=%d q=%d", cli.export_path.c_str(),
         cli.export_fps, cli.export_quality);
-    App::Request r{};
-    r.start_export = true;
-    r.export_output_path = cli.export_path;
-    r.export_fps = cli.export_fps;
-    r.export_quality = cli.export_quality;
-    r.export_keyframe_interval = cli.export_keyframe_interval;
-    r.export_max_frames = cli.export_max_frames;
-    r.export_loop_count = cli.export_loop_count;
-    r.export_blend_loop = cli.export_blend_loop;
-    r.export_blend_frames = cli.export_blend_frames;
-    r.export_bg_transparent = cli.export_bg_transparent;
-    r.export_bg_r = cli.export_bg_r;
-    r.export_bg_g = cli.export_bg_g;
-    r.export_bg_b = cli.export_bg_b;
-    r.export_width = cli.export_width;
-    r.export_height = cli.export_height;
-    r.export_crop_x = cli.export_crop_x;
-    r.export_crop_y = cli.export_crop_y;
-    r.export_crop_w = cli.export_crop_w;
-    r.export_crop_h = cli.export_crop_h;
-    r.export_format = cli.export_format;
-    r.export_prefer_hardware = cli.export_prefer_hardware;
-    r.export_dump_frames_dir = cli.export_dump_frames_dir;
-    App::Global().PostRequest(std::move(r));
+    App::ExportRequest r;
+    r.output_path = cli.export_path;
+    r.fps = cli.export_fps;
+    r.quality = cli.export_quality;
+    r.keyframe_interval = cli.export_keyframe_interval;
+    r.max_frames = cli.export_max_frames;
+    r.loop_count = cli.export_loop_count;
+    r.blend_loop = cli.export_blend_loop;
+    r.blend_frames = cli.export_blend_frames;
+    r.bg_transparent = cli.export_bg_transparent;
+    r.bg_r = cli.export_bg_r;
+    r.bg_g = cli.export_bg_g;
+    r.bg_b = cli.export_bg_b;
+    r.width = cli.export_width;
+    r.height = cli.export_height;
+    r.crop_x = cli.export_crop_x;
+    r.crop_y = cli.export_crop_y;
+    r.crop_w = cli.export_crop_w;
+    r.crop_h = cli.export_crop_h;
+    r.format = cli.export_format;
+    r.prefer_hardware = cli.export_prefer_hardware;
+    r.dump_frames_dir = cli.export_dump_frames_dir;
+    App::Global().PostCommand(App::Cmd::StartExport{.req = std::move(r)});
 }
 
 void TickSubmonitorCyclers(const Cli::Options& cli, uint32_t stream_id,
@@ -258,7 +256,7 @@ void TickSubmonitorCyclers(const Cli::Options& cli, uint32_t stream_id,
         cli.submonitor_loop_frames > 0) {
         uint32_t cur = 0;
         uint32_t total = 0;
-        if (RenderLive::Inspect::ReadPlayhead(stream_id, &cur, &total, nullptr)) {
+        if (Runtime::Active().ReadPlayhead(stream_id, &cur, &total, nullptr)) {
             const Loop::DissolveCycler::Tick tick = sm_dissolve.Advance(cur, total);
             if (tick.cycle_changed) {
                 int const n = (int)sm_slots.size();
@@ -276,10 +274,10 @@ void TickSubmonitorCyclers(const Cli::Options& cli, uint32_t stream_id,
         const Loop::FadeCycler::Tick tick = sm_fade.Advance();
         if (tick.fade_in) {
             McControl::BindImageToMc(g_afp, sm_base_mc, sm_slots[tick.cycle % n]);
-            RenderLive::Inspect::GotoLabel(g_afp, cli.submonitor_fade_in_label);
+            Runtime::Active().GotoLabel(g_afp, cli.submonitor_fade_in_label);
             LOG("Main", "submonitor fade: frame %d (cycle %d) fade-in", tick.cycle % n, tick.cycle);
         } else if (tick.fade_out) {
-            RenderLive::Inspect::GotoLabel(g_afp, cli.submonitor_fade_out_label);
+            Runtime::Active().GotoLabel(g_afp, cli.submonitor_fade_out_label);
             LOG("Main", "submonitor fade: frame %d fade-out", tick.cycle % n);
         }
         McControl::SetClipVisible(g_afp, stream_id, "license_usr", false);
@@ -288,7 +286,7 @@ void TickSubmonitorCyclers(const Cli::Options& cli, uint32_t stream_id,
 
 uint32_t ApplyLoopHousekeeping(const Cli::Options& cli, uint32_t stream_id, bool exporting) {
     static int loop_cooldown = 0;
-    static uint32_t loop_last_sid = 0xFFFFFFFC;
+    static uint32_t loop_last_sid = Runtime::kModernNoStream;
     static int frames_since_switch = 0;
     if (stream_id != loop_last_sid) {
         loop_cooldown = 0;
@@ -311,26 +309,7 @@ uint32_t ApplyLoopHousekeeping(const Cli::Options& cli, uint32_t stream_id, bool
     if (eff_cont == 0) eff_cont = 1;
     if (cli.submonitor_slideshow_fade) eff_cont = -1;
 
-    static uint32_t flag_dance_done_for = 0xFFFFFFFC;
-    static int flag_dance_mode_seen = 0;
-    if (stream_id != 0xFFFFFFFC && (g_afp.afp_set_flag_mask != nullptr) &&
-        (flag_dance_done_for != stream_id || flag_dance_mode_seen != eff_cont)) {
-        if (eff_cont == 1) {
-            g_afp.afp_set_flag_mask(stream_id, 0x200, 0x0);
-            g_afp.afp_set_flag_mask(stream_id, 0x1, 0x0);
-            g_afp.afp_set_flag_mask(stream_id, 0x1000, 0x1000);
-            g_afp.afp_set_flag_mask(stream_id, 0x1, 0x1);
-            LOG("Live", "applied continuous-loop flag sequence on stream 0x%08x", stream_id);
-        } else if (eff_cont == -1) {
-            g_afp.afp_set_flag_mask(stream_id, 0x1000, 0x0);
-            LOG("Live", "cleared continuous-loop on stream 0x%08x", stream_id);
-        }
-        flag_dance_done_for = stream_id;
-        flag_dance_mode_seen = eff_cont;
-    }
-    if (eff_cont == 1 && stream_id != 0xFFFFFFFC && (g_afp.afp_set_flag_mask != nullptr)) {
-        g_afp.afp_set_flag_mask(stream_id, 0x1, 0x1);
-    }
+    Runtime::Active().ApplyContinuousLoop(stream_id, eff_cont);
 
     RenderLive::PublishLiveState(g_afp, stream_id, frames_since_switch, exporting);
 
@@ -341,62 +320,15 @@ uint32_t ApplyLoopHousekeeping(const Cli::Options& cli, uint32_t stream_id, bool
         loop_last_sid = stream_id;
         frames_since_switch = 0;
         loop_cooldown = 10;
-        if (rr.reset_flag_dance) flag_dance_done_for = 0xFFFFFFFC;
     }
     return stream_id;
-}
-
-void ApplyMasterScale(uint32_t stream_id) {
-    static float s_last_applied_scale = -1.0F;
-    static uint32_t s_last_applied_sid = 0xFFFFFFFC;
-    const float scale = App::Global().GetMasterScale();
-    const bool stream_changed = (stream_id != s_last_applied_sid);
-    const bool scale_changed = (scale != s_last_applied_scale);
-    if (stream_id != 0xFFFFFFFC && (g_afp.afp_mc_get != nullptr) &&
-        (g_afp.afp_mc_get_id_by_path != nullptr) && (stream_changed || scale_changed)) {
-        int const root_mc = g_afp.afp_mc_get_id_by_path(stream_id, "");
-        if (root_mc > 0) {
-            float xy[2] = {scale, scale};
-            constexpr uint32_t kOpSetXyScale = 0x1003;
-            constexpr uint32_t kOpInvalidate = 0x101E;
-            g_afp.afp_mc_get(root_mc, kOpSetXyScale, (intptr_t)(uintptr_t)xy);
-            g_afp.afp_mc_get(root_mc, kOpInvalidate, 1);
-        }
-        s_last_applied_scale = scale;
-        s_last_applied_sid = stream_id;
-    }
 }
 
 void RenderOneFrame(const Cli::Options& cli, float dt, uint32_t stream_id, int frame_count) {
     if (g_d3d.device != nullptr) {
         g_d3d.BeginFrame();
 
-        Runtime::Active().RenderFrame(dt);
-
-        if (AfpManager::IsBooted() && (g_afp.afp_do_sort_render != nullptr) &&
-            stream_id != 0xFFFFFFFC) {
-            static bool logged_render_fault = false;
-            static bool logged_pre_state = false;
-            if (!logged_pre_state) {
-                HMODULE afpu_mod = GetModuleHandleA("afp-utils.dll");
-                const auto& off = GameProfile::ActiveOffsets();
-                if ((afpu_mod != nullptr) && (off.afpu_world_mat_type != 0U) &&
-                    (off.afpu_world_mat != 0U)) {
-                    uint8_t const mat_type = *((uint8_t*)afpu_mod + off.afpu_world_mat_type);
-                    auto* mat = (float*)((uint8_t*)afpu_mod + off.afpu_world_mat);
-                    LOG("AFP", "afpu world_mat_type byte = %u, mat[0..7] = %f %f %f %f %f %f %f %f",
-                        (unsigned)mat_type, mat[0], mat[1], mat[2], mat[3], mat[4], mat[5], mat[6],
-                        mat[7]);
-                }
-                logged_pre_state = true;
-            }
-            const RenderSeh::FaultReport sr =
-                RenderSeh::SafeCallSortRender(g_afp.afp_do_sort_render);
-            if (sr.faulted && !logged_render_fault) {
-                RenderSeh::LogFault("afp_do_sort_render", frame_count, sr);
-                logged_render_fault = true;
-            }
-        }
+        Runtime::Active().RenderFrame(dt, stream_id, frame_count);
 
         Export::OnMainLoopTick(g_engine, g_d3d);
 
@@ -502,16 +434,13 @@ void ExecuteAutopilotActions(const Loop::AutopilotActions& act, const Cli::Optio
     if (act.post_anim_switch) {
         LOG("Main", "posting --animation switch: '%s' (current='%s')", cli.animation_name.c_str(),
             Runtime::Active().ActiveClipName().c_str());
-        App::Request r{};
-        r.switch_animation = true;
-        r.animation_name = cli.animation_name;
-        r.animation_label = cli.animation_label;
-        App::Global().PostRequest(std::move(r));
+        App::Global().PostCommand(AfpCmd::Wrap(
+            AfpCmd::SwitchAnimation{.name = cli.animation_name, .label = cli.animation_label}));
     } else if (act.apply_anim_label_inline) {
         LOG("Main", "--animation='%s' already active, no switch needed",
             cli.animation_name.c_str());
         if (!cli.animation_label.empty()) {
-            RenderLive::Inspect::GotoLabel(g_afp, cli.animation_label);
+            Runtime::Active().GotoLabel(g_afp, cli.animation_label);
             App::Status st = App::Global().GetStatus();
             st.active_label = cli.animation_label;
             st.label_playback_active = true;
@@ -525,18 +454,12 @@ void ExecuteAutopilotActions(const Loop::AutopilotActions& act, const Cli::Optio
 
     if (act.post_seek) {
         LOG("Main", "posting --seek-frame request: %d", cli.seek_frame);
-        App::Request r{};
-        r.seek_frame = true;
-        r.seek_to_frame = cli.seek_frame;
-        App::Global().PostRequest(std::move(r));
+        App::Global().PostCommand(AfpCmd::Wrap(AfpCmd::SeekFrame{.frame = cli.seek_frame}));
     }
 
     if (act.post_goto_label) {
         LOG("Main", "posting --goto-label request: '%s'", cli.goto_label.c_str());
-        App::Request r{};
-        r.goto_label = true;
-        r.goto_label_name = cli.goto_label;
-        App::Global().PostRequest(std::move(r));
+        App::Global().PostCommand(AfpCmd::Wrap(AfpCmd::GotoLabel{.name = cli.goto_label}));
     }
 
     if (act.post_export) PostCliExportRequest(cli);
@@ -544,11 +467,8 @@ void ExecuteAutopilotActions(const Loop::AutopilotActions& act, const Cli::Optio
     if (act.post_swap) {
         LOG("Main", "auto-swap: posting hot-swap request for '%s' at frame %d",
             auto_swap_path.c_str(), frame_count);
-        App::Request r{};
-        r.load_new_ifs = true;
-        r.ifs_path = auto_swap_path;
-        r.ifs_from_arc = auto_swap_from_arc;
-        App::Global().PostRequest(std::move(r));
+        App::Global().PostCommand(
+            App::Cmd::LoadContent{.path = auto_swap_path, .from_arc = auto_swap_from_arc});
     }
 }
 
@@ -610,9 +530,9 @@ FrameTickResult AdvanceFrame(const Cli::Options& cli, float frame_seconds, int f
 
     stream_id = ApplyLoopHousekeeping(cli, stream_id, exporting);
 
-    ApplyVariants(stream_id);
-    ApplySubLayerVisibility(stream_id);
-    ApplyMasterScale(stream_id);
+    Runtime::Active().ApplyVariantSlots(stream_id);
+    Runtime::Active().ApplySublayerOverrides(stream_id);
+    Runtime::Active().ApplyMasterScale(stream_id);
 
     if (g_d3d.device != nullptr) RenderOneFrame(cli, dt, stream_id, frame_count);
     return {.dt = dt, .exporting = exporting};
@@ -679,8 +599,8 @@ int RunRenderLoop(const Cli::Options& cli, bool have_gui) {
         ExecuteAutopilotActions(act, cli, auto_swap_path, auto_swap_from_arc, frame_count, sm.slots,
                                 sm.base_mc, sm.overlay_mc);
 
-        if (auto req = App::Global().TakeRequest()) {
-            DispatchAppRequest(*req);
+        if (auto cmd = App::Global().TakeCommand()) {
+            DispatchAppCommand(*cmd);
         }
 
         const FrameTickResult tick = AdvanceFrame(cli, kFrameSeconds, frame_count, sm);

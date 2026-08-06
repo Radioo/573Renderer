@@ -84,7 +84,7 @@ Field semantics worth preserving:
 - Crop rect (`crop_x/y/w/h`): applied BEFORE the output-size scale, so
   crop_w x crop_h is the encoder's src dimensions and out_width/out_height
   still drive the final scale (defaulting to crop size when zero).
-- `format` mirrors App::Request::export_format (the canonical enum, see
+- `format` mirrors App::ExportRequest::format (the canonical enum, see
   MediaSink::Format). `prefer_hw` asks the sink to try NVENC for the video
   backends (no-op for PNG / VP9 / WebP). `using_hw` is only populated after
   Sink::Open returns, so it can be published to the GUI progress pane.
@@ -140,7 +140,7 @@ and clamps to 255; output alpha is forced to 255.
 
 ## 4. Start modes (StartSession)
 
-Session parameters are copied from App::Request with defaults: fps 60 if
+Session parameters are copied from App::ExportRequest with defaults: fps 60 if
 unset, quality 60 if outside 0..100, loop_count 1 minimum, blend_frames 15
 default. All loop/blend/content-detector bookkeeping is reset explicitly
 because g_sess is reused across sessions.

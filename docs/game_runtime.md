@@ -23,10 +23,17 @@ interface, so the two backends' logic lives in two cohesive classes
 (`ModernRuntime`, `DdrRuntime`) and adding a backend is a new class, not a
 sweep of 43 sites.
 
-This is the interface the `render_live.h` Inspect seam explicitly
+This is the interface the old `render_live.h` Inspect seam explicitly
 anticipated: its header called the free-function seam "the natural cut-line
-the future refactor widens into a backend interface." The method surface of
-`IGameRuntime` mirrors `RenderLive::Inspect` exactly.
+the future refactor widens into a backend interface." That seam has since
+been absorbed: `RenderLive::Inspect` was a set of pure one-line forwards to
+`Runtime::Active()` and was deleted (P11); callers in render_loop,
+render_loop_requests, anim_inspect, and render_live's own publishers now call
+`Runtime::Active()` directly, and `Runtime::Label` is the label type. The
+`0xFFFFFFFC` no-stream sentinel is likewise never written as a raw literal
+anymore: engine code uses `Runtime::kModernNoStream`, and the state/GUI side
+uses `App::kNoActiveStream` (state/telemetry.h, static_asserted equal in
+render_live.cpp) so the state library needs no engine include.
 
 ## Migration (strangler-fig)
 
@@ -101,9 +108,10 @@ longer exists (nor its
   loop_cooldown, frames_since_switch, trim_frames) -> RootRedrive`. The runtime
   owns the whole decision (Hold never replays; Force / loop-master re-drive a
   one-shot master, never during export) plus the ForceReplay and `App::Status`
-  republish; it returns a small `RootRedrive{replayed, reset_flag_dance,
-  new_stream_id}` the render loop applies to its loop statics (which stay owned
-  by the loop because the flag-dance and wrap tracker share them). DDR no-ops -
+  republish; it returns a small `RootRedrive{replayed, new_stream_id}` the
+  render loop applies to its loop statics. Since P12 the continuous-loop
+  flag-dance latch is a ModernRuntime member, so the trim-path replay resets it
+  internally instead of returning a `reset_flag_dance` bit. DDR no-ops -
   that no-op is the old `!g_ddr_mode` guard, which was load-bearing here (unlike
   the submonitor it operates on the DDR-layer-id `stream_id` local, so it does
   NOT self-skip on the sentinel). With this read gone, the global was deleted.
@@ -137,6 +145,34 @@ The two runtimes gained the backend-lifecycle + per-frame methods (`IsBooted`,
 `ActiveClipName`, `HasRenderableScene`, `RenderFrame`, `ReprobeVariantSlots`,
 `MaybeRedriveRootLoop`, `LoadScene`, `UnloadScene`, `Shutdown`) alongside the
 Inspect surface.
+
+P12 added the last per-frame and request-handler seams, so generic code makes
+zero raw `g_afp` calls:
+
+- `RenderFrame(dt, modern_stream_id, frame_count)`: modern runs the
+  SEH-guarded `afp_do_sort_render` (plus the one-time afpu world-mat log);
+  DDR runs its own frame render. This fixed the old asymmetry where modern
+  rendered via a direct `g_afp.afp_do_sort_render` call in RenderOneFrame
+  while DDR rendered inside the runtime.
+- `ApplyContinuousLoop(modern_stream_id, mode)`: the SDVX continuous-loop
+  flag-dance (0x200/0x1/0x1000 sequence + per-frame bit-0 re-set). The
+  done-for latch is a ModernRuntime member; MaybeRedriveRootLoop's trim path
+  resets it internally.
+- `ApplyMasterScale(modern_stream_id)`: root-mc xy-scale via afp_mc_get
+  0x1003/0x101E, cache keyed on (stream, scale).
+- `ApplyVariantSlots` / `ApplySublayerOverrides`: the per-frame re-apply
+  passes (moved out of boot.cpp; see docs/boot_and_render_loop.md 4.4).
+- `ForceReplayMaster()` / `ToggleCompanion(index)`: the request handlers that
+  previously hard-wired AfpManager in render_loop_requests.cpp.
+
+Every DDR override of these is a no-op equal to the old implicit behavior
+(sentinel self-skip or null-fn-pointer skip on the unresolved DDR `g_afp`
+table, or an empty slots/companions vector).
+
+File layout: `game_runtime.h` (interface) + `game_runtime_internal.h` (the
+two class declarations + ModernRuntime's latch/cache members) +
+`game_runtime_modern.cpp` / `game_runtime_ddr.cpp` (implementations) +
+`game_runtime.cpp` (instances + SelectRuntime/Active).
 `LoadScene` /
 `UnloadScene` are the load/unload pair; adding `LoadScene` is what let
 `MountAndLoadIfs` drop its `g_ddr_mode` branch (it is now shared arc-staging

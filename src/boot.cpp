@@ -8,8 +8,8 @@
 #include "avs_boot.h"
 #include "afp_boot.h"
 #include "render_backend.h"
-#include "mc_control.h"
 #include "state/app_state.h"
+#include "state/ifs_catalog.h"
 #include "cli/cli.h"
 #include "settings/settings.h"
 #include "app_globals.h"
@@ -264,30 +264,6 @@ bool MountAndLoadIfs(const std::string& ifs_path, bool from_arc) {
     }
 
     return Runtime::Active().LoadScene(mount_path, ifs_path);
-}
-
-void ApplyVariants(uint32_t stream_id) {
-    auto active = App::Global().ActiveIfs();
-    if (active.empty() || stream_id == 0xFFFFFFFC) return;
-    auto& cfg = App::Global().MutConfig(active);
-    for (auto& slot : cfg.slots) {
-        if (!slot.is_valid && (g_afp.afp_mc_get_id_by_path != nullptr)) {
-            int const id = g_afp.afp_mc_get_id_by_path(stream_id, slot.path.c_str());
-            slot.is_valid = (id >= 0);
-        }
-        if (!slot.is_valid) continue;
-        if (slot.bitmap_override && !slot.bitmap.empty())
-            McControl::SetClipBitmap(g_afp, stream_id, slot.path.c_str(), slot.bitmap.c_str());
-        McControl::SetClipVisible(g_afp, stream_id, slot.path.c_str(), slot.visible);
-    }
-}
-
-void ApplySubLayerVisibility(uint32_t stream_id) {
-    auto active = App::Global().ActiveIfs();
-    if (active.empty() || stream_id == 0xFFFFFFFC) return;
-    const auto overrides = App::Global().GetSublayerOverrides(active);
-    for (const auto& ov : overrides)
-        McControl::SetClipVisible(g_afp, stream_id, ov.first.c_str(), ov.second);
 }
 
 namespace {

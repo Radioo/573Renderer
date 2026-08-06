@@ -1,4 +1,5 @@
 #include "gui_live_controls.h"
+#include "../state/afp_commands.h"
 #include "../state/app_state.h"
 #include "imgui.h"
 #include "state/telemetry.h"
@@ -18,10 +19,7 @@ namespace {
 void PostSeekPaused(App::State& state, int frame, int maxf) {
     frame = std::max(frame, 0);
     frame = std::min(frame, maxf);
-    App::Request r;
-    r.seek_frame = true;
-    r.seek_to_frame = frame;
-    state.PostRequest(std::move(r));
+    state.PostCommand(AfpCmd::Wrap(AfpCmd::SeekFrame{.frame = frame}));
     auto o = state.GetLiveOverrides();
     o.paused = true;
     state.SetLiveOverrides(o);
@@ -29,10 +27,7 @@ void PostSeekPaused(App::State& state, int frame, int maxf) {
 
 void DrawPausedCheckbox(App::State& state, bool paused) {
     if (ImGui::Checkbox("Paused", &paused)) {
-        App::Request r;
-        r.set_paused = true;
-        r.paused_value = paused;
-        state.PostRequest(std::move(r));
+        state.PostCommand(AfpCmd::Wrap(AfpCmd::SetPaused{.paused = paused}));
         auto o = state.GetLiveOverrides();
         o.paused = paused;
         state.SetLiveOverrides(o);
@@ -315,10 +310,7 @@ void RenderLabelsPanel() {
         snprintf(row, sizeof(row), "%s   (frame %d)##lbl%zu",
                  labels[i].name.empty() ? "(unnamed)" : labels[i].name.c_str(), labels[i].frame, i);
         if (ImGui::Selectable(row)) {
-            App::Request r;
-            r.goto_label = true;
-            r.goto_label_name = labels[i].name;
-            state.PostRequest(std::move(r));
+            state.PostCommand(AfpCmd::Wrap(AfpCmd::GotoLabel{.name = labels[i].name}));
         }
     }
 }

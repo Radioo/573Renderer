@@ -1,5 +1,6 @@
 #include "gui_export_panel.h"
 #include "../state/app_state.h"
+#include "../state/commands.h"
 #include "../video_encoder.h"
 #include "imgui.h"
 #include "media/media_format.h"
@@ -512,30 +513,29 @@ void DrawBackgroundAndHw(MediaSink::Format current_format, bool hw_available) {
 }
 
 void PostStartRequest(App::State& state, MediaSink::Format current_format, bool hw_applies) {
-    App::Request r;
-    r.start_export = true;
-    r.export_output_path = MediaSink::MakeOutputPath(g_stem_buf, current_format);
-    r.export_fps = g_fps;
-    r.export_quality = g_quality;
-    r.export_keyframe_interval = g_keyframe_interval;
-    r.export_max_frames = g_limit_frames ? g_max_frames : 0;
-    r.export_loop_count = g_loop_count;
-    r.export_blend_loop = g_blend_loop;
-    r.export_blend_frames = g_blend_frames;
-    r.export_bg_transparent = g_bg_transparent;
-    r.export_bg_r = g_bg_rgb[0];
-    r.export_bg_g = g_bg_rgb[1];
-    r.export_bg_b = g_bg_rgb[2];
-    r.export_width = g_out_w;
-    r.export_height = g_out_h;
+    App::ExportRequest r;
+    r.output_path = MediaSink::MakeOutputPath(g_stem_buf, current_format);
+    r.fps = g_fps;
+    r.quality = g_quality;
+    r.keyframe_interval = g_keyframe_interval;
+    r.max_frames = g_limit_frames ? g_max_frames : 0;
+    r.loop_count = g_loop_count;
+    r.blend_loop = g_blend_loop;
+    r.blend_frames = g_blend_frames;
+    r.bg_transparent = g_bg_transparent;
+    r.bg_r = g_bg_rgb[0];
+    r.bg_g = g_bg_rgb[1];
+    r.bg_b = g_bg_rgb[2];
+    r.width = g_out_w;
+    r.height = g_out_h;
     App::CropRect const cr = state.GetCropRect();
-    r.export_crop_x = cr.x;
-    r.export_crop_y = cr.y;
-    r.export_crop_w = cr.w;
-    r.export_crop_h = cr.h;
-    r.export_format = g_format_idx;
-    r.export_prefer_hardware = g_prefer_hw && hw_applies;
-    state.PostRequest(std::move(r));
+    r.crop_x = cr.x;
+    r.crop_y = cr.y;
+    r.crop_w = cr.w;
+    r.crop_h = cr.h;
+    r.format = g_format_idx;
+    r.prefer_hardware = g_prefer_hw && hw_applies;
+    state.PostCommand(App::Cmd::StartExport{.req = std::move(r)});
 }
 
 void DrawStartAndStatus(App::State& state, const App::ExportState& ex, bool busy,
@@ -550,9 +550,7 @@ void DrawStartAndStatus(App::State& state, const App::ExportState& ex, bool busy
         }
     } else {
         if (ImGui::Button("Cancel", ImVec2(120, 0))) {
-            App::Request r;
-            r.cancel_export = true;
-            state.PostRequest(std::move(r));
+            state.PostCommand(App::Cmd::CancelExport{});
         }
     }
 

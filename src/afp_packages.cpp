@@ -3,6 +3,7 @@
 #include "afpu_funcs.h"
 #include "avs_funcs.h"
 #include "engine_session.h"
+#include "game_runtime.h"
 #include "avs_boot.h"
 #include "avs_xml.h"
 #include "ifs_inspect.h"
@@ -214,7 +215,7 @@ bool AfpManager::LoadPackages(EngineSession& es, const std::string& pkg_hint) {
         std::vector<std::string> const names = BuildMasterCandidates(avs, pkg_hint);
         TryPlayMasterAnimation(es, pkg_id, names);
 
-        if (es.stream_id == 0xFFFFFFFC || (int)es.stream_id < 0) {
+        if (es.stream_id == Runtime::kModernNoStream || (int)es.stream_id < 0) {
             TryPlayBitmapFallback(es, pkg_hint);
         }
 
@@ -311,7 +312,7 @@ void AfpManager::LoadBootIfses(EngineSession& es, const std::string& data_dir) {
 void AfpManager::DestroySceneStreams(AfpFuncs& afp) {
     if (afp.afp_stream_destroy == nullptr) return;
     auto destroy_one = [&](uint32_t sid) {
-        if (sid == 0xFFFFFFFC || (int)sid < 0) return;
+        if (sid == Runtime::kModernNoStream || (int)sid < 0) return;
         if (afp.afp_stream_control) {
             LOG("AFP", "stream_control(5, 0x%x)", sid);
             afp.afp_stream_control(5, sid);
@@ -375,7 +376,7 @@ void AfpManager::UnloadPackages(EngineSession& es) {
     AfpD3D9::ResetAllTextures();
 
     es.extra_streams.clear();
-    es.stream_id = 0xFFFFFFFC;
+    es.stream_id = Runtime::kModernNoStream;
     es.anim_name.clear();
     es.pkg_id = 0;
 }

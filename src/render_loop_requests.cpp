@@ -1,6 +1,5 @@
 #include "render_loop_requests.h"
 
-#include "afp_boot.h"
 #include "app_globals.h"
 #include "boot.h"
 #include "export.h"
@@ -8,172 +7,107 @@
 #include "qpro_extract.h"
 #include "qpro_scan.h"
 #include "render_live.h"
+#include "state/afp_commands.h"
 #include "state/app_state.h"
-#include "state/ifs_catalog.h"
+#include "state/commands.h"
 #include "state/telemetry.h"
 #include "support/log.h"
 
-#include <cstdint>
-#include <filesystem>
+#include <any>
 #include <string>
-#include <utility>
+#include <variant>
 
 namespace {
 
-void HandleHotSwap(const App::Request& req) {
-    LOG("Main", "Hot-swap requested: %s", req.ifs_path.c_str());
-    App::Global().BeginLoad(req.ifs_path);
+void HandleLoadContent(const App::Cmd::LoadContent& cmd) {
+    LOG("Main", "Hot-swap requested: %s", cmd.path.c_str());
+    App::Global().BeginLoad(cmd.path);
     App::Global().UpdateLoadStage("Unloading previous IFS");
     Runtime::Active().UnloadScene();
     App::Global().SetActiveIfs("");
     App::Status st = App::Global().GetStatus();
     st.current_ifs_path.clear();
-    st.stream_id = 0xFFFFFFFC;
+    st.stream_id = Runtime::kModernNoStream;
     st.playing_animation.clear();
     st.active_label.clear();
     st.label_playback_active = false;
     st.last_error.clear();
     App::Global().SetStatus(st);
 
-    if (!MountAndLoadIfs(req.ifs_path, req.ifs_from_arc)) {
+    if (!MountAndLoadIfs(cmd.path, cmd.from_arc)) {
         App::Status err = App::Global().GetStatus();
-        err.last_error = "Failed to load " + req.ifs_path;
+        err.last_error = "Failed to load " + cmd.path;
         App::Global().SetStatus(err);
     }
 }
 
-void HandleQproExtract(const App::Request& req) {
+void HandleQproExtract(const AfpCmd::QproStartExtract& cmd) {
     QproExtract::Options o;
     o.game_dir = App::Global().GameDir();
-    o.out_dir = req.qpro_out_dir;
-    o.fps = req.qpro_fps;
-    o.parts = req.qpro_parts;
-    o.part_sel = req.qpro_part_sel;
-    QproExtract::SetHueScopeEnabled(req.qpro_hue_scope);
+    o.out_dir = cmd.out_dir;
+    o.fps = cmd.fps;
+    o.parts = cmd.parts;
+    o.part_sel = cmd.part_sel;
+    QproExtract::SetHueScopeEnabled(cmd.hue_scope);
     QproExtract::Run(o);
 }
 
-void HandleForceReplay() {
-    LOG("Main", "force_replay requested (variant default pick)");
-    if (AfpManager::ForceReplay(g_engine)) {
-        App::Status st = App::Global().GetStatus();
-        st.stream_id = AfpManager::StreamId();
-        st.playing_animation = AfpManager::AnimName();
-        st.active_label.clear();
-        st.label_playback_active = false;
-        App::Global().SetStatus(st);
-    }
-}
-
-void HandleGotoLabel(const App::Request& req) {
-    RenderLive::Inspect::GotoLabel(g_afp, req.goto_label_name);
+void HandleGotoLabel(const AfpCmd::GotoLabel& cmd) {
+    Runtime::Active().GotoLabel(g_afp, cmd.name);
     App::Status st = App::Global().GetStatus();
-    st.active_label = req.goto_label_name;
-    st.label_playback_active = !req.goto_label_name.empty();
+    st.active_label = cmd.name;
+    st.label_playback_active = !cmd.name.empty();
     App::Global().SetStatus(st);
 }
 
-void UnloadAllCompanions(App::IfsConfig& cfg) {
-    for (auto& c : cfg.companions) {
-        if (c.loaded) {
-            LOG("Main",
-                "toggle_companion: unload '%s' "
-                "(pkg_id=0x%08x)",
-                c.display_name.c_str(), c.pkg_id);
-            AfpManager::UnloadCompanion(g_engine, c.pkg_id);
-            c.pkg_id = 0;
-            c.loaded = false;
-        }
+struct AfpCommandVisitor {
+    void operator()(const AfpCmd::SwitchAnimation& cmd) const {
+        if (!cmd.name.empty()) Runtime::Active().SwitchAnimation(cmd.name, cmd.label);
     }
-}
-
-void LoadCompanionAt(App::IfsConfig& cfg, int idx) {
-    auto& c = cfg.companions[idx];
-    std::string pkg_name;
-    {
-        namespace fs = std::filesystem;
-        pkg_name = fs::path(c.path).stem().string();
+    void operator()(const AfpCmd::GotoLabel& cmd) const { HandleGotoLabel(cmd); }
+    void operator()(const AfpCmd::SeekFrame& cmd) const {
+        RenderLive::HandleSeekRequest(cmd.frame, g_afp);
     }
-    LOG("Main",
-        "toggle_companion: load '%s' "
-        "(pkg_name='%s')",
-        c.display_name.c_str(), pkg_name.c_str());
-    uint32_t const pkg = AfpManager::LoadCompanion(g_engine, c.path, pkg_name);
-    if (pkg != 0U) {
-        c.pkg_id = pkg;
-        c.loaded = true;
-    } else {
-        App::Status st = App::Global().GetStatus();
-        st.last_error = "Failed to load companion " + c.display_name;
-        App::Global().SetStatus(st);
+    void operator()(const AfpCmd::SetPaused& cmd) const {
+        RenderLive::HandlePauseRequest(cmd.paused, g_afp);
     }
-}
-
-void ReplayMasterForBindings() {
-    std::string const& anim = AfpManager::AnimName();
-    if (anim.empty()) return;
-    LOG("Main",
-        "toggle_companion: replay master "
-        "'%s' so new bindings resolve",
-        anim.c_str());
-    AfpManager::ForceReplay(g_engine);
-    App::Status st = App::Global().GetStatus();
-    st.stream_id = AfpManager::StreamId();
-    st.playing_animation = AfpManager::AnimName();
-    App::Global().SetStatus(st);
-}
-
-void HandleToggleCompanion(const App::Request& req) {
-    auto active = App::Global().ActiveIfs();
-    if (active.empty()) {
-        LOG("Main", "toggle_companion: no active IFS, ignoring");
-        return;
+    void operator()(const AfpCmd::ToggleCompanion& cmd) const {
+        if (cmd.index >= 0) Runtime::Active().ToggleCompanion(cmd.index);
     }
-    auto& cfg = App::Global().MutConfig(active);
-    int const idx = req.companion_index;
-    if (idx < 0 || std::cmp_greater_equal(idx, cfg.companions.size())) {
-        LOG("Main",
-            "toggle_companion: index %d out of "
-            "range (size=%zu)",
-            idx, cfg.companions.size());
-        return;
+    void operator()([[maybe_unused]] const AfpCmd::ForceReplay& cmd) const {
+        Runtime::Active().ForceReplayMaster();
     }
-    bool const will_load = !cfg.companions[idx].loaded;
-
-    App::Global().BeginLoad(cfg.companions[idx].display_name);
-    App::Global().UpdateLoadStage(will_load ? "Loading companion IFS" : "Unloading companion");
-
-    UnloadAllCompanions(cfg);
-    if (will_load) LoadCompanionAt(cfg, idx);
-    ReplayMasterForBindings();
-    App::Global().EndLoad();
-}
-
-}
-
-void DispatchAppRequest(const App::Request& req_obj) {
-    const App::Request* req = &req_obj;
-    if (req->load_new_ifs && !req->ifs_path.empty()) {
-        HandleHotSwap(*req);
-    } else if (req->start_export) {
-        Export::HandleStartRequest(*req, g_engine, g_d3d);
-    } else if (req->cancel_export) {
-        Export::HandleCancelRequest(g_d3d);
-    } else if (req->start_qpro_extract) {
-        HandleQproExtract(*req);
-    } else if (req->start_qpro_scan) {
+    void operator()([[maybe_unused]] const AfpCmd::QproStartScan& cmd) const {
         QproExtract::RunScan(App::Global().GameDir());
-    } else if (req->force_replay) {
-        HandleForceReplay();
-    } else if (req->switch_animation && !req->animation_name.empty()) {
-        Runtime::Active().SwitchAnimation(req->animation_name, req->animation_label);
-    } else if (req->goto_label) {
-        HandleGotoLabel(*req);
-    } else if (req->seek_frame) {
-        RenderLive::HandleSeekRequest(*req, g_afp);
-    } else if (req->set_paused) {
-        RenderLive::HandlePauseRequest(*req, g_afp);
-    } else if (req->toggle_companion && req->companion_index >= 0) {
-        HandleToggleCompanion(*req);
     }
+    void operator()(const AfpCmd::QproStartExtract& cmd) const { HandleQproExtract(cmd); }
+};
+
+struct AppCommandVisitor {
+    void operator()(const App::Cmd::BootGame& cmd) const {
+        LOG("Main", "BootGame command ignored after boot (dir='%s')", cmd.game_dir.c_str());
+    }
+    void operator()(const App::Cmd::LoadContent& cmd) const {
+        if (!cmd.path.empty()) HandleLoadContent(cmd);
+    }
+    void operator()(const App::Cmd::StartExport& cmd) const {
+        Export::HandleStartRequest(cmd.req, g_engine, g_d3d);
+    }
+    void operator()([[maybe_unused]] const App::Cmd::CancelExport& cmd) const {
+        Export::HandleCancelRequest(g_d3d);
+    }
+    void operator()(const App::Cmd::BackendCommand& cmd) const {
+        const auto* afp = std::any_cast<AfpCmd::Any>(&cmd.payload);
+        if (afp == nullptr) {
+            LOG("Main", "BackendCommand with unknown payload type dropped");
+            return;
+        }
+        std::visit(AfpCommandVisitor{}, *afp);
+    }
+};
+
+}
+
+void DispatchAppCommand(const App::Command& cmd) {
+    std::visit(AppCommandVisitor{}, cmd);
 }

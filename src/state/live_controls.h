@@ -1,5 +1,7 @@
 #pragma once
 
+#include "state/telemetry.h"
+
 #include <array>
 #include <cstdint>
 #include <mutex>
@@ -34,7 +36,7 @@ public:
         std::array<char, 32> conv_engine = {};
         uint64_t size_bytes = 0;
         uint64_t load_time_ms = 0;
-        uint32_t stream_id = 0xFFFFFFFC;
+        uint32_t stream_id = kNoActiveStream;
         uint32_t cur_pos = 0;
         uint32_t total_length = 0;
         uint32_t flags0 = 0;

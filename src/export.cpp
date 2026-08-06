@@ -13,6 +13,7 @@
 #include "formats/frame_process.h"
 #include "state/telemetry.h"
 #include "state/app_state.h"
+#include "state/commands.h"
 #include "support/log.h"
 #include <utility>
 #include <ios>
@@ -103,30 +104,30 @@ void RemovePartialOutput(const Session& sess) {
 
 namespace {
 
-void InitSessionFromRequest(Session& sess, const App::Request& req, D3D9State& d3d) {
+void InitSessionFromRequest(Session& sess, const App::ExportRequest& req, D3D9State& d3d) {
     sess = {};
     sess.active = true;
-    sess.output_path = req.export_output_path;
-    sess.fps = req.export_fps > 0 ? req.export_fps : 60;
-    sess.quality = req.export_quality >= 0 && req.export_quality <= 100 ? req.export_quality : 60;
-    sess.keyframe_interval = req.export_keyframe_interval > 0 ? req.export_keyframe_interval : 0;
-    sess.max_frames = req.export_max_frames > 0 ? req.export_max_frames : 0;
-    sess.loop_count = req.export_loop_count > 0 ? req.export_loop_count : 1;
-    sess.blend_loop = req.export_blend_loop;
-    sess.blend_frames = req.export_blend_frames > 0 ? req.export_blend_frames : 15;
-    sess.bg_transparent = req.export_bg_transparent;
-    sess.bg_r = req.export_bg_r;
-    sess.bg_g = req.export_bg_g;
-    sess.bg_b = req.export_bg_b;
-    sess.out_width = req.export_width;
-    sess.out_height = req.export_height;
-    sess.crop_x = req.export_crop_x;
-    sess.crop_y = req.export_crop_y;
-    sess.crop_w = req.export_crop_w;
-    sess.crop_h = req.export_crop_h;
-    sess.format = req.export_format;
-    sess.prefer_hw = req.export_prefer_hardware;
-    sess.dump_frames_dir = req.export_dump_frames_dir;
+    sess.output_path = req.output_path;
+    sess.fps = req.fps > 0 ? req.fps : 60;
+    sess.quality = req.quality >= 0 && req.quality <= 100 ? req.quality : 60;
+    sess.keyframe_interval = req.keyframe_interval > 0 ? req.keyframe_interval : 0;
+    sess.max_frames = req.max_frames > 0 ? req.max_frames : 0;
+    sess.loop_count = req.loop_count > 0 ? req.loop_count : 1;
+    sess.blend_loop = req.blend_loop;
+    sess.blend_frames = req.blend_frames > 0 ? req.blend_frames : 15;
+    sess.bg_transparent = req.bg_transparent;
+    sess.bg_r = req.bg_r;
+    sess.bg_g = req.bg_g;
+    sess.bg_b = req.bg_b;
+    sess.out_width = req.width;
+    sess.out_height = req.height;
+    sess.crop_x = req.crop_x;
+    sess.crop_y = req.crop_y;
+    sess.crop_w = req.crop_w;
+    sess.crop_h = req.crop_h;
+    sess.format = req.format;
+    sess.prefer_hw = req.prefer_hardware;
+    sess.dump_frames_dir = req.dump_frames_dir;
     if (!sess.dump_frames_dir.empty()) {
         std::error_code ec;
         std::filesystem::create_directories(sess.dump_frames_dir, ec);
@@ -249,7 +250,7 @@ void LogSessionStart(const Session& sess) {
 
 }
 
-void StartSession(Session& sess, const App::Request& req, AfpFuncs& afp,
+void StartSession(Session& sess, const App::ExportRequest& req, AfpFuncs& afp,
                   [[maybe_unused]] AfpuFuncs& afpu, [[maybe_unused]] DllLoader& afpu_dll,
                   D3D9State& d3d) {
     if (sess.active) {
@@ -656,7 +657,7 @@ int TargetFps() {
     return sess.fps > 0 ? sess.fps : 60;
 }
 
-void HandleStartRequest(const App::Request& req, EngineSession& es, D3D9State& d3d) {
+void HandleStartRequest(const App::ExportRequest& req, EngineSession& es, D3D9State& d3d) {
     StartSession(ActiveSession(), req, es.afp, es.afpu, es.afpu_dll, d3d);
 }
 

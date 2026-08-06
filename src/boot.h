@@ -11,7 +11,3 @@ bool BootFromGameDir(HINSTANCE hInstance, const std::string& game_dir, bool want
 bool MountAndLoadIfs(const std::string& ifs_path, bool from_arc = false);
 
 void ApplyCliOverrides(const Cli::Options& opts);
-
-void ApplyVariants(uint32_t stream_id);
-
-void ApplySubLayerVisibility(uint32_t stream_id);

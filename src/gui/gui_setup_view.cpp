@@ -4,6 +4,7 @@
 #include "gui_setup_view.h"
 #include "gui_window.h"
 #include "../state/app_state.h"
+#include "../state/commands.h"
 #include "../arc_extract.h"
 #include "../customize_extract.h"
 #include "../game_profile.h"
@@ -358,11 +359,10 @@ void DrawLoadButton(App::State& state, App::BootState bs) {
     const bool boot_in_flight = (bs == App::BootState::Booting);
     ImGui::BeginDisabled(boot_in_flight || g_dir_buf[0] == '\0');
     if (ImGui::Button("Load", ImVec2(160, 32))) {
-        App::Request r;
-        r.set_game_dir = true;
+        App::Cmd::BootGame r;
         r.game_dir = g_dir_buf;
         state.GetRenderSize(r.render_width, r.render_height);
-        state.PostRequest(std::move(r));
+        state.PostCommand(std::move(r));
         state.SetBootError({});
     }
     ImGui::EndDisabled();

@@ -3,7 +3,9 @@
 #include "gui_export_panel.h"
 #include "gui_loading_overlay.h"
 #include "gui_setup_view.h"
+#include "../state/afp_commands.h"
 #include "../state/app_state.h"
+#include "../state/commands.h"
 #include "../support/log.h"
 #include "imgui.h"
 #include "state/telemetry.h"
@@ -156,11 +158,8 @@ void RenderIfsTreeNode(App::State& state, const IfsTreeNode& node, const std::st
         if (ImGui::Selectable(node.segment.c_str(), is_active,
                               ImGuiSelectableFlags_SpanAllColumns)) {
             if (!is_active) {
-                App::Request r;
-                r.load_new_ifs = true;
-                r.ifs_path = node.entry->full_path;
-                r.ifs_from_arc = node.entry->from_arc;
-                state.PostRequest(std::move(r));
+                state.PostCommand(App::Cmd::LoadContent{.path = node.entry->full_path,
+                                                        .from_arc = node.entry->from_arc});
                 LOG("Gui", "Loading IFS from tree selection: '%s'", node.entry->full_path.c_str());
             }
         }
@@ -236,9 +235,7 @@ void DrawVariantBitmapCombo(App::IfsConfig& cfg, App::VariantSlot& slot) {
     if (ImGui::Selectable("(default)", slot.bitmap.empty() && !slot.bitmap_override)) {
         slot.bitmap.clear();
         slot.bitmap_override = false;
-        App::Request r;
-        r.force_replay = true;
-        App::Global().PostRequest(std::move(r));
+        App::Global().PostCommand(AfpCmd::Wrap(AfpCmd::ForceReplay{}));
     }
     for (auto& b : cfg.bitmap_names) {
         bool const selected = (!is_default && slot.bitmap == b);
@@ -443,10 +440,7 @@ void DrawLayerList(App::State& state, const App::IfsConfig& cfg) {
             ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.50F, 0.92F, 0.65F, 1.0F));
         }
         if (ImGui::Selectable(name.c_str(), is_playing, ImGuiSelectableFlags_SpanAllColumns)) {
-            App::Request r;
-            r.switch_animation = true;
-            r.animation_name = name;
-            state.PostRequest(std::move(r));
+            state.PostCommand(AfpCmd::Wrap(AfpCmd::SwitchAnimation{.name = name, .label = ""}));
         }
         if (is_playing) ImGui::PopStyleColor();
     }
@@ -527,10 +521,7 @@ void DrawCompanionRow(App::State& state, const App::CompanionIfs& c, size_t i, i
     ImGui::PushStyleColor(ImGuiCol_Text, text_col);
     ImGui::PushID((int)i);
     if (ImGui::Selectable(label, c.loaded)) {
-        App::Request r;
-        r.toggle_companion = true;
-        r.companion_index = (int)i;
-        state.PostRequest(std::move(r));
+        state.PostCommand(AfpCmd::Wrap(AfpCmd::ToggleCompanion{.index = (int)i}));
     }
     ImGui::PopID();
     ImGui::PopStyleColor();

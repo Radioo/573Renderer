@@ -17,53 +17,9 @@
 #include <utility>
 #include <vector>
 
+static_assert(App::kNoActiveStream == Runtime::kModernNoStream);
+
 namespace RenderLive {
-
-namespace Inspect {
-
-bool HaveActiveClip(uint32_t modern_stream_id) {
-    return Runtime::Active().HaveActiveClip(modern_stream_id);
-}
-
-bool ReadPlayhead(uint32_t modern_stream_id, uint32_t* cur, uint32_t* total,
-                  uint32_t* raw_loop_count) {
-    return Runtime::Active().ReadPlayhead(modern_stream_id, cur, total, raw_loop_count);
-}
-
-bool ReadSize(uint32_t modern_stream_id, uint32_t* w, uint32_t* h) {
-    return Runtime::Active().ReadSize(modern_stream_id, w, h);
-}
-
-bool ReadRawLayerInfo(uint32_t modern_stream_id, uint32_t* raw_cur, uint32_t* raw_total,
-                      uint32_t* flags0) {
-    return Runtime::Active().ReadRawLayerInfo(modern_stream_id, raw_cur, raw_total, flags0);
-}
-
-void ReadComplete(const AfpFuncs& afp, uint32_t modern_stream_id, bool* complete) {
-    if (complete == nullptr) return;
-    *complete = Runtime::Active().ReadComplete(afp, modern_stream_id);
-}
-
-std::vector<Label> EnumerateLabels(const AfpFuncs& afp, uint32_t modern_stream_id) {
-    std::vector<Label> out;
-    for (auto& l : Runtime::Active().EnumerateLabels(afp, modern_stream_id))
-        out.push_back({.name = l.name, .frame = l.frame});
-    return out;
-}
-
-void SetPaused(const AfpFuncs& afp, bool paused) {
-    Runtime::Active().SetPaused(afp, paused);
-}
-
-bool SeekFrame(const AfpFuncs& afp, int frame) {
-    return Runtime::Active().SeekFrame(afp, frame);
-}
-
-bool GotoLabel(const AfpFuncs& afp, const std::string& name) {
-    return Runtime::Active().GotoLabel(afp, name);
-}
-
-}
 
 namespace {
 bool s_seek_happened = false;
@@ -77,38 +33,36 @@ namespace {
 bool s_pause_applied = false;
 }
 namespace {
-uint32_t s_pause_applied_sid = 0xFFFFFFFC;
+uint32_t s_pause_applied_sid = Runtime::kModernNoStream;
 }
 
 void ResetPauseDefend() {
-    s_pause_applied_sid = 0xFFFFFFFC;
+    s_pause_applied_sid = Runtime::kModernNoStream;
 }
 
-bool HandleSeekRequest(const App::Request& req, AfpFuncs& afp) {
-    if (!req.seek_frame) return false;
+bool HandleSeekRequest(int seek_to_frame, AfpFuncs& afp) {
     if (Export::IsCapturing()) {
-        LOG("Live", "ignoring seek to %d - export is capturing", req.seek_to_frame);
+        LOG("Live", "ignoring seek to %d - export is capturing", seek_to_frame);
         return true;
     }
-    RenderLive::Inspect::SeekFrame(afp, req.seek_to_frame);
+    Runtime::Active().SeekFrame(afp, seek_to_frame);
     auto ov = App::Global().GetLiveOverrides();
     ov.paused = true;
     App::Global().SetLiveOverrides(ov);
-    RenderLive::Inspect::SetPaused(afp, true);
+    Runtime::Active().SetPaused(afp, true);
     NotifySeek();
     return true;
 }
 
-bool HandlePauseRequest(const App::Request& req, AfpFuncs& afp) {
-    if (!req.set_paused) return false;
+bool HandlePauseRequest(bool paused_value, AfpFuncs& afp) {
     if (Export::IsCapturing()) {
         LOG("Live", "ignoring pause toggle - export is capturing");
         return true;
     }
     auto ov = App::Global().GetLiveOverrides();
-    ov.paused = req.paused_value;
+    ov.paused = paused_value;
     App::Global().SetLiveOverrides(ov);
-    RenderLive::Inspect::SetPaused(afp, ov.paused);
+    Runtime::Active().SetPaused(afp, ov.paused);
     return true;
 }
 
@@ -117,9 +71,9 @@ void ApplyFilter(uint32_t stream_id, bool enabled) {
     static afp_set_filter_t s_fn = nullptr;
     static bool s_resolved = false;
     static bool s_applied = false;
-    static uint32_t s_applied_sid = 0xFFFFFFFC;
+    static uint32_t s_applied_sid = Runtime::kModernNoStream;
 
-    if (stream_id == 0xFFFFFFFC || (int)stream_id < 0) return;
+    if (stream_id == Runtime::kModernNoStream || (int)stream_id < 0) return;
     if (enabled == s_applied && stream_id == s_applied_sid) return;
 
     if (!s_resolved) {
@@ -140,9 +94,9 @@ void ApplyFilter(uint32_t stream_id, bool enabled) {
 
 namespace {
 void ApplyPauseDefend(AfpFuncs& afp, uint32_t active_id, bool paused) {
-    if (active_id == 0xFFFFFFFC || (int)active_id < 0) return;
+    if (active_id == Runtime::kModernNoStream || (int)active_id < 0) return;
     if (paused == s_pause_applied && active_id == s_pause_applied_sid) return;
-    Inspect::SetPaused(afp, paused);
+    Runtime::Active().SetPaused(afp, paused);
     s_pause_applied = paused;
     s_pause_applied_sid = active_id;
 }
@@ -254,7 +208,7 @@ void FillLiveState(AfpFuncs& afp, uint32_t stream_id, uint32_t active_id, int fr
     uint32_t raw_cur = 0;
     uint32_t raw_total = 0;
     uint32_t flags0 = 0;
-    if (Inspect::ReadRawLayerInfo(stream_id, &raw_cur, &raw_total, &flags0)) {
+    if (Runtime::Active().ReadRawLayerInfo(stream_id, &raw_cur, &raw_total, &flags0)) {
         lstate.have_layer_info = true;
         lstate.flags0 = flags0;
         lstate.total_length = raw_total;
@@ -262,25 +216,25 @@ void FillLiveState(AfpFuncs& afp, uint32_t stream_id, uint32_t active_id, int fr
     }
     uint32_t sw = 0;
     uint32_t sh = 0;
-    if (Inspect::ReadSize(stream_id, &sw, &sh)) {
+    if (Runtime::Active().ReadSize(stream_id, &sw, &sh)) {
         lstate.mc_w = sw;
         lstate.mc_h = sh;
     }
     lstate.stream_id = active_id;
     lstate.frames_since_switch = frames_since_switch;
-    Inspect::ReadComplete(afp, stream_id, &lstate.master_complete);
+    lstate.master_complete = Runtime::Active().ReadComplete(afp, stream_id);
     lstate.filter_on = filter_on;
 
     static uint32_t s_wrap_prev_cur = 0xFFFFFFFF;
     static uint32_t s_wrap_count = 0;
-    static uint32_t s_wrap_sid = 0xFFFFFFFC;
+    static uint32_t s_wrap_sid = Runtime::kModernNoStream;
     static std::string s_wrap_label;
     App::Status const wstat = App::Global().GetStatus();
     uint32_t mc_c = 0;
     uint32_t mc_t = 0;
     uint32_t mc_lc = 0;
-    if (Inspect::HaveActiveClip(stream_id) &&
-        Inspect::ReadPlayhead(stream_id, &mc_c, &mc_t, &mc_lc)) {
+    if (Runtime::Active().HaveActiveClip(stream_id) &&
+        Runtime::Active().ReadPlayhead(stream_id, &mc_c, &mc_t, &mc_lc)) {
         const bool restarted = (active_id != s_wrap_sid) || (wstat.active_label != s_wrap_label) ||
                                (frames_since_switch == 0) || s_seek_happened;
         if (restarted) {
@@ -308,7 +262,7 @@ void RefreshSubLayerTree(AfpFuncs& afp, uint32_t stream_id, App::Status& st) {
     if (--s_tree_wait > 0) return;
     s_tree_wait = 15;
     st.mc_tree = BuildSubLayerTree(afp, stream_id, App::Global().GetSublayerExpanded());
-    static uint32_t s_tl_sid = 0xFFFFFFFC;
+    static uint32_t s_tl_sid = Runtime::kModernNoStream;
     static auto s_tl_n = (size_t)-1;
     if (stream_id != s_tl_sid || st.mc_tree.children.size() != s_tl_n) {
         std::string dbg;
@@ -322,7 +276,7 @@ void RefreshSubLayerTree(AfpFuncs& afp, uint32_t stream_id, App::Status& st) {
 }
 
 void RefreshMcNameList(AfpFuncs& afp, uint32_t stream_id, App::Status& st) {
-    static uint32_t s_enum_sid = 0xFFFFFFFC;
+    static uint32_t s_enum_sid = Runtime::kModernNoStream;
     static int s_enum_wait = 0;
     if (stream_id == s_enum_sid && --s_enum_wait > 0) return;
     s_enum_sid = stream_id;
@@ -340,7 +294,7 @@ void RefreshMcNameList(AfpFuncs& afp, uint32_t stream_id, App::Status& st) {
 
 void PublishStatusExtras(AfpFuncs& afp, uint32_t stream_id) {
     App::Status st = App::Global().GetStatus();
-    if (!Runtime::Active().SupportsLiveExtras() || stream_id == 0xFFFFFFFC) {
+    if (!Runtime::Active().SupportsLiveExtras() || stream_id == Runtime::kModernNoStream) {
         if (!st.mc_children.empty()) st.mc_children.clear();
         if (!st.mc_tree.children.empty()) st.mc_tree = App::SubLayerNode{};
     } else {

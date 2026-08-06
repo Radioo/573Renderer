@@ -24,14 +24,16 @@ loop: the render thread keeps running at its cadence while the GUI thread is stu
 - `GuiThread::Start` is idempotent (atomic exchange); `Stop` flips the local running flag and
   joins, letting the GUI stop selectively without tearing the whole app down.
 
-### 1.2 Request/Status pattern
+### 1.2 Command/Status pattern
 
-GUI widgets never call the engine. They post `App::Request` objects (seek_frame, set_paused,
-switch_animation, load_new_ifs, start_export, start_qpro_extract, force_replay,
-toggle_companion, goto_label, set_game_dir, ...) that the render thread consumes; the render
-thread publishes `App::Status` / LiveState / ExportState / LoadProgress snapshots that the GUI
-polls once per frame. Background workers (arc/customize extractors, qpro scan) publish into
-their own mutex-guarded Status structs polled the same way.
+GUI widgets never call the engine. They post typed `App::Command` variants
+(`Cmd::LoadContent`, `Cmd::BootGame`, `Cmd::StartExport`, `Cmd::CancelExport`) and wrapped
+AFP-backend commands (`AfpCmd::Wrap` over `SeekFrame`, `SetPaused`, `SwitchAnimation`,
+`GotoLabel`, `ForceReplay`, `ToggleCompanion`, `QproStartScan`, `QproStartExtract`) that the
+render thread consumes (see docs/state.md "Command semantics"); the render thread publishes
+`App::Status` / LiveState / ExportState / LoadProgress snapshots that the GUI polls once per
+frame. Background workers (arc/customize extractors, qpro scan) publish into their own
+mutex-guarded Status structs polled the same way.
 
 ### 1.3 gui_window internals (Win32 + DX9 lost-device dance)
 

@@ -4,51 +4,73 @@
 thread (plus the render window's WndProc for crop picking). One mutex
 serializes everything; both sides take copies under the lock. `App::Global()`
 is the process-wide singleton, but the class is a plain constructible object,
-which is what the unit tests instantiate. The render thread reads the pending
-`Request` each frame; the GUI writes requests from widget callbacks; the
-render thread publishes `Status` / `LiveState` / `LoadProgress` back.
+which is what the unit tests instantiate. The render thread drains the
+pending command each frame; the GUI posts commands from widget callbacks;
+the render thread publishes `Status` / `LiveState` / `LoadProgress` back.
+
+The command queue (`fifo_queue.h`) is a mutex-guarded FIFO deque: posts
+never overwrite each other, and the render thread takes one command per
+frame in post order.
 
 Known design debts scheduled for later phases (do not "fix" casually):
-the one-deep request mailbox OVERWRITES a pending request (two posts within
-one render-thread poll silently drop the first - P8 replaces it with a typed
-command queue); the qpro request fields couple this header to
-qpro_extract.h (P8 moves qpro behind a RenderService seam);
+the qpro command payloads couple `state/afp_commands.h` to qpro_model.h (a
+later phase moves qpro behind a RenderService seam; the coupling no longer
+touches app_state.h);
 `ShouldExit` is atomic so both threads can flip it without the mutex - the
 GUI window closing does NOT tear down the renderer (it is a control panel),
 only the render window close does.
 
-## Request semantics
+## Command semantics (P13 typed commands)
 
-One-shot commands, `std::optional` so "no request" is distinguishable from
-"apply the same request twice". Field groups and their non-obvious contracts:
+`App::Command` (`state/commands.h`) is a `std::variant` of app-level
+commands; backend-specific commands travel as
+`Cmd::BackendCommand{std::any}` whose payload is a backend-defined closed
+variant. The AFP family's variant is `AfpCmd::Any`
+(`state/afp_commands.h`, scheduled to move under the backend directory with
+the P14 seam lift); `AfpCmd::Wrap(cmd)` builds the wrapped `App::Command`.
+Posting is `State::PostCommand`, draining is `State::TakeCommand`
+(`std::optional`, one per render-loop tick). The dispatcher
+(`render_loop_requests.cpp DispatchAppCommand`) is a pair of `std::visit`
+visitors, not an if/else chain; adding a backend command never edits a
+shared state header. `main.cpp WaitForFirstBoot` consumes only
+`Cmd::BootGame` before the render loop exists.
 
-- `load_new_ifs` + `ifs_path` (+ `ifs_from_arc` for DDR: path is a .arc
-  container whose inner .ifs must be decompressed to a temp file first,
-  mirroring `IfsEntry::from_arc`).
-- `set_game_dir` + `game_dir` + `render_width/height` (0 = "use App::Global
-  / settings.ini" - handlers treat 0 as a sentinel) + `game_profile` (empty
-  or unrecognized = auto-detect from the directory).
-- qpro: `start_qpro_extract`/`qpro_out_dir`/`qpro_fps`/`qpro_hue_scope`
-  (scope the per-effect afp hue filter to the effect bitmap so a static
-  base fill like the gold sword hilt is not hue-shifted - matches the live
-  game, default on)/`qpro_parts`/`qpro_part_sel`; `start_qpro_scan` reads
-  bm2dx.dll's part arrays for the selection list.
-- `switch_animation` + `animation_name` (+ optional `animation_label`:
-  after the switch, deep-goto that label via `afp_mc_control(stream, 0xF09)`
-  - what SDVX scene lambdas do for intro+loop backgrounds). `goto_label` +
-  `goto_label_name` is the live variant without re-switching.
-- `seek_frame` + `seek_to_frame`: CAfpViewerScene LEFT/RIGHT seek
-  (`afp_mc_control 0xF08`), pauses on seek; IGNORED while an export
-  captures so a backward seek cannot corrupt the loop-wrap counter.
-  `set_paused`/`paused_value`: stream speed 0/1; ignored while exporting.
-- `toggle_companion` + `companion_index`: invalid indexes silently ignored.
-- `force_replay`: destroy + replay the master. Exists because
+App-level commands and their non-obvious contracts:
+
+- `Cmd::LoadContent{path, from_arc}`: hot-swap. `from_arc` = the path is a
+  DDR .arc container whose inner .ifs must be decompressed to a temp file
+  first, mirroring `IfsEntry::from_arc`.
+- `Cmd::BootGame{game_dir, profile_slug, render_width/height}` (0 = "use
+  App::Global / settings.ini"; empty or unrecognized slug = auto-detect
+  from the directory). Ignored with a log if it arrives after boot.
+- `Cmd::StartExport{ExportRequest}` / `Cmd::CancelExport`: `ExportRequest`
+  mirrors the GUI export panel and cli.md's export options; `format` stays
+  an int (MediaSink::Format index) so the struct remains trivially
+  populated without pulling media headers. The AFP-only knobs
+  (`loop_count`, `blend_frames`, `blend_loop`) remain in the generic
+  request until the P16 state generalization moves them to the AFP UI
+  state block.
+
+AFP commands (`AfpCmd::Any`):
+
+- `SwitchAnimation{name, label}` (optional label: after the switch,
+  deep-goto that label via `afp_mc_control(stream, 0xF09)` - what SDVX
+  scene lambdas do for intro+loop backgrounds). `GotoLabel{name}` is the
+  live variant without re-switching.
+- `SeekFrame{frame}`: CAfpViewerScene LEFT/RIGHT seek (`afp_mc_control
+  0xF08`), pauses on seek; IGNORED while an export captures so a backward
+  seek cannot corrupt the loop-wrap counter. `SetPaused{paused}`: stream
+  speed 0/1; ignored while exporting.
+- `ToggleCompanion{index}`: invalid indexes silently ignored.
+- `ForceReplay`: destroy + replay the master. Exists because
   afp_play_work_load_bitmap has no "unset" - the only way to revert a slot
   to its authored bitmap is a full re-author; other slots with a latched
-  override get re-applied by ApplyVariants on the next frame.
-- Export block: mirrors the GUI export panel and cli.md's export options;
-  `export_format` stays an int (MediaSink::Format index) so the struct
-  remains trivially populated without pulling media headers.
+  override get re-applied by ApplyVariantSlots on the next frame.
+- `QproStartExtract{out_dir, part_sel, parts, fps, hue_scope}` (hue_scope
+  scopes the per-effect afp hue filter to the effect bitmap so a static
+  base fill like the gold sword hilt is not hue-shifted - matches the live
+  game, default on); `QproStartScan` reads bm2dx.dll's part arrays for the
+  selection list.
 
 ## VariantSlot / CompanionIfs / IfsConfig
 

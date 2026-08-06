@@ -5,6 +5,7 @@
 #include "gui_layout_constants.h"
 #include "gui_splitter.h"
 #include "../state/app_state.h"
+#include "../state/telemetry.h"
 #include "imgui.h"
 
 namespace Panels {
@@ -40,7 +41,7 @@ void RenderRightPane() {
     }
     {
         auto st = App::Global().GetStatus();
-        const bool loaded = (st.stream_id != 0xFFFFFFFC);
+        const bool loaded = (st.stream_id != App::kNoActiveStream);
         if (loaded) {
             ImGui::Spacing();
             LiveControls::RenderSeekControls();

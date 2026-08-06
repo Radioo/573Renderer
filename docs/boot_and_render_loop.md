@@ -454,15 +454,20 @@ list (not enumerable without parsing afp bytecode). Any name that resolves via
 afp_mc_get_id_by_path becomes a controllable slot; default_bitmap seeds to the
 clip path (the "(default)" heuristic).
 
-### 4.4 Per-frame re-apply passes (ApplyVariants / ApplySubLayerVisibility)
+### 4.4 Per-frame re-apply passes (ApplyVariantSlots / ApplySublayerOverrides)
 
-- ApplyVariants runs once per frame - matching bm2dx's own per-frame
+Both passes live on the runtime as of P12 (`Runtime::Active().ApplyVariantSlots`
+/ `ApplySublayerOverrides`, modern-only; the DDR overrides are no-ops matching
+the old null-fn-pointer self-skips). The render loop calls them each frame
+right after loop housekeeping.
+
+- ApplyVariantSlots runs once per frame - matching bm2dx's own per-frame
   variant pattern. Slot validity is probed lazily via
   `afp_mc_get_id_by_path`. A bitmap is only pushed when the user explicitly
   touched the slot (`bitmap_override` latches on first interaction):
   unconditionally re-writing `slot.path` every frame would defeat
   animations that cycle through multiple bitmaps via PlaceObject.
-- ApplySubLayerVisibility re-asserts each frame so a PlaceObject-authored
+- ApplySublayerOverrides re-asserts each frame so a PlaceObject-authored
   re-show cannot override the user's toggle (same rationale as the
   license_usr re-assert and BG 26's per-mount denylist hide). Thread-safety
   rule: it must copy the overrides under the State lock
@@ -609,8 +614,9 @@ Each `--flag` has a fired-once bool; the gating chain enforces
 
 - `--animation`: posts switch_animation once a clip is live AND the current
   name differs. Backend-agnostic liveness via
-  `RenderLive::Inspect::HaveActiveClip` (DDR's modern StreamId is the
-  0xFFFFFFFC sentinel; without the seam the switch never posted in DDR).
+  `Runtime::Active().HaveActiveClip` (DDR's modern StreamId is the
+  `Runtime::kModernNoStream` sentinel; without the runtime dispatch the
+  switch never posted in DDR).
   If the name already matches, the flag still flips (so the export gate
   does not wait forever) and any `--animation-label` is applied via the
   seam, recording label_playback_active so the export tracks the bounded
@@ -914,11 +920,10 @@ export-end path calls ResetPauseDefend because the export forced speed 1.0
 at start and the defend's cache is stale afterwards; clearing it lets the
 sticky paused override re-apply once exporting clears.
 
-Backend seam (Inspect::): each helper branches ONCE on g_ddr_mode - the
-only place g_ddr_mode appears for the readout/controls. Deliberately free
-functions, not a vtable: this is the natural cut-line a future avs/afp
-version-separation refactor widens into a backend interface, but it is not
-that refactor yet. DDR-side facts:
+Backend seam: the readout/control helpers dispatch through
+`Runtime::Active()` (the free-function `RenderLive::Inspect` layer that
+predated `IGameRuntime` was pure forwarding and was deleted in P11).
+DDR-side facts:
 
 - DDR's afp 2.13.7 exports NO afp_set_filter, NO bulk child-enumerate, NO
   afpuloc_* version exports (RE-confirmed), so FILTER / MC-name enum /

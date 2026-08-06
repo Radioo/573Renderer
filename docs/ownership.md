@@ -165,7 +165,7 @@ export smoke through the loop-detection path (authored-loop detect -> capture
   scale, not a branch). Proven in practice by GITADORA DELTA landing as a
   pure profile entry.
 - "GUI panels hold zero business logic": audited - panels read App state,
-  draw, and post App::Requests; their only computations call the TESTED
+  draw, and post App::Commands; their only computations call the TESTED
   r573_media_format lib (DeriveExportStem / MakeOutputPath). ImGui usage is
   100% confined to src/gui/ and gated (tools/ci/check_gui_isolation.py).
 - "File-length baseline empty": met - the baseline mechanism is deleted and a
@@ -173,6 +173,37 @@ export smoke through the loop-detection path (authored-loop detect -> capture
 - Export strategies: one Format enum (media/media_format.h), per-format
   encoder Open functions, MediaSink as the Sink strategy, ExportSession
   ownership threaded (above).
+
+## P11-P12 (backend abstraction program, in progress)
+
+P11 (mechanical enablers): `tools/checks.sh` aggregate gate created;
+`RenderLive::Inspect` (9 pure forwards) collapsed into direct
+`Runtime::Active()` calls; the raw `0xFFFFFFFC` literal retired behind
+`Runtime::kModernNoStream` (engine) / `App::kNoActiveStream` (state+gui).
+Verified byte-identical on the 3-game pixel net.
+
+P12 (runtime symmetry): the five engine bypasses moved behind `IGameRuntime` -
+the modern `afp_do_sort_render` (now `ModernRuntime::RenderFrame`, fixing the
+modern/DDR render asymmetry), the continuous-loop flag-dance
+(`ApplyContinuousLoop`, latch is a runtime member), `ApplyMasterScale`,
+`ApplyVariantSlots`/`ApplySublayerOverrides` (out of boot.cpp), and the
+`force_replay`/`toggle_companion` request handlers
+(`ForceReplayMaster`/`ToggleCompanion`, out of render_loop_requests.cpp).
+Every DDR override is the old implicit no-op (sentinel self-skip, null fn
+pointer, or empty vector), verified byte-identical. game_runtime.cpp split
+into game_runtime.cpp (selection) + game_runtime_internal.h (class decls) +
+game_runtime_modern.cpp + game_runtime_ddr.cpp. Remaining known direct
+AfpManager reads in generic code (`GatherAutopilotInputs`,
+`AdvanceFrame`'s `StreamId()`, `CallAfpUpdateGuarded`) are scheduled to move
+with the CLI-autopilot split in the backend-seam phase (P14), where they
+become AFP-family code instead of gaining odd interface methods.
+
+P13 (typed commands): the flat ~50-field `App::Request` died. `App::Command`
+variant + `Cmd::BackendCommand{std::any}` + `AfpCmd::Any` (see
+docs/state.md "Command semantics"); the dispatcher is a `std::visit` visitor
+pair; `app_state.h` no longer includes qpro_model.h (that coupling now lives
+only in `state/afp_commands.h`, which P14 relocates under the backend dir).
+Export start carries a generic `App::ExportRequest`. Verified byte-identical.
 
 Deferred deliberately (each is a seam with NO consumer today; cutting them
 now would be speculative generality):

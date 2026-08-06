@@ -6,6 +6,7 @@
 #include <cstdio>
 #include "afp_boot.h"
 #include "engine_session.h"
+#include "game_runtime.h"
 #include "avs_boot.h"
 #include "ifs_inspect.h"
 #include "support/log.h"
@@ -27,7 +28,7 @@ void AfpManager::Shutdown(EngineSession& es) {
         afp.afp_shutdown();
         es.afp_booted = false;
     }
-    es.stream_id = 0xFFFFFFFC;
+    es.stream_id = Runtime::kModernNoStream;
     es.extra_streams.clear();
     es.pkg_id = 0;
     es.anim_name.clear();
@@ -48,7 +49,7 @@ const std::string& AfpManager::AnimName() {
 
 namespace {
 int ReferRootMcId(const AfpFuncs& afp) {
-    if (g_engine.stream_id == 0xFFFFFFFC || (int)g_engine.stream_id < 0) return -1;
+    if (g_engine.stream_id == Runtime::kModernNoStream || (int)g_engine.stream_id < 0) return -1;
     if (afp.afp_mc_get_id_by_path == nullptr) return -1;
     int const mc_id = afp.afp_mc_get_id_by_path(g_engine.stream_id, "");
     if (mc_id <= 0) return -1;
@@ -106,7 +107,7 @@ bool AfpManager::SeekFrame(const AfpFuncs& afp, int frame) {
 }
 
 void AfpManager::SetStreamPaused(const AfpFuncs& afp, bool paused) {
-    if (g_engine.stream_id == 0xFFFFFFFC || (int)g_engine.stream_id < 0) return;
+    if (g_engine.stream_id == Runtime::kModernNoStream || (int)g_engine.stream_id < 0) return;
     if (afp.afp_stream_set_speed != nullptr)
         afp.afp_stream_set_speed(g_engine.stream_id, paused ? 0.0F : 1.0F);
     if (afp.afp_set_flag_mask != nullptr) afp.afp_set_flag_mask(g_engine.stream_id, 1, 1);
@@ -285,9 +286,9 @@ bool AfpManager::ForceReplay(EngineSession& es) {
 }
 
 void AfpManager::DestroyCurrentStream(AfpFuncs& afp) {
-    if (g_engine.stream_id == 0xFFFFFFFC) return;
+    if (g_engine.stream_id == Runtime::kModernNoStream) return;
     if (afp.afp_stream_destroy != nullptr) afp.afp_stream_destroy(5, g_engine.stream_id, 0);
-    g_engine.stream_id = 0xFFFFFFFC;
+    g_engine.stream_id = Runtime::kModernNoStream;
     g_engine.anim_name.clear();
 }
 
@@ -306,7 +307,7 @@ bool LayerInfoDumpEnabled() {
 void MaybeDumpLayerInfo(const uint8_t* info, uint32_t flags) {
     if (!LayerInfoDumpEnabled()) return;
     static uint32_t s_last_words[15] = {};
-    static uint32_t s_last_stream = 0xFFFFFFFCU;
+    static uint32_t s_last_stream = Runtime::kModernNoStream;
     static int s_calls_since_log = 0;
     const auto* w = reinterpret_cast<const uint32_t*>(info);
     bool changed = false;
@@ -340,7 +341,7 @@ void MaybeDumpLayerInfo(const uint8_t* info, uint32_t flags) {
 }
 
 bool AfpManager::IsMasterComplete(const AfpFuncs& afp) {
-    if (g_engine.stream_id == 0xFFFFFFFC || (int)g_engine.stream_id < 0) return false;
+    if (g_engine.stream_id == Runtime::kModernNoStream || (int)g_engine.stream_id < 0) return false;
     if (afp.afp_get_layer_info == nullptr) return false;
 
     uint8_t info[64] = {};
@@ -353,7 +354,7 @@ bool AfpManager::IsMasterComplete(const AfpFuncs& afp) {
 }
 
 bool AfpManager::ReadLayerPosition(const AfpFuncs& afp, uint32_t* cur, uint32_t* total) {
-    if (g_engine.stream_id == 0xFFFFFFFC || (int)g_engine.stream_id < 0) return false;
+    if (g_engine.stream_id == Runtime::kModernNoStream || (int)g_engine.stream_id < 0) return false;
     if (afp.afp_get_layer_info == nullptr) return false;
     uint8_t info[64] = {};
     int const rc = afp.afp_get_layer_info(g_engine.stream_id, info);
@@ -382,7 +383,7 @@ bool AfpManager::ReadMcPlayhead(const AfpFuncs& afp, uint32_t* cur, uint32_t* to
 }
 
 bool AfpManager::ReadLayerAdvanceCounter(const AfpFuncs& afp, uint32_t* counter) {
-    if (g_engine.stream_id == 0xFFFFFFFC || (int)g_engine.stream_id < 0) return false;
+    if (g_engine.stream_id == Runtime::kModernNoStream || (int)g_engine.stream_id < 0) return false;
     if (afp.afp_get_layer_info == nullptr) return false;
     uint8_t info[64] = {};
     int const rc = afp.afp_get_layer_info(g_engine.stream_id, info);
@@ -419,7 +420,7 @@ bool AfpManager::SwitchAnimation(EngineSession& es, const std::string& anim_name
         return false;
     }
 
-    if (!force && es.anim_name == anim_name && es.stream_id != 0xFFFFFFFC) {
+    if (!force && es.anim_name == anim_name && es.stream_id != Runtime::kModernNoStream) {
         return true;
     }
 
@@ -438,9 +439,9 @@ bool AfpManager::SwitchAnimation(EngineSession& es, const std::string& anim_name
     auto data_id = (uint32_t)info[3];
     void* data_ptr = (void*)info[2];
 
-    if (es.stream_id != 0xFFFFFFFC) {
+    if (es.stream_id != Runtime::kModernNoStream) {
         afp.afp_stream_destroy(5, es.stream_id, 0);
-        es.stream_id = 0xFFFFFFFC;
+        es.stream_id = Runtime::kModernNoStream;
         es.anim_name.clear();
     }
 
@@ -513,7 +514,7 @@ uint32_t CreateBitmapStream(const AfpFuncs& afp, const uint8_t (&stream_args)[40
     auto image_stream_create = afp.afp_image_stream_create;
     if (image_stream_create == nullptr) {
         LOG("AFP", "PlayBitmapAnimation: afp_image_stream_create unresolved");
-        return 0xFFFFFFFC;
+        return Runtime::kModernNoStream;
     }
     auto old_level = (afp.afp_get_create_level != nullptr) ? afp.afp_get_create_level() : 0;
     if (afp.afp_set_create_level != nullptr) afp.afp_set_create_level(0);
@@ -546,15 +547,15 @@ bool AfpManager::PlayBitmapAnimation(EngineSession& es, const std::string& bitma
     uint8_t stream_args[40] = {};
     if (!BuildBitmapStreamArgs(afpu, es.pkg_id, bitmap_name, stream_args)) return false;
 
-    if (es.stream_id != 0xFFFFFFFC) {
+    if (es.stream_id != Runtime::kModernNoStream) {
         afp.afp_stream_destroy(5, es.stream_id, 0);
-        es.stream_id = 0xFFFFFFFC;
+        es.stream_id = Runtime::kModernNoStream;
         es.anim_name.clear();
     }
 
     uint32_t const stream_id = CreateBitmapStream(afp, stream_args);
 
-    if (stream_id == 0xFFFFFFFC || (int)stream_id < 0) {
+    if (stream_id == Runtime::kModernNoStream || (int)stream_id < 0) {
         LOG("AFP", "PlayBitmapAnimation: image_stream_create('%s') = 0x%08x", bitmap_name.c_str(),
             (unsigned)stream_id);
         return false;

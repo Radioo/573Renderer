@@ -3,6 +3,7 @@
 #include "afpu_funcs.h"
 #include "avs_funcs.h"
 #include "engine_session.h"
+#include "game_runtime.h"
 #include "support/dll_loader.h"
 #include "support/log.h"
 #include "dll_offsets.h"
@@ -371,7 +372,7 @@ void ProbeStreamCreateGuarded(const EngineSession& es) {
         __try {
             uint32_t const test_stream = afp.afp_stream_create();
             LOG("AFP", "Test stream_create = 0x%08x", test_stream);
-            if (test_stream != 0xFFFFFFFC && (int)test_stream >= 0) {
+            if (test_stream != Runtime::kModernNoStream && (int)test_stream >= 0) {
                 afp.afp_stream_destroy(5, test_stream, 0);
                 LOG("AFP", "Stream creation works!");
             } else {

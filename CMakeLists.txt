@@ -112,6 +112,8 @@ add_executable(renderer WIN32
     src/render_executor.cpp
     src/render_live.cpp
     src/game_runtime.cpp
+    src/game_runtime_modern.cpp
+    src/game_runtime_ddr.cpp
     src/render_seh.cpp
     src/window.cpp
     src/avs_boot.cpp

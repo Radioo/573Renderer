@@ -74,3 +74,15 @@ structured to pay that only when the dependency set actually changes.
 Tests that need the proprietary game DLLs or real game data can never run
 hosted. They are excluded by CTest label (`ctest -LE local_dll` in CI); the
 DLL-dependent tiers run manually on the owner machine.
+
+## Local aggregate gate: tools/checks.sh
+
+`bash tools/checks.sh` is the one-command local equivalent of every hosted
+gate and is the required exit criterion for any refactor slice: it runs
+build.bat (dev preset), `ctest -L ci` (locating ctest.exe next to the
+cmake.exe recorded in build/CMakeCache.txt, since the VS-bundled toolchain
+is not on the Git Bash PATH), then the five gate scripts
+(check_file_length, check_no_comments, check_gui_isolation, run_format,
+run_tidy), and prints `ALL CHECKS PASSED` only if every step succeeded.
+run_tidy needs the pip-pinned clang-tidy (see docs/tidy_migration.md) and
+the build dir's compile_commands.json, which the build step guarantees.
