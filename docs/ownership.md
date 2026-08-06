@@ -244,6 +244,14 @@ after the P17 panel registry: P17 only needs the backend id + scene flag,
 and the state-block move is a large mechanical migration with no
 user-visible payoff until the first non-AFP backend lands.
 
+P17 (panel registry): the GUI tab bar and right-pane stack are
+registry-driven per backend (src/gui/panel_registry.*, see docs/gui.md
+2.0). Intended visible diffs (renders byte-identical, verified): qpro tab
+only for iidx33; DDR loses the do-nothing loop/scale rows, the variants
+editor, and the sub-layers section; the Setup view's arc/customize
+extractors show only for ddrworld and the qpro render preset only for
+iidx33.
+
 Deferred deliberately (each is a seam with NO consumer today; cutting them
 now would be speculative generality):
 - CaptureSource seam: the capture already funnels through ONE call

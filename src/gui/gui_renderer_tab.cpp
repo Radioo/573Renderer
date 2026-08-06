@@ -1,11 +1,10 @@
 #include <algorithm>
+#include <vector>
 
 #include "gui_panels_internal.h"
-#include "gui_live_controls.h"
 #include "gui_layout_constants.h"
 #include "gui_splitter.h"
-#include "../state/app_state.h"
-#include "../state/telemetry.h"
+#include "panel_registry.h"
 #include "imgui.h"
 
 namespace Panels {
@@ -36,40 +35,10 @@ void ClampPaneWidths(float avail_w, float sw, float& left_w, float& right_w, flo
 }
 
 void RenderRightPane() {
-    if (ImGui::CollapsingHeader("Layers", ImGuiTreeNodeFlags_DefaultOpen)) {
-        RenderLayersPanel();
-    }
-    {
-        auto st = App::Global().GetStatus();
-        const bool loaded = st.scene_loaded;
-        if (loaded) {
-            ImGui::Spacing();
-            LiveControls::RenderSeekControls();
-        }
-    }
-    ImGui::Spacing();
-    ImGui::Separator();
-    ImGui::Spacing();
-    RenderVariantEditor();
-    RenderAddSlotForm();
-    ImGui::Spacing();
-    ImGui::Separator();
-    ImGui::Spacing();
-    if (ImGui::CollapsingHeader("Labels", ImGuiTreeNodeFlags_DefaultOpen)) {
-        LiveControls::RenderLabelsPanel();
-    }
-    ImGui::Spacing();
-    ImGui::Separator();
-    ImGui::Spacing();
-    if (ImGui::CollapsingHeader("Sub-layers", ImGuiTreeNodeFlags_DefaultOpen)) {
-        LiveControls::RenderSubLayersPanel();
-    }
-    ImGui::Spacing();
-    ImGui::Separator();
-    ImGui::Spacing();
-    if (ImGui::CollapsingHeader("Live preview overrides", ImGuiTreeNodeFlags_DefaultOpen)) {
-        LiveControls::RenderOverridePanel();
-    }
+    static std::vector<const Gui::PanelDesc*> sections;
+    Gui::CollectActivePanels(Gui::PanelSlot::RightStack, sections);
+    for (const auto* s : sections)
+        s->draw();
 }
 
 }

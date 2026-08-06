@@ -452,6 +452,10 @@ Design points:
 
 ## 12. DDR customize image extractor (customize_extract.*)
 
+GUI placement: both the .arc extractor and this customize extractor appear in
+the Setup view's Tools section only when the effective setup selection is
+`ddrworld` (P17, docs/gui.md 2.0) - they are DDR-data tools.
+
 Works directly on RAW game data (e.g. `data/arc/custom`): unpacks each customize .arc itself
 (each holds a single PNG; the .png entry is found by extension, falling back to the only
 entry), renames by id and losslessly re-optimises into a `customize_assets` tree.

@@ -6,6 +6,7 @@
 #include "../backend/afp_commands.h"
 #include "../state/app_state.h"
 #include "../state/commands.h"
+#include "panel_registry.h"
 #include "../support/log.h"
 #include "imgui.h"
 #include "state/telemetry.h"
@@ -449,26 +450,44 @@ void DrawLayerList(App::State& state, const App::IfsConfig& cfg) {
 
 }
 
-void RenderLayersPanel() {
-    auto& state = App::Global();
-    auto active = state.ActiveIfs();
+namespace {
+
+bool DrawLayersPanelPreamble(App::State& state, std::string& active) {
+    active = state.ActiveIfs();
     if (active.empty()) {
         ImGui::TextDisabled("Select an IFS to list its layers.");
-        return;
+        return false;
     }
-
-    auto& cfg = state.MutConfig(active);
-    if (cfg.anim_names.empty()) {
+    if (state.MutConfig(active).anim_names.empty()) {
         ImGui::TextDisabled("No layers listed in afplist.xml.");
-        return;
+        return false;
     }
+    return true;
+}
+
+}
+
+void RenderLayersPanel() {
+    auto& state = App::Global();
+    std::string active;
+    if (!DrawLayersPanelPreamble(state, active)) return;
 
     DrawLoopMasterControls();
     DrawMasterScaleControls();
 
     ImGui::Spacing();
     ImGui::TextDisabled("(click to play / replay)");
-    DrawLayerList(state, cfg);
+    DrawLayerList(state, state.MutConfig(active));
+}
+
+void RenderLayersListOnly() {
+    auto& state = App::Global();
+    std::string active;
+    if (!DrawLayersPanelPreamble(state, active)) return;
+
+    ImGui::Spacing();
+    ImGui::TextDisabled("(click to play / replay)");
+    DrawLayerList(state, state.MutConfig(active));
 }
 
 namespace {
@@ -608,13 +627,13 @@ void RenderReadyView() {
     ImGuiTabBarFlags const tab_flags =
         ImGuiTabBarFlags_FittingPolicyResizeDown | ImGuiTabBarFlags_NoCloseWithMiddleMouseButton;
     if (ImGui::BeginTabBar("##main_tabs", tab_flags)) {
-        if (ImGui::BeginTabItem("Renderer")) {
-            RenderRendererTabBody();
-            ImGui::EndTabItem();
-        }
-        if (ImGui::BeginTabItem("qpro")) {
-            RenderQproTabBody();
-            ImGui::EndTabItem();
+        static std::vector<const Gui::PanelDesc*> tabs;
+        Gui::CollectActivePanels(Gui::PanelSlot::MainTab, tabs);
+        for (const auto* tab : tabs) {
+            if (ImGui::BeginTabItem(tab->tab_label)) {
+                tab->draw();
+                ImGui::EndTabItem();
+            }
         }
         ImGui::EndTabBar();
     }

@@ -25,6 +25,13 @@ char g_dir_buf[1024] = {};
 std::string g_last_state_value;
 bool g_initial_sync_done = false;
 
+std::string EffectiveSetupSlug(App::State& state) {
+    std::string explicit_slug = state.GetGameProfileSlug();
+    if (!explicit_slug.empty()) return explicit_slug;
+    const GameProfile::Profile* auto_pick = GameProfile::AutoDetect(g_dir_buf);
+    return auto_pick != nullptr ? auto_pick->slug : std::string{};
+}
+
 void PersistSetup(App::State& state, const char* dir_value) {
     if ((dir_value != nullptr) && state.GameDir() != dir_value) {
         state.SetGameDir(dir_value);
@@ -189,6 +196,8 @@ void DrawRenderPresetCombo(App::State& state, int rw, int rh) {
     };
     const int kPresetCount = (int)(sizeof(kPresets) / sizeof(kPresets[0]));
     const int kCustomIdx = kPresetCount - 1;
+    const int kQproIdx = kCustomIdx - 1;
+    const bool show_qpro_preset = (EffectiveSetupSlug(state) == "iidx33");
 
     static int shown_idx = -1;
     static int last_rw = -1;
@@ -211,6 +220,7 @@ void DrawRenderPresetCombo(App::State& state, int rw, int rh) {
     ImGui::SetNextItemWidth(-120.0F);
     if (ImGui::BeginCombo("##render_preset", kPresets[shown_idx].label)) {
         for (int i = 0; i < kPresetCount; i++) {
+            if (i == kQproIdx && !show_qpro_preset && i != shown_idx) continue;
             bool const selected = (i == shown_idx);
             if (ImGui::Selectable(kPresets[i].label, selected)) {
                 shown_idx = i;
@@ -397,8 +407,10 @@ void RenderView() {
     DrawRenderFps(state);
     DrawRenderResolution(state);
     DrawLoadButton(state, bs);
-    DrawArcExtractor();
-    DrawCustomizeExtractor();
+    if (EffectiveSetupSlug(state) == "ddrworld") {
+        DrawArcExtractor();
+        DrawCustomizeExtractor();
+    }
 
     ImGui::End();
 }

@@ -73,9 +73,47 @@ mutex-guarded Status structs polled the same way.
 - `VSplitter` is built on `ImGui::InvisibleButton` only (hit-tested, layout-advancing,
   IsItemActive/Hovered - no imgui_internal). A drag moves pixels symmetrically between the two
   neighbours, committing only if BOTH stay >= their minimum, so the row stays exactly tiled.
-- Views: BootState WaitingForDir/Booting/Failed -> Setup view; Ready -> tabbed main view
-  (Renderer, qpro). The loading overlay renders on top of EITHER view from the same
-  LoadProgress API.
+- Views: BootState WaitingForDir/Booting/Failed -> Setup view; Ready -> tabbed main view.
+  The loading overlay renders on top of EITHER view from the same LoadProgress API.
+
+### 2.0 Panel registry (P17) - backends register their panels
+
+The tab bar and the right-pane section stack are REGISTRY-DRIVEN
+(`src/gui/panel_registry.{h,cpp}`), not hardcoded: `PanelDesc{id, tab_label,
+slot, draw, visible}` entries live in per-backend `PanelSet` tables keyed by
+the id string the engine publishes (`App::State::ActiveBackendId`, seeded
+from `Backend::Active()->Id()` at boot). `CollectActivePanels(slot)` returns
+the active backend's visible entries in authored order; `RenderReadyView`
+iterates the MainTab slot and `RenderRightPane` the RightStack slot. Rules:
+
+- MEMBERSHIP IS THE CAPABILITY DECLARATION. A control a backend does not
+  support is ABSENT from its set - never greyed out, never a disabled-text
+  explainer. ImGui stays 100% inside src/gui/ (the isolation gate is
+  untouched): the engine contributes only the backend id string; all draw
+  code and the registration tables are GUI-side.
+- Each RightStack entry's draw fn owns its own chrome (leading
+  Spacing/Separator/Spacing for every section after the first two, its
+  CollapsingHeader, flags), so set membership changes cannot disturb the
+  layout of the remaining sections.
+- `visible` predicates cover the two other gating shapes: per-profile
+  gating (the qpro tab's `GetGameProfileSlug() == "iidx33"`) and
+  runtime-state gating (the seek strip's `Status::scene_loaded`, checked
+  inside its draw fn).
+- Current sets: afp_modern = Renderer tab, qpro tab (iidx33 only), and the
+  right stack layers(+loop/scale)/seek/variants/labels/sub-layers/
+  overrides. afp_ddr = Renderer tab and layers(list only)/seek/labels/
+  overrides. Intended DDR diffs vs the old hardcoded stack: the do-nothing
+  loop-master + master-scale rows, the variants editor, and the sub-layers
+  section (with its "unavailable for DDR" text) are gone in favor of
+  absence; the overrides panel keeps its internal modern-only rows hidden
+  as before.
+- A future backend adds its own `PanelSet` row + whatever GUI-side draw
+  fns its panels need; no shared shell code changes.
+- The Setup view is PRE-boot (no active backend), so its per-game tools
+  gate on the EFFECTIVE setup selection (explicit combo slug, else
+  auto-detect of the typed dir): the .arc extractor and the customize-image
+  extractor (both DDR tools, docs/ddr.md) show only for `ddrworld`, and the
+  "520x704 (qpro avatar)" render preset only for `iidx33`.
 
 ### 2.1 IFS picker specifics
 

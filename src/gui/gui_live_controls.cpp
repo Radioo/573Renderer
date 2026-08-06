@@ -349,10 +349,6 @@ void RenderSubLayerNode(App::State& state, const std::string& active, const App:
 
 void RenderSubLayersPanel() {
     auto& state = App::Global();
-    if (state.ActiveBackendId() == "afp_ddr") {
-        ImGui::TextDisabled("Sub-layer toggles are unavailable for DDR (no enumerate).");
-        return;
-    }
     const std::string active = state.ActiveIfs();
     if (active.empty()) {
         ImGui::TextDisabled("(no IFS loaded)");

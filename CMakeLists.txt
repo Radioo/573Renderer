@@ -134,6 +134,7 @@ add_executable(renderer WIN32
     src/mc_control.cpp
     src/gui/gui_window.cpp
     src/gui/gui_panels.cpp
+    src/gui/panel_registry.cpp
     src/gui/gui_renderer_tab.cpp
     src/gui/gui_qpro_panel.cpp
     src/gui/gui_splitter.cpp

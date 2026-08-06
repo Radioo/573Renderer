@@ -5,6 +5,10 @@ Knowledge captured from `src/qpro_dll.*`, `src/qpro_scan.*`, `src/qpro_extract.*
 `src/qpro_composite_debug.cpp`, plus `src/ifs_inspect.*` (IFS/texturelist inspection shared
 with the general renderer).
 
+GUI: the qpro tab is registered only for the `iidx33` profile since P17 (panel
+registry, docs/gui.md 2.0) - it reads bm2dx.dll and was meaningless on every
+other game, where it used to render anyway.
+
 ## 1. Part discovery: the bm2dx.dll static arrays (QproDll)
 
 `QproDll::Read` is a PURE STATIC PE read of `<game>/modules/bm2dx.dll` - no boot, no loader.
