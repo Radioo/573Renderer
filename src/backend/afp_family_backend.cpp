@@ -3,6 +3,7 @@
 #include "afp_boot.h"
 #include "app_globals.h"
 #include "avs_boot.h"
+#include "avs_funcs.h"
 #include "backend/afp_profiles.h"
 #include "backend/backend.h"
 #include "cli/cli.h"
@@ -89,7 +90,13 @@ bool LoadAllDlls(const std::string& dll_dir, const AfpProfiles::AfpConfig& p, bo
     if (!g_avs_dll.Load((dll_dir + p.avs_dll).c_str())) return false;
     if (!g_afp_dll.Load((dll_dir + p.afp_dll).c_str())) return false;
     if (!g_afpu_dll.Load((dll_dir + p.afpu_dll).c_str())) return false;
-    if (!g_avs.Load(g_avs_dll)) {
+    const AvsOrdinals& avs_ord = (p.avs_generation == AfpProfiles::AvsGeneration::Avs2161)
+                                     ? kAvsOrdinals2161
+                                     : kAvsOrdinals217;
+    LOG("Init", "AVS ordinal map: %s",
+        (p.avs_generation == AfpProfiles::AvsGeneration::Avs2161) ? "avs 2.16.1"
+                                                                  : "avs 2.16.3/2.17");
+    if (!g_avs.Load(g_avs_dll, avs_ord)) {
         LOG("Init", "FAILED to resolve AVS functions");
         return false;
     }

@@ -21,7 +21,7 @@ typedef int (*ddr_afp_ext_command_t)(int cmd, void* arg);
 typedef int (*ddr_afp_get_data_id_by_name_t)(const char* name);
 typedef uint32_t (*ddr_afp_stream_do_create_t)(int data_id, void* a2, void* a3);
 typedef uint32_t (*ddr_afp_layer_create_with_property_t)(uint32_t stream_id, const char* path,
-                                                         int64_t a3, const void* a4);
+                                                         intptr_t a3, const void* a4);
 typedef int (*ddr_afp_id_is_valid_t)(int type, uint32_t id);
 typedef void (*ddr_afp_layer_set_priority_t)(uint32_t layer_id, int priority);
 typedef int (*ddr_afp_layer_set_attribute_t)(uint32_t layer_id, int mask, int value);
@@ -31,7 +31,7 @@ typedef int (*ddr_afp_mc_op_t)(uint32_t mc_id, int op, ...);
 typedef int (*ddr_afp_mc_op_frame_t)(uint32_t mc_id, int op, int frame);
 typedef int (*ddr_afp_layer_stop_t)(uint32_t layer_id);
 typedef int (*ddr_afp_layer_play_t)(uint32_t layer_id, float rate);
-typedef int (*ddr_afp_layer_get_info_t)(uint32_t layer_id, void* out_info, int64_t a3);
+typedef int (*ddr_afp_layer_get_info_t)(uint32_t layer_id, void* out_info, intptr_t a3);
 typedef int (*ddr_afp_stream_get_info_t)(uint32_t stream_id, void* out_info);
 
 struct AfpDdrFuncs {
@@ -107,8 +107,18 @@ typedef int (*ddr_afpu_do_create_stream_all_t)(void* a1, void* a2);
 typedef int (*ddr_afpu_ngp_read_data_t)(const char* name, const char* path, int flags);
 typedef int (*ddr_afpu_destroy_package_data_t)(uint32_t pkg_id);
 typedef uint32_t (*ddr_afpu_get_afp_id_t)(const char* name);
-typedef int (*ddr_afpu_get_afp_info_at_package_t)(void* out_info, uint32_t data_id,
+struct DdrAfpInfo {
+    uint32_t field0;
+    uint32_t field1;
+    void* reserved;
+    const char* name;
+    uint32_t stream_id;
+};
+
+typedef int (*ddr_afpu_get_afp_info_at_package_t)(DdrAfpInfo* out_info, uint32_t data_id,
                                                   const char* clip_name);
+typedef int (*ddr_afpu_get_afp_info_from_index_at_package_t)(DdrAfpInfo* out_info, uint32_t data_id,
+                                                             int index);
 typedef int (*ddr_afpu_get_texture_bind_id_t)(unsigned int afp_tex_id);
 
 struct AfpuDdrFuncs {
@@ -125,6 +135,7 @@ struct AfpuDdrFuncs {
     ddr_afpu_destroy_package_data_t afpu_destroy_package_data = nullptr;
     ddr_afpu_get_afp_id_t afpu_get_afp_id = nullptr;
     ddr_afpu_get_afp_info_at_package_t afpu_get_afp_info_at_package = nullptr;
+    ddr_afpu_get_afp_info_from_index_at_package_t afpu_get_afp_info_from_index_at_package = nullptr;
     ddr_afpu_get_texture_bind_id_t afpu_get_texture_bind_id = nullptr;
 
     bool Load(DllLoader& loader) {
@@ -141,6 +152,7 @@ struct AfpuDdrFuncs {
         DDR_LOAD(loader, afpu_destroy_package_data);
         DDR_LOAD(loader, afpu_get_afp_id);
         DDR_LOAD(loader, afpu_get_afp_info_at_package);
+        DDR_LOAD(loader, afpu_get_afp_info_from_index_at_package);
         DDR_LOAD(loader, afpu_get_texture_bind_id);
         return afpu_boot && afpu_set_afp_render_params && afpu_set_render_params;
     }

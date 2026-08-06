@@ -144,6 +144,14 @@ const std::vector<AfpConfig> kConfigs = {
         .afp_set_verbose_wide_args = true,
     },
     AfpConfig{
+        .slug = "iidx24",
+        .avs_dll = "libavs-win32.dll",
+        .afp_dll = "libafp-win32.dll",
+        .afpu_dll = "libafputils-win32.dll",
+        .avs_generation = AvsGeneration::Avs2161,
+        .offsets = kIidx33Offsets,
+    },
+    AfpConfig{
         .slug = "ddrworld",
         .avs_dll = "libavs-win64.dll",
         .afp_dll = "libafp-win64.dll",

@@ -125,7 +125,7 @@ std::string ReadCStr(const Image& img, uint64_t va) {
     std::string out;
     for (size_t i = 0; i <= kMaxName; ++i) {
         if ((size_t)off + i >= img.bytes.size()) return {};
-        uint8_t const c = img.bytes[off + i];
+        uint8_t const c = img.bytes[(size_t)off + i];
         if (c == 0) return out;
         if (c < 0x20 || c > 0x7E) return {};
         out.push_back((char)c);

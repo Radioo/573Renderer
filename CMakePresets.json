@@ -24,6 +24,24 @@
     {
       "name": "ci",
       "inherits": "base"
+    },
+    {
+      "name": "base32",
+      "hidden": true,
+      "inherits": "base",
+      "binaryDir": "${sourceDir}/build32",
+      "architecture": { "value": "x86", "strategy": "external" },
+      "cacheVariables": {
+        "VCPKG_TARGET_TRIPLET": "x86-windows-static"
+      }
+    },
+    {
+      "name": "dev32",
+      "inherits": "base32"
+    },
+    {
+      "name": "ci32",
+      "inherits": "base32"
     }
   ],
   "buildPresets": [
@@ -34,6 +52,14 @@
     {
       "name": "ci",
       "configurePreset": "ci"
+    },
+    {
+      "name": "dev32",
+      "configurePreset": "dev32"
+    },
+    {
+      "name": "ci32",
+      "configurePreset": "ci32"
     }
   ]
 }

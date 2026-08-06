@@ -98,6 +98,49 @@ initializers must follow declaration order (e.g. SDVX's
 `.afpu_set_config_safe_clean_pos` must appear between `.call_afpu_boot` and
 `.call_afp_set_flag_setup`).
 
+## AvsGeneration - the avs2 ordinal map is NOT stable across versions
+
+`AvsFuncs::Load` resolves avs2 by mangled ordinal (`<prefix><6 hex>`), and
+that ordinal-to-function map CHANGES between avs generations. It is not a
+uniform shift, so it cannot be derived by adding an offset.
+
+`AfpConfig::avs_generation` selects the table; `kAvsOrdinals217` (the
+default) covers avs2 2.16.3 and 2.17.x, and `kAvsOrdinals2161` covers the
+2.16.1 build IIDX 24 ships. `LoadAllDlls` picks one and logs which.
+
+Concrete evidence, IIDX 24's libavs-win32 2.16.1 (390 exports) vs the
+2.16.3 / 2.17.x builds (392 exports):
+
+| block | delta | example |
+|---|---|---|
+| VFS (`avs_fs_*`) | -0x15 | mount 0x04b -> 0x036 |
+| property (`property_*`) | -0x15 | create 0x090 -> 0x07b |
+| log (`log_body_*`) | -0x12 | info 0x17c -> 0x16a |
+| boot (`avs_boot`/`_shutdown`) | -0x0f | boot 0x129 -> 0x11a |
+| `avs_is_active` | -0x11 | 0x12d -> 0x11c |
+| `avs_filesys_imagefs` | -0x0b | 0x158 -> 0x14d |
+| gheap | REORGANISED | allocate 0x02f -> 0x183, free 0x031 -> 0x178 |
+
+Four different deltas plus a wholesale gheap move: the heap API was
+restructured between 2.16.1 and 2.16.3, so `avs_gheap_allocate` is not
+merely shifted. Using the 2.17 map against 2.16.1 makes
+`property_create` (0x090) land on `node_refdata`, and the renderer
+SEGFAULTS inside AVS boot. That was the IIDX 24 boot crash.
+
+How to re-derive for a new avs build (the method that produced the table
+above): these libraries keep their assert/log strings, so locate the source
+file names (`property-api.c`, `vfs-api-mount.c`, `avs-boot.c`,
+`heap-api-gheap.c`) and the function-name literals (`node_create`,
+`mount: fstype==NULL`, `kill application`), data-xref back to the
+referencing function, then walk callers until you reach an export named
+`<prefix><6 hex>` and read off its suffix. Cross-check the shape (arg
+count, callees) against the known-good build. Disambiguating tips found
+this round: `avs_boot` vs its mode-2 sibling both log the same banner - the
+real `avs_boot` writes boot-mode 1 into the state byte that `avs_is_active`
+reads; `avs_gheap_allocate` is the one whose NULL-pointer path allocates
+and non-NULL path reallocates (its wrapper logs `realloc(%p,%u)=%p`), NOT
+the 1-arg `alloc(size)` export next to it.
+
 ## kSkip sentinel
 
 `GameProfile::kSkip` (= -1) as an ordinal means "this game's afp-core does

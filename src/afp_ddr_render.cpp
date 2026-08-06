@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <cstdio>
 #include "afp_ddr_render.h"
+#include "support/engine_abi.h"
 #include "support/env.h"
 #include "support/log.h"
 #include "formats/dxt_decode.h"
@@ -59,8 +60,8 @@ void DecodeDxtToRect(const uint8_t* src, int w, int h, uint8_t* dst, int pitch, 
     Dxt::Decompress(fmt, w, h, {src, src_size}, {dst, dst_size}, pitch);
 }
 
-int __fastcall Cb_TexCreate(void* ctx, unsigned int w, unsigned int h, int fmt, int a5, int a6,
-                            int a7) {
+int AFP_CB Cb_TexCreate(void* ctx, unsigned int w, unsigned int h, int fmt, int a5, int a6,
+                        int a7) {
     (void)ctx;
     (void)a5;
     (void)a6;
@@ -79,7 +80,7 @@ int __fastcall Cb_TexCreate(void* ctx, unsigned int w, unsigned int h, int fmt, 
     return id;
 }
 
-void __fastcall Cb_TexDestroy(int id) {
+void AFP_CB Cb_TexDestroy(int id) {
     if (id >= 0 && id < kMaxTex && (g_tex[id] != nullptr)) {
         g_tex[id]->Release();
         g_tex[id] = nullptr;
@@ -140,8 +141,8 @@ void DecodeTexRect(int fmt, const uint8_t* src, int w, int h, uint8_t* dstBase, 
 
 }
 
-void __fastcall Cb_TexUpload(int id, int fmt, intptr_t a3, intptr_t a4, int x, int y, int w, int h,
-                             void* pixels) {
+void AFP_CB Cb_TexUpload(int id, int fmt, intptr_t a3, intptr_t a4, int x, int y, int w, int h,
+                         void* pixels) {
     (void)a3;
     (void)a4;
     if (id < 0 || id >= kMaxTex || (g_tex[id] == nullptr) || (pixels == nullptr)) return;
@@ -159,17 +160,19 @@ void __fastcall Cb_TexUpload(int id, int fmt, intptr_t a3, intptr_t a4, int x, i
     g_tex[id]->UnlockRect(0);
 }
 
-void* __fastcall Cb_Alloc(void* ctx, unsigned int size) {
+constexpr size_t kAfpAllocAlign = 16;
+
+void* AFP_CB Cb_Alloc(void* ctx, unsigned int size) {
     (void)ctx;
-    return malloc((size != 0U) ? size : 1);
+    return _aligned_malloc((size != 0U) ? size : 1, kAfpAllocAlign);
 }
-void* __fastcall Cb_Realloc(void* ctx, void* p, unsigned int size) {
+void* AFP_CB Cb_Realloc(void* ctx, void* p, unsigned int size) {
     (void)ctx;
-    return realloc(p, (size != 0U) ? size : 1);
+    return _aligned_realloc(p, (size != 0U) ? size : 1, kAfpAllocAlign);
 }
-void __fastcall Cb_Free(void* ctx, void* p) {
+void AFP_CB Cb_Free(void* ctx, void* p) {
     (void)ctx;
-    free(p);
+    _aligned_free(p);
 }
 
 void ApplyTransforms() {
@@ -186,7 +189,7 @@ void ApplyTransforms() {
 bool g_filter_on = false;
 float g_filter_dh = 0.0F, g_filter_ds = 0.0F, g_filter_dl = 0.0F;
 
-void __fastcall Cb_InitFrame() {
+void AFP_CB Cb_InitFrame() {
     if (g_dev == nullptr) return;
     g_dev->SetVertexShader(nullptr);
     g_dev->SetPixelShader(nullptr);
@@ -248,7 +251,7 @@ void DumpAtlases() {
     }
 }
 
-void __fastcall Cb_FinishFrame() {
+void AFP_CB Cb_FinishFrame() {
     if (g_frame < 2) LOG("DDR-R", "finish_frame: %d draws", g_draw_count);
     int const df = DumpFrame();
     if (df >= 0 && g_frame >= df - 60 && g_frame <= df + 60) {
@@ -259,7 +262,7 @@ void __fastcall Cb_FinishFrame() {
     g_frame++;
 }
 
-void __fastcall Cb_SetMask(int type, int level, int x, int y, int w, int h, int a7) {
+void AFP_CB Cb_SetMask(int type, int level, int x, int y, int w, int h, int a7) {
     (void)level;
     (void)a7;
     if (g_dev == nullptr) return;
@@ -285,13 +288,13 @@ void __fastcall Cb_SetMask(int type, int level, int x, int y, int w, int h, int 
     g_dev->SetScissorRect(&r);
     g_dev->SetRenderState(D3DRS_SCISSORTESTENABLE, TRUE);
 }
-void __fastcall Cb_SetPriority(int p) {
+void AFP_CB Cb_SetPriority(int p) {
     (void)p;
 }
 
 int g_blend_mode = 0;
 
-void __fastcall Cb_SetBlend(int mode) {
+void AFP_CB Cb_SetBlend(int mode) {
     if (g_dev == nullptr) return;
     g_blend_mode = mode;
     static unsigned seen = 0;
@@ -309,7 +312,7 @@ void __fastcall Cb_SetBlend(int mode) {
     g_dev->SetRenderState(D3DRS_DESTBLEND, bs.dst);
 }
 
-void __fastcall Cb_SetFilter(int a1, int a2, void* a3) {
+void AFP_CB Cb_SetFilter(int a1, int a2, void* a3) {
     const auto* p = reinterpret_cast<const float*>(a3);
     if ((a1 == 100 || a1 == 101) && (a2 != 0) && (p != nullptr)) {
         g_filter_on = true;
@@ -332,11 +335,11 @@ void __fastcall Cb_SetFilter(int a1, int a2, void* a3) {
             g_filter_ds, g_filter_dl, g_frame);
     }
 }
-void __fastcall Cb_SetDrawRect(const float* r) {
+void AFP_CB Cb_SetDrawRect(const float* r) {
     (void)r;
 }
 
-void __fastcall Cb_LoadMatrix(float* m2x3) {
+void AFP_CB Cb_LoadMatrix(float* m2x3) {
     if (m2x3 == nullptr) {
         g_have_world = false;
         return;
@@ -357,7 +360,7 @@ void __fastcall Cb_LoadMatrix(float* m2x3) {
     if (g_dev != nullptr) g_dev->SetTransform(D3DTS_WORLD, &g_world);
 }
 
-void __fastcall Cb_LoadMatrix44(float* m) {
+void AFP_CB Cb_LoadMatrix44(float* m) {
     if (m == nullptr) {
         g_have_world = false;
         return;
@@ -372,7 +375,7 @@ void __fastcall Cb_LoadMatrix44(float* m) {
     if (g_dev != nullptr) g_dev->SetTransform(D3DTS_WORLD, &g_world);
 }
 
-void __fastcall Cb_LoadProj44(float* m) {
+void AFP_CB Cb_LoadProj44(float* m) {
     if (m == nullptr) {
         g_have_proj = false;
         if (g_dev != nullptr) {
@@ -394,13 +397,13 @@ void __fastcall Cb_LoadProj44(float* m) {
     if (g_dev != nullptr) g_dev->SetTransform(D3DTS_PROJECTION, &g_proj);
 }
 
-void __fastcall Cb_GetScreenSize(int* x, int* y, int* w, int* h) {
+void AFP_CB Cb_GetScreenSize(int* x, int* y, int* w, int* h) {
     if (x != nullptr) *x = 0;
     if (y != nullptr) *y = 0;
     if (w != nullptr) *w = g_w;
     if (h != nullptr) *h = g_h;
 }
-void __fastcall Cb_GetNearFar(float* nr, float* fr) {
+void AFP_CB Cb_GetNearFar(float* nr, float* fr) {
     static float n = 1.0F;
     static float f = 10000.0F;
     static bool const init = []() {
@@ -642,7 +645,7 @@ void LogTrackBars(int count, const Vtx* buf) {
 
 }
 
-void __fastcall Cb_DrawPrimitive(const float* vtx, int count, int* params, void* a4) {
+void AFP_CB Cb_DrawPrimitive(const float* vtx, int count, int* params, void* a4) {
     (void)a4;
     g_draw_count++;
     if ((g_dev == nullptr) || (vtx == nullptr) || (params == nullptr) || count <= 0) return;
@@ -702,7 +705,7 @@ void __fastcall Cb_DrawPrimitive(const float* vtx, int count, int* params, void*
     if (prims > 0) g_dev->DrawPrimitiveUP(pt, prims, buf, sizeof(Vtx));
 }
 
-void __fastcall Cb_DrawShape(unsigned int id, const float* c0, const float* c1, void* ctx) {
+void AFP_CB Cb_DrawShape(unsigned int id, const float* c0, const float* c1, void* ctx) {
     (void)c0;
     (void)c1;
     (void)ctx;
@@ -714,51 +717,90 @@ intptr_t Cb_Noop() {
     return 0;
 }
 
-uint8_t g_render_params[0x140];
-uint8_t g_afpu_config[0x80];
+constexpr size_t kRenderParamsSlots = 0x140 / 8;
+constexpr size_t kAfpuConfigSlots = 0x80 / 8;
 
-template <class F> void Put(uint8_t* base, size_t off, F fn) {
-    *reinterpret_cast<void**>(base + off) = reinterpret_cast<void*>(fn);
+constexpr size_t kSlotInitFrame = 1;
+constexpr size_t kSlotFinishFrame = 2;
+constexpr size_t kSlotSetMask = 3;
+constexpr size_t kSlotSetBlend = 4;
+constexpr size_t kSlotSetPriority = 5;
+constexpr size_t kSlotSetFilter = 6;
+constexpr size_t kSlotDrawPrimitive = 7;
+constexpr size_t kSlotDrawShape = 8;
+constexpr size_t kSlotLoadMatrix = 9;
+constexpr size_t kSlotLoadMatrix44 = 10;
+constexpr size_t kSlotLoadProj44 = 11;
+constexpr size_t kSlotGetScreenSize = 12;
+constexpr size_t kSlotGetNearFar = 13;
+constexpr size_t kSlotSetDrawRect = 14;
+constexpr size_t kSlotOptionalFirst = 15;
+constexpr size_t kSlotOptionalLast = 34;
+constexpr size_t kSlotReserved = 35;
+constexpr size_t kSlotAlloc = 36;
+constexpr size_t kSlotRealloc = 37;
+constexpr size_t kSlotFree = 38;
+
+constexpr size_t kSlotTexCreate = 0;
+constexpr size_t kSlotTexDestroy = 1;
+constexpr size_t kSlotTexUpload = 2;
+constexpr size_t kSlotAfpuAlloc = 4;
+constexpr size_t kSlotAfpuRealloc = 5;
+constexpr size_t kSlotAfpuFree = 6;
+constexpr size_t kSlotAfpuNear = 7;
+
+uint8_t g_render_params[kRenderParamsSlots * Support::kEngineSlot];
+uint8_t g_afpu_config[kAfpuConfigSlots * Support::kEngineSlot];
+
+void PutSlot(uint8_t* base, size_t slot, void* value) {
+    memcpy(base + Support::SlotOffset(slot), static_cast<const void*>(&value), sizeof(value));
+}
+
+template <class F> void Put(uint8_t* base, size_t slot, F fn) {
+    PutSlot(base, slot, reinterpret_cast<void*>(fn));
 }
 
 void BuildStructs() {
     memset(g_render_params, 0, sizeof(g_render_params));
-    *reinterpret_cast<uint64_t*>(g_render_params + 0x00) = 0x200;
-    for (size_t off = 0x08; off < sizeof(g_render_params); off += 8)
-        Put(g_render_params, off, Cb_Noop);
-    Put(g_render_params, 0x08, Cb_InitFrame);
-    Put(g_render_params, 0x10, Cb_FinishFrame);
-    Put(g_render_params, 0x18, Cb_SetMask);
-    Put(g_render_params, 0x20, Cb_SetBlend);
-    Put(g_render_params, 0x28, Cb_SetPriority);
-    Put(g_render_params, 0x30, Cb_SetFilter);
-    Put(g_render_params, 0x38, Cb_DrawPrimitive);
-    Put(g_render_params, 0x40, Cb_DrawShape);
-    Put(g_render_params, 0x48, Cb_LoadMatrix);
-    Put(g_render_params, 0x50, Cb_LoadMatrix44);
-    Put(g_render_params, 0x58, Cb_LoadProj44);
-    Put(g_render_params, 0x60, Cb_GetScreenSize);
-    Put(g_render_params, 0x68, Cb_GetNearFar);
-    Put(g_render_params, 0x70, Cb_SetDrawRect);
+    *reinterpret_cast<uint32_t*>(g_render_params) = 0x200;
+    for (size_t slot = 1; slot < kRenderParamsSlots; slot++)
+        Put(g_render_params, slot, Cb_Noop);
+    Put(g_render_params, kSlotInitFrame, Cb_InitFrame);
+    Put(g_render_params, kSlotFinishFrame, Cb_FinishFrame);
+    Put(g_render_params, kSlotSetMask, Cb_SetMask);
+    Put(g_render_params, kSlotSetBlend, Cb_SetBlend);
+    Put(g_render_params, kSlotSetPriority, Cb_SetPriority);
+    Put(g_render_params, kSlotSetFilter, Cb_SetFilter);
+    Put(g_render_params, kSlotDrawPrimitive, Cb_DrawPrimitive);
+    Put(g_render_params, kSlotDrawShape, Cb_DrawShape);
+    Put(g_render_params, kSlotLoadMatrix, Cb_LoadMatrix);
+    Put(g_render_params, kSlotLoadMatrix44, Cb_LoadMatrix44);
+    Put(g_render_params, kSlotLoadProj44, Cb_LoadProj44);
+    Put(g_render_params, kSlotGetScreenSize, Cb_GetScreenSize);
+    Put(g_render_params, kSlotGetNearFar, Cb_GetNearFar);
+    Put(g_render_params, kSlotSetDrawRect, Cb_SetDrawRect);
     if (Support::EnvFlag("DDR_DEFAULT_CB")) {
-        for (size_t off = 0x78; off <= 0x110; off += 8)
-            *reinterpret_cast<void**>(g_render_params + off) = nullptr;
-        LOG("DDR-R", "DDR_DEFAULT_CB: nulled render_params 0x78..0x110 (afp defaults)");
+        for (size_t slot = kSlotOptionalFirst; slot <= kSlotOptionalLast; slot++)
+            PutSlot(g_render_params, slot, nullptr);
+        LOG("DDR-R", "DDR_DEFAULT_CB: nulled render_params slots %zu..%zu (afp defaults)",
+            kSlotOptionalFirst, kSlotOptionalLast);
     }
-    *reinterpret_cast<void**>(g_render_params + 0x118) = nullptr;
-    Put(g_render_params, 0x120, Cb_Alloc);
-    Put(g_render_params, 0x128, Cb_Realloc);
-    Put(g_render_params, 0x130, Cb_Free);
+    PutSlot(g_render_params, kSlotReserved, nullptr);
+    Put(g_render_params, kSlotAlloc, Cb_Alloc);
+    Put(g_render_params, kSlotRealloc, Cb_Realloc);
+    Put(g_render_params, kSlotFree, Cb_Free);
 
     memset(g_afpu_config, 0, sizeof(g_afpu_config));
-    Put(g_afpu_config, 0x00, Cb_TexCreate);
-    Put(g_afpu_config, 0x08, Cb_TexDestroy);
-    Put(g_afpu_config, 0x10, Cb_TexUpload);
-    Put(g_afpu_config, 0x20, Cb_Alloc);
-    Put(g_afpu_config, 0x28, Cb_Realloc);
-    Put(g_afpu_config, 0x30, Cb_Free);
-    *reinterpret_cast<float*>(g_afpu_config + 0x38) = 1.0F;
-    *reinterpret_cast<float*>(g_afpu_config + 0x3C) = 9999.0F;
+    Put(g_afpu_config, kSlotTexCreate, Cb_TexCreate);
+    Put(g_afpu_config, kSlotTexDestroy, Cb_TexDestroy);
+    Put(g_afpu_config, kSlotTexUpload, Cb_TexUpload);
+    Put(g_afpu_config, kSlotAfpuAlloc, Cb_Alloc);
+    Put(g_afpu_config, kSlotAfpuRealloc, Cb_Realloc);
+    Put(g_afpu_config, kSlotAfpuFree, Cb_Free);
+    auto* afpu_planes =
+        reinterpret_cast<float*>(g_afpu_config + Support::SlotOffset(kSlotAfpuNear));
+    afpu_planes[0] = 1.0F;
+    afpu_planes[1] = 9999.0F;
 }
 
 }

@@ -10,8 +10,12 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 add_compile_definitions(NOMINMAX)
 
-if(NOT CMAKE_SIZEOF_VOID_P EQUAL 8)
-    message(FATAL_ERROR "This project must be built as 64-bit (x64)")
+if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+    set(R573_ARCH_SUFFIX "")
+elseif(CMAKE_SIZEOF_VOID_P EQUAL 4)
+    set(R573_ARCH_SUFFIX "32")
+else()
+    message(FATAL_ERROR "Unsupported pointer size ${CMAKE_SIZEOF_VOID_P}")
 endif()
 
 find_package(imgui CONFIG REQUIRED)
@@ -199,7 +203,7 @@ target_link_libraries(renderer PRIVATE
 )
 
 set_target_properties(renderer PROPERTIES
-    OUTPUT_NAME                      "573Renderer"
+    OUTPUT_NAME                      "573Renderer${R573_ARCH_SUFFIX}"
     RUNTIME_OUTPUT_DIRECTORY         "${CMAKE_SOURCE_DIR}/bin"
     RUNTIME_OUTPUT_DIRECTORY_DEBUG   "${CMAKE_SOURCE_DIR}/bin"
     RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_SOURCE_DIR}/bin"

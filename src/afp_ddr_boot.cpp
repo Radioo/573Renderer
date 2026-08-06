@@ -18,6 +18,7 @@
 
 namespace DdrAfp {
 namespace {
+constexpr int kMaxPackageClips = 4096;
 AfpDdrFuncs g_afp;
 AfpuDdrFuncs g_afpu;
 bool g_booted = false;
@@ -25,6 +26,7 @@ int g_stream_data_id = -1;
 uint32_t g_layer_id = 0;
 uint32_t g_root_stream_id = 0;
 uintptr_t g_afpu_base = 0;
+uintptr_t g_afp_base = 0;
 uint32_t g_loop_frames = 0;
 float g_time_scale = 1.0F;
 struct DdrClip {
@@ -96,6 +98,7 @@ bool Boot(DllLoader& afp_dll, DllLoader& afpu_dll, D3D9State& d3d) {
         return false;
     }
     g_afpu_base = reinterpret_cast<uintptr_t>(afpu_dll.Module());
+    g_afp_base = reinterpret_cast<uintptr_t>(afp_dll.Module());
 
     if (g_afp.afp_ext_command != nullptr) {
         const char* ver = nullptr;
@@ -129,45 +132,34 @@ bool Boot(DllLoader& afp_dll, DllLoader& afpu_dll, D3D9State& d3d) {
 
 namespace {
 
-struct PkgClipTable {
-    uint16_t count = 0;
-    uintptr_t arr = 0;
-    uintptr_t rec = 0;
-};
-
-PkgClipTable FindPkgClipTable(int data_id) {
-    PkgClipTable out;
-    if (g_afpu_base == 0U) return out;
-    uintptr_t const tbl = *reinterpret_cast<uintptr_t*>(g_afpu_base + 0x48450);
-    int const idx = (data_id >> 15) & 0xFF;
-    uintptr_t const rec =
-        (tbl != 0U) ? *reinterpret_cast<uintptr_t*>(tbl + ((uintptr_t)idx * 8)) : 0;
-    if (rec == 0U) return out;
-    out.rec = rec;
-    out.count = *reinterpret_cast<uint16_t*>(rec + 0x14);
-    out.arr = *reinterpret_cast<uintptr_t*>(rec + 0x50);
-    return out;
-}
-
-const char* PkgClipName(uintptr_t arr, uint16_t i) {
-    return *reinterpret_cast<const char**>(arr + ((uintptr_t)i * 40) + 16);
-}
-
-uint32_t PkgClipStreamId(uintptr_t arr, uint16_t i) {
-    return *reinterpret_cast<uint32_t*>(arr + ((uintptr_t)i * 40) + 32);
+bool ReadClipAtIndex(int data_id, int index, DdrAfpInfo& out) {
+    if (g_afpu.afpu_get_afp_info_from_index_at_package == nullptr) {
+        LOG("DDR", "afpu_get_afp_info_from_index_at_package not resolved - cannot enumerate clips");
+        return false;
+    }
+    out = DdrAfpInfo{};
+    int const rc =
+        g_afpu.afpu_get_afp_info_from_index_at_package(&out, static_cast<uint32_t>(data_id), index);
+    if (rc < 0) {
+        if (index == 0) {
+            LOG("DDR", "clip enumeration returned %d at index 0 (package %#x has no afp clips)", rc,
+                (unsigned)data_id);
+        }
+        return false;
+    }
+    return true;
 }
 
 void EnumeratePackageClips(int data_id, const std::string& pkg_name, uint32_t& root_stream_id,
                            const char*& root_clip_name) {
-    PkgClipTable const pkg = FindPkgClipTable(data_id);
-    if (pkg.rec == 0U) return;
-    const char* pkg_nm = *reinterpret_cast<const char**>(pkg.rec + 0x60);
-    LOG("DDR", "package rec=%p clip_count=%u arr=%p name@+96='%s' (expect '%s')", (void*)pkg.rec,
-        pkg.count, (void*)pkg.arr, pkg_nm ? pkg_nm : "(null)", pkg_name.c_str());
+    LOG("DDR", "enumerating clips of package '%s' (data_id=%#x)", pkg_name.c_str(),
+        (unsigned)data_id);
     g_clips.clear();
-    for (uint16_t i = 0; i < pkg.count && i < 24; i++) {
-        const char* nm = PkgClipName(pkg.arr, i);
-        uint32_t const sid = PkgClipStreamId(pkg.arr, i);
+    for (int i = 0; i < kMaxPackageClips; i++) {
+        DdrAfpInfo info{};
+        if (!ReadClipAtIndex(data_id, i, info)) break;
+        const char* nm = info.name;
+        uint32_t const sid = info.stream_id;
         g_clips.push_back({.name = (nm != nullptr) ? std::string(nm) : std::string(),
                            .stream_id = sid,
                            .layer_id = 0});
@@ -191,35 +183,30 @@ void EnumeratePackageClips(int data_id, const std::string& pkg_name, uint32_t& r
     }
 }
 
-void ApplyRootClipOverride(int data_id, uint32_t& root_stream_id, const char*& root_clip_name) {
+void ApplyRootClipOverride(uint32_t& root_stream_id, const char*& root_clip_name) {
     std::optional<std::string> const rc = Support::EnvVar("DDR_ROOT_CLIP");
     if (!rc) return;
-    PkgClipTable const pkg = FindPkgClipTable(data_id);
-    if (pkg.rec == 0U) return;
-    for (uint16_t i = 0; i < pkg.count; i++) {
-        const char* nm = PkgClipName(pkg.arr, i);
-        if ((nm != nullptr) && strcmp(nm, rc->c_str()) == 0) {
-            root_stream_id = PkgClipStreamId(pkg.arr, i);
-            root_clip_name = nm;
-            LOG("DDR", "DDR_ROOT_CLIP override -> clip '%s' stream=%#x", nm, root_stream_id);
+    for (const auto& c : g_clips) {
+        if (c.name == *rc) {
+            root_stream_id = c.stream_id;
+            root_clip_name = c.name.c_str();
+            LOG("DDR", "DDR_ROOT_CLIP override -> clip '%s' stream=%#x", c.name.c_str(),
+                root_stream_id);
             break;
         }
     }
 }
 
-void CreateExtraLayersDiag(int data_id) {
+void CreateExtraLayersDiag() {
     if (!Support::EnvFlag("DDR_EXTRA_LAYERS")) return;
-    PkgClipTable const pkg = FindPkgClipTable(data_id);
     int made = 0;
-    if (pkg.rec != 0U) {
-        for (uint16_t i = 1; i < pkg.count; i++) {
-            const char* nm = PkgClipName(pkg.arr, i);
-            uint32_t const sid = PkgClipStreamId(pkg.arr, i);
-            uint32_t const lid = g_afp.afp_layer_create_with_property(sid, nm, 0, nullptr);
-            if ((g_afp.afp_id_is_valid != nullptr) && g_afp.afp_id_is_valid(5, lid) >= 0) {
-                if (g_afp.afp_layer_play != nullptr) g_afp.afp_layer_play(lid, 1.0F);
-                made++;
-            }
+    for (size_t i = 1; i < g_clips.size(); i++) {
+        const auto& c = g_clips[i];
+        uint32_t const lid =
+            g_afp.afp_layer_create_with_property(c.stream_id, c.name.c_str(), 0, nullptr);
+        if ((g_afp.afp_id_is_valid != nullptr) && g_afp.afp_id_is_valid(5, lid) >= 0) {
+            if (g_afp.afp_layer_play != nullptr) g_afp.afp_layer_play(lid, 1.0F);
+            made++;
         }
     }
     LOG("DDR", "DDR_EXTRA_LAYERS: created+played %d extra layers (advance-context test)", made);
@@ -230,10 +217,10 @@ void CreateRootLayer(int data_id, uint32_t root_stream_id, const char* root_clip
     uint32_t stream_id = 0;
     const char* path = nullptr;
     if ((g_afpu.afpu_get_afp_info_at_package != nullptr) && (root_clip_name != nullptr)) {
-        uint8_t info[64] = {0};
-        g_afpu.afpu_get_afp_info_at_package(info, static_cast<uint32_t>(data_id), root_clip_name);
-        stream_id = *reinterpret_cast<uint32_t*>(info + 24);
-        path = *reinterpret_cast<const char**>(info + 16);
+        DdrAfpInfo info{};
+        g_afpu.afpu_get_afp_info_at_package(&info, static_cast<uint32_t>(data_id), root_clip_name);
+        stream_id = info.stream_id;
+        path = info.name;
     }
     if (stream_id == 0U) {
         stream_id = root_stream_id;
@@ -274,7 +261,7 @@ void CreateRootLayer(int data_id, uint32_t root_stream_id, const char* root_clip
         int const mc = g_afp.afp_layer_mc_refer(g_layer_id, "/");
         LOG("DDR", "afp_layer_mc_refer(%#x, \"/\") -> %#x", g_layer_id, mc);
     }
-    if (g_layer_id != 0U) CreateExtraLayersDiag(data_id);
+    if (g_layer_id != 0U) CreateExtraLayersDiag();
 }
 
 }
@@ -312,7 +299,7 @@ bool LoadIfs(AvsFuncs& avs, DllLoader& avs_dll, const std::string& ifs_disk_path
     uint32_t root_stream_id = 0;
     const char* root_clip_name = nullptr;
     EnumeratePackageClips(data_id, pkg_name, root_stream_id, root_clip_name);
-    ApplyRootClipOverride(data_id, root_stream_id, root_clip_name);
+    ApplyRootClipOverride(root_stream_id, root_clip_name);
     CreateRootLayer(data_id, root_stream_id, root_clip_name);
 
     return true;
@@ -348,7 +335,7 @@ void AdvanceOnce(float dt) {
 namespace {
 uintptr_t LayerStruct() {
     if (g_layer_id == 0U) return 0;
-    static auto afp_base = reinterpret_cast<uintptr_t>(GetModuleHandleA("libafp-win64.dll"));
+    const uintptr_t afp_base = g_afp_base;
     if (afp_base == 0U) return 0;
     int const group = static_cast<int>((g_layer_id >> 27) & 0xF) - 1;
     if (group < 0 || group >= 2) return 0;
@@ -380,7 +367,7 @@ void ClearSubFrame() {
 
 namespace {
 uintptr_t ChildMc(const char* name) {
-    static auto afp_base = reinterpret_cast<uintptr_t>(GetModuleHandleA("libafp-win64.dll"));
+    const uintptr_t afp_base = g_afp_base;
     if ((afp_base == 0U) || (g_layer_id == 0U) || (g_afp.afp_layer_mc_refer == nullptr)) return 0;
     static uint32_t mc_id = 0;
     static bool tried = false;
@@ -630,10 +617,10 @@ bool CreateClipLayer(DdrClip& clip, const std::string& name) {
     uint32_t stream_id = 0;
     const char* path = clip.name.c_str();
     if ((g_afpu.afpu_get_afp_info_at_package != nullptr) && g_stream_data_id >= 0) {
-        uint8_t info[64] = {0};
-        g_afpu.afpu_get_afp_info_at_package(info, (uint32_t)g_stream_data_id, clip.name.c_str());
-        stream_id = *reinterpret_cast<uint32_t*>(info + 24);
-        const char* p = *reinterpret_cast<const char**>(info + 16);
+        DdrAfpInfo info{};
+        g_afpu.afpu_get_afp_info_at_package(&info, (uint32_t)g_stream_data_id, clip.name.c_str());
+        stream_id = info.stream_id;
+        const char* p = info.name;
         if (p != nullptr) path = p;
     }
     if (stream_id == 0U) stream_id = clip.stream_id;

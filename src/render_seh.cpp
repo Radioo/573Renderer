@@ -61,12 +61,19 @@ int CaptureFault(EXCEPTION_POINTERS* ep, FaultReport* out) {
         }
         if (ep->ContextRecord != nullptr) {
             const CONTEXT* c = ep->ContextRecord;
+#ifdef _WIN64
             const uint64_t regs[16] = {c->Rax, c->Rcx, c->Rdx, c->Rbx, c->Rsp, c->Rbp,
                                        c->Rsi, c->Rdi, c->R8,  c->R9,  c->R10, c->R11,
                                        c->R12, c->R13, c->R14, c->R15};
+            out->pc = c->Rip;
+#else
+            const uint64_t regs[16] = {c->Eax, c->Ecx, c->Edx, c->Ebx, c->Esp, c->Ebp,
+                                       c->Esi, c->Edi, 0,      0,      0,      0,
+                                       0,      0,      0,      0};
+            out->pc = c->Eip;
+#endif
             for (int i = 0; i < 16; i++)
                 out->regs[i] = regs[i];
-            out->pc = c->Rip;
         }
     }
     return EXCEPTION_EXECUTE_HANDLER;
