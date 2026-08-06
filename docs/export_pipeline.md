@@ -26,7 +26,7 @@ Three entry points, called by the main loop between afp_do_update and
 EndFrame:
 
 - `Export::HandleStartRequest` (dispatch from main.cpp's request handler, the
-  same spot that handles toggle_companion / force_replay / switch_animation;
+  same spot that handles force_replay / switch_animation;
   kept as free functions so per-session state stays private to export.cpp)
   -> StartSession. How the root timeline is driven depends on RootLoopMode:
   in Force mode (or a label/blend export) it force-replays / drives the root

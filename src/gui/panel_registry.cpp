@@ -1,10 +1,7 @@
 #include "panel_registry.h"
 
 #include "../state/app_state.h"
-#include "../state/telemetry.h"
-#include "gui_live_controls.h"
 #include "gui_panels_internal.h"
-#include "imgui.h"
 
 #include <span>
 #include <string>
@@ -14,131 +11,53 @@ namespace Gui {
 
 namespace {
 
-void LeadingSeparator() {
-    ImGui::Spacing();
-    ImGui::Separator();
-    ImGui::Spacing();
-}
-
-void SectionLayersFull() {
-    if (ImGui::CollapsingHeader("Layers", ImGuiTreeNodeFlags_DefaultOpen)) {
-        Panels::RenderLayersPanel();
-    }
-}
-
-void SectionLayersList() {
-    if (ImGui::CollapsingHeader("Layers", ImGuiTreeNodeFlags_DefaultOpen)) {
-        Panels::RenderLayersListOnly();
-    }
-}
-
-void SectionSeek() {
-    auto st = App::Global().GetStatus();
-    if (st.scene_loaded) {
-        ImGui::Spacing();
-        Panels::LiveControls::RenderSeekControls();
-    }
-}
-
-void SectionVariants() {
-    LeadingSeparator();
-    Panels::RenderVariantEditor();
-    Panels::RenderAddSlotForm();
-}
-
-void SectionLabels() {
-    LeadingSeparator();
-    if (ImGui::CollapsingHeader("Labels", ImGuiTreeNodeFlags_DefaultOpen)) {
-        Panels::LiveControls::RenderLabelsPanel();
-    }
-}
-
-void SectionSubLayers() {
-    LeadingSeparator();
-    if (ImGui::CollapsingHeader("Sub-layers", ImGuiTreeNodeFlags_DefaultOpen)) {
-        Panels::LiveControls::RenderSubLayersPanel();
-    }
-}
-
-void SectionOverrides() {
-    LeadingSeparator();
-    if (ImGui::CollapsingHeader("Live preview overrides", ImGuiTreeNodeFlags_DefaultOpen)) {
-        Panels::LiveControls::RenderOverridePanel();
-    }
-}
-
 bool QproTabVisible() {
     return App::Global().GetGameProfileSlug() == "iidx33";
 }
 
 constexpr PanelDesc kModernPanels[] = {
-    {.id = "renderer_tab",
+    {.id = "renderer_view",
      .tab_label = "Renderer",
      .slot = PanelSlot::MainTab,
-     .draw = &Panels::RenderRendererTabBody,
+     .draw = &Panels::RenderRendererView,
      .visible = nullptr},
-    {.id = "qpro_tab",
+    {.id = "qpro_view",
      .tab_label = "qpro",
      .slot = PanelSlot::MainTab,
      .draw = &Panels::RenderQproTabBody,
      .visible = &QproTabVisible},
-    {.id = "layers",
-     .tab_label = nullptr,
-     .slot = PanelSlot::RightStack,
-     .draw = &SectionLayersFull,
+    {.id = "properties",
+     .tab_label = "Properties",
+     .slot = PanelSlot::InspectorTab,
+     .draw = &Panels::RenderPropertiesTab,
      .visible = nullptr},
-    {.id = "seek",
-     .tab_label = nullptr,
-     .slot = PanelSlot::RightStack,
-     .draw = &SectionSeek,
+    {.id = "render",
+     .tab_label = "Render",
+     .slot = PanelSlot::InspectorTab,
+     .draw = &Panels::RenderRenderTabModern,
      .visible = nullptr},
-    {.id = "variants",
-     .tab_label = nullptr,
-     .slot = PanelSlot::RightStack,
-     .draw = &SectionVariants,
-     .visible = nullptr},
-    {.id = "labels",
-     .tab_label = nullptr,
-     .slot = PanelSlot::RightStack,
-     .draw = &SectionLabels,
-     .visible = nullptr},
-    {.id = "sublayers",
-     .tab_label = nullptr,
-     .slot = PanelSlot::RightStack,
-     .draw = &SectionSubLayers,
-     .visible = nullptr},
-    {.id = "overrides",
-     .tab_label = nullptr,
-     .slot = PanelSlot::RightStack,
-     .draw = &SectionOverrides,
+    {.id = "live",
+     .tab_label = "Live",
+     .slot = PanelSlot::InspectorTab,
+     .draw = &Panels::RenderLiveTab,
      .visible = nullptr},
 };
 
 constexpr PanelDesc kDdrPanels[] = {
-    {.id = "renderer_tab",
+    {.id = "renderer_view",
      .tab_label = "Renderer",
      .slot = PanelSlot::MainTab,
-     .draw = &Panels::RenderRendererTabBody,
+     .draw = &Panels::RenderRendererView,
      .visible = nullptr},
-    {.id = "layers",
-     .tab_label = nullptr,
-     .slot = PanelSlot::RightStack,
-     .draw = &SectionLayersList,
+    {.id = "render",
+     .tab_label = "Render",
+     .slot = PanelSlot::InspectorTab,
+     .draw = &Panels::RenderRenderTabDdr,
      .visible = nullptr},
-    {.id = "seek",
-     .tab_label = nullptr,
-     .slot = PanelSlot::RightStack,
-     .draw = &SectionSeek,
-     .visible = nullptr},
-    {.id = "labels",
-     .tab_label = nullptr,
-     .slot = PanelSlot::RightStack,
-     .draw = &SectionLabels,
-     .visible = nullptr},
-    {.id = "overrides",
-     .tab_label = nullptr,
-     .slot = PanelSlot::RightStack,
-     .draw = &SectionOverrides,
+    {.id = "live",
+     .tab_label = "Live",
+     .slot = PanelSlot::InspectorTab,
+     .draw = &Panels::RenderLiveTab,
      .visible = nullptr},
 };
 

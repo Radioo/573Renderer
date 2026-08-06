@@ -137,10 +137,13 @@ add_executable(renderer WIN32
     src/gui/gui_window.cpp
     src/gui/gui_panels.cpp
     src/gui/panel_registry.cpp
-    src/gui/gui_renderer_tab.cpp
+    src/gui/gui_style.cpp
+    src/gui/gui_widgets.cpp
+    src/gui/gui_scene_panel.cpp
+    src/gui/gui_inspector.cpp
+    src/gui/gui_timeline.cpp
     src/gui/gui_qpro_panel.cpp
     src/gui/gui_splitter.cpp
-    src/gui/gui_live_controls.cpp
     src/gui/gui_export_panel.cpp
     src/gui/gui_loading_overlay.cpp
     src/gui/gui_setup_view.cpp

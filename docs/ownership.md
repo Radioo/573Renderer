@@ -185,8 +185,9 @@ the modern `afp_do_sort_render` (now `ModernRuntime::RenderFrame`, fixing the
 modern/DDR render asymmetry), the continuous-loop flag-dance
 (`ApplyContinuousLoop`, latch is a runtime member), `ApplyMasterScale`,
 `ApplyVariantSlots`/`ApplySublayerOverrides` (out of boot.cpp), and the
-`force_replay`/`toggle_companion` request handlers
-(`ForceReplayMaster`/`ToggleCompanion`, out of render_loop_requests.cpp).
+`force_replay` request handler (`ForceReplayMaster`, out of
+render_loop_requests.cpp; the `toggle_companion` handler moved the same way
+and was later removed with the locale-overlay feature).
 Every DDR override is the old implicit no-op (sentinel self-skip, null fn
 pointer, or empty vector), verified byte-identical. game_runtime.cpp split
 into game_runtime.cpp (selection) + game_runtime_internal.h (class decls) +

@@ -2,7 +2,12 @@
 
 Knowledge captured from `src/gui/*`. The GUI mirrors
 KONAMI's own in-game AFP debug viewer (`CAfpViewerScene` in bm2dx) wherever a control maps to
-an engine call - those mappings are engine facts and are listed in section 4.
+an engine call - those mappings are engine facts and are listed in section 5.
+
+Layout lineage: the current design is the "Timeline Studio" direction with the "Scene graph"
+center pane, chosen over a control-deck grid, an embedded-monitor center, and a no-right-pane
+workspace. Squared styling (all rounding 0) and the export modal are deliberate decisions from
+that round, not defaults.
 
 ## 1. Threading model
 
@@ -29,7 +34,7 @@ loop: the render thread keeps running at its cadence while the GUI thread is stu
 GUI widgets never call the engine. They post typed `App::Command` variants
 (`Cmd::LoadContent`, `Cmd::BootGame`, `Cmd::StartExport`, `Cmd::CancelExport`) and wrapped
 AFP-backend commands (`AfpCmd::Wrap` over `SeekFrame`, `SetPaused`, `SwitchAnimation`,
-`GotoLabel`, `ForceReplay`, `ToggleCompanion`, `QproStartScan`, `QproStartExtract`) that the
+`GotoLabel`, `ForceReplay`, `QproStartScan`, `QproStartExtract`) that the
 render thread consumes (see docs/state.md "Command semantics"); the render thread publishes
 `App::Status` / LiveState / ExportState / LoadProgress snapshots that the GUI polls once per
 frame. Background workers (arc/customize extractors, qpro scan) publish into their own
@@ -50,128 +55,243 @@ mutex-guarded Status structs polled the same way.
   (standard DX9 lost-device dance).
 - WM_GETMINMAXINFO clamps the min window size to the layout constants (fires during
   CreateWindow while the module global is still null - fine, the constants are static).
-- Fonts: ImGui's ProggyClean is ASCII-only; the GUI loads Segoe UI 16px, falling back to
-  Consolas 15px, from `%WINDIR%\Fonts` (GetWindowsDirectory, not hardcoded), with glyph ranges
-  0x0020-0x00FF, 0x2010-0x2027, 0x2030-0x205E to cover dashes/quotes/ellipsis. Fonts MUST be
-  added BEFORE ImGui_ImplDX9_Init (the backend uploads the atlas on init; later fonts render
-  blank). The glyph-range array must be static (ImGui keeps the pointer).
 - io.IniFilename = nullptr (window layout not persisted). The GUI HWND is exposed via
   `Gui::GetHwnd()` for native dialog parenting.
 
-## 2. Layout
+## 2. Style, fonts, icons (gui_style, gui_icons, gui_widgets)
 
-- Layout constants live in one place (`gui_layout_constants.h`) so the two consumers cannot
-  drift: WM_GETMINMAXINFO (min client size) and the renderer-tab pane layout (per-pane
-  minimums + splitter width). Pane minimums: left 240 (IFS tree), centre 320 (info + export),
-  right 300 (layers/variants stack); defaults 320 / 380; splitter 6 px; min client =
-  sum + 2 splitters + 80 margin, min height 600.
-- Renderer tab = three panes (IFS tree | IFS info + export | layers/variants/labels/
-  sub-layers/overrides) separated by two draggable `Gui::VSplitter`s. Side-pane widths are
-  session-only (deliberately not persisted); the CENTRE pane always absorbs the remainder.
-  When the window shrinks below fit, the centre steals width from the right pane first, then
-  the left (side panels are tools, centre is content).
-- `VSplitter` is built on `ImGui::InvisibleButton` only (hit-tested, layout-advancing,
-  IsItemActive/Hovered - no imgui_internal). A drag moves pixels symmetrically between the two
-  neighbours, committing only if BOTH stay >= their minimum, so the row stays exactly tiled.
-- Views: BootState WaitingForDir/Booting/Failed -> Setup view; Ready -> tabbed main view.
-  The loading overlay renders on top of EITHER view from the same LoadProgress API.
+- SQUARE EVERYTHING: every rounding in the style struct is 0 (window, frame, grab, scrollbar,
+  tab, popup, child). Hairline 1px borders on popups/child cards only; surfaces are separated
+  by four fill levels (ground / raised / overlay / sunken) instead of borders.
+- Fonts (all loaded from `%WINDIR%\Fonts`, GetWindowsDirectory, never hardcoded):
+  - base = Segoe UI 16px (fallback Consolas, then ImGui default),
+  - header = Segoe UI Semibold 18px (`seguisb.ttf`, fallback bold, fallback base),
+  - mono = Consolas 13px for everything that changes per frame (playhead, flags, hex ids) so
+    digits do not jitter,
+  - icons = **Segoe Fluent Icons merged into the base atlas** from the SYSTEM font
+    (`SegoeIcons.ttf`, fallback `segmdl2.ttf` on Win10) - PUA range 0xE700-0xE950,
+    `ImFontConfig::MergeMode`; zero bundled assets, nothing to license. Glyph escapes live in
+    `gui_icons.h`; only icons with a live consumer are defined there (dead-code rule).
+- imgui is 1.92+: `PushFont` takes (font, size); `Gui::PushHeaderFont()` / `PushMonoFont()`
+  wrap `PushFont(f, f->LegacySize)` so call sites stay one-liners. Fonts are added BEFORE
+  `ImGui_ImplDX9_Init` (the backend uploads the atlas on init).
+- Glyph ranges: 0x0020-0x00FF plus 0x2010-0x2027 / 0x2030-0x205E (quotes/ellipsis); the
+  range arrays are static (ImGui keeps the pointer).
+- PER-GAME ACCENT: `Gui::ApplyAccentForProfile(slug)` re-derives every accent-tinted color
+  (buttons, headers, tabs, checkmarks, sliders...) from one accent per game-profile slug
+  prefix: sdvx cyan, iidx blue, ddr gold, gitadora red, jubeat silver, default blue. Called
+  once per frame from `Panels::Build` with a change-guard, so the window always signals which
+  game is loaded. Neutral surfaces never change - only the accent mix does.
+- Shared widgets (`gui_widgets`): `Segmented` (row of mutually exclusive small buttons; used
+  for root-loop, continuous-loop, background, MC-name-type, and the main-view switch) and
+  `SectionHeader` (icon + header-font title + dim suffix + separator).
 
-### 2.0 Panel registry (P17) - backends register their panels
+## 3. Layout
 
-The tab bar and the right-pane section stack are REGISTRY-DRIVEN
-(`src/gui/panel_registry.{h,cpp}`), not hardcoded: `PanelDesc{id, tab_label,
-slot, draw, visible}` entries live in per-backend `PanelSet` tables keyed by
-the id string the engine publishes (`App::State::ActiveBackendId`, seeded
-from `Backend::Active()->Id()` at boot). `CollectActivePanels(slot)` returns
-the active backend's visible entries in authored order; `RenderReadyView`
-iterates the MainTab slot and `RenderRightPane` the RightStack slot. Rules:
+Ready view = fixed shell, top to bottom:
 
-- MEMBERSHIP IS THE CAPABILITY DECLARATION. A control a backend does not
-  support is ABSENT from its set - never greyed out, never a disabled-text
-  explainer. ImGui stays 100% inside src/gui/ (the isolation gate is
-  untouched): the engine contributes only the backend id string; all draw
-  code and the registration tables are GUI-side.
-- Each RightStack entry's draw fn owns its own chrome (leading
-  Spacing/Separator/Spacing for every section after the first two, its
-  CollapsingHeader, flags), so set membership changes cannot disturb the
-  layout of the remaining sections.
-- `visible` predicates cover the two other gating shapes: per-profile
-  gating (the qpro tab's `GetGameProfileSlug() == "iidx33"`) and
-  runtime-state gating (the seek strip's `Status::scene_loaded`, checked
-  inside its draw fn).
-- Current sets: afp_modern = Renderer tab, qpro tab (iidx33 only), and the
-  right stack layers(+loop/scale)/seek/variants/labels/sub-layers/
-  overrides. afp_ddr = Renderer tab and layers(list only)/seek/labels/
-  overrides. Intended DDR diffs vs the old hardcoded stack: the do-nothing
-  loop-master + master-scale rows, the variants editor, and the sub-layers
-  section (with its "unavailable for DDR" text) are gone in favor of
-  absence; the overrides panel keeps its internal modern-only rows hidden
-  as before.
-- A future backend adds its own `PanelSet` row + whatever GUI-side draw
-  fns its panels need; no shared shell code changes.
-- The Setup view is PRE-boot (no active backend), so its per-game tools
-  gate on the EFFECTIVE setup selection (explicit combo slug, else
-  auto-detect of the typed dir): the .arc extractor and the customize-image
-  extractor (both DDR tools, docs/ddr.md) show only for `ddrworld`, and the
-  "520x704 (qpro avatar)" render preset only for `iidx33`.
+1. **Top bar**: brand (header font, accent), main-view switch (only when >1 view: Renderer /
+   qpro), active IFS path (mono), then right-aligned Export button + measured-fps readout.
+2. **Three panes** split by two draggable `Gui::VSplitter`s:
+   - left = Browse (IFS tree), center = Scene (clip hierarchy), right = Inspector (tabs).
+   - Side-pane widths are session-only; the CENTER pane absorbs the remainder; when the
+     window shrinks below fit, the center steals from the right pane first, then the left.
+   - `VSplitter` is built on `ImGui::InvisibleButton` only (no imgui_internal); a drag moves
+     pixels symmetrically and commits only if BOTH neighbours stay >= their minimum.
+3. **Timeline dock** (fixed height `kTimelineH`): transport + custom track, section 4.
+4. **Status strip** (`kStatusStripH`, mono font): profile name, render WxH, render health
+   (last_error, tooltip carries the full text), the export status tag (clickable, reopens
+   the export modal), right-aligned afp version.
 
-### 2.1 IFS picker specifics
+- Layout constants live in `gui_layout_constants.h` so WM_GETMINMAXINFO and the pane layout
+  cannot drift. Pane minimums: left 240, center 320, right 280; defaults 300/340; splitter 6.
+- Views: BootState WaitingForDir/Booting/Failed -> Setup view; Ready -> the shell above. The
+  loading overlay renders on top of EITHER view from the same LoadProgress API.
+- Keyboard (active when no text input is focused): Space = play/pause, Left/Right = step 1,
+  Shift+Left/Right = step 100, Ctrl+E = export modal. Handled in the timeline dock; steps are
+  suppressed while an export captures.
+
+### 3.0 Panel registry - backends register their panels
+
+The main-view switch and the inspector tab set are REGISTRY-DRIVEN
+(`src/gui/panel_registry.{h,cpp}`): `PanelDesc{id, tab_label, slot, draw, visible}` entries in
+per-backend `PanelSet` tables keyed by `App::State::ActiveBackendId`. Slots:
+
+- `MainTab`: whole-shell views. afp_modern = Renderer + qpro (visible predicate
+  `GetGameProfileSlug() == "iidx33"`); afp_ddr = Renderer only. With one visible entry the
+  top-bar switch does not render.
+- `InspectorTab`: right-pane tabs. afp_modern = Properties / Render / Live; afp_ddr =
+  Render (reduced draw fn) / Live.
+
+Rules unchanged from the original registry: MEMBERSHIP IS THE CAPABILITY DECLARATION (an
+unsupported control is ABSENT, never greyed); ImGui stays 100% inside src/gui/ (isolation
+gate); a future backend adds a `PanelSet` row plus draw fns, no shell changes. The Scene pane
+and timeline are shared shell surfaces whose per-backend differences are DATA-driven: DDR
+publishes no afplist names, no mc_tree, no slots, so those tree features simply do not appear.
+
+### 3.1 Browse pane (IFS picker)
 
 - The IFS tree is rebuilt from the entry list EVERY frame (linear in entries x depth, fine for
   ~6000 files). ImGui ID GOTCHA: pushing the entry POINTER as the row ID broke clicking -
   the rebuild gives a different pointer each frame, so press (frame N) and release (frame N+1)
-  had different IDs and ImGui never registered the click ("nothing happens"). Fix: PushID on
-  the full path STRING (stable content, unique) - directory TreeNodes already used the segment
-  string, which is why they worked.
+  had different IDs and ImGui never registered the click. Fix: PushID on the full path STRING.
 - Auto-expand is keyed off the WHOLE tree size (<= 20 files), not per-subtree: a tiny install
-  (GITADORA's single deeply-nested data/afp_result_10_c.ifs) auto-opens, while a real
-  SDVX/IIDX install stays collapsed so small subfolders don't pop open when a scan finishes
-  (the old per-subtree <= 20 rule expanded every one of them).
+  auto-opens while a real SDVX/IIDX install stays collapsed.
 - Active-row highlight compares the FULL absolute path (Status::current_ifs_path), not the
   basename - installs have same-named IFSes across subdirs.
-- The .ifs directory scan runs on a background thread (boot flips to Ready before it
-  finishes); the pane shows the scan's live status line instead of "none found" while running.
+- The .ifs directory scan runs on a background thread; the pane shows the scan's live status
+  line instead of "none found" while running.
 - File leaves post `load_new_ifs` requests carrying `from_arc` for DDR .arc-wrapped IFSes.
 
-### 2.2 Variant editor semantics (afp engine facts)
+### 3.2 Scene pane (gui_scene_panel) - the clip hierarchy
 
-- "(default)" cannot un-override a clip: `afp_play_work_load_bitmap` (afp-core)
-  looks its name argument up in the bitmap dictionary and only REBINDS -
-  every call tears down the prior fragment and builds a new one keyed on the given name; there
-  is no "restore authored" path. So "(default)" drops the override locally and posts
-  `force_replay` so the master stream's timeline re-authors the clip's original bitmap (other
-  latched slots re-apply next frame, so only that slot visually reverts).
-- Slots are probed from afplist/texturelist plus common names; unresolved user-added slots are
-  probed by the render thread next frame.
+One tree replaces the old Layers + Sub-layers + Variants panels:
 
-### 2.3 Layers panel
+- Top level = afplist.xml `<afp>` entries (KONAMI's own debug viewer labels this exact list
+  "[LAYERNUM]"). Single-click SELECTS (drives the Properties tab); DOUBLE-CLICK plays /
+  replays (same-name picks route through ForceReplay in the dispatcher, a valid replay).
+- Under the PLAYING layer: the live child tree from `afp_mc_enumerate_children`
+  (Status::mc_tree), with per-clip visibility checkboxes, positions (when MC-name enumeration
+  is on - the same data as F3), and an accent "variant" badge on nodes matched by a
+  VariantSlot (`slot.path == node.path or node.name`).
+- Sub-clip semantics preserved from the old sub-layers panel: expansion is LAZY (opening a
+  node writes its path into the State expand-set the render thread reads to enumerate on
+  demand); ImGui row IDs use the SIBLING INDEX because afp clips can have same-named siblings
+  whose paths collide; the path stays the afp toggle key, so same-named siblings toggle as a
+  group - matching the game (SetClipVisible walks the dir-6 same-name chain). Absent
+  override = authored visible.
+- Slots that do not correspond to an enumerated node render as ghost rows under the playing
+  layer ("(unresolved slot)" until the render thread's probe resolves them).
+- Bottom row: add-slot-by-clip-path input (probed by the render thread next frame).
+- Selection model (`Panels::Scene::Selection`, GUI-thread-local): None / Layer / Child with
+  path + name; reset on IFS switch.
+- DDR: no afplist, no bulk child-enumerate in afp 2.13.7, so the pane shows only the
+  no-layers hint; everything else is driven by absent data.
 
-- The layer list = afplist.xml <afp> entries; KONAMI's own AFP debug viewer labels this exact
-  list "[LAYERNUM]" and instantiates the pick via CreateAfpLayer - hence the "Layers" name.
-  Clicking the already-playing row is a valid replay (the dispatcher routes same-name picks
-  through ForceReplay).
-- DDR backgrounds have no afplist (single root clip), so this panel early-outs in DDR mode;
-  the seek controls were therefore relocated OUT of this panel into the tab body, gated on a
-  loaded stream id instead (Status.stream_id != the 0xFFFFFFFC sentinel; for DDR the non-
-  sentinel value is DdrAfp::LayerId()).
-- "Loop root" combo encodes a game mechanism: the real game's generic decision for a
-  scene-BG root that reaches its end is HOLD (mount once, afp's own tick reaches its natural
-  terminal branch while nested children free-run - the game default; fixes the select_bg
-  o_kazari5 ornament snapping back every 140-frame root cycle) vs FORCE loop (re-drive the
-  root via ForceReplay + the continuous-loop flag sequence - needed for one-shot masters like
-  bg_common). The renderer mounts via afplist and cannot read the dispatcher's per-BG choice
-  at runtime, so this is an explicit user control defaulting to the game default (Hold),
-  persisted in settings.ini.
-- "Master scale": SDVX I-IV-era 720x1280 IFSes (select_bg_booth, select_bg_ii, _4bg, ...)
-  need x1.5 to fill 1080x1920 - the real game does this per-BG via the BG entry's payload+28
-  float; the GUI exposes it as a slider with a 1.5x preset since the preview has no BG-id
-  notion.
+### 3.3 Inspector pane (gui_inspector)
 
-## 3. Loading overlay and progress rules
+- **Properties** (afp_modern only): the Scene selection. Layer -> kind, frame count,
+  playing state, Play/Replay button. Child -> full clip path (mono), position when known,
+  and when a VariantSlot matches: slot-visible checkbox + the bitmap swap combo.
+  Variant semantics (engine facts): "(default)" cannot un-override a clip -
+  `afp_play_work_load_bitmap` only REBINDS (there is no "restore authored" path), so
+  "(default)" drops the override locally and posts `force_replay` so the master timeline
+  re-authors the clip's original bitmap; other latched slots re-apply next frame.
+- **Render**: loop master (persisted), root-loop Segmented, continuous-loop Segmented
+  (OFF/default/ON = -1/0/1), trim frames, master scale slider + 1.0x/1.5x presets,
+  background Segmented, filter (F7) and MC names (F3) toggles + name-type Segmented, reset
+  overrides. The DDR variant of this tab is background + reset only.
+  - "Loop root" encodes a game mechanism: the real game's generic decision for a scene-BG
+    root that reaches its end is HOLD (mount once, afp's own tick reaches its natural
+    terminal branch while nested children free-run - the game default) vs FORCE loop
+    (ForceReplay + the continuous-loop flag sequence - needed for one-shot masters like
+    bg_common). The renderer mounts via afplist and cannot read the dispatcher's per-BG
+    choice at runtime, so this is an explicit user control defaulting to the game default.
+  - "Master scale": SDVX I-IV-era 720x1280 IFSes need x1.5 on a 1080x1920 game - the real
+    game does this per-BG via the BG entry's payload+28 float; exposed as a slider with a
+    1.5x preset since the preview has no BG-id notion.
+- **Live**: the live state readout (mono font), file info block, and the MC-names column
+  list (shown when MC names are on in "column" mode).
+
+### 3.4 Timeline dock (gui_timeline)
+
+- Transport: -100 / -1 / play-pause / +1 / +100 icon buttons; step buttons WRAP around
+  mc_total (matching afp's own wrap-to-0). Mono frame readout `cur / total`, wrap-count
+  "loop N", and the LABEL COMBO: a dropdown listing every label with its frame, preview =
+  the active label. Labels switched via dropdown because label NAMES drawn on the track
+  overlapped unreadably whenever labels sat frames apart (e.g. wait/out).
+- Track: one custom ImDrawList widget over an InvisibleButton. Progress fill + 2px playhead
+  from the BOUNDED mc playhead; frame labels drawn as amber TICKS ONLY at `frame/total`
+  (hover a tick for its name, click it to post `GotoLabel`; clicking/dragging anywhere else
+  seeks). Seeking pauses, mirroring the debug viewer's TIME controls (slider-style seeks
+  CLAMP; only the step buttons wrap).
+- During capture the track additionally tints `frames_captured/total` green, giving the
+  export a determinate visual; the whole dock is disabled while capturing (a seek would
+  corrupt the export's loop-wrap counter, a pause would freeze the capture - the render
+  thread also hard-ignores such requests; greying just makes it visible).
+- The dock always renders in the Renderer view; without a loaded scene it shows a hint line.
+
+## 4. Export modal + status tag (gui_export_panel)
+
+- The export form is a MODAL ("Export", centered, 620px), opened from the top-bar button or
+  Ctrl+E, and via the status-strip tag. Zero permanent pixels in the shell.
+- SIZING GOTCHA: the window uses `AlwaysAutoResize` for height but its width MUST be pinned
+  via `SetNextWindowSizeConstraints`. The form is full of stretch-to-available
+  widgets (`SetNextItemWidth(-FLT_MIN)`, `GetContentRegionAvail()`), and auto-resize +
+  stretch widgets feed back into each other: the window re-measures "content wants more"
+  every frame and balloons to screen width. Pinning the width breaks the loop.
+- HEIGHT GOTCHA: the max-height constraint is the viewport work height minus a margin, and
+  the position is re-centered EVERY frame (`ImGuiCond_Always`, 0.5 pivot). Auto-resize
+  windows never scroll on their own; with an Appearing-only position, expanding Advanced
+  grew the modal past the bottom edge and hid the Start/Close footer. Capped height makes
+  the scrollbar take over, and per-frame centering keeps growth symmetric. Cost: the modal
+  is not user-draggable, which is fine because the crop-pick flow closes it anyway.
+- Common path: filename stem + format, fps + quality, output resolution (preset combo +
+  WxH + scale buttons), transparent-bg + HW-accel. Everything else - keyframe interval,
+  frame limit, loop count, blend seam, crop, bg color - sits behind one "Advanced"
+  CollapsingHeader.
+- Starting an export closes the modal; progress lives in the status strip (capturing N /
+  encoding / done / failed, clickable to reopen) and as the timeline capture tint.
+- Crop pick handshake: arming "Pick region" CLOSES the modal (the drag happens on the render
+  window), and the modal auto-reopens when pick mode ends (`g_reopen_after_pick`).
+- Form state is file-scope statics so choices survive modal close and IFS reloads. The whole
+  form is disabled during capture so a mid-capture click cannot mutate values already
+  snapshotted into the export session; the crop rect is snapshotted at start for the same
+  reason. Numeric crop edits write state only on change to avoid racing the drag handler.
+- Filename stem auto-regenerates on IFS/animation change only. Output resolution (0,0) =
+  "native at submit time"; a two-static-state machine (shown_idx + last dims) keeps a user
+  "Custom" pick from being auto-reverted by the auto-match next frame. Same pattern in
+  Setup's render-resolution widget.
+- Encoder facts baked into the tooltips: AVIF = AV1 dual-stream with an auxiliary alpha
+  plane (img-tag transparency; color stream NVENC on RTX 40+, alpha stream stays software);
+  WebM VP9 = yuva420p single stream (video-tag transparency; software only - NO NVIDIA
+  desktop GPU ships a VP9 encoder); WebM AV1 = NVENC-capable AND video-tag smooth but OPAQUE
+  only; WebP anim = alpha + smooth img-tag playback everywhere, ~2-3x larger; PNG sequence =
+  lossless frame_NNNNNN.png folder via WIC. video-tag playback beats animated img for long
+  clips because Blink clamps animated-image frame durations to 10 ms.
+- Keyframe interval: shown only when `MediaSink::UsesKeyframeInterval(format)`; 0 = auto
+  (one keyframe/sec); a larger value or one >= the frame count forces a single keyframe.
+  Feeds `Request::export_keyframe_interval` -> encoder `gop_size` (docs/media_formats.md).
+- H.264 export REQUIRES h264_nvenc on this ffmpeg build (no libx264/openh264 compiled in).
+  av1_nvenc needs Ada (RTX 40) or newer; the HW probe is format-specific.
+- "Blend loop seam" is the ONLY sanctioned pixel-compare feature: a user-opted-in synthesized
+  crossfade for backgrounds with no clean authored loop. The real game does NOT do this.
+
+## 5. Debug-viewer parity controls (engine-call mappings)
+
+The live controls mirror KONAMI's CAfpViewerScene key bindings. Each GUI control drives the
+exact engine call the scene's key does:
+
+| Control (scene key) | Engine call |
+| --- | --- |
+| timeline track + step buttons (LEFT/RIGHT; SHIFT = 100-step) | absolute-frame seek via afp_mc_control 0xF08 (deep_goto_play) on the master mc; seeking force-pauses, exactly like the scene |
+| play/pause button + Space (RETURN+SHIFT) | stream playback speed 0 / 1 via afp_stream_set_speed, re-applied each frame by the render thread |
+| Background Segmented (F4) | preview RT clear color: default transparent -> grey -> black -> red -> green -> blue (kBgPresets); live preview only, export has its own bg |
+| Filter toggle (F7) | afp-core set-filter ord 0x032 on the active stream, filter id 0x80000000 OR enable - the same call the scene's CLayer slot-32 wrapper makes |
+| Show MC names (F3 DISP MC) | afp_mc_enumerate_children ord 0x079 on the master; name-type (F6): "at clip pos" = draw each name over the preview, "column" = the Live tab list; also feeds Scene-tree positions |
+| timeline frame readout | the BOUNDED mc playhead (work+0x76 via afp_mc_set 0x1010), shown exactly like the IIDX debug viewer |
+| "loop N" readout | OUR detected backward-wrap tally since the clip/label last (re)started - NOT afp's work+0x104; the debug scene shows no loop_count |
+| Live tab size readout | afp_get_layer_info word[8]/word[9] |
+| timeline label markers | current label name + the label list (goto via label playback) |
+| Live tab raw cur/total | free-running stream counter afp_get_layer_info w[13]/w[12] - climbs past total under the continuous-loop dance (diagnostic) |
+| Live tab file info | afp-utils package metadata; version triplets unpack as major=(v>>16)&0xFFFF, minor=(v>>8)&0xFF, patch=v&0xFF (matches the scene's printf). Locale is intentionally omitted - it is the real game's runtime region via a bm2dx CRT call, not derivable from afp/avs |
+
+Other live-control semantics:
+
+- Continuous loop OFF/default/ON: OFF = clear the CLayer flag (master reverts to gotoAndStop
+  saturation), default = leave engine default, ON = apply the BG-dispatcher flag sequence
+  (master keeps advancing past total_length while sub-clips evolve naturally; what BG 20
+  needs). Re-applied on the NEXT stream switch.
+- Trim frames: >0 restarts the master via ForceReplay at rendered frame N since the last
+  switch (watch an exact-length loop at full framerate).
+- DDR gating: DDR's afp 2.13.7 exports none of the modern-only knobs (continuous-loop flag
+  dance, trim ForceReplay, afp_set_filter, bulk child-enumerate), so those widgets are absent
+  in the DDR panel sets; Background, Reset and the Live readout stay (self-gated on have_*).
+
+## 6. Loading overlay and progress rules
 
 - Full-screen dimmed overlay with `ImGuiWindowFlags_NoInputs` - hit-testing suppressed, so
-  drawing it AFTER the regular view is enough to make everything non-interactive (no per-
-  widget disabling).
+  drawing it AFTER the regular view is enough to make everything non-interactive.
 - Determinate bar when a fraction is known (e.g. textures_expected pre-counted from
   texturelist.xml); otherwise an indeterminate marquee PLUS a changing detail line (current
   item or climbing count) so it never looks frozen. Edge-triggered logging records overlay
@@ -180,109 +300,43 @@ iterates the MainTab slot and `RenderRightPane` the RightStack slot. Rules:
   total unknown) shows an animated bar + "Scanning... N found" + the current path; pass 2
   shows done/total. This implements the project-wide progress rule (see CLAUDE.md).
 
-## 4. Debug-viewer parity controls (engine-call mappings)
+## 7. Setup view
 
-The live controls mirror KONAMI's CAfpViewerScene key bindings. Each GUI control drives the
-exact engine call the scene's key does:
-
-| Control (scene key) | Engine call |
-| --- | --- |
-| [TIME] seek slider + step buttons (LEFT/RIGHT; SHIFT = 100-step) | absolute-frame seek via afp_mc_control 0xF08 (deep_goto_play) on the master mc; seeking force-pauses, exactly like the scene |
-| Paused checkbox (RETURN+SHIFT) | stream playback speed 0 / 1 via afp_stream_set_speed, re-applied each frame by the render thread |
-| Background cycle (F4) | preview RT clear color: default transparent -> grey -> black -> red -> green -> blue -> wrap (kBgPresets); live preview only, export has its own bg |
-| Filter toggle (F7) | afp-core set-filter ord 0x032 on the active stream, filter id 0x80000000 OR enable - the same call the scene's CLayer slot-32 wrapper makes |
-| Show MC names (F3 DISP MC) | afp_mc_enumerate_children ord 0x079 on the master; name-type (F6): 0 = draw each name at its clip position over the preview, 1 = fixed column list |
-| [TIME] readout | the BOUNDED mc playhead (work+0x76 via afp_mc_set 0x1010), shown in every mode exactly like the IIDX debug viewer |
-| [LOOPS] readout | OUR detected backward-wrap tally since the clip/label last (re)started - NOT afp's work+0x104; the debug scene shows no loop_count |
-| [SIZE] readout | afp_get_layer_info word[8]/word[9] |
-| [LBL NO]/[LBL NM] | current label name + index n/N from the label list |
-| raw cur/total readout | free-running stream counter afp_get_layer_info w[13]/w[12] - climbs past total under the continuous-loop dance (diagnostic) |
-| [FILE INFO] block | afp-utils package metadata; version triplets unpack as major=(v>>16)&0xFFFF, minor=(v>>8)&0xFF, patch=v&0xFF (matches the scene's printf). Locale is intentionally omitted - it is the real game's runtime region via a bm2dx CRT call, not derivable from afp/avs |
-
-Other live-control semantics:
-
-- Continuous loop mode input: -1 = explicit OFF (clear the CLayer flag; master reverts to
-  gotoAndStop saturation), 0 = leave engine default, 1 = explicit ON (apply the BG-dispatcher
-  flag sequence - master keeps advancing past total_length while sub-clips evolve naturally;
-  what BG 20 needs). Re-applied on the NEXT stream switch.
-- Trim frames: >0 restarts the master via ForceReplay at rendered frame N since the last
-  switch (watch an exact-length loop at full framerate).
-- The whole seek block is disabled while an export is capturing: a seek would corrupt the
-  export's loop-wrap counter and a pause would freeze the capture (the render thread also
-  hard-ignores such requests during capture; greying just makes it visible).
-- Step buttons WRAP around mc_total (matching afp's own wrap-to-0), while the slider clamps.
-- DDR gating: DDR's afp 2.13.7 exports none of the modern-only knobs (continuous-loop flag
-  dance, trim ForceReplay, afp_set_filter, bulk child-enumerate), so those widgets hide in
-  DDR mode; Background cycle, Reset and the live readout stay (self-gated on have_* flags).
-- Sub-layers panel: per-sub-clip visibility checkboxes over the active layer's named child
-  tree. Expansion is LAZY - opening a node writes its path into a State expand-set the render
-  thread reads to enumerate children on demand (dynamic timer subtrees only walked if opened).
-  ImGui IDs use the SIBLING INDEX, not the path: afp clips can have same-named siblings
-  (several `txt_usr`) whose paths collide, and ImGui asserts on duplicate row IDs; the path
-  stays the afp toggle key, so same-named siblings toggle as a group - matching the game
-  (SetClipVisible walks the dir-6 same-name chain). Absent override = authored visible.
-  DDR-gated (no bulk child-enumerate in 2.13.7).
-
-## 5. Export panel notes (encoder facts)
-
-- Form state is file-scope statics so fps/quality/format choices survive tab switches and IFS
-  reloads.
-- Format facts baked into the tooltips: AVIF = AV1 dual-stream with an auxiliary alpha plane
-  (plays in img tags with transparency; color stream NVENC on RTX 40+, alpha stream stays
-  software - tiny bitstream, NVENC has no alpha path); WebM VP9 = yuva420p single stream
-  (video-tag transparency; software only - NO NVIDIA desktop GPU ships a VP9 encoder); WebM
-  AV1 = NVENC-capable AND video-tag smooth but OPAQUE only; WebP anim = alpha + smooth img-tag
-  playback everywhere, ~2-3x larger; PNG sequence = lossless frame_NNNNNN.png folder via WIC.
-  video-tag playback beats animated img for long clips because Blink clamps animated-image
-  frame durations to 10 ms.
-- Keyframe interval (`g_keyframe_interval`): shown only when
-  `MediaSink::UsesKeyframeInterval(current_format)` (all codec formats, not PNG/WebP). 0 =
-  auto (one keyframe/sec); a larger value or one >= the frame count forces a single keyframe
-  for a much smaller file on static/scrolling scenes. The inline hint shows "(auto: 1/sec)" or
-  "(every N frames)". Feeds `Request::export_keyframe_interval` -> encoder `gop_size`. See
-  docs/media_formats.md "Keyframe interval".
-- H.264 export REQUIRES h264_nvenc on this ffmpeg build (no libx264/openh264 compiled in).
-  av1_nvenc needs Ada (RTX 40) or newer; h264_nvenc is on most NVENC GPUs. HW probe is
-  format-specific.
-- "Blend loop seam" is the ONLY sanctioned pixel-compare feature: a user-opted-in synthesized
-  crossfade for backgrounds with no clean authored loop (e.g. select_bg_iv's one-shot _4bg).
-  The real game does NOT do this.
-- The whole form is disabled during capture so a mid-capture click cannot mutate values
-  already snapshotted into the export session; the crop rect is snapshotted at start for the
-  same reason. Crop has two entry paths (numeric inputs + an armed pick-drag on the render
-  window mirrored back into App::CropRect); numeric edits write state only on change to avoid
-  racing the drag handler.
-- Filename stem auto-regenerates on IFS/animation change only (not per frame).
-- Output resolution (0,0) = "native at submit time"; a two-static-state machine
-  (shown_idx + last dims) keeps a user "Custom" pick from being auto-reverted by the
-  auto-match next frame. Same pattern in Setup's render-resolution widget.
-
-## 6. Setup view
-
+- Centered bordered card (640px, `ImGuiChildFlags_AutoResizeY`, vertically offset ~35% of
+  the free space) instead of a top-left form; brand header inside the card.
 - Game profile combo: Konami ships per-game builds of afp-core.dll sharing the export-name
-  scheme but DIVERGING in ordinal-to-function mapping (e.g. IIDX 33 vs SDVX 7); the profile
-  selects ordinals + boot-call gating. Auto-detect matches known substrings in the game dir
-  path; the Auto label previews what it would pick.
-- Render fps: controls the live loop tick rate AND per-tick dt (dt = 1/fps) so animation speed
-  is unchanged at any rate. DDR content is authored at 60; IIDX/SDVX previews historically ran
-  at 120.
-- Render resolution presets encode native sizes: 3840x2160 (GITADORA DELTA, 4K@60),
-  1920x1080, 1280x720 (IIDX 17), 1080x1920 / 720x1280 (SDVX portrait), 520x704 (IIDX qpro
-  avatar canvas), 1024x768 (jubeat saucer - the reason hardcoded 1080p broke: AFP's
-  GetScreenSize callback must match the offscreen RT shape or layout coords land wrong).
-  Values clamp to 64..8192 (floor protects D3D9, ceiling stops accidental giant RTs).
-- Settings persist to settings.ini on every change (atomic tempfile + rename, so per-keystroke
-  saves are safe).
-- The setup screen also hosts the standalone Tools: the batch .arc extractor and the customize
-  image extractor (see docs/ddr.md sections 11-12), both worker-thread + polled-Status.
+  scheme but DIVERGING in ordinal-to-function mapping; the profile selects ordinals +
+  boot-call gating. Auto-detect matches known substrings in the game dir path; the Auto
+  label previews what it would pick.
+- Render fps: controls the live loop tick rate AND per-tick dt (dt = 1/fps) so animation
+  speed is unchanged at any rate. DDR content is authored at 60; IIDX/SDVX previews
+  historically ran at 120.
+- Render resolution presets are NAMED FOR THEIR GAMES (3840x2160 GITADORA 4K, 1920x1080
+  IIDX, 1280x720 DDR, 1080x1920 SDVX / jubeat portrait, 720x1280 SDVX old-era, 520x704 qpro
+  avatar - iidx33 only) because AFP's GetScreenSize callback must match the offscreen RT
+  shape or layout coords land wrong. Values clamp to 64..8192.
+- Settings persist to settings.ini on every change (atomic tempfile + rename).
+- The DDR-only Tools (batch .arc extractor, customize image extractor - docs/ddr.md) render
+  inside the card, gated on the EFFECTIVE setup selection (explicit combo slug, else
+  auto-detect of the typed dir).
 
-## 7. qpro tab
+## 8. qpro view
+
+Reached via the top-bar view switch (iidx33 only; registry MainTab entry).
 
 - Drives the qpro extractor (docs/qpro.md): category checkboxes compose with the per-part
   date-grouped scan selection (a part renders iff category on AND part checked). A scan that
   selects nothing blocks extract; no scan = all parts.
-- Body parts need the 520x704 render size (Setup preset) - the tab shows a warning otherwise;
-  other categories extract at any size.
+- Body parts need the 520x704 render size (Setup preset) - the tab shows a warning otherwise.
 - The skip/failure Issue list renders prominently with a copy-to-clipboard button - a skip
   must never pass silently.
 - Uses ImGuiListClipper for the per-part checkbox lists (thousands of rows).
+
+## 9. Removed: locale overlay (companions UI)
+
+The locale companion picker (`<base>_{j,a,k}.ifs` exclusive overlay selection) was removed as
+a feature: GUI card, `AfpCmd::ToggleCompanion`, `IGameRuntime::ToggleCompanion`,
+`App::CompanionIfs`, `IfsInspect::FindCompanions` are all gone. The ENGINE-level companion
+package machinery (`AfpManager::LoadCompanion` / `UnloadCompanion` / mount aliasing) remains -
+qpro loads its co-present part packages through it (docs/qpro.md), and the bm2dx locale
+name-shadowing facts stay documented in docs/boot_and_render_loop.md "Companions".

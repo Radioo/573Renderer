@@ -46,11 +46,15 @@ if not exist "%VCPKG_ROOT%\vcpkg.exe" (
 
 cd /d "%ROOT%"
 
-cmake --preset dev
-set "CONFIGURE_RC=%ERRORLEVEL%"
-if not "%CONFIGURE_RC%"=="0" (
-    echo CMake configure FAILED with exit code %CONFIGURE_RC%
-    exit /b 1
+if exist "build\CMakeCache.txt" (
+    echo [Build] Reusing existing configure - ninja re-runs CMake if inputs changed
+) else (
+    cmake --preset dev
+    set "CONFIGURE_RC=!ERRORLEVEL!"
+    if not "!CONFIGURE_RC!"=="0" (
+        echo CMake configure FAILED with exit code !CONFIGURE_RC!
+        exit /b 1
+    )
 )
 
 cmake --build --preset dev

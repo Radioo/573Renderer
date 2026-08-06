@@ -1,23 +1,27 @@
 #include "gui_panels.h"
 #include "gui_panels_internal.h"
 #include "gui_export_panel.h"
+#include "gui_icons.h"
+#include "gui_layout_constants.h"
 #include "gui_loading_overlay.h"
 #include "gui_setup_view.h"
-#include "../backend/afp_commands.h"
+#include "gui_splitter.h"
+#include "gui_style.h"
+#include "gui_widgets.h"
+#include "panel_registry.h"
+#include "../game_profile.h"
 #include "../state/app_state.h"
 #include "../state/commands.h"
-#include "panel_registry.h"
 #include "../support/log.h"
 #include "imgui.h"
-#include "state/telemetry.h"
-#include "state/ifs_catalog.h"
 #include "state/boot_lifecycle.h"
+#include "state/ifs_catalog.h"
+#include "state/telemetry.h"
 
 #include <algorithm>
-#include <cstdio>
 #include <cctype>
 #include <cfloat>
-#include <cstring>
+#include <cstdio>
 #include <string>
 #include <utility>
 #include <vector>
@@ -32,32 +36,6 @@ std::string PrettifyPath(const std::string& in, size_t max_len = 72) {
     if (s.size() <= max_len) return s;
     size_t const tail = max_len - 3;
     return "..." + s.substr(s.size() - tail);
-}
-}
-
-namespace {
-void RenderTopBar(const App::Status& status) {
-    ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.13F, 0.14F, 0.17F, 1.0F));
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(16, 10));
-    ImGui::BeginChild("topbar", ImVec2(0, 56), 1, ImGuiWindowFlags_NoScrollbar);
-
-    ImGui::TextColored(ImVec4(0.75F, 0.85F, 1.0F, 1.0F), "573Renderer");
-    ImGui::SameLine(0, 24);
-    if (status.current_ifs_path.empty()) {
-        ImGui::TextDisabled("no IFS loaded");
-    } else {
-        ImGui::TextDisabled("%s", PrettifyPath(status.current_ifs_path).c_str());
-    }
-
-    char fps_buf[24];
-    snprintf(fps_buf, sizeof(fps_buf), "%.1f fps", status.fps_measured);
-    float const fps_w = ImGui::CalcTextSize(fps_buf).x;
-    ImGui::SameLine(ImGui::GetWindowWidth() - fps_w - 28);
-    ImGui::TextColored(ImVec4(0.55F, 0.75F, 0.95F, 1.0F), "%s", fps_buf);
-
-    ImGui::EndChild();
-    ImGui::PopStyleVar();
-    ImGui::PopStyleColor();
 }
 }
 
@@ -189,11 +167,9 @@ void RenderIfsPicker() {
     auto list = state.ListAvailableIfs();
     std::string const active_path = state.GetStatus().current_ifs_path;
 
-    ImGui::TextColored(ImVec4(0.92F, 0.92F, 0.93F, 1.00F), "IFS Files");
-    ImGui::SameLine();
-    ImGui::TextDisabled("(%zu)", list.size());
-    ImGui::Separator();
-    ImGui::Spacing();
+    char suffix[32];
+    snprintf(suffix, sizeof(suffix), "(%zu)", list.size());
+    Gui::SectionHeader(ICON_FOLDER, "Browse", suffix);
 
     if (state.IsIfsScanning()) {
         std::string const s = state.GetIfsScanStatus();
@@ -208,7 +184,7 @@ void RenderIfsPicker() {
 
     static char filter_buf[128] = {};
     ImGui::SetNextItemWidth(-FLT_MIN);
-    ImGui::InputTextWithHint("##ifsfilter", "Filter by path...", filter_buf, sizeof(filter_buf));
+    ImGui::InputTextWithHint("##ifsfilter", "filter by path...", filter_buf, sizeof(filter_buf));
     std::string filter = filter_buf;
     for (auto& c : filter)
         c = (char)tolower((unsigned char)c);
@@ -219,395 +195,226 @@ void RenderIfsPicker() {
 
     IfsTreeNode const tree = BuildIfsTree(list);
     const bool tree_small = list.size() <= 20;
-    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 4.0F);
     for (const auto& c : tree.children) {
         RenderIfsTreeNode(state, c, active_path, filter, tree_small);
     }
+    ImGui::EndChild();
+}
+
+namespace {
+
+int g_main_view = 0;
+
+void ClampPaneWidths(float avail_w, float sw, float& left_w, float& right_w, float& center_w) {
+    left_w = std::max(left_w, Gui::kPaneLeftMin);
+    right_w = std::max(Gui::kPaneRightMin, right_w);
+    center_w = avail_w - left_w - right_w - (2.0F * sw);
+    if (center_w < Gui::kPaneCenterMin) {
+        float deficit = Gui::kPaneCenterMin - center_w;
+        const float room_r = right_w - Gui::kPaneRightMin;
+        const float take_r = room_r < deficit ? room_r : deficit;
+        if (take_r > 0.0F) {
+            right_w -= take_r;
+            deficit -= take_r;
+        }
+        if (deficit > 0.0F) {
+            const float room_l = left_w - Gui::kPaneLeftMin;
+            const float take_l = room_l < deficit ? room_l : deficit;
+            if (take_l > 0.0F) left_w -= take_l;
+        }
+        center_w = avail_w - left_w - right_w - (2.0F * sw);
+        center_w = std::max(center_w, 1.0F);
+    }
+}
+
+void RenderTopBar(const App::Status& status) {
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, ImGui::GetStyleColorVec4(ImGuiCol_PopupBg));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(14, 8));
+    ImGui::BeginChild("topbar", ImVec2(0, Gui::kTopBarH), 1, ImGuiWindowFlags_NoScrollbar);
+
+    ImGui::AlignTextToFramePadding();
+    Gui::PushHeaderFont();
+    ImGui::TextColored(ImGui::GetStyleColorVec4(ImGuiCol_CheckMark), "573Renderer");
+    ImGui::PopFont();
+
+    static std::vector<const Gui::PanelDesc*> tabs;
+    Gui::CollectActivePanels(Gui::PanelSlot::MainTab, tabs);
+    if (tabs.size() > 1) {
+        ImGui::SameLine(0.0F, 18.0F);
+        for (size_t i = 0; i < tabs.size(); i++) {
+            if (i > 0) ImGui::SameLine(0.0F, 2.0F);
+            const bool active = std::cmp_equal(i, g_main_view);
+            ImGui::PushStyleColor(
+                ImGuiCol_Button,
+                ImGui::GetStyleColorVec4(active ? ImGuiCol_HeaderActive : ImGuiCol_FrameBg));
+            if (ImGui::Button(tabs[i]->tab_label)) g_main_view = (int)i;
+            ImGui::PopStyleColor();
+        }
+    }
+    if (std::cmp_greater_equal(g_main_view, tabs.size())) g_main_view = 0;
+
+    ImGui::SameLine(0.0F, 18.0F);
+    Gui::PushMonoFont();
+    if (status.current_ifs_path.empty()) {
+        ImGui::TextDisabled("no IFS loaded");
+    } else {
+        ImGui::TextDisabled("%s", PrettifyPath(status.current_ifs_path).c_str());
+    }
+    ImGui::PopFont();
+
+    char fps_buf[24];
+    snprintf(fps_buf, sizeof(fps_buf), "%.1f fps", status.fps_measured);
+    float const fps_w = ImGui::CalcTextSize(fps_buf).x;
+    float const export_w = ImGui::CalcTextSize(ICON_EXPORT "  Export...").x + 22.0F;
+    ImGui::SameLine(ImGui::GetWindowWidth() - fps_w - export_w - 44.0F);
+    ImGui::BeginDisabled(!status.scene_loaded);
+    if (ImGui::Button(ICON_EXPORT "  Export...")) {
+        Export::RequestOpen();
+    }
+    ImGui::EndDisabled();
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("Export the playing animation to video / image (Ctrl+E).");
+    }
+    ImGui::SameLine(ImGui::GetWindowWidth() - fps_w - 18.0F);
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextColored(ImGui::GetStyleColorVec4(ImGuiCol_CheckMark), "%s", fps_buf);
+
+    ImGui::EndChild();
     ImGui::PopStyleVar();
-    ImGui::EndChild();
-}
-
-namespace {
-void DrawVariantBitmapCombo(App::IfsConfig& cfg, App::VariantSlot& slot) {
-    const bool is_default = (!slot.bitmap.empty() && slot.bitmap == slot.default_bitmap);
-    ImGui::SetNextItemWidth(-FLT_MIN);
-    const char* preview = slot.bitmap.empty() || is_default ? "(default)" : slot.bitmap.c_str();
-    if (!ImGui::BeginCombo("##bitmap", preview)) return;
-    if (ImGui::Selectable("(default)", slot.bitmap.empty() && !slot.bitmap_override)) {
-        slot.bitmap.clear();
-        slot.bitmap_override = false;
-        App::Global().PostCommand(AfpCmd::Wrap(AfpCmd::ForceReplay{}));
-    }
-    for (auto& b : cfg.bitmap_names) {
-        bool const selected = (!is_default && slot.bitmap == b);
-        if (ImGui::Selectable(b.c_str(), selected)) {
-            slot.bitmap = b;
-            slot.bitmap_override = true;
-        }
-        if (selected) ImGui::SetItemDefaultFocus();
-    }
-    ImGui::EndCombo();
-}
-
-void DrawVariantBitmapInput(App::VariantSlot& slot) {
-    char buf[128] = {};
-    size_t n = slot.bitmap.size();
-    if (n >= sizeof(buf)) n = sizeof(buf) - 1;
-    memcpy(buf, slot.bitmap.data(), n);
-    buf[n] = 0;
-    ImGui::SetNextItemWidth(-FLT_MIN);
-    if (ImGui::InputTextWithHint("##bitmap", "bitmap name (blank = IFS default)", buf,
-                                 sizeof(buf))) {
-        slot.bitmap = buf;
-        slot.bitmap_override = (buf[0] != '\0');
-    }
-}
-
-void RenderVariantSlot(App::IfsConfig& cfg, App::VariantSlot& slot) {
-    ImGui::PushID(slot.path.c_str());
-
-    ImVec4 const dot_color =
-        slot.is_valid ? ImVec4(0.50F, 0.85F, 0.50F, 1.0F) : ImVec4(0.70F, 0.70F, 0.70F, 0.5F);
-    ImGui::TextColored(dot_color, "%s", slot.is_valid ? "*" : "o");
-    ImGui::SameLine();
-    ImGui::Text("%s", slot.path.c_str());
-    if (!slot.is_valid) {
-        ImGui::SameLine();
-        ImGui::TextDisabled("(unresolved)");
-    }
-
-    ImGui::Indent(18.0F);
-    ImGui::Checkbox("Visible", &slot.visible);
-
-    if (!cfg.bitmap_names.empty()) {
-        DrawVariantBitmapCombo(cfg, slot);
-    } else {
-        DrawVariantBitmapInput(slot);
-    }
-    ImGui::Unindent(18.0F);
-    ImGui::Spacing();
-
-    ImGui::PopID();
-}
-}
-
-void RenderVariantEditor() {
-    auto& state = App::Global();
-    auto active = state.ActiveIfs();
-
-    ImGui::TextColored(ImVec4(0.92F, 0.92F, 0.93F, 1.00F), "Variants");
-    if (active.empty()) {
-        ImGui::SameLine();
-        ImGui::TextDisabled("(no IFS loaded)");
-        ImGui::Separator();
-        ImGui::Spacing();
-        ImGui::TextDisabled("Select an IFS on the left to configure its clip "
-                            "variants.");
-        return;
-    }
-
-    auto& cfg = state.MutConfig(active);
-    ImGui::SameLine();
-    ImGui::TextDisabled("(%zu slot%s)", cfg.slots.size(), cfg.slots.size() == 1 ? "" : "s");
-    ImGui::Separator();
-    ImGui::Spacing();
-
-    if (cfg.slots.empty()) {
-        ImGui::TextDisabled("No variant slots discovered yet.");
-        ImGui::Spacing();
-        ImGui::TextWrapped("Slots are probed from afplist.xml / texturelist.xml plus a "
-                           "list of common clip names. If nothing resolves, this IFS may "
-                           "not expose any named variant clips, or probing has not run yet "
-                           "(it completes once the animation reaches a frame that places "
-                           "them).");
-        return;
-    }
-
-    ImGui::BeginChild("variants_scroll", ImVec2(0, -64), 0);
-    for (auto& slot : cfg.slots)
-        RenderVariantSlot(cfg, slot);
-    ImGui::EndChild();
-}
-
-void RenderAddSlotForm() {
-    auto& state = App::Global();
-    auto active = state.ActiveIfs();
-    if (active.empty()) return;
-
-    ImGui::Separator();
-    ImGui::TextDisabled("Add slot by clip path:");
-    auto& cfg = state.MutConfig(active);
-    static char buf[128] = {};
-    ImGui::SetNextItemWidth(-120.0F);
-    ImGui::InputTextWithHint("##new_slot", "e.g. coin", buf, sizeof(buf));
-    ImGui::SameLine();
-    if (ImGui::Button("Add", ImVec2(-FLT_MIN, 0))) {
-        if (buf[0] != 0) {
-            bool exists = false;
-            for (auto& s : cfg.slots) {
-                if (s.path == buf) {
-                    exists = true;
-                    break;
-                }
-            }
-            if (!exists) {
-                App::VariantSlot s;
-                s.path = buf;
-                s.default_bitmap = buf;
-                s.visible = true;
-                s.is_valid = false;
-                cfg.slots.push_back(std::move(s));
-            }
-            buf[0] = 0;
-        }
-    }
-}
-
-namespace {
-
-void DrawLoopMasterControls() {
-    bool loop = App::Global().GetLoopMaster();
-    if (ImGui::Checkbox("Loop master animation", &loop)) {
-        App::Global().SetLoopMaster(loop);
-        App::SaveCurrentSettings();
-    }
-    if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("When the master animation reaches the end of\n"
-                          "its timeline, re-play it from frame 0. Useful\n"
-                          "for short title clips that otherwise freeze\n"
-                          "on their last authored frame.");
-    }
-
-    auto mode = App::Global().GetRootLoopMode();
-    int idx = (mode == App::State::RootLoopMode::Force) ? 1 : 0;
-    const char* kItems[2] = {"Auto-hold (default)", "Force loop"};
-    ImGui::TextUnformatted("Loop root:");
-    ImGui::SameLine();
-    ImGui::SetNextItemWidth(180.0F);
-    if (ImGui::Combo("##root_loop", &idx, kItems, 2)) {
-        App::Global().SetRootLoopMode(idx == 1 ? App::State::RootLoopMode::Force
-                                               : App::State::RootLoopMode::Hold);
-        App::SaveCurrentSettings();
-    }
-    if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("How a scene-BG root that reaches its end is driven.\n"
-                          "Auto-hold (game default): mount once, let the root\n"
-                          "  play once and HOLD while nested children keep running -\n"
-                          "  e.g. select_bg_o_dimension_6th's o_kazari5 ornament\n"
-                          "  rotates its full timeline instead of snapping back every\n"
-                          "  140-frame root cycle.\n"
-                          "Force loop: re-drive the root to frame 0 each cycle\n"
-                          "  (ForceReplay + the continuous-loop flag sequence). Needed\n"
-                          "  for one-shot masters (bg_common) that only loop this way,\n"
-                          "  or to deliberately force-loop the whole clip.\n\n"
-                          "Applies to the live preview now and to the next non-label\n"
-                          "export. Persisted across restarts.");
-    }
-}
-
-void DrawMasterScaleControls() {
-    float scale = App::Global().GetMasterScale();
-    ImGui::SetNextItemWidth(180.0F);
-    if (ImGui::SliderFloat("Master scale", &scale, 0.25F, 4.0F, "%.2fx")) {
-        App::Global().SetMasterScale(scale);
-        App::SaveCurrentSettings();
-    }
-    ImGui::SameLine();
-    if (ImGui::SmallButton("1.0x##scale_reset")) {
-        App::Global().SetMasterScale(1.0F);
-        App::SaveCurrentSettings();
-    }
-    ImGui::SameLine();
-    if (ImGui::SmallButton("1.5x##scale_sdvx_old")) {
-        App::Global().SetMasterScale(1.5F);
-        App::SaveCurrentSettings();
-    }
-    if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("Multiplies the master stream's transform matrix by the\n"
-                          "given factor. Default 1.0x.\n\n"
-                          "1.5x preview matches what SDVX 7's BG dispatcher applies to\n"
-                          "SDVX-I-through-IV-era 720x1280 select_bg variants on a\n"
-                          "1080x1920 game.");
-    }
-}
-
-void DrawLayerList(App::State& state, const App::IfsConfig& cfg) {
-    std::string const playing = state.GetStatus().playing_animation;
-
-    ImGui::BeginChild("layer_scroll", ImVec2(0, 200.0F), 1);
-    for (const auto& name : cfg.anim_names) {
-        bool const is_playing = (name == playing);
-        if (is_playing) {
-            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.50F, 0.92F, 0.65F, 1.0F));
-        }
-        if (ImGui::Selectable(name.c_str(), is_playing, ImGuiSelectableFlags_SpanAllColumns)) {
-            state.PostCommand(AfpCmd::Wrap(AfpCmd::SwitchAnimation{.name = name, .label = ""}));
-        }
-        if (is_playing) ImGui::PopStyleColor();
-    }
-    ImGui::EndChild();
-}
-
-}
-
-namespace {
-
-bool DrawLayersPanelPreamble(App::State& state, std::string& active) {
-    active = state.ActiveIfs();
-    if (active.empty()) {
-        ImGui::TextDisabled("Select an IFS to list its layers.");
-        return false;
-    }
-    if (state.MutConfig(active).anim_names.empty()) {
-        ImGui::TextDisabled("No layers listed in afplist.xml.");
-        return false;
-    }
-    return true;
-}
-
-}
-
-void RenderLayersPanel() {
-    auto& state = App::Global();
-    std::string active;
-    if (!DrawLayersPanelPreamble(state, active)) return;
-
-    DrawLoopMasterControls();
-    DrawMasterScaleControls();
-
-    ImGui::Spacing();
-    ImGui::TextDisabled("(click to play / replay)");
-    DrawLayerList(state, state.MutConfig(active));
-}
-
-void RenderLayersListOnly() {
-    auto& state = App::Global();
-    std::string active;
-    if (!DrawLayersPanelPreamble(state, active)) return;
-
-    ImGui::Spacing();
-    ImGui::TextDisabled("(click to play / replay)");
-    DrawLayerList(state, state.MutConfig(active));
-}
-
-namespace {
-
-void DrawIfsSummaryCard(const App::IfsConfig& cfg) {
-    ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.14F, 0.15F, 0.18F, 1.0F));
-    ImGui::BeginChild("ifs_summary", ImVec2(0, 78), 1, ImGuiWindowFlags_NoScrollbar);
-    if (ImGui::BeginTable("summary_tbl", 3, ImGuiTableFlags_SizingStretchSame)) {
-        ImGui::TableNextRow();
-        ImGui::TableSetColumnIndex(0);
-        ImGui::TextDisabled("Layers");
-        ImGui::TextColored(ImVec4(0.80F, 0.90F, 1.0F, 1.0F), "%zu", cfg.anim_names.size());
-
-        ImGui::TableSetColumnIndex(1);
-        ImGui::TextDisabled("Bitmaps");
-        ImGui::TextColored(ImVec4(0.80F, 0.90F, 1.0F, 1.0F), "%zu", cfg.bitmap_names.size());
-
-        ImGui::TableSetColumnIndex(2);
-        ImGui::TextDisabled("Variant slots");
-        ImGui::TextColored(ImVec4(0.80F, 0.90F, 1.0F, 1.0F), "%zu", cfg.slots.size());
-        ImGui::EndTable();
-    }
-    ImGui::EndChild();
     ImGui::PopStyleColor();
 }
 
-const char* CompanionLocaleName(const std::string& sfx) {
-    if (sfx == "_j") return "Japanese";
-    if (sfx == "_a") return "Asian";
-    if (sfx == "_k") return "Korean";
-    return "Other";
-}
-
-void DrawCompanionRow(App::State& state, const App::CompanionIfs& c, size_t i, int loaded_idx) {
-    const char* action_hint = nullptr;
-    if (c.loaded) {
-        action_hint = "   (active - click to clear)";
-    } else if (loaded_idx >= 0) {
-        action_hint = "   (click to switch)";
-    } else {
-        action_hint = "   (click to load)";
-    }
-
-    char label[256];
-    snprintf(label, sizeof(label), "[%s]  %s%s", CompanionLocaleName(c.suffix),
-             c.display_name.c_str(), action_hint);
-
-    ImVec4 const text_col =
-        c.loaded ? ImVec4(0.80F, 0.95F, 0.85F, 1.0F) : ImVec4(0.72F, 0.74F, 0.78F, 0.95F);
-    ImGui::PushStyleColor(ImGuiCol_Text, text_col);
-    ImGui::PushID((int)i);
-    if (ImGui::Selectable(label, c.loaded)) {
-        state.PostCommand(AfpCmd::Wrap(AfpCmd::ToggleCompanion{.index = (int)i}));
-    }
-    ImGui::PopID();
-    ImGui::PopStyleColor();
-}
-
-void DrawLocaleOverlayCard(App::State& state, const App::IfsConfig& cfg) {
-    int loaded_idx = -1;
-    for (size_t i = 0; i < cfg.companions.size(); i++) {
-        if (cfg.companions[i].loaded) {
-            loaded_idx = (int)i;
-            break;
-        }
-    }
-
-    ImGui::Text("Locale overlay");
-    ImGui::SameLine();
-    if (loaded_idx >= 0) {
-        ImGui::TextDisabled("(%s active - click again to clear)",
-                            cfg.companions[loaded_idx].display_name.c_str());
-    } else {
-        ImGui::TextDisabled("(%zu available - click one to overlay)", cfg.companions.size());
-    }
-    ImGui::Separator();
-
-    ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.14F, 0.15F, 0.18F, 1.0F));
-    float const row_h = ImGui::GetTextLineHeightWithSpacing() + 2.0F;
-    auto rows = (float)cfg.companions.size();
-    float const box_h = ((rows < 6.0F ? rows : 6.0F) * row_h) + 12.0F;
-    ImGui::BeginChild("companions_card", ImVec2(0, box_h), 1, 0);
-    for (size_t i = 0; i < cfg.companions.size(); i++)
-        DrawCompanionRow(state, cfg.companions[i], i, loaded_idx);
-    ImGui::EndChild();
-    ImGui::PopStyleColor();
-    ImGui::Spacing();
-}
-
-}
-
-void RenderIfsInfoPane() {
-    auto& state = App::Global();
-    auto active = state.ActiveIfs();
-
-    ImGui::TextColored(ImVec4(0.92F, 0.92F, 0.93F, 1.00F), "IFS Info");
-    if (active.empty()) {
-        ImGui::SameLine();
-        ImGui::TextDisabled("(no selection)");
-        ImGui::Separator();
-        ImGui::Spacing();
-        ImGui::TextWrapped("Select an IFS file from the tree on the left "
-                           "to see its atlases, bitmaps, and available "
-                           "animations.");
+void DrawExportStatusTag(App::State& state) {
+    App::ExportState const ex = state.GetExport();
+    const char* label = nullptr;
+    ImVec4 color{};
+    char buf[64];
+    switch (ex.phase) {
+    case App::ExportPhase::Capturing:
+        snprintf(buf, sizeof(buf), "capturing %d%s", ex.frames_captured,
+                 ex.using_hardware ? " [NVENC]" : "");
+        label = buf;
+        color = ImVec4(1.0F, 0.85F, 0.3F, 1.0F);
+        break;
+    case App::ExportPhase::Encoding:
+        snprintf(buf, sizeof(buf), "encoding %d frames...", ex.frames_captured);
+        label = buf;
+        color = ImVec4(1.0F, 0.85F, 0.3F, 1.0F);
+        break;
+    case App::ExportPhase::Done:
+        label = "export done";
+        color = ImVec4(0.50F, 0.92F, 0.65F, 1.0F);
+        break;
+    case App::ExportPhase::Failed:
+        label = "export failed";
+        color = ImVec4(1.0F, 0.45F, 0.45F, 1.0F);
+        break;
+    case App::ExportPhase::Idle:
         return;
     }
 
-    auto& cfg = state.MutConfig(active);
-    ImGui::SameLine();
-    ImGui::TextDisabled("%s", active.c_str());
-    ImGui::Separator();
-    ImGui::Spacing();
+    ImGui::SameLine(0.0F, 14.0F);
+    ImGui::PushStyleColor(ImGuiCol_Text, color);
+    if (ImGui::SmallButton(label)) Export::RequestOpen();
+    ImGui::PopStyleColor();
+    if (ImGui::IsItemHovered()) {
+        if (ex.phase == App::ExportPhase::Done) {
+            ImGui::SetTooltip("%s\nClick to open the export dialog.", ex.output_path.c_str());
+        } else if (ex.phase == App::ExportPhase::Failed) {
+            ImGui::SetTooltip("%s\nClick to open the export dialog.", ex.error.c_str());
+        } else {
+            ImGui::SetTooltip("Click to open the export dialog.");
+        }
+    }
+}
 
-    DrawIfsSummaryCard(cfg);
-    ImGui::Spacing();
+void RenderStatusStripImpl(const App::Status& status) {
+    auto& state = App::Global();
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, ImGui::GetStyleColorVec4(ImGuiCol_TitleBg));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(14, 4));
+    ImGui::BeginChild("status_strip", ImVec2(0, Gui::kStatusStripH), 0,
+                      ImGuiWindowFlags_NoScrollbar);
 
-    if (!cfg.companions.empty()) DrawLocaleOverlayCard(state, cfg);
+    Gui::PushMonoFont();
 
-    ImGui::Spacing();
-    Panels::Export::RenderPanel();
+    const GameProfile::Profile* profile = GameProfile::BySlug(state.GetGameProfileSlug());
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextDisabled("%s", profile != nullptr ? profile->name : "no profile");
+
+    int rw = 0;
+    int rh = 0;
+    state.GetRenderSize(rw, rh);
+    ImGui::SameLine(0.0F, 14.0F);
+    ImGui::TextDisabled("%dx%d", rw, rh);
+
+    ImGui::SameLine(0.0F, 14.0F);
+    if (status.last_error.empty()) {
+        ImGui::TextColored(ImVec4(0.50F, 0.92F, 0.65F, 1.0F), "render ok");
+    } else {
+        ImGui::TextColored(ImVec4(1.0F, 0.45F, 0.45F, 1.0F), "%s",
+                           PrettifyPath(status.last_error, 60).c_str());
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", status.last_error.c_str());
+    }
+
+    DrawExportStatusTag(state);
+
+    auto live = state.GetLiveState();
+    if (live.have_file_info) {
+        char ver[32];
+        snprintf(ver, sizeof(ver), "afp %u.%u.%u", (live.afp_ver >> 16) & 0xFFFF,
+                 (live.afp_ver >> 8) & 0xFF, live.afp_ver & 0xFF);
+        ImGui::SameLine(ImGui::GetWindowWidth() - ImGui::CalcTextSize(ver).x - 18.0F);
+        ImGui::TextDisabled("%s", ver);
+    }
+
+    ImGui::PopFont();
+    ImGui::EndChild();
+    ImGui::PopStyleVar();
+    ImGui::PopStyleColor();
+}
+
+}
+
+void RenderRendererView() {
+    static float left_w = Gui::kPaneLeftDefault;
+    static float right_w = Gui::kPaneRightDefault;
+
+    const float avail_w = ImGui::GetContentRegionAvail().x;
+    const float row_h =
+        ImGui::GetContentRegionAvail().y - Gui::kTimelineH - ImGui::GetStyle().ItemSpacing.y;
+    const float sw = Gui::kSplitterW;
+
+    float center_w = 0.0F;
+    ClampPaneWidths(avail_w, sw, left_w, right_w, center_w);
+
+    ImGui::BeginChild("pane_left", ImVec2(left_w, row_h), 0);
+    RenderIfsPicker();
+    ImGui::EndChild();
+
+    ImGui::SameLine(0.0F, 0.0F);
+    {
+        float c = center_w;
+        Gui::VSplitter("##split_l", sw, row_h, &left_w, &c, Gui::kPaneLeftMin, Gui::kPaneCenterMin);
+    }
+    ImGui::SameLine(0.0F, 0.0F);
+
+    ImGui::BeginChild("pane_center", ImVec2(center_w, row_h), 0);
+    RenderScenePane();
+    ImGui::EndChild();
+
+    ImGui::SameLine(0.0F, 0.0F);
+    {
+        float c = center_w;
+        Gui::VSplitter("##split_r", sw, row_h, &c, &right_w, Gui::kPaneCenterMin,
+                       Gui::kPaneRightMin);
+    }
+    ImGui::SameLine(0.0F, 0.0F);
+
+    ImGui::BeginChild("pane_right", ImVec2(right_w, row_h), 0);
+    RenderInspectorPane();
+    ImGui::EndChild();
+
+    RenderTimelineDock();
 }
 
 namespace {
@@ -617,6 +424,7 @@ void RenderReadyView() {
     ImGuiViewport* vp = ImGui::GetMainViewport();
     ImGui::SetNextWindowPos(vp->WorkPos);
     ImGui::SetNextWindowSize(vp->WorkSize);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(10, 8));
     ImGui::Begin("##main", nullptr,
                  ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
                      ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoBringToFrontOnFocus);
@@ -624,25 +432,28 @@ void RenderReadyView() {
     RenderTopBar(status);
     ImGui::Spacing();
 
-    ImGuiTabBarFlags const tab_flags =
-        ImGuiTabBarFlags_FittingPolicyResizeDown | ImGuiTabBarFlags_NoCloseWithMiddleMouseButton;
-    if (ImGui::BeginTabBar("##main_tabs", tab_flags)) {
-        static std::vector<const Gui::PanelDesc*> tabs;
-        Gui::CollectActivePanels(Gui::PanelSlot::MainTab, tabs);
-        for (const auto* tab : tabs) {
-            if (ImGui::BeginTabItem(tab->tab_label)) {
-                tab->draw();
-                ImGui::EndTabItem();
-            }
-        }
-        ImGui::EndTabBar();
+    static std::vector<const Gui::PanelDesc*> tabs;
+    Gui::CollectActivePanels(Gui::PanelSlot::MainTab, tabs);
+    if (!tabs.empty()) {
+        int const view = std::clamp(g_main_view, 0, (int)tabs.size() - 1);
+        const float content_h =
+            ImGui::GetContentRegionAvail().y - Gui::kStatusStripH - ImGui::GetStyle().ItemSpacing.y;
+        ImGui::BeginChild("main_view", ImVec2(0, content_h), 0);
+        tabs[(size_t)view]->draw();
+        ImGui::EndChild();
     }
 
+    RenderStatusStripImpl(status);
+    Export::RenderModal();
+
     ImGui::End();
+    ImGui::PopStyleVar();
 }
 }
 
 void Build() {
+    Gui::ApplyAccentForProfile(App::Global().GetGameProfileSlug());
+
     App::BootState const bs = App::Global().GetBootState();
     auto progress = App::Global().GetLoadProgress();
 

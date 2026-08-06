@@ -528,11 +528,12 @@ These are the engine-behaviour facts encoded in the header comments:
 - **Companions**: IIDX locale companions (`<base>_{j,a,k}.ifs`) share
   bitmap NAMES with the base (title.ifs::coin vs title_j.ifs::coin - same
   name, different pixels); AFPU's lookup is last-loaded-wins, so a freshly
-  loaded companion package overlays the base's textures. That is also why
-  the GUI enforces EXCLUSIVE companion selection - keeping two loaded buys
-  nothing. Unload cascade: `afpu_package_control(6)` + `avs_fs_umount` of
-  the per-companion mountpoint (`/afp_companion_N`, monotonic counter so
-  two companions never collide even after an unload).
+  loaded companion package overlays the base's textures. Unload cascade:
+  `afpu_package_control(6)` + `avs_fs_umount` of the per-companion
+  mountpoint (`/afp_companion_N`, monotonic counter so two companions never
+  collide even after an unload). The renderer's locale-overlay UI that used
+  this per-locale was REMOVED; `AfpManager::LoadCompanion` survives as the
+  generic co-present package loader for the qpro pipeline (docs/qpro.md).
 - **DestroyCurrentStream**: afp_stream_destroy type-5 cascades the whole
   master tree including every child clip attached via
   `afp_mc_attach_stream`. The composite extractor must call this BEFORE

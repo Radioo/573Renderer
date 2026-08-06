@@ -47,10 +47,6 @@ void DdrRuntime::ForceReplayMaster() {
     LOG("Main", "force_replay ignored: DDR backend has no modern master stream");
 }
 
-void DdrRuntime::ToggleCompanion([[maybe_unused]] int companion_index) {
-    LOG("Main", "toggle_companion ignored: DDR backend has no companion IFSes");
-}
-
 bool DdrRuntime::LoadScene(const std::string& mount_path, const std::string& ifs_path) {
     auto& state = App::Global();
     if (g_avs.avs_fs_umount != nullptr) {

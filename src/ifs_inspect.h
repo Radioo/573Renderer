@@ -19,8 +19,6 @@ struct AtlasFilter {
 std::vector<AtlasFilter> ReadAtlasFilters(const AvsFuncs& avs,
                                           const char* mount_root = "/afp/packages");
 
-std::vector<App::CompanionIfs> FindCompanions(const std::string& base_ifs_path);
-
 void ProbeSlots(const AfpFuncs& afp, uint32_t stream_id, App::IfsConfig& cfg);
 
 }

@@ -167,12 +167,13 @@ zero raw `g_afp` calls:
   0x1003/0x101E, cache keyed on (stream, scale).
 - `ApplyVariantSlots` / `ApplySublayerOverrides`: the per-frame re-apply
   passes (moved out of boot.cpp; see docs/boot_and_render_loop.md 4.4).
-- `ForceReplayMaster()` / `ToggleCompanion(index)`: the request handlers that
-  previously hard-wired AfpManager in render_loop_requests.cpp.
+- `ForceReplayMaster()`: the request handler that previously hard-wired
+  AfpManager in render_loop_requests.cpp. (`ToggleCompanion` was removed
+  along with the locale-overlay feature.)
 
 Every DDR override of these is a no-op equal to the old implicit behavior
 (sentinel self-skip or null-fn-pointer skip on the unresolved DDR `g_afp`
-table, or an empty slots/companions vector).
+table, or an empty slots vector).
 
 File layout: `game_runtime.h` (interface) + `game_runtime_internal.h` (the
 two class declarations + ModernRuntime's latch/cache members) +

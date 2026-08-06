@@ -93,56 +93,6 @@ void LogAfpuWorldMatOnce() {
     }
 }
 
-void UnloadAllCompanions(App::IfsConfig& cfg) {
-    for (auto& c : cfg.companions) {
-        if (c.loaded) {
-            LOG("Main",
-                "toggle_companion: unload '%s' "
-                "(pkg_id=0x%08x)",
-                c.display_name.c_str(), c.pkg_id);
-            AfpManager::UnloadCompanion(g_engine, c.pkg_id);
-            c.pkg_id = 0;
-            c.loaded = false;
-        }
-    }
-}
-
-void LoadCompanionAt(App::IfsConfig& cfg, int idx) {
-    auto& c = cfg.companions[idx];
-    std::string pkg_name;
-    {
-        namespace fs = std::filesystem;
-        pkg_name = fs::path(c.path).stem().string();
-    }
-    LOG("Main",
-        "toggle_companion: load '%s' "
-        "(pkg_name='%s')",
-        c.display_name.c_str(), pkg_name.c_str());
-    uint32_t const pkg = AfpManager::LoadCompanion(g_engine, c.path, pkg_name);
-    if (pkg != 0U) {
-        c.pkg_id = pkg;
-        c.loaded = true;
-    } else {
-        App::Status st = App::Global().GetStatus();
-        st.last_error = "Failed to load companion " + c.display_name;
-        App::Global().SetStatus(st);
-    }
-}
-
-void ReplayMasterForBindings() {
-    std::string const& anim = AfpManager::AnimName();
-    if (anim.empty()) return;
-    LOG("Main",
-        "toggle_companion: replay master "
-        "'%s' so new bindings resolve",
-        anim.c_str());
-    AfpManager::ForceReplay(g_engine);
-    App::Status st = App::Global().GetStatus();
-    st.stream_id = AfpManager::StreamId();
-    st.playing_animation = AfpManager::AnimName();
-    App::Global().SetStatus(st);
-}
-
 }
 
 bool ModernRuntime::IsBooted() {
@@ -256,31 +206,6 @@ void ModernRuntime::ForceReplayMaster() {
     }
 }
 
-void ModernRuntime::ToggleCompanion(int companion_index) {
-    auto active = App::Global().ActiveIfs();
-    if (active.empty()) {
-        LOG("Main", "toggle_companion: no active IFS, ignoring");
-        return;
-    }
-    auto& cfg = App::Global().MutConfig(active);
-    if (companion_index < 0 || std::cmp_greater_equal(companion_index, cfg.companions.size())) {
-        LOG("Main",
-            "toggle_companion: index %d out of "
-            "range (size=%zu)",
-            companion_index, cfg.companions.size());
-        return;
-    }
-    bool const will_load = !cfg.companions[companion_index].loaded;
-
-    App::Global().BeginLoad(cfg.companions[companion_index].display_name);
-    App::Global().UpdateLoadStage(will_load ? "Loading companion IFS" : "Unloading companion");
-
-    UnloadAllCompanions(cfg);
-    if (will_load) LoadCompanionAt(cfg, companion_index);
-    ReplayMasterForBindings();
-    App::Global().EndLoad();
-}
-
 bool ModernRuntime::LoadScene(const std::string& mount_path, const std::string& ifs_path) {
     auto& state = App::Global();
     state.UpdateLoadStage("Mounting IFS");
@@ -311,12 +236,6 @@ bool ModernRuntime::LoadScene(const std::string& mount_path, const std::string& 
     state.UpdateLoadStage("Inspecting IFS dictionary");
     auto& cfg = App::Global().MutConfig(basename);
     IfsInspect::LoadDictionary(g_avs, cfg);
-
-    cfg.companions = IfsInspect::FindCompanions(ifs_path);
-    if (!cfg.companions.empty()) {
-        LOG("Inspect", "IFS '%s': %zu locale companion(s) found next to base", cfg.filename.c_str(),
-            cfg.companions.size());
-    }
 
     state.SetActiveIfs(basename);
     PublishSceneStatus(state, ifs_path, mount_path);

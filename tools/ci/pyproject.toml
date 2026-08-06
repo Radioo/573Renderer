@@ -4,6 +4,5 @@ version = "0.1.0"
 requires-python = ">=3.12"
 dependencies = [
     "clang-format==19.1.7",
-    "libclang==18.1.1",
     "clang-tidy==21.1.6",
 ]

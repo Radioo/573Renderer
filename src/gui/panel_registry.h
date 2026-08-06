@@ -6,7 +6,7 @@ namespace Gui {
 
 enum class PanelSlot : int {
     MainTab,
-    RightStack,
+    InspectorTab,
 };
 
 struct PanelDesc {

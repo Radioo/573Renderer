@@ -61,7 +61,6 @@ AFP commands (`AfpCmd::Any`):
   0xF08`), pauses on seek; IGNORED while an export captures so a backward
   seek cannot corrupt the loop-wrap counter. `SetPaused{paused}`: stream
   speed 0/1; ignored while exporting.
-- `ToggleCompanion{index}`: invalid indexes silently ignored.
 - `ForceReplay`: destroy + replay the master. Exists because
   afp_play_work_load_bitmap has no "unset" - the only way to revert a slot
   to its authored bitmap is a full re-author; other slots with a latched
@@ -72,7 +71,7 @@ AFP commands (`AfpCmd::Any`):
   game, default on); `QproStartScan` reads bm2dx.dll's part arrays for the
   selection list.
 
-## VariantSlot / CompanionIfs / IfsConfig
+## VariantSlot / IfsConfig
 
 - `VariantSlot.bitmap` = name actively applied (empty = leave unchanged);
   `default_bitmap` = restore target for "(default)", populated at
@@ -80,12 +79,11 @@ AFP commands (`AfpCmd::Any`):
   name for title.ifs-style slots); `bitmap_override` LATCHES on first user
   pick because there is no unset path - once touched, keep re-writing every
   frame to beat PlaceObject re-application from the timeline.
-- `CompanionIfs`: IIDX locale convention `<base>_j/_a/_k.ifs`. bm2dx keys a
-  static per-scene table with these paths (the per-scene locale-path table
-  function); the renderer infers them from the naming rule
-  instead - deterministic for
-  every shipping IFS observed. `pkg_id` is the AFPU package id while
-  mounted (needed for UnloadCompanion).
+- The former `CompanionIfs` locale-overlay struct (`<base>_j/_a/_k.ifs`
+  inferred by naming rule, exclusive GUI selection) was removed with the
+  locale-overlay feature; the engine-level companion-package machinery it
+  used lives on for qpro (docs/qpro.md). The bm2dx engine fact survives in
+  docs/boot_and_render_loop.md "Companions".
 - `IfsConfig.sublayer_overrides` is distinct from `slots`: slots come from
   ProbeSlots (afplist + bitmap names + a Konami name list); sublayer
   overrides come from live child enumeration (recursive "parent/child"

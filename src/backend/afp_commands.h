@@ -26,10 +26,6 @@ struct SetPaused {
     bool paused = false;
 };
 
-struct ToggleCompanion {
-    int index = -1;
-};
-
 struct ForceReplay {};
 
 struct QproStartScan {};
@@ -42,8 +38,8 @@ struct QproStartExtract {
     bool hue_scope = true;
 };
 
-using Any = std::variant<SwitchAnimation, GotoLabel, SeekFrame, SetPaused, ToggleCompanion,
-                         ForceReplay, QproStartScan, QproStartExtract>;
+using Any = std::variant<SwitchAnimation, GotoLabel, SeekFrame, SetPaused, ForceReplay,
+                         QproStartScan, QproStartExtract>;
 
 inline App::Command Wrap(Any cmd) {
     return App::Cmd::BackendCommand{.payload = std::move(cmd)};

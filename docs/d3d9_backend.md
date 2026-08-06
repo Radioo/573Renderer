@@ -922,7 +922,11 @@ the bm2dx scene-teardown path):
   on the white fallback - visible but unambiguous, never the previous
   IFS's content.
 
-### Companions (locale overlay IFSes)
+### Companions (co-present overlay packages)
+
+The locale-overlay feature (GUI-selectable `<base>_{j,a,k}.ifs`) was
+removed; this machinery (`AfpManager::LoadCompanion` and friends) remains
+in use by the qpro pipeline, which loads several packages co-present.
 
 - Mount sequence mirrors LoadBootIfses: MountFsRoot for the companion's
   parent dir under a private VFS alias, MountIfsImage, afpu_ngp_read_local,

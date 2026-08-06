@@ -49,8 +49,6 @@ public:
 
     virtual void ForceReplayMaster() = 0;
 
-    virtual void ToggleCompanion(int companion_index) = 0;
-
     virtual bool LoadScene(const std::string& mount_path, const std::string& ifs_path) = 0;
 
     virtual void UnloadScene() = 0;

@@ -74,7 +74,7 @@ void DrawFilenameAndFormat() {
     ImGui::TextDisabled("%s", shown_ext);
 
     ImGui::SetNextItemWidth(-FLT_MIN);
-    if (ImGui::BeginCombo("format##exp_fmt", MediaSink::FormatLabel(current_format))) {
+    if (ImGui::BeginCombo("##exp_fmt", MediaSink::FormatLabel(current_format))) {
         for (int i = 0; i < MediaSink::kFormatCount; i++) {
             MediaSink::Format const f = MediaSink::FromIndex(i);
             bool const selected = (i == g_format_idx);
@@ -122,7 +122,7 @@ void DrawFpsQualitySliders() {
     }
     ImGui::SameLine();
     ImGui::SetNextItemWidth(-FLT_MIN);
-    ImGui::SliderInt("quality##exp_q", &g_quality, 0, 100, "quality %d");
+    ImGui::SliderInt("##exp_q", &g_quality, 0, 100, "quality %d");
     if (ImGui::IsItemHovered()) {
         ImGui::SetTooltip("Output quality. 0 = smallest file with strong\n"
                           "artifacts, 100 = near lossless. Default 60.\n"
@@ -216,13 +216,6 @@ void DrawLoopControls() {
                               "seam mismatch. 0 = no crossfade (hard cut at the best frame).");
         }
     }
-}
-
-void DrawFpsQualityFrameCap(MediaSink::Format current_format) {
-    DrawFpsQualitySliders();
-    DrawKeyframeIntervalControl(current_format);
-    DrawFrameLimitControls();
-    DrawLoopControls();
 }
 
 struct ResPreset {
@@ -378,7 +371,39 @@ void DrawOutputResolution(App::State& state) {
     DrawScaleButtons(w_disp, h_disp);
 }
 
-void DrawCrop(App::State& state) {
+bool DrawCropPickButtons(App::State& state, bool pick_mode, int* xywh, bool& changed) {
+    bool close_for_pick = false;
+    if (pick_mode) {
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.65F, 0.45F, 0.15F, 1.0F));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.75F, 0.55F, 0.22F, 1.0F));
+        if (ImGui::Button("Picking...##crop_pick", ImVec2(110, 0))) {
+            state.SetCropPickMode(false);
+        }
+        ImGui::PopStyleColor(2);
+    } else {
+        if (ImGui::Button("Pick region##crop_pick", ImVec2(110, 0))) {
+            state.SetCropPickMode(true);
+            close_for_pick = true;
+        }
+    }
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("Click to arm crop-selection mode, then\n"
+                          "click-and-drag on the render window to\n"
+                          "draw a rectangle. Esc cancels. This dialog\n"
+                          "reopens once the region is picked; the export\n"
+                          "will encode only pixels inside the rect.");
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Clear##crop_clear", ImVec2(70, 0))) {
+        state.SetCropRect({});
+        state.SetCropPickMode(false);
+        xywh[0] = xywh[1] = xywh[2] = xywh[3] = 0;
+        changed = true;
+    }
+    return close_for_pick;
+}
+
+bool DrawCrop(App::State& state) {
     App::CropRect const rect = state.GetCropRect();
     int xywh[4] = {rect.x, rect.y, rect.w, rect.h};
     const bool pick_mode = state.GetCropPickMode();
@@ -401,31 +426,7 @@ void DrawCrop(App::State& state) {
         if (i < 3) ImGui::SameLine();
     }
 
-    if (pick_mode) {
-        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.65F, 0.45F, 0.15F, 1.0F));
-        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.75F, 0.55F, 0.22F, 1.0F));
-        if (ImGui::Button("Picking...##crop_pick", ImVec2(110, 0))) {
-            state.SetCropPickMode(false);
-        }
-        ImGui::PopStyleColor(2);
-    } else {
-        if (ImGui::Button("Pick region##crop_pick", ImVec2(110, 0))) {
-            state.SetCropPickMode(true);
-        }
-    }
-    if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("Click to arm crop-selection mode, then\n"
-                          "click-and-drag on the render window to\n"
-                          "draw a rectangle. Esc cancels. The export\n"
-                          "will encode only pixels inside the rect.");
-    }
-    ImGui::SameLine();
-    if (ImGui::Button("Clear##crop_clear", ImVec2(70, 0))) {
-        state.SetCropRect({});
-        state.SetCropPickMode(false);
-        xywh[0] = xywh[1] = xywh[2] = xywh[3] = 0;
-        changed = true;
-    }
+    bool const close_for_pick = DrawCropPickButtons(state, pick_mode, xywh, changed);
 
     if (changed) {
         App::CropRect r;
@@ -435,6 +436,7 @@ void DrawCrop(App::State& state) {
         r.h = (std::max)(0, xywh[3]);
         state.SetCropRect(r);
     }
+    return close_for_pick;
 }
 
 void DrawHwAccelTooltip(MediaSink::Format current_format, bool hw_available, bool is_h264) {
@@ -547,12 +549,18 @@ void DrawStartAndStatus(App::State& state, const App::ExportState& ex, bool busy
                                             current_format == MediaSink::Format::MP4_H264);
             const bool hw_applies = hw_available && format_can_use_hw;
             PostStartRequest(state, current_format, hw_applies);
+            ImGui::CloseCurrentPopup();
         }
     } else {
         if (ImGui::Button("Cancel", ImVec2(120, 0))) {
             state.PostCommand(App::Cmd::CancelExport{});
         }
     }
+    ImGui::SameLine();
+    if (ImGui::Button("Close", ImVec2(90, 0))) {
+        ImGui::CloseCurrentPopup();
+    }
+    ImGui::SameLine();
 
     switch (ex.phase) {
     case App::ExportPhase::Idle:
@@ -582,16 +590,35 @@ void DrawStartAndStatus(App::State& state, const App::ExportState& ex, bool busy
     }
 }
 
+bool g_open_requested = false;
+bool g_reopen_after_pick = false;
+
 }
 
-void RenderPanel() {
+void RequestOpen() {
+    g_open_requested = true;
+}
+
+void RenderModal() {
     auto& state = App::Global();
+
+    if (g_reopen_after_pick && !state.GetCropPickMode()) {
+        g_reopen_after_pick = false;
+        g_open_requested = true;
+    }
+    if (g_open_requested) {
+        ImGui::OpenPopup("Export");
+        g_open_requested = false;
+    }
+
+    ImGuiViewport* vp = ImGui::GetMainViewport();
+    ImGui::SetNextWindowPos(vp->GetCenter(), ImGuiCond_Always, ImVec2(0.5F, 0.5F));
+    ImGui::SetNextWindowSizeConstraints(ImVec2(620, 0), ImVec2(620, vp->WorkSize.y - 48.0F));
+    if (!ImGui::BeginPopupModal("Export", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) return;
+
     App::ExportState const ex = state.GetExport();
     const bool busy =
         (ex.phase == App::ExportPhase::Capturing || ex.phase == App::ExportPhase::Encoding);
-
-    ImGui::Separator();
-    ImGui::TextColored(ImVec4(0.92F, 0.92F, 0.93F, 1.00F), "Export");
 
     MaybeRegenerateStem(state);
 
@@ -601,13 +628,30 @@ void RenderPanel() {
 
     if (busy) ImGui::BeginDisabled();
     DrawFilenameAndFormat();
-    DrawFpsQualityFrameCap(current_format);
+    DrawFpsQualitySliders();
     DrawOutputResolution(state);
-    DrawCrop(state);
     DrawBackgroundAndHw(current_format, hw_available);
+
+    ImGui::Spacing();
+    bool close_for_pick = false;
+    if (ImGui::CollapsingHeader("Advanced")) {
+        DrawKeyframeIntervalControl(current_format);
+        DrawFrameLimitControls();
+        DrawLoopControls();
+        close_for_pick = DrawCrop(state);
+    }
     if (busy) ImGui::EndDisabled();
 
+    ImGui::Spacing();
+    ImGui::Separator();
+    ImGui::Spacing();
     DrawStartAndStatus(state, ex, busy, current_format, hw_available);
+
+    if (close_for_pick) {
+        g_reopen_after_pick = true;
+        ImGui::CloseCurrentPopup();
+    }
+    ImGui::EndPopup();
 }
 
 }

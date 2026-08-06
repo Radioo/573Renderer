@@ -1,12 +1,12 @@
 #include "gui_window.h"
 #include "gui_panels.h"
 #include "gui_layout_constants.h"
+#include "gui_style.h"
 #include "../support/log.h"
 
 #include <algorithm>
 #include <d3d9.h>
 #include <d3d9caps.h>
-#include <string>
 
 #include <imgui.h>
 #include <imgui_impl_win32.h>
@@ -104,94 +104,6 @@ bool CreateDevice(Window& w) {
 }
 }
 
-namespace {
-void LoadFonts() {
-    static const ImWchar kGlyphRanges[] = {
-        0x0020, 0x00FF, 0x2010, 0x2027, 0x2030, 0x205E, 0,
-    };
-
-    ImGuiIO& io = ImGui::GetIO();
-
-    char winroot[MAX_PATH] = {};
-    UINT const n = GetWindowsDirectoryA(winroot, sizeof(winroot));
-    if (n == 0 || n >= sizeof(winroot)) {
-        LOG("Gui", "GetWindowsDirectory failed; using default ImGui font");
-        io.Fonts->AddFontDefault();
-        return;
-    }
-
-    struct Candidate {
-        const char* rel_path;
-        float size_px;
-        const char* label;
-    };
-    const Candidate candidates[] = {
-        {.rel_path = "\\Fonts\\segoeui.ttf", .size_px = 16.0F, .label = "Segoe UI 16px"},
-        {.rel_path = "\\Fonts\\consola.ttf", .size_px = 15.0F, .label = "Consolas 15px"},
-    };
-
-    for (const auto& c : candidates) {
-        std::string const path = std::string(winroot) + c.rel_path;
-        ImFont* f = io.Fonts->AddFontFromFileTTF(path.c_str(), c.size_px, nullptr, kGlyphRanges);
-        if (f != nullptr) {
-            LOG("Gui", "Font loaded: %s (%s)", c.label, path.c_str());
-            return;
-        }
-    }
-
-    LOG("Gui", "Could not load Segoe UI or Consolas; using ImGui default "
-               "(em-dashes will render as boxes)");
-    io.Fonts->AddFontDefault();
-}
-}
-
-namespace {
-void ApplyDarkStyle() {
-    ImGuiStyle& s = ImGui::GetStyle();
-    s.WindowRounding = 6.0F;
-    s.FrameRounding = 4.0F;
-    s.GrabRounding = 4.0F;
-    s.ScrollbarRounding = 4.0F;
-    s.TabRounding = 4.0F;
-    s.PopupRounding = 4.0F;
-    s.ChildRounding = 4.0F;
-    s.WindowBorderSize = 0.0F;
-    s.FrameBorderSize = 0.0F;
-    s.ItemSpacing = ImVec2(8, 6);
-    s.ItemInnerSpacing = ImVec2(6, 4);
-    s.FramePadding = ImVec2(8, 4);
-    s.WindowPadding = ImVec2(12, 10);
-
-    ImVec4* c = s.Colors;
-    c[ImGuiCol_WindowBg] = ImVec4(0.10F, 0.105F, 0.11F, 1.00F);
-    c[ImGuiCol_ChildBg] = ImVec4(0.12F, 0.125F, 0.13F, 1.00F);
-    c[ImGuiCol_PopupBg] = ImVec4(0.08F, 0.08F, 0.09F, 0.98F);
-    c[ImGuiCol_Border] = ImVec4(0.18F, 0.18F, 0.20F, 0.50F);
-    c[ImGuiCol_FrameBg] = ImVec4(0.16F, 0.16F, 0.18F, 1.00F);
-    c[ImGuiCol_FrameBgHovered] = ImVec4(0.22F, 0.22F, 0.25F, 1.00F);
-    c[ImGuiCol_FrameBgActive] = ImVec4(0.26F, 0.26F, 0.30F, 1.00F);
-    c[ImGuiCol_TitleBg] = ImVec4(0.08F, 0.08F, 0.09F, 1.00F);
-    c[ImGuiCol_TitleBgActive] = ImVec4(0.10F, 0.10F, 0.12F, 1.00F);
-    c[ImGuiCol_TitleBgCollapsed] = ImVec4(0.06F, 0.06F, 0.07F, 1.00F);
-    c[ImGuiCol_MenuBarBg] = ImVec4(0.11F, 0.11F, 0.13F, 1.00F);
-    c[ImGuiCol_Button] = ImVec4(0.22F, 0.34F, 0.55F, 1.00F);
-    c[ImGuiCol_ButtonHovered] = ImVec4(0.30F, 0.44F, 0.70F, 1.00F);
-    c[ImGuiCol_ButtonActive] = ImVec4(0.20F, 0.32F, 0.52F, 1.00F);
-    c[ImGuiCol_Header] = ImVec4(0.18F, 0.22F, 0.30F, 1.00F);
-    c[ImGuiCol_HeaderHovered] = ImVec4(0.24F, 0.30F, 0.40F, 1.00F);
-    c[ImGuiCol_HeaderActive] = ImVec4(0.20F, 0.26F, 0.35F, 1.00F);
-    c[ImGuiCol_CheckMark] = ImVec4(0.55F, 0.82F, 1.00F, 1.00F);
-    c[ImGuiCol_SliderGrab] = ImVec4(0.45F, 0.65F, 0.90F, 1.00F);
-    c[ImGuiCol_SliderGrabActive] = ImVec4(0.55F, 0.75F, 1.00F, 1.00F);
-    c[ImGuiCol_Tab] = ImVec4(0.14F, 0.14F, 0.16F, 1.00F);
-    c[ImGuiCol_TabHovered] = ImVec4(0.28F, 0.38F, 0.55F, 1.00F);
-    c[ImGuiCol_TabActive] = ImVec4(0.22F, 0.30F, 0.45F, 1.00F);
-    c[ImGuiCol_Separator] = ImVec4(0.22F, 0.22F, 0.25F, 1.00F);
-    c[ImGuiCol_Text] = ImVec4(0.92F, 0.92F, 0.93F, 1.00F);
-    c[ImGuiCol_TextDisabled] = ImVec4(0.45F, 0.45F, 0.48F, 1.00F);
-}
-}
-
 bool Init(Window& w, HINSTANCE hinst) {
     w.wc.cbSize = sizeof(w.wc);
     w.wc.style = CS_CLASSDC;
@@ -226,7 +138,7 @@ bool Init(Window& w, HINSTANCE hinst) {
 
     LoadFonts();
 
-    ApplyDarkStyle();
+    ApplyStyle();
 
     ImGui_ImplWin32_Init(w.hwnd);
     ImGui_ImplDX9_Init(w.device);

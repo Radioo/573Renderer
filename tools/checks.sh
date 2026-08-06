@@ -4,7 +4,15 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-MSYS_NO_PATHCONV=1 cmd.exe //c build.bat
+BUILD_LOG="$(mktemp)"
+BUILD_BAT="$(cygpath -w "$ROOT/build.bat")"
+MSYS_NO_PATHCONV=1 cmd.exe /c "$BUILD_BAT" 2>&1 | tee "$BUILD_LOG"
+if ! grep -q "Build successful" "$BUILD_LOG"; then
+    echo "checks: build.bat never reported success - build step did not run or failed"
+    rm -f "$BUILD_LOG"
+    exit 1
+fi
+rm -f "$BUILD_LOG"
 
 CTEST_EXE="ctest"
 if [ -f build/CMakeCache.txt ]; then

@@ -7,53 +7,12 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
-#include <filesystem>
 #include <string>
-#include <system_error>
 #include <utility>
 #include <vector>
 #include <algorithm>
 
 namespace IfsInspect {
-
-std::vector<App::CompanionIfs> FindCompanions(const std::string& base_ifs_path) {
-    struct Suffix {
-        const char* tag;
-        const char* human;
-    };
-    static const Suffix kLocaleSuffixes[] = {
-        {.tag = "_j", .human = "Japanese"},
-        {.tag = "_a", .human = "Asian"},
-        {.tag = "_k", .human = "Korean"},
-    };
-
-    std::vector<App::CompanionIfs> out;
-    namespace fs = std::filesystem;
-    std::error_code ec;
-
-    fs::path const base(base_ifs_path);
-    if (base.empty() || !fs::exists(base, ec)) return out;
-
-    fs::path const parent = base.parent_path();
-    std::string const stem = base.stem().string();
-    std::string ext = base.extension().string();
-    if (ext.empty()) ext = ".ifs";
-
-    for (const auto& s : kLocaleSuffixes) {
-        std::string cand_name = stem;
-        cand_name += s.tag;
-        cand_name += ext;
-        fs::path const candidate = parent / cand_name;
-        if (!fs::exists(candidate, ec)) continue;
-        App::CompanionIfs c;
-        c.path = candidate.string();
-        c.suffix = s.tag;
-        c.display_name = candidate.filename().string();
-        c.loaded = false;
-        out.push_back(std::move(c));
-    }
-    return out;
-}
 
 int CountExpectedTextures(const AvsFuncs& avs) {
     auto tree = AvsXml::LoadFromFile(avs, "/afp/packages/tex/texturelist.xml");

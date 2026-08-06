@@ -295,9 +295,6 @@ struct AfpCommandVisitor {
     void operator()(const AfpCmd::SetPaused& cmd) const {
         RenderLive::HandlePauseRequest(cmd.paused, g_afp);
     }
-    void operator()(const AfpCmd::ToggleCompanion& cmd) const {
-        if (cmd.index >= 0) Runtime::Active().ToggleCompanion(cmd.index);
-    }
     void operator()([[maybe_unused]] const AfpCmd::ForceReplay& cmd) const {
         Runtime::Active().ForceReplayMaster();
     }
