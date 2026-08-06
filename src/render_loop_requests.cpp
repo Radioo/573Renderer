@@ -45,7 +45,7 @@ struct AppCommandVisitor {
         if (!cmd.path.empty()) HandleLoadContent(cmd);
     }
     void operator()(const App::Cmd::StartExport& cmd) const {
-        Export::HandleStartRequest(cmd.req, g_engine, g_d3d);
+        Export::HandleStartRequest(cmd.req, g_d3d);
     }
     void operator()([[maybe_unused]] const App::Cmd::CancelExport& cmd) const {
         Export::HandleCancelRequest(g_d3d);

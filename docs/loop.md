@@ -21,7 +21,7 @@ for "how different do these two frames look."
 - Size mismatch or empty input returns a large sentinel (1e9) so a
   mismatched pair never reads as a loop match.
 
-Consumer: the DDR export loop detector (`export_ddr.cpp`
+Consumer: the DDR export loop detector (`backend/afp_capture_drivers.cpp`
 `HandleDdrLoopFrame`) uses it two ways - as the authored-loop wrap check
 (a clean current_frame wrap is ~0; a drifting scene's wrap is >> the
 `kAfpCleanMad` = 2.5 threshold, e.g. bg_0001 measures ~14) and as the
@@ -34,10 +34,10 @@ primary and the modern path use afp's own state.
 
 ## DdrLoopDetector (ddr_loop_detector.h)
 
-The DDR export loop-detection state machine, extracted from export_ddr.cpp so
+The DDR export loop-detection state machine, extracted from the DDR capture driver (originally export_ddr.cpp) so
 it runs standalone and is unit-tested on synthetic streams. It owns all its
 own bookkeeping (loop reference frame, held frame, wrap/divergence state,
-loops-done count); the engine coupling stays in export_ddr.cpp's thin
+loops-done count); the engine coupling stays in afp_capture_drivers.cpp's thin
 `HandleDdrLoopFrame` adapter.
 
 `Feed(const DdrFeed&, const SubmitFn&) -> DdrResult`, one call per captured

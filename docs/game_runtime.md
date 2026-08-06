@@ -125,24 +125,26 @@ tracker + the loop statics into one controller) is still worthwhile for
 render_loop readability, but it is no longer on the `g_ddr_mode` critical path -
 `MaybeRedriveRootLoop` already carries the backend split.
 
-## The export loop-detection strategy (why g_sess.ddr is not a simple swap)
+## The export loop-detection strategy (now backend capture drivers)
 
-The export `g_ddr_mode` READ is gone: `StartSession` now caches
-`g_sess.ddr = Runtime::Active().IsLegacyDdr()` (the honest backend-identity
-query on the runtime selected at boot). What remains is the `g_sess.ddr`
-FIELD, which selects the loop-detection FLOW, not just a backend read. The DDR
-path (export_ddr.cpp `HandleDdrLoopFrame`) is the renderer's subtlest code: an
-afp authored-loop PRIMARY signal plus the one sanctioned pixel-MAD content
-FALLBACK (per CLAUDE.md), an end-on-freeze latch, and a one-frame-delayed
-submit - with the bg_common loop-count bug in its history. The loop DECISIONS
-are already extracted and unit-tested in `r573_loop` (`DdrLoopDetector`,
-`StepModernLoop`, and the blend seam); what still branches on `g_sess.ddr` is
-the surrounding capture/finish FLOW (the StartSession seek/label/root-mode
-setup, CaptureFrame's static-detect-vs-DDR-route, and OnMainLoopTick's DDR
-tick block). Collapsing that flow behind an export-backend strategy is a
-deliberate, smoke-heavy slice (the flow is engine-coupled: GPU readback +
-encoder, so it is verified by live DDR + modern exports, not unit tests), so
-the field stays until then.
+The `g_sess.ddr` flow field is GONE (P18): the capture/finish flow is a
+backend-provided strategy, `Export::ICaptureDriver` (src/export_capture.h)
+with `AfpModernCaptureDriver` / `AfpDdrCaptureDriver`
+(src/backend/afp_capture_drivers.*), reached via
+`Backend::Active()->ExportDriver()`. `BeginCapture` is the old per-backend
+playback setup (label goto / seek / ForceReplay / continuous-loop override +
+unpause), `TickCapture` the old per-tick capture flow (modern: idle tracking
++ `StepModernLoop` decisions + safety caps; DDR: the loop-detector feed with
+its authored-loop PRIMARY signal, the one sanctioned pixel-MAD content
+FALLBACK, end-on-freeze latch and one-frame-delayed submit), and
+`EndCapture` the continuous-loop restore + pause-defend reset. The loop
+DECISIONS stay unit-tested in `r573_loop`; the flow was moved VERBATIM and
+verified with the smoke set this doc always demanded (live DDR
+authored-loop export, modern label export, blend-loop export, plus the
+pixel net). export.cpp is now backend-free AND engine-free: it owns the
+session, sink, crop/bg/dump, blend compose, and finish, which is what made
+the hosted `export_capture_tests` (fake frame source through
+`SubmitOneFrame`) possible.
 
 The two runtimes gained the backend-lifecycle + per-frame methods (`IsBooted`,
 `ActiveClipName`, `HasRenderableScene`, `RenderFrame`, `ReprobeVariantSlots`,

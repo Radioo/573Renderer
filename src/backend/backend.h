@@ -6,6 +6,9 @@
 namespace Cli {
 struct Options;
 }
+namespace Export {
+class ICaptureDriver;
+}
 namespace GameProfile {
 struct Profile;
 }
@@ -52,6 +55,8 @@ public:
     virtual void BindSubmonitor() = 0;
 
     virtual bool HandleCommand(const std::any& payload) = 0;
+
+    virtual Export::ICaptureDriver& ExportDriver() = 0;
 };
 
 IBackend* Active();

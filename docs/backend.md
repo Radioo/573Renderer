@@ -33,6 +33,10 @@ can implement `IBackend` directly and nothing above the seam changes.
 - `HandleCommand(any)`: backend-specific command dispatch; the payload is
   the backend's own closed variant (`AfpCmd::Any` for the AFP family, see
   docs/state.md "Command semantics").
+- `ExportDriver()`: the backend's `Export::ICaptureDriver` (P18) - the
+  export capture strategy (begin playback, per-tick capture/stop decisions,
+  teardown). See docs/export_pipeline.md and docs/game_runtime.md "export
+  loop-detection strategy".
 
 `Backend::CreateActive(profile)` constructs the backend once per boot by
 looking up `profile.backend_id` in the `kBackends` registry table (unknown

@@ -143,7 +143,7 @@ void RenderOneFrame(const Cli::Options& cli, float dt, int frame_count) {
 
         Backend::Active()->RenderScene(dt, frame_count);
 
-        Export::OnMainLoopTick(g_engine, g_d3d);
+        Export::OnMainLoopTick(g_d3d);
 
         int const current_frame = frame_count + 1;
         for (int const sf : cli.screenshot_frames) {

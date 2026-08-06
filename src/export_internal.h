@@ -1,15 +1,14 @@
 #pragma once
 
-#include "afp_boot.h"
 #include "loop/ddr_loop_detector.h"
 #include "media_sink.h"
-#include "render_backend.h"
-#include "state/app_state.h"
 
 #include <chrono>
 #include <cstdint>
 #include <string>
 #include <vector>
+
+struct D3D9State;
 
 namespace Export {
 
@@ -46,7 +45,6 @@ struct Session {
 
     std::string dump_frames_dir;
 
-    bool ddr = false;
     bool loop_detected = false;
 
     Loop::DdrLoopDetector ddr_detector;
@@ -74,6 +72,10 @@ Session& ActiveSession();
 
 void SubmitOneFrame(Session& sess, uint8_t* bgra, int w, int h);
 
-void HandleDdrLoopFrame(Session& sess, std::vector<uint8_t>& bgra, int w, int h);
+void FinishAndEncode(Session& sess);
+
+void FailSession(Session& sess, const std::string& err);
+
+void PublishCapturing(Session& sess);
 
 }

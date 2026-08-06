@@ -1,34 +1,26 @@
 #include "export.h"
-#include "afpu_funcs.h"
-#include "app_globals.h"
+#include "backend/backend.h"
+#include "export_capture.h"
 #include "export_internal.h"
-#include "afp_boot.h"
-#include "afp_ddr.h"
 #include "media/media_format.h"
-#include "render_live.h"
 #include "media_sink.h"
-#include "game_runtime.h"
-#include "loop/blend_loop.h"
-#include "loop/modern_loop.h"
 #include "formats/frame_process.h"
+#include "loop/blend_loop.h"
+#include "render_backend.h"
 #include "state/telemetry.h"
 #include "state/app_state.h"
 #include "state/commands.h"
 #include "support/log.h"
-#include <utility>
-#include <ios>
-#include <system_error>
-
-#define WIN32_LEAN_AND_MEAN
-#include <windows.h>
 
 #include <chrono>
 #include <cstdint>
 #include <cstdio>
-#include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <ios>
 #include <string>
+#include <system_error>
+#include <utility>
 #include <vector>
 
 namespace Export {
@@ -72,12 +64,10 @@ void RestoreBgClearColor(const Session& sess) {
     }
 }
 
-void RestoreContinuousLoop(Session& sess) {
-    if (!sess.forced_continuous_loop) return;
-    auto lo = App::Global().GetLiveOverrides();
-    lo.continuous_loop_mode = sess.saved_continuous_loop;
-    App::Global().SetLiveOverrides(lo);
-    sess.forced_continuous_loop = false;
+void DriverEndCapture(Session& sess) {
+    if (Backend::Active() != nullptr) {
+        Backend::Active()->ExportDriver().EndCapture(sess);
+    }
 }
 
 void DumpBgraReference(const std::vector<uint8_t>& bgra, int w, int h, int frame_idx,
@@ -101,8 +91,6 @@ void RemovePartialOutput(const Session& sess) {
     std::error_code ec;
     std::filesystem::remove(sess.output_path, ec);
 }
-
-namespace {
 
 void InitSessionFromRequest(Session& sess, const App::ExportRequest& req, D3D9State& d3d) {
     sess = {};
@@ -162,79 +150,6 @@ void ApplyLabelSuffixToOutput(Session& sess) {
     LOG("Export", "label '%s' selected -> output: %s", sess.label_name.c_str(), p.c_str());
 }
 
-void StartDdrPlayback(Session& sess) {
-    if (sess.label_active && !sess.label_name.empty()) {
-        DdrAfp::GotoLabel(sess.label_name);
-        int const lf = DdrAfp::ClipLabelFrame(sess.label_name.c_str());
-        if (lf >= 0) sess.ddr_loop_label = lf;
-        LOG("Export",
-            "DDR label export: start from '%s' (frame %d), stop after "
-            "%d continuous loop(s)",
-            sess.label_name.c_str(), lf, sess.loop_count);
-        return;
-    }
-    const int loop_f = DdrAfp::ClipLabelFrame("loop");
-    if (loop_f >= 0) {
-        DdrAfp::SeekFrame(loop_f);
-        sess.ddr_loop_label = loop_f;
-        LOG("Export",
-            "DDR export: rewound to 'loop' label (frame %d); "
-            "detecting loop length from authored wrap",
-            loop_f);
-    } else {
-        DdrAfp::SeekFrame(0);
-        LOG("Export", "DDR export: no 'loop' label; rewound to frame 0, "
-                      "detecting loop length from rendered content");
-    }
-}
-
-void ForceContinuousLoopOverride(Session& sess, int new_mode) {
-    auto lo = App::Global().GetLiveOverrides();
-    sess.saved_continuous_loop = lo.continuous_loop_mode;
-    sess.forced_continuous_loop = true;
-    lo.continuous_loop_mode = new_mode;
-    App::Global().SetLiveOverrides(lo);
-}
-
-void StartModernPlayback(Session& sess, AfpFuncs& afp) {
-    if (sess.label_active) {
-        {
-            auto lo = App::Global().GetLiveOverrides();
-            if (lo.continuous_loop_mode != -1) {
-                ForceContinuousLoopOverride(sess, -1);
-            }
-        }
-        AfpManager::GotoLabel(afp, sess.label_name);
-        LOG("Export",
-            "label export: playing label '%s', stop after %d "
-            "mc-playhead loop wrap(s) (continuous-loop flag sequence disabled)",
-            sess.label_name.c_str(), sess.loop_count);
-        return;
-    }
-    const auto root_mode = App::Global().GetRootLoopMode();
-    const int live_cont = App::Global().GetLiveOverrides().continuous_loop_mode;
-    const bool force_root = (root_mode == App::State::RootLoopMode::Force) || (live_cont == 1);
-    if (sess.blend_loop) {
-        AfpManager::ForceReplay(g_engine);
-    } else if (force_root) {
-        AfpManager::ForceReplay(g_engine);
-        ForceContinuousLoopOverride(sess, 1);
-        LOG("Export",
-            "root-loop FORCE: driving continuous-loop for loop "
-            "capture (was %d)",
-            sess.saved_continuous_loop);
-    } else {
-        AfpManager::SeekFrame(afp, 0);
-        sess.hold_mode = true;
-        ForceContinuousLoopOverride(sess, 1);
-        LOG("Export", "root-loop HOLD: rewound to frame 0 (SeekFrame, no "
-                      "remount) + continuous-loop flag sequence ON (keeps the master clock "
-                      "ticking so nested children free-run) + NO ForceReplay (which "
-                      "would snap them); bound by master end / max_frames / safety "
-                      "cap - set --export-max-frames for length");
-    }
-}
-
 void LogSessionStart(const Session& sess) {
     char bg[32] = {};
     if (!sess.bg_transparent) {
@@ -248,11 +163,7 @@ void LogSessionStart(const Session& sess) {
         sess.max_frames > 0 ? maxf : "none");
 }
 
-}
-
-void StartSession(Session& sess, const App::ExportRequest& req, AfpFuncs& afp,
-                  [[maybe_unused]] AfpuFuncs& afpu, [[maybe_unused]] DllLoader& afpu_dll,
-                  D3D9State& d3d) {
+void StartSession(Session& sess, const App::ExportRequest& req, D3D9State& d3d) {
     if (sess.active) {
         LOG("Export", "start: already running, ignoring");
         return;
@@ -267,14 +178,8 @@ void StartSession(Session& sess, const App::ExportRequest& req, AfpFuncs& afp,
     }
     if (sess.label_active && !sess.label_name.empty()) ApplyLabelSuffixToOutput(sess);
 
-    sess.ddr = Runtime::Active().IsLegacyDdr();
-    if (sess.ddr) {
-        StartDdrPlayback(sess);
-    } else {
-        StartModernPlayback(sess, afp);
-    }
+    Backend::Active()->ExportDriver().BeginCapture(sess);
 
-    Runtime::Active().SetPaused(afp, false);
     LogSessionStart(sess);
     Publish(sess, App::ExportPhase::Capturing);
 }
@@ -289,25 +194,23 @@ void CancelSession(Session& sess, D3D9State& d3d) {
     sess.sink.Cancel();
     if (sess.d3d_ptr == nullptr) sess.d3d_ptr = &d3d;
     RestoreBgClearColor(sess);
-    RestoreContinuousLoop(sess);
-    RenderLive::ResetPauseDefend();
+    DriverEndCapture(sess);
     sess.d3d_ptr = nullptr;
     RemovePartialOutput(sess);
     Publish(sess, App::ExportPhase::Idle);
+}
+
 }
 
 void FailSession(Session& sess, const std::string& err) {
     sess.active = false;
     sess.sink.Cancel();
     RestoreBgClearColor(sess);
-    RestoreContinuousLoop(sess);
-    RenderLive::ResetPauseDefend();
+    DriverEndCapture(sess);
     sess.d3d_ptr = nullptr;
     RemovePartialOutput(sess);
     Publish(sess, App::ExportPhase::Failed, err);
     LOG("Export", "failed: %s", err.c_str());
-}
-
 }
 
 namespace {
@@ -381,22 +284,6 @@ void SubmitOneFrame(Session& sess, uint8_t* bgra, int w, int h) {
 
 namespace {
 
-void CaptureFrame(Session& sess, D3D9State& d3d) {
-    static std::vector<uint8_t> bgra_buf;
-    int w = 0;
-    int h = 0;
-    if (!d3d.ReadOffscreenBGRA(bgra_buf, w, h)) {
-        FailSession(sess, "D3D9 offscreen readback failed");
-        return;
-    }
-
-    if (sess.ddr && sess.max_frames == 0) {
-        HandleDdrLoopFrame(sess, bgra_buf, w, h);
-        return;
-    }
-    SubmitOneFrame(sess, bgra_buf.data(), w, h);
-}
-
 bool BlendComposeAndSubmit(Session& sess) {
     auto& buf = sess.blend_buf;
     const int W = sess.blend_w;
@@ -445,6 +332,8 @@ bool BlendComposeAndSubmit(Session& sess) {
     return true;
 }
 
+}
+
 void FinishAndEncode(Session& sess) {
     if (sess.frames_captured == 0) {
         FailSession(sess, "no frames were captured - did the animation never advance?");
@@ -467,143 +356,16 @@ void FinishAndEncode(Session& sess) {
     LOG("Export", "%s written: %s (%d frames, %d fps, q=%d%s)", fmt_label, sess.output_path.c_str(),
         sess.frames_captured, sess.fps, sess.quality, sess.using_hw ? ", HW NVENC" : "");
     RestoreBgClearColor(sess);
-    RestoreContinuousLoop(sess);
-    RenderLive::ResetPauseDefend();
+    DriverEndCapture(sess);
     sess.d3d_ptr = nullptr;
     Publish(sess, App::ExportPhase::Done);
 }
 
-}
-
-namespace {
-
-void TickDdrCapture(Session& sess, D3D9State& d3d) {
-    CaptureFrame(sess, d3d);
-    if (!sess.active) return;
-    if (sess.loop_detected) {
-        FinishAndEncode(sess);
-        return;
-    }
-    if (sess.max_frames > 0 && sess.frames_captured >= sess.max_frames) {
-        LOG("Export", "max-frames cap reached (%d), finalising encode", sess.frames_captured);
-        FinishAndEncode(sess);
-        return;
-    }
-    constexpr int kDdrSafetyCap = 18000;
-    if (sess.frames_captured >= kDdrSafetyCap) {
-        LOG("Export", "DDR loop not detected within %d frames, finalising", sess.frames_captured);
-        FinishAndEncode(sess);
-        return;
-    }
+void PublishCapturing(Session& sess) {
     if ((sess.frames_captured & 3) == 0) Publish(sess, App::ExportPhase::Capturing);
 }
 
-void MaybeDumpTick(const Session& sess, uint32_t mc_c_now, bool wrapped, uint32_t cur_pos,
-                   uint32_t total_len) {
-    static int s_td = -1;
-    if (s_td < 0) {
-        char v[8] = {};
-        DWORD const n = GetEnvironmentVariableA("EXPORT_TICK_DUMP", v, sizeof(v));
-        s_td = (n > 0 && (v[0] != 0) && v[0] != '0') ? 1 : 0;
-    }
-    if (s_td != 0) {
-        LOG("Export",
-            "tick: captured=%d mc_cur=%u wrapped=%d cur_pos=%u/%u loops_done=%u hold=%d idle=%d",
-            sess.frames_captured, mc_c_now, (int)wrapped, cur_pos, total_len, sess.loops_done,
-            (int)sess.hold_mode, sess.idle_frames);
-    }
-}
-
-bool HitSafetyCap(const Session& sess) {
-    if (sess.max_frames > 0 && sess.frames_captured >= sess.max_frames) {
-        LOG("Export", "max-frames cap reached (%d), finalising encode", sess.frames_captured);
-        return true;
-    }
-
-    constexpr int kHoldSafetyCap = 5400;
-    if (sess.hold_mode && sess.max_frames == 0 && sess.frames_captured >= kHoldSafetyCap) {
-        LOG("Export",
-            "root-loop HOLD: reached safety cap (%d frames) without a "
-            "master-end / child-cycle signal - the nested child has no public "
-            "afp playhead to bound on (terminator STAGED). Finalising; set "
-            "--export-max-frames for an exact length.",
-            sess.frames_captured);
-        return true;
-    }
-
-    constexpr int kLabelSafetyCap = 3600;
-    if (sess.label_active && sess.max_frames == 0 && sess.label_seen >= kLabelSafetyCap) {
-        LOG("Export",
-            "label export reached safety cap (%d ticks) without a loop "
-            "wrap - the label may run-to-stop; finalising (captured %d frames)",
-            sess.label_seen, sess.frames_captured);
-        return true;
-    }
-
-    constexpr int kIdleThreshold = 90;
-    if (!sess.label_active && sess.max_frames == 0 && sess.idle_frames >= kIdleThreshold) {
-        LOG("Export",
-            "no afp playhead in the composition advanced for %d ticks - "
-            "animation is done, finalising encode (captured %d frames total)",
-            sess.idle_frames, sess.frames_captured);
-        return true;
-    }
-    return false;
-}
-
-}
-
-namespace {
-
-void UpdateIdleFrames(Session& sess, const AfpFuncs& afp) {
-    if (sess.label_active || sess.max_frames != 0) return;
-    std::vector<int> heads;
-    uint32_t cur_pos = 0;
-    uint32_t total_len = 0;
-    if (AfpManager::ReadLayerPosition(afp, &cur_pos, &total_len)) heads.push_back((int)cur_pos);
-    uint32_t mc_cur = 0;
-    if (AfpManager::ReadMcPlayhead(afp, &mc_cur, nullptr, nullptr)) heads.push_back((int)mc_cur);
-    for (const AfpManager::ChildClip& c : AfpManager::EnumerateChildClips(afp)) {
-        if (c.have_playhead) heads.push_back(c.cur);
-    }
-    if (heads.empty()) {
-        sess.idle_frames = 0;
-        sess.prev_playheads.clear();
-        return;
-    }
-    if (!sess.prev_playheads.empty()) {
-        sess.idle_frames = (heads == sess.prev_playheads) ? sess.idle_frames + 1 : 0;
-    }
-    sess.prev_playheads = std::move(heads);
-}
-
-Loop::ModernTick BuildModernTick(const Session& sess, const AfpFuncs& afp) {
-    uint32_t cur_pos = 0;
-    uint32_t total_len = 0;
-    const bool have_pos = AfpManager::ReadLayerPosition(afp, &cur_pos, &total_len);
-
-    uint32_t mc_c_now = 0;
-    const bool mc_valid = AfpManager::ReadMcPlayhead(afp, &mc_c_now, nullptr, nullptr);
-    bool is_master_complete = false;
-    if (!sess.label_active && (!have_pos || total_len <= 0)) {
-        is_master_complete = AfpManager::IsMasterComplete(afp);
-    }
-    return {.have_pos = have_pos,
-            .cur_pos = cur_pos,
-            .total_len = total_len,
-            .mc_valid = mc_valid,
-            .mc_cur = mc_c_now,
-            .is_master_complete = is_master_complete,
-            .idle_frames = sess.idle_frames,
-            .label_active = sess.label_active,
-            .loop_count = sess.loop_count,
-            .hold_mode = sess.hold_mode};
-}
-
-}
-
-void OnMainLoopTick(EngineSession& es, D3D9State& d3d) {
-    const AfpFuncs& afp = es.afp;
+void OnMainLoopTick(D3D9State& d3d) {
     Session& sess = ActiveSession();
     if (!sess.active) return;
 
@@ -612,41 +374,7 @@ void OnMainLoopTick(EngineSession& es, D3D9State& d3d) {
         return;
     }
 
-    if (sess.ddr) {
-        TickDdrCapture(sess, d3d);
-        return;
-    }
-
-    UpdateIdleFrames(sess, afp);
-    const Loop::ModernTick tick = BuildModernTick(sess, afp);
-    const Loop::ModernDecision dec =
-        Loop::StepModernLoop(tick, sess.mc_prev_cur, sess.loops_done, sess.label_seen);
-    MaybeDumpTick(sess, tick.mc_cur, dec.wrapped, tick.cur_pos, tick.total_len);
-
-    if (dec.master_oneshot && sess.loop_count > 1 && sess.idle_frames == 8) {
-        LOG("Export",
-            "master timeline is a one-shot (output frozen at cur %u/%u); "
-            "capturing one cycle - loop_count>1 needs a looping bg (try Continuous loop).",
-            tick.cur_pos, tick.total_len);
-    }
-    if (dec.naturally_done && sess.max_frames == 0) {
-        if (dec.wrapped && !sess.label_active) {
-            CaptureFrame(sess, d3d);
-            if (!sess.active) return;
-        }
-        FinishAndEncode(sess);
-        return;
-    }
-
-    CaptureFrame(sess, d3d);
-    if (!sess.active) return;
-
-    if (HitSafetyCap(sess)) {
-        FinishAndEncode(sess);
-        return;
-    }
-
-    if ((sess.frames_captured & 3) == 0) Publish(sess, App::ExportPhase::Capturing);
+    Backend::Active()->ExportDriver().TickCapture(sess, d3d);
 }
 
 bool IsCapturing() {
@@ -657,8 +385,8 @@ int TargetFps() {
     return sess.fps > 0 ? sess.fps : 60;
 }
 
-void HandleStartRequest(const App::ExportRequest& req, EngineSession& es, D3D9State& d3d) {
-    StartSession(ActiveSession(), req, es.afp, es.afpu, es.afpu_dll, d3d);
+void HandleStartRequest(const App::ExportRequest& req, D3D9State& d3d) {
+    StartSession(ActiveSession(), req, d3d);
 }
 
 void HandleCancelRequest(D3D9State& d3d) {

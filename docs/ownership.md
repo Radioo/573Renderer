@@ -114,13 +114,11 @@ into GpuContext (`g_gpu.d3d`; the shim reference stays in app_globals.h).
   would break; switching it is a separate, higher-risk slice (qpro-regression
   surface) not a capacity bump. Documented rather than half-shipped.
 - Consumer conversion (modules take EngineSession& / GpuContext& explicitly),
-  then shim deletion. Export's public surface converted (the P8 ExportSession
-  seam, deferred from P6): `Export::OnMainLoopTick(EngineSession&, D3D9State&)`
-  and `HandleStartRequest(req, EngineSession&, D3D9State&)` - the internal
-  helpers keep their table params via `es.afp`/`es.afpu`/`es.afpu_dll`
-  forwarding, so the change is signature-only (byte-verified 12/12 SDVX export
-  frames across the stash-dance). export.h no longer pulls the loose
-  afp_funcs/afpu_funcs/dll_loader headers - engine_session.h is the seam.
+  then shim deletion. Export's surface has since moved PAST the
+  EngineSession-taking stage: P18 removed the engine from export.h entirely
+  (`OnMainLoopTick(D3D9State&)` / `HandleStartRequest(req, D3D9State&)`);
+  the engine access lives in the backend capture drivers, which use the
+  family globals like the rest of the AFP family.
 
 ## Exit criteria trace (from the plan)
 
@@ -144,7 +142,7 @@ the session threads Publish / Init / StartDdrPlayback / StartModernPlayback /
 ForceContinuousLoopOverride / Start-Cancel-FailSession / OpenSinkForFirstFrame
 / SubmitOneFrame / CaptureFrame / BlendComposeAndSubmit / FinishAndEncode /
 TickDdrCapture / MaybeDumpTick / HitSafetyCap / BuildModernTick and
-export_ddr.cpp's HandleDdrLoopFrame (whose DdrLoopDetector submit lambda now
+the DDR capture driver's HandleDdrLoopFrame (whose DdrLoopDetector submit lambda now
 CAPTURES the session instead of reading the global - SubmitFn is a
 std::function, so the capture is free). The five public entry points
 (OnMainLoopTick, HandleStartRequest, HandleCancelRequest, IsCapturing,
@@ -252,13 +250,20 @@ editor, and the sub-layers section; the Setup view's arc/customize
 extractors show only for ddrworld and the qpro render preset only for
 iidx33.
 
+P18 (export capture seam): `Export::ICaptureDriver`
+(BeginCapture/TickCapture/EndCapture) with the two AFP drivers in
+src/backend/afp_capture_drivers.*; `Session.ddr` deleted; export_ddr.cpp
+absorbed into the DDR driver; `export.h` lost `EngineSession&` and
+export.cpp lost every AFP and D3D9 LINK dependency (the offscreen readback
+lives in the drivers), which landed the long-deferred CaptureSource seam
+WITH its first consumer: the hosted `export_capture_tests` ci tier drives
+SubmitOneFrame/FinishAndEncode (blend compose + crop) from a synthetic
+frame source with a null-backend stub. Verified: pixel net byte-identical,
+live DDR authored-loop export (bg_0009, 1373 frames), modern label export
+(select_bg_vi hologram 'loop', 299 frames), blend-loop export smoke.
+
 Deferred deliberately (each is a seam with NO consumer today; cutting them
 now would be speculative generality):
-- CaptureSource seam: the capture already funnels through ONE call
-  (D3D9State::ReadOffscreenBGRA in Export::CaptureFrame); introduce the
-  injection point together with the first export-loop test that needs a fake
-  frame source (blocked on the export.cpp link web: AfpManager / RenderLive /
-  Runtime symbols).
 - qpro RenderService seam: revisit with the multi-package "Scene designer"
   work.
 - Formal per-panel view-model structs: panels are already thin; add VMs when

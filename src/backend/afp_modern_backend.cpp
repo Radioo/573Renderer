@@ -2,7 +2,9 @@
 
 #include "afp_boot.h"
 #include "app_globals.h"
+#include "backend/afp_capture_drivers.h"
 #include "backend/backend.h"
+#include "export_capture.h"
 #include "game_runtime.h"
 #include "state/app_state.h"
 
@@ -21,6 +23,8 @@ public:
 
     [[nodiscard]] const char* Id() const override { return "afp_modern"; }
 
+    Export::ICaptureDriver& ExportDriver() override { return export_driver_; }
+
 protected:
     bool BootEngine(const BootEnv& env) override {
         App::Global().UpdateLoadStage("Booting AFP");
@@ -30,6 +34,8 @@ protected:
     }
 
 private:
+    AfpModernCaptureDriver export_driver_;
+
     static void LoadPersistentIfses(const BootEnv& env) {
         if (!env.load_boot_content || !AfpManager::IsBooted()) return;
         App::Global().UpdateLoadStage("Loading persistent IFSes");

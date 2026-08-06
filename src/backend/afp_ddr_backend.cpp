@@ -2,8 +2,10 @@
 
 #include "afp_ddr.h"
 #include "app_globals.h"
+#include "backend/afp_capture_drivers.h"
 #include "backend/afp_profiles.h"
 #include "backend/backend.h"
+#include "export_capture.h"
 #include "game_runtime.h"
 #include "state/app_state.h"
 #include "state/boot_lifecycle.h"
@@ -19,6 +21,11 @@ public:
     AfpDdrBackend() { Runtime::SelectRuntime(true); }
 
     [[nodiscard]] const char* Id() const override { return "afp_ddr"; }
+
+    Export::ICaptureDriver& ExportDriver() override { return export_driver_; }
+
+private:
+    AfpDdrCaptureDriver export_driver_;
 
 protected:
     bool BootEngine([[maybe_unused]] const BootEnv& env) override {
