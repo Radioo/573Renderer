@@ -13,6 +13,15 @@ namespace {
 
 const std::vector<Profile> kProfiles = {
     Profile{
+        .name = "IIDX 26 (Rootage)",
+        .slug = "iidx26",
+        .dir_substring = "rootage",
+        .backend_id = "afp_modern",
+        .game_dll = "bm2dx.dll",
+        .default_render_w = 1280,
+        .default_render_h = 720,
+    },
+    Profile{
         .name = "IIDX 33 (Sparkle Shower)",
         .slug = "iidx33",
         .dir_substring = "iidx",

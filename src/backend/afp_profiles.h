@@ -2,8 +2,14 @@
 
 #include <cstdint>
 #include <string>
+#include <vector>
 
 namespace AfpProfiles {
+
+struct FlagCall {
+    uint32_t flags;
+    uint32_t mask;
+};
 
 struct DllOffsetSet {
     uintptr_t afp_callback_table;
@@ -43,11 +49,15 @@ struct AfpConfig {
     bool call_afpu_render_init = true;
     bool call_afpu_set_config = true;
     bool call_afpu_set_flag_setup = true;
+    std::vector<FlagCall> afpu_set_flag_calls = {
+        {.flags = 4, .mask = 4}, {.flags = 8, .mask = 8}, {.flags = 16, .mask = 16}};
     bool call_afpu_boot = true;
 
     bool afpu_set_config_safe_clean_pos = false;
 
     bool call_afp_set_flag_setup = true;
+    std::vector<FlagCall> afp_set_flag_calls = {
+        {.flags = 16, .mask = 0}, {.flags = 8, .mask = 0}, {.flags = 65537, .mask = 0}};
 
     bool apply_iidx_data_segment_patches = true;
 

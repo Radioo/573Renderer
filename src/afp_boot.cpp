@@ -61,6 +61,11 @@ void __cdecl StubGetNearFar(float* near_val, float* far_val) {
 
 namespace {
 
+const AfpProfiles::AfpConfig& DefaultAfpConfig() {
+    static const AfpProfiles::AfpConfig cfg{};
+    return cfg;
+}
+
 void FillRenderContext(AfpRenderContext& render_ctx) {
     render_ctx.InitZero();
     render_ctx.Flags() = 0x200;
@@ -99,13 +104,15 @@ void RunAfpCoreBoot(EngineSession& es) {
     }
 
     if ((es.active_cfg != nullptr) && !es.active_cfg->call_afp_set_flag_setup) {
-        LOG("AFP", "Skipping afp_set_flag setup triple (gated off by profile '%s')",
+        LOG("AFP", "Skipping afp_set_flag setup calls (gated off by profile '%s')",
             es.active_cfg->slug);
     } else if (afp.afp_set_flag != nullptr) {
-        afp.afp_set_flag(16, 0);
-        afp.afp_set_flag(8, 0);
-        afp.afp_set_flag(65537, 0);
-        LOG("AFP", "afp_set_flag: 16, 8, 65537 (matching bm2dx)");
+        const auto& calls = (es.active_cfg != nullptr) ? es.active_cfg->afp_set_flag_calls
+                                                       : DefaultAfpConfig().afp_set_flag_calls;
+        for (const auto& c : calls) {
+            afp.afp_set_flag(c.flags, c.mask);
+            LOG("AFP", "afp_set_flag(0x%x, 0x%x)", c.flags, c.mask);
+        }
     }
 }
 
@@ -328,12 +335,15 @@ void ConfigureAfpu(EngineSession& es) {
         LOG("AFP", "afpu_set_config: buffer=4096, quality=10, clean_pos=%d", clean_pos);
     }
     if ((es.active_cfg != nullptr) && !es.active_cfg->call_afpu_set_flag_setup) {
-        LOG("AFP", "Skipping afpu_set_flag setup triple (gated off by profile '%s')",
+        LOG("AFP", "Skipping afpu_set_flag setup calls (gated off by profile '%s')",
             es.active_cfg->slug);
     } else if (afpu.afpu_set_flag != nullptr) {
-        afpu.afpu_set_flag(4, 4);
-        afpu.afpu_set_flag(8, 8);
-        afpu.afpu_set_flag(16, 16);
+        const auto& calls = (es.active_cfg != nullptr) ? es.active_cfg->afpu_set_flag_calls
+                                                       : DefaultAfpConfig().afpu_set_flag_calls;
+        for (const auto& c : calls) {
+            afpu.afpu_set_flag(c.flags, c.mask);
+            LOG("AFP", "afpu_set_flag(0x%x, 0x%x)", c.flags, c.mask);
+        }
     }
 }
 

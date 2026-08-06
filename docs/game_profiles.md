@@ -186,6 +186,34 @@ IIDX 33 (`kIidx33Offsets`; from the original dll_offsets.h IDA RE):
 | afpu_render_context     | 0x28880 |                                        |
 | afpu_set_screen_rect_fn | 0x18550 | the set-screen-rect function body, in IIDX afpu 1.2.19 |
 
+IIDX 26 Rootage (`kIidx26Offsets`; afp-core 2.14.11 / afp-utils 1.2.12 -
+seven and five point releases BEFORE IIDX 33's 2.14.18 / 1.2.19, same
+XCd229cc / XE592acd export schemes but a completely different data-segment
+layout. Derived by decompiling afp_set_afp_data (afp-core ord 0x000: the
+callback table is the destination of its 35-qword copy loop, also passed
+to the rebind helper in the & 0x800 branch; the render-flags dword is the
+& 0x800 gate itself, at table + 0x32C exactly like IIDX 33) and
+afpu_render_init (afp-utils ord 0x070: stores its argument - the render
+context - into one global at function entry and passes the data-struct
+global to afp-core's afp_set_afp_data at the end). The set-screen-rect
+function was found by its body shape, NOT by data-struct+0x630 (that
+offset holds max_nr_nodes in 1.2.12 - the struct layout shifted): search
+afp-utils for the `or byte ptr [rip+X], 1` idiom (80 0D ?? ?? ?? ?? 01)
+and keep the hit whose function takes a pointer arg and stores 4 ints
+(one 16-byte SSE store in this build) into rect globals, ORs 1 into a
+flag byte and zeroes a counter. Cross-check: the function's address sits
+in the afpu data struct at slot +0x70, the SAME slot IIDX 33's set-rect
+function occupies in ITS data struct):
+
+| field                   | value   | note                                     |
+|-------------------------|---------|-------------------------------------------|
+| afp_callback_table      | 0x189988 | in afp_set_afp_data                       |
+| afp_render_flags        | 0x189CB4 | = table + 0x32C, the & 0x800 gate         |
+| afp_nearfar_slot        | 0x1899F0 | = table + 0x68                            |
+| afpu_data_struct        | 0x431A0  | in afpu_render_init                       |
+| afpu_render_context     | 0x43850  | in afpu_render_init                       |
+| afpu_set_screen_rect_fn | 0x30CB0  | body-shape + data-struct slot +0x70 match |
+
 SDVX 7 NABLA (`kSdvx7Offsets`; derived by comparing IIDX afp-core's
 afp_set_afp_data against SDVX 7's - the function structures are identical so
 the globals it writes map 1:1; SDVX afp-utils' afpu_render_init gives the
@@ -321,11 +349,27 @@ afp_boot.cpp; false = skip.
 - `call_afpu_set_config` - afp-utils ordinal 0x005. Live SDVX trace shows the
   SDVX game does not call it from its main thread (see the SDVX notes for the
   later, corrected picture).
-- `call_afpu_set_flag_setup` - the bm2dx afpu_set_flag triple (4,4 / 8,8 /
-  16,16). SDVX's trace shows only ONE afpu_set_flag call at boot with
+- `call_afpu_set_flag_setup` - gates the afpu_set_flag boot calls. The exact
+  (flags, mask) pairs fired come from `afpu_set_flag_calls` (see below);
+  the default list is the bm2dx-33-derived triple (4,4 / 8,8 / 16,16).
+  SDVX's trace shows only ONE afpu_set_flag call at boot with
   completely different args (0x1, 0x1000); the triple is skipped on SDVX
   entirely until the real SDVX flags are known (branch instead of skip,
   later).
+- `afpu_set_flag_calls` / `afp_set_flag_calls` - the exact per-profile
+  (flags, mask) pair lists the gated set-flag setup fires, in order. Both
+  DLLs implement the same semantics, verified by decompiling afp-core
+  export 0x005 and afp-utils export 0x003 on IIDX 26 and IIDX 33:
+  `new = mask | (old & ~flags)` - the first argument SELECTS the bits to
+  modify, the second gives their new values. So (16, 16) SETS bit 16,
+  (16, 0) CLEARS it, and a game's mirrored `mov edx, N; mov ecx, edx`
+  call sites mean "set bit N" while `(N, 0)` means "clear bit N". The
+  defaults preserve the renderer's historical bm2dx-33-derived behaviour:
+  afp (16,0 / 8,0 / 65537,0) and afpu (4,4 / 8,8 / 16,16). A profile whose
+  game demonstrably passes different pairs overrides the list with the
+  game's exact calls (read them off the disasm of the boot function's
+  call sites - the decompiler often hides the second argument, so check
+  the edx/ecx setup instructions).
 - `call_afpu_boot` - afp-utils ordinal 0x000. Live SDVX trace showed
   soundvoltex.dll's IAT does NOT call afpu_boot directly; best hypothesis was
   that SDVX's afp_boot internally bootstraps the afp-utils side, making an
@@ -406,13 +450,92 @@ afp_boot.cpp; false = skip.
   to) - it relies solely on afpu_render_init's internal rebind. True = match the game: skip both, but keep the slot 12/13
   (screen-size / near-far) re-patch.
 
-## The five shipped profiles
+## The six shipped profiles
 
 ### IIDX 33 (Sparkle Shower) - slug `iidx33`, dir hint "iidx"
 
 Reference target. Default ordinals, 1920x1080, kIidx33Offsets, all gates
 default-true - its boot sequence is the renderer's reference; nothing to
 override.
+
+### IIDX 26 (Rootage) - slug `iidx26`, dir hint "rootage"
+
+DLLs: avs2-core 2.17.0 / afp-core 2.14.11 / afp-utils 1.2.12 (2018-era, vs
+IIDX 33's avs2 2.17.4 / afp-core 2.14.18 / afp-utils 1.2.19). Same
+XCd229cc / XE592acd / XCgsqzn export schemes and the SAME export counts
+(126 / 123 / 392). The identity row sits BEFORE iidx33 in the registry ON
+PURPOSE: AutoDetect returns the first dir_substring match, and every IIDX
+dir matches iidx33's broad "iidx" hint - "rootage" must win first or the
+Rootage dir boots with IIDX 33 offsets (the original load-crash this
+profile fixes). 1280x720 (Rootage-era cabinets are 720p; FHD IIDX arrived
+with the Lightning Model era), kIidx26Offsets.
+
+Ordinal maps: verified IDENTICAL to IIDX 33 for every export the renderer
+resolves, via a pairwise decompile comparison of all 46 used afp-core
+exports and all 36 used afp-utils exports across both builds (multi-agent
+sweep; 82/82 same-function verdicts, no low-confidence). avs2-core 2.17.0's
+suffix map likewise matches the avs_funcs.h ordinals - spot-verified by
+decompiling the 26 build's exports for avs_boot ("avs-boot.c"),
+property_create / property_node_create ("property-api.c", "node_create"),
+and avs_fs_mount ("vfs-api-mount.c") at the same suffixes, plus a full
+export-table diff (392 names in both).
+
+Version drift found by the sweep (none affects the renderer's call
+surface): afp-core 2.14.11 lacks ext commands 13-17, mc_control mode range
+tops at 0x1039 vs 0x103D, and its set_flag refresh-trigger mask is 0x4011
+vs 0x14011 (bit 0x10000 does not exist yet - see the flag-call list note
+below). afp-utils 1.2.12's set_config has cases 1-8 only (no 9/10), and
+its per-slot render array is 48 bytes vs 24.
+
+The entire afp bring-up lives in ONE bm2dx function - find it via the xref
+to the afp_boot import (afp-core name suffix 000002); every gate below is
+read straight off that decompile/disasm. The sequence: afp_boot(ctx) with
+a STATIC render-context blob (flags dword 0x200, callbacks at +0x008..
++0x068, allocator trio at +0x118..+0x130 - layout identical to
+FillRenderContext's), afp_set_stream_nr(2048), afp_set_verbose(1) 1-arg,
+afp_set_flag(0x10, 0x10), afp_set_flag(8, 8) - MIRRORED args, i.e. SET
+those bits, and NO third 65537 call - afpu_boot(0, data) 2-arg with a NULL
+config node, afpu_render_init(cfg), the afpu memory-hook install (afpu
+suffix 000006, skipped by the renderer as on T44), D3D setup,
+afpu_set_config(1, 4096), then afpu_set_flag(4, 0) - note the xor edx
+CLEAR - afpu_set_flag(8, 8), afpu_set_flag(16, 16). bm2dx 26 never
+imports afp_set_afp_data (0x000) nor afp_render_init (0x00f) at all, and
+never calls afpu_set_config types 2/3.
+
+Gate set and provenance:
+
+- `call_afp_set_stream_nr = true` - game calls afp_set_stream_nr(2048).
+- `call_afp_stream_create_test = false` - diagnostic probe; skip for safety.
+- `call_afp_render_init = false` - bm2dx 26 does not import afp-core 0x00f.
+- `call_afpu_render_init = true` - game calls afpu_render_init.
+- `call_afpu_set_config = true` - game calls (1, 4096). The renderer's
+  extra (2, 10) hits 1.2.12's case 2 (max_nr_masks resize, identical to
+  IIDX 33's) and (3, 0) hits case 3, where value 0 installs a NULL
+  cleanup callback (values 1/2 install real cleanup routines) - so the
+  safe_clean_pos override below makes case 3 a no-op, matching the game
+  never calling it.
+- `call_afpu_set_flag_setup = true` with
+  `afpu_set_flag_calls = {(4,0), (8,8), (16,16)}` - the game's exact
+  pairs; the first call CLEARS afpu bit 4 where the default list sets it.
+- `call_afpu_boot = true` - game calls afpu_boot(NULL, data). The
+  renderer passes its max_nr_masks=16 property instead; 1.2.12's
+  afpu_boot runs the same property_psmap_import path (2 psmap fields
+  fewer than 1.2.19, none of them ours).
+- `afpu_set_config_safe_clean_pos = true` - pass (3, 0), see above.
+- `call_afp_set_flag_setup = true` with
+  `afp_set_flag_calls = {(16,16), (8,8)}` - the game's exact mirrored
+  pairs. NO 65537: afp-core 2.14.11's refresh-trigger mask is 0x4011
+  (bit 0x10000 arrived by 2.14.18), so the bm2dx-33 third call addresses
+  a flag bit that does not exist in this build.
+- `apply_iidx_data_segment_patches = true` - kIidx26Offsets are correct;
+  needed for the poke + slot re-patch.
+- `afp_set_afp_data_wide_args = false` - afp_set_afp_data is 1-arg in
+  2.14.11 (seen directly in its decompile).
+- `afp_set_verbose_wide_args = false` - game calls afp_set_verbose(1) 1-arg.
+- `scan_arc_containers = false` - loose .ifs (modern layout, DLLs and
+  data/ in the game root; no modules/ subdir).
+- `skip_explicit_afp_set_afp_data = true` - like gdxg/T44 the game relies
+  solely on afpu_render_init's internal rebind-path call (0x800 left set).
 
 ### SDVX 7 (NABLA) - slug `sdvx7`, dir hint "sdvx"
 

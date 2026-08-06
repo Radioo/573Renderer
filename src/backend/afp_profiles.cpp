@@ -37,6 +37,21 @@ constexpr DllOffsetSet kIidx33Offsets = {
     .afpu_world_mat = 0x2B880,
 };
 
+constexpr DllOffsetSet kIidx26Offsets = {
+    .afp_callback_table = 0x189988,
+    .afp_render_flags = 0x189CB4,
+    .afp_nearfar_slot = 0x1899F0,
+    .afpu_data_struct = 0x431A0,
+    .afpu_render_context = 0x43850,
+    .afpu_set_screen_rect_fn = 0x30CB0,
+    .afp_table_b_count = 0,
+    .afpu_shapes_a = 0,
+    .afpu_shapes_b = 0,
+    .afpu_drawn = 0,
+    .afpu_world_mat_type = 0,
+    .afpu_world_mat = 0,
+};
+
 constexpr DllOffsetSet kSdvx7Offsets = {
     .afp_callback_table = 0xED008,
     .afp_render_flags = 0xED334,
@@ -86,6 +101,28 @@ const std::vector<AfpConfig> kConfigs = {
     AfpConfig{
         .slug = "iidx33",
         .offsets = kIidx33Offsets,
+    },
+    AfpConfig{
+        .slug = "iidx26",
+        .offsets = kIidx26Offsets,
+
+        .call_afp_set_stream_nr = true,
+        .call_afp_stream_create_test = false,
+        .call_afp_render_init = false,
+        .call_afpu_render_init = true,
+        .call_afpu_set_config = true,
+        .call_afpu_set_flag_setup = true,
+        .afpu_set_flag_calls = {{.flags = 4, .mask = 0},
+                                {.flags = 8, .mask = 8},
+                                {.flags = 16, .mask = 16}},
+        .call_afpu_boot = true,
+        .afpu_set_config_safe_clean_pos = true,
+        .call_afp_set_flag_setup = true,
+        .afp_set_flag_calls = {{.flags = 16, .mask = 16}, {.flags = 8, .mask = 8}},
+        .apply_iidx_data_segment_patches = true,
+        .afp_set_afp_data_wide_args = false,
+        .afp_set_verbose_wide_args = false,
+        .skip_explicit_afp_set_afp_data = true,
     },
     AfpConfig{
         .slug = "sdvx7",
