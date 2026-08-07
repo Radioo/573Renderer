@@ -33,6 +33,40 @@ The old `CMakeLists.txt` hard failure ("This project must be built as
 64-bit") is replaced by a pointer-size switch that sets `R573_ARCH_X64` and
 `R573_ARCH_SUFFIX`.
 
+## Configuring dev32 from an IDE (CLion): needs an x86 toolchain
+
+`base32` declares `"architecture": {"value": "x86", "strategy": "external"}`.
+`external` means CMake does NOT set the architecture up - the CALLER must.
+It is the only valid strategy under the Ninja generator, because Ninja has
+no platform concept: with MSVC the target architecture comes entirely from
+the `INCLUDE` / `LIB` / `PATH` environment variables.
+
+`build32.bat` supplies that by calling `vcvarsall.bat x86` (vs `x64` in
+`build.bat`), and CI does it with `ilammy/msvc-dev-cmd` `arch: x86`. An IDE
+that configures the preset from its own default (amd64) environment gets a
+half-x86 setup: the x86 compiler with x64 libraries. It fails as
+
+```
+...\lib\x64\MSVCRTD.lib : warning LNK4272: library machine type 'x64'
+                          conflicts with target machine type 'x86'
+unresolved external symbol _mainCRTStartup / __RTC_InitBase / __RTC_Shutdown
+```
+
+The unresolved symbols are the x86 CRT entry points (leading-underscore
+cdecl decoration); they are missing because the x64 CRT was linked against
+an x86 object.
+
+Fix in CLion: Settings -> Build, Execution, Deployment -> Toolchains -> add
+a Visual Studio toolchain with **Architecture: x86**, then point the
+`dev32` CMake profile at it. Leave `dev` on the default toolchain.
+
+This is an environment mismatch, not a preset defect - do not "fix" it by
+pinning compiler paths or LIB directories in the preset, which would hard
+code an MSVC version. Note the dangerous sibling of this failure: with a
+fully x64 environment the configure SUCCEEDS and silently produces an x64
+binary named `573Renderer32.exe`, which is why CI verifies the PE machine
+field (0x14c) rather than merely that the file exists.
+
 ## The engine ABI seam (src/support/engine_abi.h)
 
 Two things about the engine interface change with pointer width. Both are

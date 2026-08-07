@@ -312,9 +312,14 @@ Other live-control semantics:
   speed is unchanged at any rate. DDR content is authored at 60; IIDX/SDVX previews
   historically ran at 120.
 - Render resolution presets are NAMED FOR THEIR GAMES (3840x2160 GITADORA 4K, 1920x1080
-  IIDX, 1280x720 DDR, 1080x1920 SDVX / jubeat portrait, 720x1280 SDVX old-era, 520x704 qpro
-  avatar - iidx33 only) because AFP's GetScreenSize callback must match the offscreen RT
-  shape or layout coords land wrong. Values clamp to 64..8192.
+  IIDX, 1280x720 DDR, 640x480 legacy 4:3, 1080x1920 SDVX / jubeat portrait, 720x1280 SDVX
+  old-era, 520x704 qpro avatar - iidx33 only) because AFP's GetScreenSize callback must
+  match the offscreen RT shape or layout coords land wrong. Values clamp to 64..8192.
+  640x480 carries no game name because it is the generic pre-HD arcade size rather than any
+  one title's native mode; it is listed inside the landscape group (after 1280x720) because
+  the qpro entry is located POSITIONALLY as `kCustomIdx - 1`, so any new preset must be
+  inserted before it. The export panel's output-resolution list carries the same 640x480
+  entry, in the same position relative to its trailing Custom row.
 - Settings persist to settings.ini on every change (atomic tempfile + rename).
 - The DDR-only Tools (batch .arc extractor, customize image extractor - docs/ddr.md) render
   inside the card, gated on the EFFECTIVE setup selection (explicit combo slug, else

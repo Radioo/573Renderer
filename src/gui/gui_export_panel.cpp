@@ -250,9 +250,10 @@ void DrawResolutionPresetCombo(int rw, int rh) {
     char native_label[48];
     snprintf(native_label, sizeof(native_label), "Native (%dx%d)", rw, rh);
     const ResPreset kPresets[] = {
-        {.label = native_label, .w = 0, .h = 0},    {.label = "1920x1080", .w = 1920, .h = 1080},
-        {.label = "1280x720", .w = 1280, .h = 720}, {.label = "1080x1920", .w = 1080, .h = 1920},
-        {.label = "720x1280", .w = 720, .h = 1280}, {.label = "Custom", .w = -1, .h = -1},
+        {.label = native_label, .w = 0, .h = 0},      {.label = "1920x1080", .w = 1920, .h = 1080},
+        {.label = "1280x720", .w = 1280, .h = 720},   {.label = "640x480", .w = 640, .h = 480},
+        {.label = "1080x1920", .w = 1080, .h = 1920}, {.label = "720x1280", .w = 720, .h = 1280},
+        {.label = "Custom", .w = -1, .h = -1},
     };
     const int kPresetCount = (int)(sizeof(kPresets) / sizeof(kPresets[0]));
     const int kCustomIdx = kPresetCount - 1;

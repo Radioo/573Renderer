@@ -193,6 +193,7 @@ void DrawRenderPresetCombo(App::State& state, int rw, int rh) {
         {.label = "3840x2160 (GITADORA 4K)", .w = 3840, .h = 2160},
         {.label = "1920x1080 (IIDX)", .w = 1920, .h = 1080},
         {.label = "1280x720 (DDR)", .w = 1280, .h = 720},
+        {.label = "640x480 (legacy 4:3)", .w = 640, .h = 480},
         {.label = "1080x1920 (SDVX / jubeat portrait)", .w = 1080, .h = 1920},
         {.label = "720x1280 (SDVX old-era)", .w = 720, .h = 1280},
         {.label = "520x704 (qpro avatar)", .w = 520, .h = 704},
