@@ -19,6 +19,8 @@
 namespace DdrAfp {
 namespace {
 constexpr int kMaxPackageClips = 4096;
+constexpr int kAfpEngineHeapSize = 64 * 1024 * 1024;
+constexpr int kAfpuEngineHeapSize = 64 * 1024 * 1024;
 AfpDdrFuncs g_afp;
 AfpuDdrFuncs g_afpu;
 bool g_booted = false;
@@ -66,6 +68,42 @@ void ApplyDdrAfpAttributes() {
     }
 }
 
+bool BootAfpCore(void* render_params, void*& afp_heap) {
+    if (g_afp.HasSplitRenderApi()) {
+        afp_heap = malloc(kAfpEngineHeapSize);
+        if (afp_heap == nullptr) {
+            LOG("DDR", "failed to allocate %d MB afp engine heap",
+                kAfpEngineHeapSize / (1024 * 1024));
+            return false;
+        }
+        LOG("DDR", "afp_boot(heap=%p/0x%x, render_params=%p) [pre-2.13 caller-supplied heap]...",
+            afp_heap, (unsigned)kAfpEngineHeapSize, render_params);
+    } else {
+        LOG("DDR", "afp_boot(render_params=%p)...", render_params);
+    }
+    LOG("DDR", "afp_boot -> %d", g_afp.BootEngine(afp_heap, kAfpEngineHeapSize, render_params));
+    return true;
+}
+
+bool BootAfpUtils(void* afpu_config) {
+    void* afpu_heap = nullptr;
+    if (g_afpu.BootTakesHeap()) {
+        afpu_heap = malloc(kAfpuEngineHeapSize);
+        if (afpu_heap == nullptr) {
+            LOG("DDR", "failed to allocate %d MB afpu engine heap",
+                kAfpuEngineHeapSize / (1024 * 1024));
+            return false;
+        }
+        LOG("DDR", "afpu_boot(0, heap=%p/0x%x) [pre-2.13 caller-supplied heap]...", afpu_heap,
+            (unsigned)kAfpuEngineHeapSize);
+    } else {
+        LOG("DDR", "afpu_boot(0, afpu_config=%p)...", afpu_config);
+    }
+    LOG("DDR", "afpu_boot -> %d",
+        g_afpu.BootEngine(nullptr, afpu_config, afpu_heap, kAfpuEngineHeapSize));
+    return true;
+}
+
 void ApplyDdrAfpuAttributes(void* render_params, void* afpu_config) {
     if (g_afpu.afpu_set_afp_render_params != nullptr)
         g_afpu.afpu_set_afp_render_params(render_params);
@@ -104,24 +142,25 @@ bool Boot(DllLoader& afp_dll, DllLoader& afpu_dll, D3D9State& d3d) {
         const char* ver = nullptr;
         g_afp.afp_ext_command(9, static_cast<void*>(&ver));
         if (ver != nullptr) LOG("DDR", "AFP version: %s", ver);
+    } else if (g_afp.afp_get_version != nullptr) {
+        const char* ver = g_afp.afp_get_version();
+        if (ver != nullptr) LOG("DDR", "AFP version: %s", ver);
     }
+    LOG("DDR", "AFP render API: %s", g_afp.HasSplitRenderApi() ? "split (pre-2.13)" : "unified");
 
-    DdrRender::Init(d3d.device, d3d.width, d3d.height);
+    DdrRender::Init(d3d.device, d3d.width, d3d.height, g_afp.HasSplitRenderApi());
     DdrRender::SetTexBindResolver(g_afpu.afpu_get_texture_bind_id);
 
     void* render_params = DdrRender::RenderParams();
     void* afpu_config = DdrRender::AfpuConfig();
 
-    LOG("DDR", "afp_boot(render_params=%p)...", render_params);
-    int ret = g_afp.afp_boot(render_params);
-    LOG("DDR", "afp_boot -> %d", ret);
+    void* afp_heap = nullptr;
+    if (!BootAfpCore(render_params, afp_heap)) return false;
 
     LOG("DDR", "afp_set_stream_max_nr(2048)...");
     ApplyDdrAfpAttributes();
 
-    LOG("DDR", "afpu_boot(0, afpu_config=%p)...", afpu_config);
-    ret = g_afpu.afpu_boot(nullptr, afpu_config);
-    LOG("DDR", "afpu_boot -> %d", ret);
+    if (!BootAfpUtils(afpu_config)) return false;
 
     ApplyDdrAfpuAttributes(render_params, afpu_config);
 
@@ -229,9 +268,9 @@ void CreateRootLayer(int data_id, uint32_t root_stream_id, const char* root_clip
     g_root_stream_id = stream_id;
     LOG("DDR", "layer src: stream_id=%#x path='%s'", stream_id, path ? path : "");
     uint32_t const layer_id = g_afp.afp_layer_create_with_property(stream_id, path, 0, nullptr);
-    int const valid = (g_afp.afp_id_is_valid != nullptr) ? g_afp.afp_id_is_valid(5, layer_id) : 0;
-    LOG("DDR", "afp_layer_create_with_property -> layer=%#x valid=%d", layer_id, valid);
-    if (valid >= 0) {
+    bool const valid = g_afp.LayerValid(layer_id);
+    LOG("DDR", "afp_layer_create_with_property -> layer=%#x valid=%d", layer_id, (int)valid);
+    if (valid) {
         g_layer_id = layer_id;
         const char* active = "";
         if (path != nullptr) {
@@ -279,22 +318,16 @@ bool LoadIfs(AvsFuncs& avs, DllLoader& avs_dll, const std::string& ifs_disk_path
     }
 
     int data_id = -1;
-    if (g_afpu.afpu_ngp_read_data != nullptr) {
-        data_id = g_afpu.afpu_ngp_read_data(pkg_name.c_str(), "/afp/packages", 0);
-        LOG("DDR", "afpu_ngp_read_data('%s', /afp/packages) -> %d", pkg_name.c_str(), data_id);
-    }
+    data_id = g_afpu.ReadPackage(pkg_name.c_str(), "/afp/packages");
+    LOG("DDR", "read package '%s' from /afp/packages -> %d", pkg_name.c_str(), data_id);
     if (data_id < 0) {
         LOG("DDR", "package read failed");
         return false;
     }
     g_stream_data_id = data_id;
 
-    if (g_afpu.afpu_do_create_stream_all != nullptr) {
-        int const r = g_afpu.afpu_do_create_stream_all(
-            reinterpret_cast<void*>(static_cast<intptr_t>(data_id)),
-            reinterpret_cast<void*>(static_cast<intptr_t>(1)));
-        LOG("DDR", "afpu_do_create_stream_all(%d, 1) -> %d", data_id, r);
-    }
+    int const streams_rc = g_afpu.CreateStreamsForPackage(data_id);
+    LOG("DDR", "create streams for package %#x -> %d", (unsigned)data_id, streams_rc);
 
     uint32_t root_stream_id = 0;
     const char* root_clip_name = nullptr;
@@ -326,7 +359,7 @@ void AdvanceOnce(float dt) {
         if (g_afp.afp_render_finish != nullptr) g_afp.afp_render_finish();
     } else {
         if (g_afp.afp_render_init != nullptr) g_afp.afp_render_init();
-        if (g_afp.afp_do_render != nullptr) g_afp.afp_do_render(dt * eff, env_mode, 0);
+        g_afp.RenderAll(dt * eff, env_mode);
         if (g_afp.afp_render_finish != nullptr) g_afp.afp_render_finish();
     }
 }
@@ -463,12 +496,12 @@ void DumpLoopDiag(int frame) {
 
 void DisplayFrame(int frame, bool first) {
     static int const disp_mode = Support::EnvInt("DDR_DISPLAY_MODE").value_or(5);
-    if (first) LOG("DDR", "RenderFrame %d: afp_do_display(mode=%d)...", frame, disp_mode);
+    if (first) LOG("DDR", "RenderFrame %d: display(mode=%d)...", frame, disp_mode);
     if (disp_mode == 2 && (g_afp.afp_do_display != nullptr)) {
         for (unsigned g = 0; g < 8; g++)
             g_afp.afp_do_display(2, g);
-    } else if ((g_afp.afp_do_display != nullptr) && (g_layer_id != 0U)) {
-        g_afp.afp_do_display(5, g_layer_id);
+    } else if (g_layer_id != 0U) {
+        g_afp.DisplayLayer(g_layer_id);
     }
 }
 }
@@ -652,8 +685,7 @@ bool SwitchClip(const std::string& name) {
     if ((g_layer_id != 0U) && g_layer_id != clip->layer_id && (g_afp.afp_layer_stop != nullptr))
         g_afp.afp_layer_stop(g_layer_id);
 
-    const bool reuse = (clip->layer_id != 0U) && (g_afp.afp_id_is_valid != nullptr) &&
-                       g_afp.afp_id_is_valid(5, clip->layer_id) >= 0;
+    const bool reuse = (clip->layer_id != 0U) && g_afp.LayerValid(clip->layer_id);
     if (reuse) {
         if (g_afp.afp_layer_stop != nullptr) g_afp.afp_layer_stop(clip->layer_id);
         if (g_afp.afp_layer_play != nullptr) g_afp.afp_layer_play(clip->layer_id, 1.0F);

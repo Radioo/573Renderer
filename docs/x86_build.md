@@ -178,6 +178,75 @@ are the game's own: those images live in other IFS the real game has
 mounted concurrently, and afp degrades gracefully. They are not an error
 in the renderer.
 
+## IIDX 20 (tricoro) - a THIRD engine generation
+
+Profile `iidx20`, dir hint "tricoro", backend `afp_ddr`, 1280x720,
+`avs_generation = Avs2158`. WORKING: 24 clips enumerate and both
+`1p_frame` (lane, turntable, groove gauge) and `center_frame_sp` render.
+
+tricoro is not just "older 32-bit" - it is a different generation of BOTH
+libraries, and needed four separate fixes. Each was found by RE, and each
+is detected from the DLL's own exports rather than hardcoded per profile.
+
+### 1. avs 2.15.8 ordinal map
+
+360 exports (vs 390 / 392) with prefix `XCd229cc` - note the prefix is a
+per-build SEED, not a library identity: this same prefix is used by modern
+afp-core elsewhere. Ordinals shifted again and non-uniformly, so
+`kAvsOrdinals2158` is a third table. Recovered by the assert-string method
+described in docs/game_profiles.md and cross-checked against the repo's
+existing `idc573/avs/2.15.08.idc`.
+
+### 2. avs_boot takes SEVEN args (split heaps)
+
+2.15.8: `avs_boot(config, std_heap, std_sz, avs_heap, avs_sz, log_writer,
+log_ctx)` - TWO separate heaps. The 6-arg form used by 2.16+/2.17 puts the
+log writer where 2.15.8 expects `avs_sz`. Gated by
+`AvsOrdinals::boot_takes_split_heaps`, which also makes the renderer
+allocate the second heap.
+
+### 3. AFP 2.10.5t7 has the PRE-UNIFICATION render API
+
+`afp_do_render(dt,type,id)` / `afp_do_display(type,id)` /
+`afp_id_is_valid(type,id)` do not exist yet. The originals are the
+per-target `afp_render_all(dt)` / `afp_display_layer(id)` /
+`afp_layer_is_valid(id)`. Likewise afputils: `afpu_ngp_read(name, path)`
+(no flags arg) and `afpu_create_stream_all(pkg)` (1 arg).
+`AfpDdrFuncs`/`AfpuDdrFuncs` resolve BOTH spellings and dispatch through
+`RenderAll` / `DisplayLayer` / `LayerValid` / `ReadPackage` /
+`CreateStreamsForPackage`; `HasSplitRenderApi()` is the generation probe.
+
+### 4. Both engines want a CALLER-SUPPLIED heap
+
+`afp_boot(heap, heap_size, render_params)` - 3 args, where the first two
+initialise afp's own pool (the callee aligns the base, memsets it to -1
+and registers it). Same for `afpu_boot(config, heap, heap_size)`, whose
+heap init logs "afpu heap already setting". The 2.13.x 1-arg/2-arg forms
+pass render_params where the heap belongs, so the engine memsets wild
+memory. 64 MB each; note the afpu render callbacks arrive via the
+separate `afpu_set_render_params`, not through afpu_boot.
+
+### 5. draw_primitive changed signature (the last crash)
+
+The render_params PUBLIC layout is otherwise IDENTICAL between 2.10.5t7
+and 2.13.1t8 (2.13 remaps internally into a compacted table, but the
+caller-facing offsets match, verified slot by slot). The one exception:
+
+- 2.10.5t7: `draw_primitive(vtx, count, prim_type, attr, a5, a6, c0[4], c1[4], ctx)` - 9 args
+- 2.13.1t8: `draw_primitive(vtx, count, params, ctx)` - 4 args
+
+Our callback reads arg 3 as a `params` POINTER; on 2.10 that slot holds an
+integer primitive type, so dereferencing it segfaulted on the first frame.
+`Cb_DrawPrimitiveLegacy` repacks the 9 args into the 2.13 params block and
+forwards. The block layout is `[0]=type [1]=flags [2]=tex [3]=? [4..7]=c0
+[8..11]=c1`; that c0/c1 pair is exactly 2.10's two colour args. `a5` was
+confirmed to be the texture id EMPIRICALLY (it logs values like 0x9808001,
+the AFP texture-id shape, while a6 is always 0) rather than assumed.
+
+Also learned from that mapping pass: `set_mask` takes SIX args in BOTH
+builds - the 7-arg description elsewhere counted the format string's
+duplicate print of arg1 (once as %d, once as %s through a type-name table).
+
 ## Still x64-only
 
 The MODERN afp path (`afp_boot.cpp`'s render context / `afpu_data`,

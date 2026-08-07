@@ -7,7 +7,7 @@
 
 namespace DdrRender {
 
-void Init(IDirect3DDevice9* device, int screen_w, int screen_h);
+void Init(IDirect3DDevice9* device, int screen_w, int screen_h, bool legacy_draw_primitive);
 
 void* RenderParams();
 

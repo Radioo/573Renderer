@@ -705,6 +705,29 @@ void AFP_CB Cb_DrawPrimitive(const float* vtx, int count, int* params, void* a4)
     if (prims > 0) g_dev->DrawPrimitiveUP(pt, prims, buf, sizeof(Vtx));
 }
 
+void AFP_CB Cb_DrawPrimitiveLegacy(const float* vtx, int count, int prim_type, unsigned attr,
+                                   int a5, int a6, const float* c0, const float* c1, void* ctx) {
+    if (g_frame < 1 && g_draw_count <= 8) {
+        LOG("DDR-R", "legacy draw_primitive type=%d attr=%#x a5=%#x a6=%#x", prim_type, attr,
+            (unsigned)a5, (unsigned)a6);
+    }
+    int params[12] = {};
+    params[0] = prim_type;
+    params[1] = (int)attr;
+    params[2] = a5;
+    params[3] = a6;
+    auto copy4 = [](float* dst, const float* src) {
+        if (src == nullptr) return;
+        dst[0] = src[0];
+        dst[1] = src[1];
+        dst[2] = src[2];
+        dst[3] = src[3];
+    };
+    copy4(reinterpret_cast<float*>(&params[4]), c0);
+    copy4(reinterpret_cast<float*>(&params[8]), c1);
+    Cb_DrawPrimitive(vtx, count, params, ctx);
+}
+
 void AFP_CB Cb_DrawShape(unsigned int id, const float* c0, const float* c1, void* ctx) {
     (void)c0;
     (void)c1;
@@ -760,7 +783,7 @@ template <class F> void Put(uint8_t* base, size_t slot, F fn) {
     PutSlot(base, slot, reinterpret_cast<void*>(fn));
 }
 
-void BuildStructs() {
+void BuildStructs(bool legacy_draw_primitive) {
     memset(g_render_params, 0, sizeof(g_render_params));
     *reinterpret_cast<uint32_t*>(g_render_params) = 0x200;
     for (size_t slot = 1; slot < kRenderParamsSlots; slot++)
@@ -771,7 +794,11 @@ void BuildStructs() {
     Put(g_render_params, kSlotSetBlend, Cb_SetBlend);
     Put(g_render_params, kSlotSetPriority, Cb_SetPriority);
     Put(g_render_params, kSlotSetFilter, Cb_SetFilter);
-    Put(g_render_params, kSlotDrawPrimitive, Cb_DrawPrimitive);
+    if (legacy_draw_primitive) {
+        Put(g_render_params, kSlotDrawPrimitive, Cb_DrawPrimitiveLegacy);
+    } else {
+        Put(g_render_params, kSlotDrawPrimitive, Cb_DrawPrimitive);
+    }
     Put(g_render_params, kSlotDrawShape, Cb_DrawShape);
     Put(g_render_params, kSlotLoadMatrix, Cb_LoadMatrix);
     Put(g_render_params, kSlotLoadMatrix44, Cb_LoadMatrix44);
@@ -818,15 +845,16 @@ void SetupOrthoProjection() {
 }
 }
 
-void Init(IDirect3DDevice9* device, int screen_w, int screen_h) {
+void Init(IDirect3DDevice9* device, int screen_w, int screen_h, bool legacy_draw_primitive) {
     g_dev = device;
     g_w = screen_w;
     g_h = screen_h;
     IdentityM(g_proj);
     IdentityM(g_world);
     SetupOrthoProjection();
-    BuildStructs();
-    LOG("DDR-R", "render backend init %dx%d dev=%p (ortho proj)", g_w, g_h, (void*)g_dev);
+    BuildStructs(legacy_draw_primitive);
+    LOG("DDR-R", "render backend init %dx%d dev=%p (ortho proj, draw_primitive=%s)", g_w, g_h,
+        (void*)g_dev, legacy_draw_primitive ? "legacy 9-arg" : "unified 4-arg");
 }
 
 void* RenderParams() {

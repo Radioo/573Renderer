@@ -8,6 +8,9 @@ typedef void* T_PROPERTY_NODE;
 
 typedef void (*avs_boot_t)(void* config_node, void* heap_buffer, int heap_size, void* log_callback,
                            void* log_userdata, void* extra);
+typedef void (*avs_boot_split_heap_t)(void* config_node, void* std_heap, int std_heap_size,
+                                      void* avs_heap, int avs_heap_size, void* log_writer,
+                                      void* log_userdata);
 typedef void (*avs_shutdown_t)();
 typedef int (*avs_is_active_t)();
 
@@ -99,6 +102,8 @@ struct AvsOrdinals {
     int log_body_info;
     int log_body_warning;
     int log_body_misc;
+
+    bool boot_takes_split_heaps;
 };
 
 constexpr AvsOrdinals kAvsOrdinals217 = {
@@ -135,6 +140,7 @@ constexpr AvsOrdinals kAvsOrdinals217 = {
     .log_body_info = 0x17c,
     .log_body_warning = 0x17b,
     .log_body_misc = 0x17d,
+    .boot_takes_split_heaps = false,
 };
 
 constexpr AvsOrdinals kAvsOrdinals2161 = {
@@ -171,10 +177,50 @@ constexpr AvsOrdinals kAvsOrdinals2161 = {
     .log_body_info = 0x16a,
     .log_body_warning = 0x169,
     .log_body_misc = 0x16b,
+    .boot_takes_split_heaps = false,
+};
+
+constexpr AvsOrdinals kAvsOrdinals2158 = {
+    .avs_boot = 0x0aa,
+    .avs_shutdown = 0x01d,
+    .avs_is_active = 0x012,
+    .avs_filesys_imagefs = 0x095,
+    .avs_fs_addfs = 0x12d,
+    .avs_fs_mount = 0x0ce,
+    .avs_fs_umount = 0x0a2,
+    .avs_fs_open = 0x090,
+    .avs_fs_read = 0x10d,
+    .avs_fs_lseek = 0x04d,
+    .avs_fs_close = 0x11f,
+    .avs_fs_fstat = 0x0c3,
+    .avs_fs_opendir = 0x0f0,
+    .avs_fs_readdir = 0x0bb,
+    .avs_fs_closedir = 0x0b8,
+    .avs_fs_dump_mountpoint = 0x0e9,
+    .avs_gheap_allocate = 0x169,
+    .avs_gheap_free = 0x16a,
+    .property_create = 0x126,
+    .property_destroy = 0x13c,
+    .property_search = 0x12e,
+    .property_node_create = 0x02c,
+    .property_node_refer = 0x009,
+    .property_psmap_import = 0x005,
+    .property_insert_read = 0x09a,
+    .property_node_traversal = 0x046,
+    .property_node_name = 0x049,
+    .property_read_query_memsize = 0x0ff,
+    .property_read_query_memsize_long = 0x02b,
+    .log_boot = 0x04e,
+    .log_body_info = 0x0dc,
+    .log_body_warning = 0x018,
+    .log_body_misc = 0x075,
+    .boot_takes_split_heaps = true,
 };
 
 struct AvsFuncs {
     avs_boot_t avs_boot = nullptr;
+    avs_boot_split_heap_t avs_boot_split_heap = nullptr;
+    bool boot_takes_split_heaps = false;
     avs_shutdown_t avs_shutdown = nullptr;
     avs_is_active_t avs_is_active = nullptr;
 
@@ -215,6 +261,8 @@ struct AvsFuncs {
 
     bool Load(DllLoader& loader, const AvsOrdinals& ord = kAvsOrdinals217) {
         DLL_LOAD(loader, avs_boot, ord.avs_boot);
+        avs_boot_split_heap = reinterpret_cast<avs_boot_split_heap_t>(avs_boot);
+        boot_takes_split_heaps = ord.boot_takes_split_heaps;
         DLL_LOAD(loader, avs_shutdown, ord.avs_shutdown);
         DLL_LOAD(loader, avs_is_active, ord.avs_is_active);
         DLL_LOAD(loader, avs_filesys_imagefs, ord.avs_filesys_imagefs);

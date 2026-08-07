@@ -34,7 +34,7 @@ extern const DllOffsetSet kFallbackIidxOffsets;
 const DllOffsetSet& ActiveOffsets();
 void SetActiveOffsets(const DllOffsetSet& offsets);
 
-enum class AvsGeneration : uint8_t { Avs217, Avs2161 };
+enum class AvsGeneration : uint8_t { Avs217, Avs2161, Avs2158 };
 
 struct AfpConfig {
     const char* slug;

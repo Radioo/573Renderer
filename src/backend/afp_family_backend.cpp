@@ -90,13 +90,17 @@ bool LoadAllDlls(const std::string& dll_dir, const AfpProfiles::AfpConfig& p, bo
     if (!g_avs_dll.Load((dll_dir + p.avs_dll).c_str())) return false;
     if (!g_afp_dll.Load((dll_dir + p.afp_dll).c_str())) return false;
     if (!g_afpu_dll.Load((dll_dir + p.afpu_dll).c_str())) return false;
-    const AvsOrdinals& avs_ord = (p.avs_generation == AfpProfiles::AvsGeneration::Avs2161)
-                                     ? kAvsOrdinals2161
-                                     : kAvsOrdinals217;
-    LOG("Init", "AVS ordinal map: %s",
-        (p.avs_generation == AfpProfiles::AvsGeneration::Avs2161) ? "avs 2.16.1"
-                                                                  : "avs 2.16.3/2.17");
-    if (!g_avs.Load(g_avs_dll, avs_ord)) {
+    const AvsOrdinals* avs_ord = &kAvsOrdinals217;
+    const char* avs_ord_name = "avs 2.16.3/2.17";
+    if (p.avs_generation == AfpProfiles::AvsGeneration::Avs2161) {
+        avs_ord = &kAvsOrdinals2161;
+        avs_ord_name = "avs 2.16.1";
+    } else if (p.avs_generation == AfpProfiles::AvsGeneration::Avs2158) {
+        avs_ord = &kAvsOrdinals2158;
+        avs_ord_name = "avs 2.15.8";
+    }
+    LOG("Init", "AVS ordinal map: %s", avs_ord_name);
+    if (!g_avs.Load(g_avs_dll, *avs_ord)) {
         LOG("Init", "FAILED to resolve AVS functions");
         return false;
     }

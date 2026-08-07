@@ -10,8 +10,11 @@
 
 namespace {
 void* g_avs_heap = nullptr;
+void* g_avs_gheap = nullptr;
 }
 static const int AVS_HEAP_SIZE = 128 * 1024 * 1024;
+static const int AVS_STD_HEAP_SIZE = 64 * 1024 * 1024;
+static const int AVS_GHEAP_SIZE = 64 * 1024 * 1024;
 namespace {
 bool g_avs_booted = false;
 }
@@ -34,6 +37,35 @@ void __cdecl avs_log_writer(const char* chars, int nchars, void* ctx) {
 }
 }
 
+namespace {
+bool AllocSplitHeapIfNeeded(const AvsFuncs& avs) {
+    if (!avs.boot_takes_split_heaps) return true;
+    g_avs_gheap = malloc(AVS_GHEAP_SIZE);
+    if (g_avs_gheap == nullptr) {
+        LOG("AVS", "Failed to allocate %d MB avs heap", AVS_GHEAP_SIZE / (1024 * 1024));
+        return false;
+    }
+    LOG("AVS", "Allocated %d MB avs heap at %p (split-heap avs_boot)",
+        AVS_GHEAP_SIZE / (1024 * 1024), g_avs_gheap);
+    return true;
+}
+
+void CallAvsBoot(const AvsFuncs& avs, void* config_node) {
+    if (avs.boot_takes_split_heaps) {
+        LOG("AVS",
+            "Calling avs_boot(config=%p, std_heap=%p/0x%x, avs_heap=%p/0x%x) [split-heap]...",
+            config_node, g_avs_heap, AVS_STD_HEAP_SIZE, g_avs_gheap, AVS_GHEAP_SIZE);
+        avs.avs_boot_split_heap(config_node, g_avs_heap, AVS_STD_HEAP_SIZE, g_avs_gheap,
+                                AVS_GHEAP_SIZE, reinterpret_cast<void*>(avs_log_writer), nullptr);
+        return;
+    }
+    LOG("AVS", "Calling avs_boot(config=%p, heap=%p, size=0x%x)...", config_node, g_avs_heap,
+        AVS_HEAP_SIZE);
+    avs.avs_boot(config_node, g_avs_heap, AVS_HEAP_SIZE, nullptr,
+                 reinterpret_cast<void*>(avs_log_writer), nullptr);
+}
+}
+
 bool AvsManager::Boot(AvsFuncs& avs) {
     LOG("AVS", "Booting AVS...");
 
@@ -43,6 +75,8 @@ bool AvsManager::Boot(AvsFuncs& avs) {
         return false;
     }
     LOG("AVS", "Allocated %d MB heap at %p", AVS_HEAP_SIZE / (1024 * 1024), g_avs_heap);
+
+    if (!AllocSplitHeapIfNeeded(avs)) return false;
 
     uint8_t prop_buf[4096];
     memset(prop_buf, 0, sizeof(prop_buf));
@@ -68,10 +102,7 @@ bool AvsManager::Boot(AvsFuncs& avs) {
         auto* config_node = avs.property_search(prop, nullptr, "/config");
         LOG("AVS", "property_search('/config') = %p", config_node);
 
-        LOG("AVS", "Calling avs_boot(config=%p, heap=%p, size=0x%x)...", config_node, g_avs_heap,
-            AVS_HEAP_SIZE);
-        avs.avs_boot(static_cast<void*>(config_node), g_avs_heap, AVS_HEAP_SIZE, nullptr,
-                     reinterpret_cast<void*>(avs_log_writer), nullptr);
+        CallAvsBoot(avs, static_cast<void*>(config_node));
 
         avs.property_destroy(prop);
     }
