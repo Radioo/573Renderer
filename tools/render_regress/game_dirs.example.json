@@ -11,5 +11,6 @@
   "iidx17_encrypted": "<path to your IIDX 17 SIRIUS dump>",
   "iidx17_title": "<path to your IIDX 17 SIRIUS dump>",
   "iidx13_title": "<path to your IIDX 13 DistorteD dump>",
-  "iidx11_red": "<path to your IIDX 11 RED dump>"
+  "iidx11_red": "<path to your IIDX 11 RED dump>",
+  "iidx09_title": "<path to your IIDX 9 9th style dump, the dir holding data/>"
 }

@@ -22,6 +22,15 @@ const std::vector<Profile> kProfiles = {
         .default_render_h = 720,
     },
     Profile{
+        .name = "IIDX 9 (9th style)",
+        .slug = "iidx09",
+        .dir_substring = "9th style",
+        .backend_id = "scene3d",
+        .game_dll = "bm2dx.exe",
+        .default_render_w = 640,
+        .default_render_h = 480,
+    },
+    Profile{
         .name = "IIDX 11 (IIDX RED)",
         .slug = "iidx11",
         .dir_substring = "iidxred",

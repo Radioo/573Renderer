@@ -3,6 +3,20 @@
 The game-profile system encodes what differs between Konami game versions so
 the renderer can boot the right ordinals + defaults per game.
 
+## IIDX 9 (9th style) - the older index container
+
+9th style writes chunk 0's length **big-endian** and has no chunk 1, so the
+name tables are appended to chunk 0 instead. Everything inside chunk 0 is the
+usual little-endian layout at the usual offsets, and nothing is encrypted.
+`SysIdx::Parse` picks the container by testing whether `4 + BE_length` equals
+the file size, which is exact on all 170 packages and cannot collide with a
+little-endian file. Layout and the split name-table form:
+`IIDX/ninth_style_index_container.md`.
+
+Its packages live under `data/graph/{anime,game,intro}/` plus `data/graph/mdata`,
+with no `sys/` directory and no 3D scenes. Point the tool at the directory that
+holds `data/` - for a standard dump that is `<root>/D/C02`.
+
 ## IIDX 11 (RED) - binary DirectX .x models
 
 RED needs no decryption anywhere: its 172 `sys/` packages and all 360 tiles are

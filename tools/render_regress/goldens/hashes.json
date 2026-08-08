@@ -7,6 +7,14 @@
     "ifs": "common_background_v3.arc",
     "seconds": 3.2
   },
+  "iidx09_title": {
+    "frames": {
+      "200": "368cc854114299feae987823965e97646ad1803b12c6eff81aa05b3e298a532b",
+      "60": "368cc854114299feae987823965e97646ad1803b12c6eff81aa05b3e298a532b"
+    },
+    "ifs": "title9",
+    "seconds": 3.8
+  },
   "iidx11_red": {
     "frames": {
       "120": "622bce3ed8228432c0c2d3dbdaa84222cf21fecb498a8c20f6b22d426ebd0989",

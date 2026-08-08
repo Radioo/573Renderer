@@ -25,6 +25,12 @@ std::filesystem::path Sirius13Dir() {
     return std::filesystem::path(*root) / "data" / "graph" / "sys";
 }
 
+std::filesystem::path Ninth09Dir() {
+    const std::optional<std::string> root = Support::EnvVar("R573_IIDX09_DIR");
+    if (!root || root->empty()) return {};
+    return std::filesystem::path(*root) / "data" / "graph";
+}
+
 std::filesystem::path Red11Dir() {
     const std::optional<std::string> root = Support::EnvVar("R573_IIDX11_DIR");
     if (!root || root->empty()) return {};
@@ -258,5 +264,49 @@ TEST_CASE("iidx red packages load with no encryption at all", "[.real]") {
     REQUIRE(packages > 150);
     REQUIRE(tiles_total > 300);
     REQUIRE(cells_total > 3000);
+    REQUIRE(past_last_tile == 0);
+}
+
+TEST_CASE("9th style packages load from the single big-endian chunk", "[.real]") {
+    const std::filesystem::path graph = Ninth09Dir();
+    if (graph.empty() || !std::filesystem::exists(graph)) return;
+
+    int packages = 0;
+    int tiles_total = 0;
+    int cells_total = 0;
+    int named_cells = 0;
+    int with_animations = 0;
+    int past_last_tile = 0;
+
+    for (const auto& e : std::filesystem::recursive_directory_iterator(graph)) {
+        if (!e.is_directory()) continue;
+        const std::string dir = e.path().string();
+        if (!Gc2d::IsPackageDir(dir)) continue;
+
+        Gc2d::Package loaded;
+        std::string err;
+        REQUIRE(Gc2d::Load(dir, loaded, err));
+        packages++;
+        cells_total += (int)loaded.index.cells.size();
+        named_cells += (int)loaded.index.cell_names.size();
+        if (!loaded.index.animation_names.empty()) with_animations++;
+        REQUIRE(loaded.tiles.size() == loaded.index.texture_paths.size());
+        for (const auto& tile : loaded.tiles) {
+            REQUIRE(tile.width > 0);
+            REQUIRE(tile.bgra.size() == (size_t)tile.width * (size_t)tile.height * 4);
+            tiles_total++;
+        }
+        CheckCells(loaded.index, past_last_tile);
+        if (!loaded.index.records.empty()) CheckRecords(loaded.index);
+
+        for (const auto& [name, start] : loaded.index.animation_names)
+            REQUIRE((size_t)start < loaded.index.records.size());
+    }
+
+    REQUIRE(packages == 170);
+    REQUIRE(tiles_total > 300);
+    REQUIRE(cells_total > 5000);
+    REQUIRE(named_cells == cells_total);
+    REQUIRE(with_animations > 80);
     REQUIRE(past_last_tile == 0);
 }

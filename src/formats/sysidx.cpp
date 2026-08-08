@@ -17,6 +17,7 @@ constexpr size_t kHeaderPaths = 0x014;
 constexpr size_t kCellTableFixed = 0x1B8;
 constexpr size_t kRecordBytes = 36;
 constexpr size_t kCellBytes = 8;
+constexpr size_t kTailGapBytes = 44;
 
 uint16_t U16(std::span<const uint8_t> b, size_t o) {
     if (o + 1 >= b.size()) return 0;
@@ -41,6 +42,16 @@ std::string FixedString(std::span<const uint8_t> b, size_t o, size_t max_len) {
         s.push_back((char)c);
     }
     return s;
+}
+
+uint32_t U32Be(std::span<const uint8_t> b, size_t o) {
+    if (o + 3 >= b.size()) return 0;
+    return ((uint32_t)b[o] << 24U) | ((uint32_t)b[o + 1] << 16U) | ((uint32_t)b[o + 2] << 8U) |
+           (uint32_t)b[o + 3];
+}
+
+bool IsSingleChunkBigEndian(std::span<const uint8_t> file) {
+    return file.size() >= 8 && (size_t)U32Be(file, 0) + 4 == file.size();
 }
 
 bool SplitChunks(std::span<const uint8_t> file, std::span<const uint8_t>& chunk0,
@@ -106,7 +117,7 @@ void ReadRotationBlock(std::span<const uint8_t> c0, uint32_t off, std::vector<Ke
     ReadKeys(c0, U32(c0, off), 4, false, out);
 }
 
-void ParseCells(std::span<const uint8_t> c0, uint32_t off, Package& out) {
+size_t ParseCells(std::span<const uint8_t> c0, uint32_t off, Package& out) {
     out.cells.clear();
     size_t at = off;
     while (at + kCellBytes <= c0.size()) {
@@ -119,6 +130,7 @@ void ParseCells(std::span<const uint8_t> c0, uint32_t off, Package& out) {
         out.cells.push_back(c);
         at += kCellBytes;
     }
+    return at;
 }
 
 void ParseRecords(std::span<const uint8_t> c0, uint32_t off, Package& out) {
@@ -142,8 +154,42 @@ void ParseRecords(std::span<const uint8_t> c0, uint32_t off, Package& out) {
         ReadKeys(c0, U32(c0, at + 24), 8, false, r.scale);
         ReadAlphaKeys(c0, U32(c0, at + 28), r.alpha);
         ReadRotationBlock(c0, U32(c0, at + 32), r.rotation);
+        const bool last = r.type == kRecEndTable;
         out.records.push_back(std::move(r));
+        if (last) break;
     }
+}
+
+size_t ParseRecordsEnd(std::span<const uint8_t> c0, uint32_t off) {
+    if (off == 0 || off >= c0.size()) return 0;
+    const size_t count = (c0.size() - off) / kRecordBytes;
+    for (size_t i = 0; i < count; i++) {
+        if (I16(c0, off + (i * kRecordBytes)) == kRecEndTable) {
+            return off + ((i + 1) * kRecordBytes);
+        }
+    }
+    return 0;
+}
+
+bool ParseSplitNameTable(std::span<const uint8_t> sec, size_t& at,
+                         std::unordered_map<std::string, uint16_t>& out) {
+    std::vector<std::string> names;
+    while (at < sec.size()) {
+        if (sec[at] == 0) {
+            at++;
+            break;
+        }
+        std::string name = FixedString(sec, at, sec.size() - at);
+        at += name.size() + 1;
+        names.push_back(std::move(name));
+    }
+    for (const auto& name : names) {
+        if (at + 2 > sec.size()) return false;
+        out.emplace(name, U16(sec, at));
+        at += 2;
+    }
+    if (at < sec.size() && sec[at] == 0) at++;
+    return !names.empty();
 }
 
 bool ParseNameTable(std::span<const uint8_t> c1, size_t& at,
@@ -169,7 +215,12 @@ bool Parse(std::span<const uint8_t> file, Package& out, std::string& err) {
 
     std::span<const uint8_t> c0;
     std::span<const uint8_t> c1;
-    if (!SplitChunks(file, c0, c1, err)) return false;
+    const bool single_chunk = IsSingleChunkBigEndian(file);
+    if (single_chunk) {
+        c0 = file.subspan(4, U32Be(file, 0));
+    } else if (!SplitChunks(file, c0, c1, err)) {
+        return false;
+    }
     if (c0.size() < kCellTableFixed) {
         err = "chunk 0 is smaller than the fixed header";
         return false;
@@ -194,8 +245,22 @@ bool Parse(std::span<const uint8_t> file, Package& out, std::string& err) {
         err = "cell table offset runs past chunk 0";
         return false;
     }
-    ParseCells(c0, off_cells, out);
+    const size_t cells_end = ParseCells(c0, off_cells, out);
     ParseRecords(c0, off_records, out);
+
+    if (single_chunk) {
+        const size_t records_end = ParseRecordsEnd(c0, off_records);
+        const size_t len_at = (records_end != 0) ? records_end : (cells_end + kTailGapBytes);
+        if (len_at + 4 > c0.size()) return true;
+        const uint32_t len = U32(c0, len_at);
+        if (len_at + 4 + (size_t)len != c0.size()) return true;
+
+        const std::span<const uint8_t> section = c0.subspan(len_at + 4, len);
+        size_t at = 0;
+        ParseSplitNameTable(section, at, out.cell_names);
+        ParseSplitNameTable(section, at, out.animation_names);
+        return true;
+    }
 
     size_t at = 0;
     std::unordered_map<std::string, uint16_t> unused_table;

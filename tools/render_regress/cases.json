@@ -1,6 +1,19 @@
 {
   "cases": [
     {
+      "name": "iidx09_title",
+      "arch": "x86",
+      "profile": "iidx09",
+      "ifs_candidates": [
+        "data/graph/game/title9"
+      ],
+      "animation": "TITLE_TAIKI",
+      "frames": [
+        60,
+        200
+      ]
+    },
+    {
       "name": "iidx11_red",
       "arch": "x86",
       "profile": "iidx11",
