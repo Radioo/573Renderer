@@ -125,3 +125,18 @@ has to be reduced modulo 255. Getting that wrong corrupts exactly two S-box
 entries, which leaves most blocks decrypting correctly and looks like a chaining
 bug rather than a cipher bug. The NIST SP 800-38A CBC-AES256 vector in
 `tests/formats/aes_tests.cpp` catches it immediately.
+
+## DirectX .x models (`xfile.h`, `xfile_binary.h`)
+
+`XFile::Parse` takes a whole `.x` file. The header's third field selects the
+encoding: `txt ` is parsed directly by the recursive-descent reader in
+`xfile.cpp`, and `bin ` is first transcoded to the text form by
+`XFile::BinaryToText`, then re-entered through the same `Parse`. Anything else
+(`tzip`, `bzip`) is rejected.
+
+Transcoding rather than writing a second parser is deliberate: the two encodings
+are the same object graph, and the text reader is the one covered by tests. The
+transcoder invents the separators the binary form omits (it emits `value;` after
+every integer and float, which the reader treats as whitespace since every list
+carries its own length), drops GUIDs, and formats floats with a
+shortest-round-trip conversion so model coordinates survive the trip.

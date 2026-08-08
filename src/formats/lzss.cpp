@@ -12,6 +12,8 @@ namespace {
 
 constexpr size_t kRingInit = 4078;
 constexpr size_t kMinMatch = 3;
+constexpr size_t kMaxMatch = 18;
+constexpr size_t kFlagsPerByte = 8;
 constexpr uint32_t kFlagsExhausted = 0x100;
 constexpr uint32_t kFlagsRefill = 0xFF00;
 
@@ -28,6 +30,14 @@ bool Decompress(std::span<const uint8_t> blob, std::vector<uint8_t>& out, std::s
         return false;
     }
     const uint32_t usize = ReadSizeLe(blob);
+
+    const size_t coded = blob.size() - 4;
+    const size_t max_output = ((coded / (1 + (2 * kFlagsPerByte))) + 1) * kFlagsPerByte * kMaxMatch;
+    if ((size_t)usize > max_output) {
+        err = "declared size " + std::to_string(usize) + " exceeds what " + std::to_string(coded) +
+              " coded bytes can produce (" + std::to_string(max_output) + ")";
+        return false;
+    }
 
     std::vector<uint8_t> work(kRingBytes + usize, 0);
     size_t src = 4;

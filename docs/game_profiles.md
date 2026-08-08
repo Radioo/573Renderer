@@ -3,6 +3,36 @@
 The game-profile system encodes what differs between Konami game versions so
 the renderer can boot the right ordinals + defaults per game.
 
+## IIDX 11 (RED) - binary DirectX .x models
+
+RED needs no decryption anywhere: its 172 `sys/` packages and all 360 tiles are
+plain LZSS. What it needs is the **binary** `.X` encoding. A `.x` header's third
+field is `txt ` or `bin `, and RED ships 7 of its 9 models as `bin` (DistorteD
+ships 1, Resort Anthem none), so `model/red` failed to load entirely while the
+newer games looked fine.
+
+Both encodings describe the same object graph, so `XFile::Parse` transcodes the
+binary token stream to the text form (`src/formats/xfile_binary.cpp`) and reuses
+the existing parser rather than growing a second one. Token table and the
+transcoding pitfalls: `IIDX/binary_x_models.md`.
+
+## IIDX 13 (DistorteD) - same backend, Blowfish textures
+
+DistorteD shares the whole IIDX 17 stack below (`scene3d` backend, 640x480, GC
+sprite packages) with one difference: its content root is `data/graph/` and its
+`sys/` textures are **Blowfish-CBC encrypted while `system.idx` is plaintext** -
+the inverse of SIRIUS, where the package is sealed as a unit. The key derives
+from the texture's file stem, so the game uses ten keys total. Details and
+re-find anchors: `IIDX/distorted_gc_encryption.md`.
+
+The loader decides per texture by decoding: plaintext LZSS first, and if that
+does not yield a `GC ` header, Blowfish. The `GC ` magic is the acceptance test,
+so a wrong guess cannot be silently accepted. `Lzss::Decompress` rejects a
+declared output size larger than the coded input can produce (one control byte
+covers eight items, longest match 18 bytes), which is what makes probing safe -
+without it a garbage length from encrypted bytes triggers a multi-gigabyte
+allocation.
+
 ## IIDX 17 (SIRIUS) - the engine-free `scene3d` backend
 
 SIRIUS has no `bm2dx.dll` and no libafp: the AFP engine is statically linked

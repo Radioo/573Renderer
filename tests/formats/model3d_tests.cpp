@@ -255,9 +255,16 @@ TEST_CASE("xfile collects animation keys per frame channel") {
     REQUIRE(scene.max_key_time == 30);
 }
 
-TEST_CASE("xfile rejects the binary form rather than misparsing it") {
+TEST_CASE("xfile rejects an unknown container form rather than misparsing it") {
+    XFile::Scene scene;
+    std::string err;
+    REQUIRE_FALSE(XFile::Parse("xof 0303tzip0032\n", scene, err));
+    REQUIRE(err.find("unsupported .x form") != std::string::npos);
+}
+
+TEST_CASE("xfile accepts the binary form but still needs objects in it") {
     XFile::Scene scene;
     std::string err;
     REQUIRE_FALSE(XFile::Parse("xof 0303bin 0032\n", scene, err));
-    REQUIRE(err.find("text .x") != std::string::npos);
+    REQUIRE(err.find("no Frame or Mesh") != std::string::npos);
 }

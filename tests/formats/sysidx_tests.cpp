@@ -19,12 +19,25 @@ std::filesystem::path SysDir() {
     return std::filesystem::path(*root) / "data" / "graph_data" / "sys";
 }
 
-int CheckCells(const SysIdx::Package& pkg) {
+std::filesystem::path Sirius13Dir() {
+    const std::optional<std::string> root = Support::EnvVar("R573_IIDX13_DIR");
+    if (!root || root->empty()) return {};
+    return std::filesystem::path(*root) / "data" / "graph" / "sys";
+}
+
+std::filesystem::path Red11Dir() {
+    const std::optional<std::string> root = Support::EnvVar("R573_IIDX11_DIR");
+    if (!root || root->empty()) return {};
+    return std::filesystem::path(*root) / "data" / "graph" / "sys";
+}
+
+int CheckCells(const SysIdx::Package& pkg, int& past_last_tile) {
     int straddling = 0;
     const int atlas_h = SysIdx::kAtlasTileHeight * (int)pkg.texture_paths.size();
     for (const auto& c : pkg.cells) {
         REQUIRE((int)c.x + (int)c.w <= SysIdx::kAtlasWidth);
-        REQUIRE((int)c.y + (int)c.h <= atlas_h);
+        REQUIRE((int)c.y + (int)c.h <= SysIdx::kAtlasTileHeight * SysIdx::kMaxTextures);
+        if ((int)c.y + (int)c.h > atlas_h) past_last_tile++;
         if ((c.y / SysIdx::kAtlasTileHeight) != ((c.y + c.h - 1) / SysIdx::kAtlasTileHeight)) {
             straddling++;
         }
@@ -130,6 +143,7 @@ TEST_CASE("sirius index invariants hold on the real IIDX 17 data", "[.real]") {
     int with_records = 0;
     int cells_total = 0;
     int straddling = 0;
+    int past_last_tile = 0;
     int tiles_total = 0;
 
     for (const auto& e : std::filesystem::directory_iterator(sys)) {
@@ -150,7 +164,7 @@ TEST_CASE("sirius index invariants hold on the real IIDX 17 data", "[.real]") {
         REQUIRE(loaded.tiles.size() == pkg.texture_paths.size());
         cells_total += (int)pkg.cells.size();
 
-        straddling += CheckCells(pkg);
+        straddling += CheckCells(pkg, past_last_tile);
 
         if (!pkg.records.empty()) {
             with_records++;
@@ -171,5 +185,78 @@ TEST_CASE("sirius index invariants hold on the real IIDX 17 data", "[.real]") {
     REQUIRE(with_records > 200);
     REQUIRE(cells_total > 20000);
     REQUIRE(straddling > 0);
+    REQUIRE(past_last_tile == 0);
     REQUIRE(tiles_total > 1300);
+}
+
+TEST_CASE("distorted packages load through the blowfish texture path", "[.real]") {
+    const std::filesystem::path sys = Sirius13Dir();
+    if (sys.empty() || !std::filesystem::exists(sys)) return;
+
+    int packages = 0;
+    int tiles_total = 0;
+    int cells_total = 0;
+    int past_last_tile = 0;
+
+    for (const auto& e : std::filesystem::directory_iterator(sys)) {
+        if (!e.is_directory()) continue;
+        const std::string dir = e.path().string();
+        if (!Gc2d::IsPackageDir(dir)) continue;
+
+        Gc2d::Package loaded;
+        std::string err;
+        REQUIRE(Gc2d::Load(dir, loaded, err));
+        packages++;
+        cells_total += (int)loaded.index.cells.size();
+        REQUIRE(loaded.tiles.size() == loaded.index.texture_paths.size());
+        for (const auto& tile : loaded.tiles) {
+            REQUIRE(tile.width > 0);
+            REQUIRE(tile.width <= SysIdx::kAtlasWidth);
+            REQUIRE(tile.height <= SysIdx::kAtlasTileHeight);
+            REQUIRE(tile.bgra.size() == (size_t)tile.width * (size_t)tile.height * 4);
+            tiles_total++;
+        }
+        CheckCells(loaded.index, past_last_tile);
+        if (!loaded.index.records.empty()) CheckRecords(loaded.index);
+    }
+
+    REQUIRE(packages > 200);
+    REQUIRE(tiles_total > 700);
+    REQUIRE(cells_total > 5000);
+    REQUIRE(past_last_tile == 26);
+}
+
+TEST_CASE("iidx red packages load with no encryption at all", "[.real]") {
+    const std::filesystem::path sys = Red11Dir();
+    if (sys.empty() || !std::filesystem::exists(sys)) return;
+
+    int packages = 0;
+    int tiles_total = 0;
+    int cells_total = 0;
+    int past_last_tile = 0;
+
+    for (const auto& e : std::filesystem::directory_iterator(sys)) {
+        if (!e.is_directory()) continue;
+        const std::string dir = e.path().string();
+        if (!Gc2d::IsPackageDir(dir)) continue;
+
+        Gc2d::Package loaded;
+        std::string err;
+        REQUIRE(Gc2d::Load(dir, loaded, err));
+        packages++;
+        cells_total += (int)loaded.index.cells.size();
+        REQUIRE(loaded.tiles.size() == loaded.index.texture_paths.size());
+        for (const auto& tile : loaded.tiles) {
+            REQUIRE(tile.width > 0);
+            REQUIRE(tile.bgra.size() == (size_t)tile.width * (size_t)tile.height * 4);
+            tiles_total++;
+        }
+        CheckCells(loaded.index, past_last_tile);
+        if (!loaded.index.records.empty()) CheckRecords(loaded.index);
+    }
+
+    REQUIRE(packages > 150);
+    REQUIRE(tiles_total > 300);
+    REQUIRE(cells_total > 3000);
+    REQUIRE(past_last_tile == 0);
 }

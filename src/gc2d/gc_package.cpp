@@ -1,6 +1,7 @@
 #include "gc2d/gc_package.h"
 
 #include "formats/aes.h"
+#include "formats/blowfish.h"
 #include "formats/gcz.h"
 #include "formats/lzss.h"
 #include "formats/sysidx.h"
@@ -15,6 +16,7 @@
 #include <ios>
 #include <iterator>
 #include <span>
+#include <string_view>
 #include <string>
 #include <system_error>
 #include <utility>
@@ -80,6 +82,36 @@ std::filesystem::path SealedName(const std::filesystem::path& plain) {
     return sealed;
 }
 
+constexpr std::string_view kBlowfishMaster = "omE872M2akmRkERh4177S";
+constexpr std::array<uint8_t, Blowfish::kBlockBytes> kBlowfishIv = {'t', 'u', 'k', 'u',
+                                                                    'p', 'y', 'p', 'y'};
+constexpr size_t kBlowfishDerivedBytes = 24;
+
+std::vector<uint8_t> DeriveTextureKey(const std::string& stem) {
+    std::vector<uint8_t> master(kBlowfishMaster.begin(), kBlowfishMaster.end());
+    std::vector<uint8_t> seed(kBlowfishDerivedBytes, 0);
+    for (size_t i = 0; i < stem.size() && i < seed.size(); i++)
+        seed[i] = (uint8_t)stem[i];
+
+    std::vector<uint8_t> derived;
+    Blowfish::Cipher(master).EncryptCbc(kBlowfishIv, seed, derived);
+    if (derived.empty()) return {};
+    derived.back() = 0;
+    const auto zero = std::ranges::find(derived, 0);
+    return {derived.begin(), zero};
+}
+
+bool DecodeTexture(std::span<const uint8_t> raw, const std::string& stem, Gcz::Tile& out,
+                   std::string& err) {
+    std::vector<uint8_t> payload;
+    if (Lzss::Decompress(raw, payload, err) && Gcz::Parse(payload, out, err)) return true;
+
+    std::vector<uint8_t> plain;
+    Blowfish::Cipher(DeriveTextureKey(stem)).DecryptCbc(kBlowfishIv, raw, plain);
+    if (!Lzss::Decompress(plain, payload, err)) return false;
+    return Gcz::Parse(payload, out, err);
+}
+
 bool LoadTextures(const std::filesystem::path& dir, Package& out, std::string& err) {
     out.tiles.clear();
     out.tiles.reserve(out.index.texture_paths.size());
@@ -87,10 +119,8 @@ bool LoadTextures(const std::filesystem::path& dir, Package& out, std::string& e
         const std::filesystem::path file = dir / LeafName(vfs);
         std::vector<uint8_t> raw;
         if (!ReadMaybeEncrypted(file, SealedName(file), out.name, raw, err)) return false;
-        std::vector<uint8_t> payload;
-        if (!Lzss::Decompress(raw, payload, err)) return false;
         Gcz::Tile parsed;
-        if (!Gcz::Parse(payload, parsed, err)) return false;
+        if (!DecodeTexture(raw, file.stem().string(), parsed, err)) return false;
         TileImage tile;
         tile.width = parsed.width;
         tile.height = parsed.height;

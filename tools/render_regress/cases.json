@@ -1,6 +1,31 @@
 {
   "cases": [
     {
+      "name": "iidx11_red",
+      "arch": "x86",
+      "profile": "iidx11",
+      "ifs_candidates": [
+        "data/graph/model/red"
+      ],
+      "frames": [
+        30,
+        120
+      ]
+    },
+    {
+      "name": "iidx13_title",
+      "arch": "x86",
+      "profile": "iidx13",
+      "ifs_candidates": [
+        "data/graph/sys/title"
+      ],
+      "animation": "TITLE_TAIKI",
+      "frames": [
+        100,
+        300
+      ]
+    },
+    {
       "name": "iidx17_scene",
       "arch": "x86",
       "profile": "iidx17",

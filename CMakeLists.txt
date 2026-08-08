@@ -50,12 +50,14 @@ add_library(r573_formats STATIC
     src/formats/txp2.cpp
     src/formats/lzss.cpp
     src/formats/aes.cpp
+    src/formats/blowfish.cpp
     src/formats/gcz.cpp
     src/formats/sysidx.cpp
     src/formats/gcanim.cpp
     src/formats/inz.cpp
     src/formats/xfile.cpp
     src/formats/xfile_lexer.cpp
+    src/formats/xfile_binary.cpp
     src/formats/dxt_decode.cpp
     src/formats/bgra_crop.cpp
     src/formats/hsl_adjust.cpp
@@ -247,6 +249,8 @@ add_executable(formats_tests
     tests/formats/model3d_real_tests.cpp
     tests/formats/sysidx_tests.cpp
     tests/formats/aes_tests.cpp
+    tests/formats/blowfish_tests.cpp
+    tests/formats/xfile_binary_tests.cpp
     src/gc2d/gc_package.cpp
     tests/formats/frame_process_tests.cpp
     tests/formats/dxt_decode_tests.cpp

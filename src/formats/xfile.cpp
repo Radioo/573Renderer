@@ -1,5 +1,6 @@
 #include "formats/xfile.h"
 
+#include "formats/xfile_binary.h"
 #include "formats/xfile_lexer.h"
 
 #include <array>
@@ -297,8 +298,17 @@ bool Parse(const std::string& text, Scene& out, std::string& err) {
         err = "not a DirectX .x file (missing 'xof ' magic)";
         return false;
     }
-    if (text.size() < 11 || text.compare(8, 3, "txt") != 0) {
-        err = "only the text .x form is supported, got '" + text.substr(8, 3) + "'";
+    if (text.size() < 11) {
+        err = ".x file is shorter than its header";
+        return false;
+    }
+    if (text.compare(8, 3, "bin") == 0) {
+        std::string converted;
+        if (!BinaryToText(text, converted, err)) return false;
+        return Parse(converted, out, err);
+    }
+    if (text.compare(8, 3, "txt") != 0) {
+        err = "unsupported .x form '" + text.substr(8, 3) + "'";
         return false;
     }
 
