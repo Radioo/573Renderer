@@ -2,6 +2,8 @@
 
 #include "../state/app_state.h"
 #include "gui_panels_internal.h"
+#include "gui_scene3d_panel.h"
+#include "scene3d/scene3d_host.h"
 
 #include <span>
 #include <string>
@@ -13,6 +15,10 @@ namespace {
 
 bool QproTabVisible() {
     return App::Global().GetGameProfileSlug() == "iidx33";
+}
+
+bool Scene3dTabVisible() {
+    return Scene3dHost::Active();
 }
 
 constexpr PanelDesc kModernPanels[] = {
@@ -59,6 +65,11 @@ constexpr PanelDesc kDdrPanels[] = {
      .slot = PanelSlot::InspectorTab,
      .draw = &Panels::RenderLiveTab,
      .visible = nullptr},
+    {.id = "scene3d",
+     .tab_label = "3D scene",
+     .slot = PanelSlot::InspectorTab,
+     .draw = &Panels::Scene3dPanel::Render,
+     .visible = &Scene3dTabVisible},
 };
 
 struct PanelSet {

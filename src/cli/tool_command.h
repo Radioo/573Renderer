@@ -13,6 +13,7 @@ enum class ToolKind : std::uint8_t {
     ExtractCustomize,
     ExtractQproJson,
     QproScan,
+    Scene3dTest,
 };
 
 struct ToolCommand {

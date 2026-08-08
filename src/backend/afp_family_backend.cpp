@@ -1,4 +1,6 @@
 #include "backend/afp_family_backend.h"
+#include "scene3d/scene3d.h"
+#include "scene3d/scene3d_host.h"
 
 #include "afp_boot.h"
 #include "app_globals.h"
@@ -244,6 +246,26 @@ std::vector<App::State::IfsEntry> ScanGameDir(const std::string& game_dir,
     return out;
 }
 
+void AppendSceneDirs(const std::string& game_dir, std::vector<App::State::IfsEntry>& out) {
+    std::error_code ec;
+    const std::filesystem::path root(game_dir);
+    if (!std::filesystem::is_directory(root, ec)) return;
+    size_t found = 0;
+    for (const auto& e : std::filesystem::recursive_directory_iterator(
+             root, std::filesystem::directory_options::skip_permission_denied, ec)) {
+        if (ec) break;
+        if (!e.is_directory(ec)) continue;
+        const std::string dir = e.path().string();
+        if (!Scene3d::IsSceneDir(dir)) continue;
+        App::State::IfsEntry entry;
+        entry.full_path = dir;
+        entry.name = std::filesystem::relative(e.path(), root, ec).string() + "  [3D scene]";
+        out.push_back(std::move(entry));
+        found++;
+    }
+    if (found != 0) LOG("Boot", "Found %zu 3D model scenes", found);
+}
+
 void ScanThreadBody(const std::string& game_dir, bool scan_arcs, bool scan_txp2) noexcept {
     try {
         auto& st = App::Global();
@@ -261,6 +283,7 @@ void ScanThreadBody(const std::string& game_dir, bool scan_arcs, bool scan_txp2)
                 st.SetIfsScanStatus(s);
             },
             scan_arcs, scan_txp2);
+        AppendSceneDirs(game_dir, ifs_list);
         LOG("Boot", "Found %zu IFS files under %s", ifs_list.size(), game_dir.c_str());
         st.SetAvailableIfs(std::move(ifs_list));
         st.SetIfsScanStatus("");
@@ -387,6 +410,14 @@ void AfpFamilyBackend::StartContentScan() {
 bool AfpFamilyBackend::LoadContent(const std::string& path, bool from_arc) {
     auto& state = App::Global();
     state.BeginLoad(path);
+
+    if (Scene3d::IsSceneDir(path)) {
+        state.UpdateLoadStage("Loading 3D scene");
+        const bool ok = Scene3dHost::Load(path);
+        state.EndLoad();
+        return ok;
+    }
+    Scene3dHost::Unload();
 
     std::string mount_path = path;
     if (from_arc) {

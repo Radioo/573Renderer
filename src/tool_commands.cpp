@@ -4,6 +4,7 @@
 #include "qpro_scan.h"
 #include "support/log.h"
 #include "afp_ddr_test.h"
+#include "scene3d/scene3d_test.h"
 #include "arc_extract.h"
 #include "customize_extract.h"
 #include "qpro_dll.h"
@@ -100,6 +101,8 @@ int RunQproScan(const Cli::ToolCommand& cmd) {
 
 int Run(const Cli::ToolCommand& cmd) {
     switch (cmd.kind) {
+    case Cli::ToolKind::Scene3dTest:
+        return Scene3dTest::Run(cmd.in_path, cmd.out_path, cmd.frames);
     case Cli::ToolKind::DdrTest:
         return RunDdrTest(cmd);
     case Cli::ToolKind::ExtractArc:

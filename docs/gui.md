@@ -350,3 +350,49 @@ a feature: GUI card, `AfpCmd::ToggleCompanion`, `IGameRuntime::ToggleCompanion`,
 package machinery (`AfpManager::LoadCompanion` / `UnloadCompanion` / mount aliasing) remains -
 qpro loads its co-present part packages through it (docs/qpro.md), and the bm2dx locale
 name-shadowing facts stay documented in docs/boot_and_render_loop.md "Companions".
+
+## 3D scene viewer (IIDX 18)
+
+Directories that contain a `.inz` manifest plus at least one `.xz` model are
+listed in Browse with a `[3D scene]` suffix. Selecting one loads it through the
+normal content path: the backend detects a scene directory in `LoadContent`,
+hands it to `Scene3dHost`, and `RenderScene` draws the scene instead of the AFP
+content until a normal package is loaded again.
+
+A **3D scene** tab appears in the inspector while a scene is live. It shows the
+model / tile / draw-call counts and carries:
+
+- **Pause** and a speed slider, plus a scrubber over the animation in `.x`
+  AnimationKey ticks (the scene loops at its longest key time).
+- **Animate models** and **Animate camera** freeze each independently, holding
+  whatever pose they were in rather than snapping to tick 0. This is the way to
+  stop a scene orbiting or a layer drifting while still letting the rest run;
+  Pause stops the clock for everything at once. "Animate camera" is disabled
+  when the scene has no camera in its `.x`, or while free camera is driving the
+  view, with a tooltip saying which.
+- A **Models** list with a per-model visibility checkbox and a blend-mode combo
+  (opaque / alpha / additive / subtract). The blend value shown is the one the
+  game's per-screen setup code assigns; the combo overrides it so a layer can be
+  isolated or inspected.
+- **Free camera** toggle. OFF uses the camera animated inside the `.x` file;
+  scenes without one (`resort_st`, `boss_st`) start with free look ON because it
+  is the only way to see them. **Reset view** re-frames from the scene bounds.
+- A **move speed** drag, seeded from the scene's bounding radius so a 10-unit
+  scene and a 10000-unit scene both feel the same.
+
+Camera controls, handled in `src/scene3d/scene3d_input.cpp`:
+
+| input | action |
+|---|---|
+| hold RIGHT MOUSE | look around (cursor is hidden and re-centred each frame) |
+| W / A / S / D | move forward / left / back / right |
+| E or Space | move up |
+| Q or Ctrl | move down |
+| Shift | 5x faster |
+| Alt | 5x slower |
+
+Movement keys only apply while the right mouse button is held, so the keyboard
+stays free for the rest of the UI. The look handler runs before the normal
+window proc and swallows only the messages it uses, so crop-pick and the other
+window interactions are unaffected. Pitch is clamped just short of vertical to
+avoid gimbal flip.

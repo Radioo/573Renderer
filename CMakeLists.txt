@@ -48,6 +48,11 @@ target_link_libraries(r573_support PUBLIC tl::expected PRIVATE r573::warnings)
 add_library(r573_formats STATIC
     src/formats/ddr_arc.cpp
     src/formats/txp2.cpp
+    src/formats/lzss.cpp
+    src/formats/gcz.cpp
+    src/formats/inz.cpp
+    src/formats/xfile.cpp
+    src/formats/xfile_lexer.cpp
     src/formats/dxt_decode.cpp
     src/formats/bgra_crop.cpp
     src/formats/hsl_adjust.cpp
@@ -141,6 +146,7 @@ add_executable(renderer WIN32
     src/mc_control.cpp
     src/gui/gui_window.cpp
     src/gui/gui_panels.cpp
+    src/gui/gui_scene3d_panel.cpp
     src/gui/panel_registry.cpp
     src/gui/gui_style.cpp
     src/gui/gui_widgets.cpp
@@ -179,6 +185,13 @@ add_executable(renderer WIN32
     src/afp_ddr_boot.cpp
     src/afp_ddr_txp2.cpp
     src/afp_ddr_test.cpp
+    src/scene3d/anim.cpp
+    src/scene3d/camera.cpp
+    src/scene3d/scene3d_host.cpp
+    src/scene3d/scene3d_input.cpp
+    src/scene3d/scene3d.cpp
+    src/scene3d/scene3d_render.cpp
+    src/scene3d/scene3d_test.cpp
 )
 
 target_compile_options(renderer PRIVATE "$<$<CXX_COMPILER_ID:MSVC>:/utf-8>")
@@ -221,6 +234,9 @@ include(Catch)
 add_executable(formats_tests
     tests/formats/ddr_arc_tests.cpp
     tests/formats/txp2_tests.cpp
+    tests/formats/model3d_tests.cpp
+    tests/formats/model3d_real_tests.cpp
+    src/support/env.cpp
     tests/formats/frame_process_tests.cpp
     tests/formats/dxt_decode_tests.cpp
     tests/formats/bgra_crop_tests.cpp
