@@ -5,5 +5,9 @@
   "ddrworld": "<path to your DDR WORLD dump>",
   "iidx19": "X:\\path\\to\\IIDX 19",
   "iidx19_reload": "X:\\path\\to\\IIDX 19",
-  "iidx18": "<path to your IIDX 18 Resort Anthem dump>"
+  "iidx18": "<path to your IIDX 18 Resort Anthem dump>",
+  "iidx17_scene": "<path to your IIDX 17 SIRIUS dump>",
+  "iidx17_package": "<path to your IIDX 17 SIRIUS dump>",
+  "iidx17_encrypted": "<path to your IIDX 17 SIRIUS dump>",
+  "iidx17_title": "<path to your IIDX 17 SIRIUS dump>"
 }

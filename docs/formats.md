@@ -99,3 +99,29 @@ stayed at the D3D create-time default (transparent black) - the historical
 Uncompressed format ids seen in `TexUpload` (same afp-utils table): `0x01`
 i4 (1 bpp), `0x0E` rgb888 (3 bpp), `0x10`/`0x20` (a/x)rgb8888 (4 bpp),
 `0x1E` la88, `0x1F` rgb565 (2 bpp).
+
+## AES-256-CBC-CTS (`aes.h`)
+
+Decrypt-only AES-256 in CBC mode with ciphertext stealing, used by the IIDX 17
+(SIRIUS) encrypted sprite packages (`system.idr`, `N.gcr`). Ciphertext stealing
+matters: 136 of the 141 encrypted files have a length that is not a multiple of
+16, and the format carries no padding, so the plaintext is exactly as long as
+the ciphertext.
+
+`DecryptCbcCts(key, iv, cipher, out, err)` takes the 32-byte key and the 16-byte
+IV separately; the caller splits them off the file (the IV is the first 16 bytes,
+the ciphertext is the rest). Key derivation is game-specific and lives with the
+package loader, not here.
+
+The tail follows NIST CBC-CS3 / Kerberos CTS: with a partial last block of `d`
+bytes, `P_n = D(C_{n-1})[0:d] XOR C_n`, and `P_{n-1} = D(C_n || D(C_{n-1})[d:16])
+XOR C_{n-2}`.
+
+The S-box is generated at first use rather than shipped as a literal table:
+multiplicative inverses come from a log/antilog pair over GF(2^8) with generator
+3, then the standard affine transform. The one trap is `a == 1`, where
+`255 - log[a]` is 255 while the antilog table only fills 0..254 - the exponent
+has to be reduced modulo 255. Getting that wrong corrupts exactly two S-box
+entries, which leaves most blocks decrypting correctly and looks like a chaining
+bug rather than a cipher bug. The NIST SP 800-38A CBC-AES256 vector in
+`tests/formats/aes_tests.cpp` catches it immediately.

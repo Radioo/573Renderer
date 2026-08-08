@@ -21,6 +21,7 @@ class AfpFamilyBackend : public IBackend {
 public:
     bool Boot(const BootEnv& env) final;
     void Shutdown() final;
+    [[nodiscard]] bool ContentReady() const final;
     void StartContentScan() final;
     bool LoadContent(const std::string& path, bool from_arc) final;
     void UnloadContent() final;

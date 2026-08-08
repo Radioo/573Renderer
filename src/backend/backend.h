@@ -40,6 +40,8 @@ public:
 
     virtual void Shutdown() = 0;
 
+    [[nodiscard]] virtual bool ContentReady() const = 0;
+
     virtual void StartContentScan() = 0;
 
     virtual bool LoadContent(const std::string& path, bool from_arc) = 0;

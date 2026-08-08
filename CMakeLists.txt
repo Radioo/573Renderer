@@ -49,7 +49,10 @@ add_library(r573_formats STATIC
     src/formats/ddr_arc.cpp
     src/formats/txp2.cpp
     src/formats/lzss.cpp
+    src/formats/aes.cpp
     src/formats/gcz.cpp
+    src/formats/sysidx.cpp
+    src/formats/gcanim.cpp
     src/formats/inz.cpp
     src/formats/xfile.cpp
     src/formats/xfile_lexer.cpp
@@ -118,6 +121,11 @@ add_executable(renderer WIN32
     src/tool_commands.cpp
     src/boot.cpp
     src/backend/backend_registry.cpp
+    src/backend/scene3d_backend.cpp
+    src/gc2d/gc_package.cpp
+    src/gc2d/gc_host.cpp
+    src/gc2d/gc_render.cpp
+    src/game_revision.cpp
     src/backend/afp_profiles.cpp
     src/backend/afp_family_backend.cpp
     src/backend/afp_family_frame.cpp
@@ -147,6 +155,7 @@ add_executable(renderer WIN32
     src/gui/gui_window.cpp
     src/gui/gui_panels.cpp
     src/gui/gui_scene3d_panel.cpp
+    src/gui/gui_gc2d_panel.cpp
     src/gui/panel_registry.cpp
     src/gui/gui_style.cpp
     src/gui/gui_widgets.cpp
@@ -236,13 +245,15 @@ add_executable(formats_tests
     tests/formats/txp2_tests.cpp
     tests/formats/model3d_tests.cpp
     tests/formats/model3d_real_tests.cpp
-    src/support/env.cpp
+    tests/formats/sysidx_tests.cpp
+    tests/formats/aes_tests.cpp
+    src/gc2d/gc_package.cpp
     tests/formats/frame_process_tests.cpp
     tests/formats/dxt_decode_tests.cpp
     tests/formats/bgra_crop_tests.cpp
     tests/formats/hsl_adjust_tests.cpp
 )
-target_link_libraries(formats_tests PRIVATE Catch2::Catch2WithMain r573_formats r573::warnings)
+target_link_libraries(formats_tests PRIVATE Catch2::Catch2WithMain r573_formats r573_support r573::warnings)
 catch_discover_tests(formats_tests DISCOVERY_MODE POST_BUILD PROPERTIES LABELS ci)
 
 add_executable(cli_tests

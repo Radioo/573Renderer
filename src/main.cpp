@@ -4,7 +4,6 @@
 #include "support/crash_report.h"
 #include "support/log.h"
 #include "backend/backend.h"
-#include "game_runtime.h"
 #include "render_backend.h"
 #include "state/app_state.h"
 #include "state/commands.h"
@@ -375,7 +374,7 @@ bool SeedStateAndStartGui(HINSTANCE hInstance, const Cli::Options& cli,
 void MountStartupContent(App::State& state, const Cli::Options& cli) {
     bool startup_from_arc = false;
     std::string const startup_ifs = ResolveStartupIfs(state, cli.startup_ifs, startup_from_arc);
-    bool const afp_ready = Runtime::Active().IsBooted();
+    bool const afp_ready = Backend::Active()->ContentReady();
     if (!startup_ifs.empty() && afp_ready) {
         MountAndLoadIfs(startup_ifs, startup_from_arc);
         ApplyCliOverrides(cli);

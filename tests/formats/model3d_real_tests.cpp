@@ -58,7 +58,7 @@ TEST_CASE("mode_bg scene decodes from the real IIDX 18 data", "[.real]") {
         REQUIRE(Gcz::Parse(tile_bytes, tile, err));
         REQUIRE(tile.width == 256);
         REQUIRE(tile.height == 256);
-        REQUIRE(tile.argb1555.size() == (size_t)256 * 256 * 2);
+        REQUIRE(tile.pixels.size() == (size_t)256 * 256 * 2);
         total_height += tile.height;
     }
     REQUIRE(total_height == 14 * 256);

@@ -397,6 +397,10 @@ void AfpFamilyBackend::Shutdown() {
     AvsManager::Shutdown(g_avs);
 }
 
+bool AfpFamilyBackend::ContentReady() const {
+    return Runtime::Active().IsBooted();
+}
+
 void AfpFamilyBackend::StartContentScan() {
     auto& state = App::Global();
     bool const scan_arcs = cfg_->scan_arc_containers;

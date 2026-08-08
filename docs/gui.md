@@ -126,7 +126,9 @@ per-backend `PanelSet` tables keyed by `App::State::ActiveBackendId`. Slots:
   `GetGameProfileSlug() == "iidx33"`); afp_ddr = Renderer only. With one visible entry the
   top-bar switch does not render.
 - `InspectorTab`: right-pane tabs. afp_modern = Properties / Render / Live; afp_ddr =
-  Render (reduced draw fn) / Live.
+  Render (reduced draw fn) / Live / 3D scene; scene3d = 3D scene / 2D package. The last two
+  carry visible predicates (`Scene3dHost::Active()`, `Gc2dHost::Active()`) so only the tab for
+  the kind of content actually loaded is present.
 
 Rules unchanged from the original registry: MEMBERSHIP IS THE CAPABILITY DECLARATION (an
 unsupported control is ABSENT, never greyed); ImGui stays 100% inside src/gui/ (isolation
@@ -351,7 +353,7 @@ package machinery (`AfpManager::LoadCompanion` / `UnloadCompanion` / mount alias
 qpro loads its co-present part packages through it (docs/qpro.md), and the bm2dx locale
 name-shadowing facts stay documented in docs/boot_and_render_loop.md "Companions".
 
-## 3D scene viewer (IIDX 18)
+## 3D scene viewer (IIDX 17 / 18)
 
 Directories that contain a `.inz` manifest plus at least one `.xz` model are
 listed in Browse with a `[3D scene]` suffix. Selecting one loads it through the
@@ -396,3 +398,20 @@ stays free for the rest of the UI. The look handler runs before the normal
 window proc and swallows only the messages it uses, so crop-pick and the other
 window interactions are unaffected. Pitch is clamped just short of vertical to
 avoid gimbal flip.
+
+## 2D package viewer (IIDX 17)
+
+Directories holding a `system.idx` or `system.idr` are listed in Browse with a
+`[2D package]` suffix and load through the same content path as 3D scenes. A
+**2D package** tab appears in the inspector while one is live, showing the cell /
+record / animation / tile counts and the quad count for the current frame.
+
+- An **animation combo** listing every animation the package names. This is not
+  cosmetic: a package's first animation is often not its content (see
+  `docs/game_profiles.md`), so without the combo some packages look broken.
+- **Pause** and a speed slider, plus a frame scrubber over the current
+  animation's length. Dragging the scrubber pauses first, so the playhead stays
+  where it was put.
+
+`--animation <name>` picks the starting animation from the command line, which
+is what the headless screenshot path uses.

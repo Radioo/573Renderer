@@ -3,6 +3,70 @@
 The game-profile system encodes what differs between Konami game versions so
 the renderer can boot the right ordinals + defaults per game.
 
+## IIDX 17 (SIRIUS) - the engine-free `scene3d` backend
+
+SIRIUS has no `bm2dx.dll` and no libafp: the AFP engine is statically linked
+into `bm2dx.exe`, so there is nothing for a host to load. Its 3D model scenes
+need no engine at all, so the `iidx17` profile uses a separate **`scene3d`**
+backend that boots without any DLLs, scans for scene directories, and renders
+them through `Scene3dHost`.
+
+Its **2D sprite packages are decoded too**, by `Gc2dHost`. A package is one
+directory under `data/graph_data/` holding an index (`system.idx`, or
+`system.idr` when the package is encrypted) plus up to twelve LZSS-compressed
+`GC ` texture tiles (`N.gcz`, or `N.gcr` when encrypted). The content scan lists
+both kinds: `[3D scene]` and `[2D package]`. All 349 shipped packages load,
+including the 134 encrypted ones.
+
+Encryption is a per-package property detected by probing for `system.idr`; there
+is no package list anywhere. The payload is AES-256-CBC with ciphertext stealing
+(`src/formats/aes.cpp`), IV = the file's first 16 bytes, key = two constant
+32-byte tables XORed together and then XORed with the package's directory name
+(zero-padded, not repeated). A decrypted index still spells its texture paths
+with the `.gcz` extension, so the loader rewrites it to `.gcr` at open time.
+
+Three render-side rules that the format forces, all covered in the notes repo
+doc (`IIDX/sirius_gc_sprite_formats.md`):
+
+- **Point sampling, plus the half-texel offset.** Unused atlas space is filled
+  with the transparent key colour (green, alpha bit clear), which is exactly the
+  colour key the game hands to `D3DXLoadSurfaceFromMemory`. Anything that
+  interpolates across a cell border drags that green into the sprite edge.
+- **One D3D texture per tile.** Cells address a virtual atlas that stacks the
+  tiles 1024 rows apart, and most packages contain cells that straddle a tile
+  boundary, so a cell can need one quad per tile it touches.
+- **The record table is an ordering table: draw it BACK TO FRONT.** One animation's
+  records are listed front-most first, so drawing in table order makes each
+  background paint over everything ahead of it. `GcAnim::Evaluate` reverses the
+  flattened draw list, which is equivalent to walking the records and every
+  nested group in reverse. Single-layer packages look identical either way, so
+  the regression case for this is `title` / `TITLE_TAIKI`.
+- **Blend mode comes from the alpha track, not from `flags` alone.** `flags` bit
+  `0x0002` means "this record has an alpha track" and bit `0x0010` selects
+  subtractive; the additive-vs-normal choice is made from the alpha keyframe's
+  two bytes. `GcAnim::SelectBlend` implements the game's exact ladder, and a
+  record whose pair is `(0, 100)` draws nothing at all. Without this, cells whose
+  artwork has a baked black background (the copyright line in `title`) paint a
+  solid black rectangle instead of compositing.
+- **`topleft = position - anchor * scale`.** The position is where the record's
+  anchor lands on screen; only the anchor is scaled. Scale is a signed percentage
+  per axis, so `(100, 200)` means the cell is stored at half height, and
+  `(-100, 100)` is a horizontal flip.
+
+A package's alphabetically first animation is not necessarily its content: in
+`sys/0200` animation `00` is built entirely from cells that point at blank atlas
+padding. Use the **2D package** inspector tab (or `--animation`) to pick another.
+
+The install is split into datecoded revision folders with `.orig` (encrypted)
+siblings. `GameRevision::LatestRevisionDir` picks the newest folder whose name
+is exactly ten digits, which excludes `.orig` structurally rather than by
+suffix matching, and logs the choice.
+
+Adding this backend also moved one check off the AFP runtime: startup content
+loading used to gate on `Runtime::Active().IsBooted()`, which is meaningless for
+an engine-free backend. `IBackend::ContentReady()` now lets each backend answer
+for itself.
+
 ## IIDX 18 (Resort Anthem) - by-name libavs
 
 IIDX 18 uses the SAME TXP2 pipeline as IIDX 19 (identical flag word 0x67FDB, no

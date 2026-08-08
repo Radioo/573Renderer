@@ -1,6 +1,54 @@
 {
   "cases": [
     {
+      "name": "iidx17_scene",
+      "arch": "x86",
+      "profile": "iidx17",
+      "ifs_candidates": [
+        "data/graph_data/model/mode_bg"
+      ],
+      "frames": [
+        25
+      ]
+    },
+    {
+      "name": "iidx17_package",
+      "arch": "x86",
+      "profile": "iidx17",
+      "ifs_candidates": [
+        "data/graph_data/sys/0200"
+      ],
+      "animation": "01",
+      "frames": [
+        8,
+        16
+      ]
+    },
+    {
+      "name": "iidx17_encrypted",
+      "arch": "x86",
+      "profile": "iidx17",
+      "ifs_candidates": [
+        "data/graph_data/sys/allrank"
+      ],
+      "frames": [
+        10
+      ]
+    },
+    {
+      "name": "iidx17_title",
+      "arch": "x86",
+      "profile": "iidx17",
+      "ifs_candidates": [
+        "data/graph_data/sys/title"
+      ],
+      "animation": "TITLE_TAIKI",
+      "frames": [
+        200,
+        400
+      ]
+    },
+    {
       "name": "iidx18",
       "arch": "x86",
       "profile": "iidx18",
