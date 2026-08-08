@@ -1,0 +1,84 @@
+{
+  "cases": [
+    {
+      "name": "iidx19",
+      "arch": "x86",
+      "profile": "iidx19",
+      "ifs_candidates": [
+        "data/graphic/0200.bin"
+      ],
+      "animation": "01",
+      "frames": [
+        6,
+        20
+      ]
+    },
+    {
+      "name": "iidx19_reload",
+      "arch": "x86",
+      "profile": "iidx19",
+      "ifs_candidates": [
+        "data/graphic/0200.bin"
+      ],
+      "swap_to": "data/graphic/fcombo00.bin",
+      "swap_after": 5,
+      "frames": [
+        11
+      ]
+    },
+    {
+      "name": "iidx20",
+      "arch": "x86",
+      "profile": "iidx20",
+      "ifs_candidates": [
+        "data/graphic/0/title.ifs",
+        "data/graphic/1/title.ifs",
+        "data/graphic/title.ifs"
+      ],
+      "frames": [
+        20,
+        40
+      ]
+    },
+    {
+      "name": "iidx24",
+      "arch": "x86",
+      "profile": "iidx24",
+      "ifs_candidates": [
+        "data/graphic/0/title.ifs",
+        "data/graphic/1/title.ifs",
+        "data/graphic/title.ifs"
+      ],
+      "frames": [
+        20,
+        40
+      ]
+    },
+    {
+      "name": "iidx26",
+      "arch": "x64",
+      "profile": "iidx26",
+      "ifs_candidates": [
+        "data/graphic/0/title.ifs",
+        "data/graphic/1/title.ifs",
+        "data/graphic/title.ifs"
+      ],
+      "frames": [
+        20,
+        40
+      ]
+    },
+    {
+      "name": "ddrworld",
+      "arch": "x64",
+      "profile": "ddrworld",
+      "ifs_candidates": [
+        "data/arc/bm2d/common_background_v3.arc"
+      ],
+      "frames": [
+        20,
+        60
+      ]
+    }
+  ]
+}

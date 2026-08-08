@@ -101,7 +101,12 @@ Ready view = fixed shell, top to bottom:
 3. **Timeline dock** (fixed height `kTimelineH`): transport + custom track, section 4.
 4. **Status strip** (`kStatusStripH`, mono font): profile name, render WxH, render health
    (last_error, tooltip carries the full text), the export status tag (clickable, reopens
-   the export modal), right-aligned afp version.
+   the export modal), right-aligned afp version. Once an export finishes, an "Open folder"
+   button appears beside the status tag and inside the export modal; both call
+   `NativeDialog::RevealInFileManager`, which uses `SHOpenFolderAndSelectItems` to open
+   Explorer with the output SELECTED, falling back to opening the parent directory when the
+   item cannot be resolved. Relative export paths are made absolute first, and a PNG-sequence
+   export (which writes a directory) is selected the same way.
 
 - Layout constants live in `gui_layout_constants.h` so WM_GETMINMAXINFO and the pane layout
   cannot drift. Pane minimums: left 240, center 320, right 280; defaults 300/340; splitter 6.

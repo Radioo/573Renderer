@@ -37,6 +37,7 @@ struct BootGame {
     std::string profile_slug;
     int render_width = 0;
     int render_height = 0;
+    bool size_explicit = false;
 };
 
 struct LoadContent {

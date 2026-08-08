@@ -5,7 +5,10 @@
 #include <cstdio>
 #include "afp_ddr.h"
 #include "afp_ddr_funcs.h"
+#include "afp_ddr_geo.h"
 #include "afp_ddr_render.h"
+#include "afp_ddr_render_shape.h"
+#include "afp_ddr_txp2.h"
 #include "avs_funcs.h"
 #include "avs_boot.h"
 #include "support/dll_loader.h"
@@ -14,11 +17,14 @@
 #include "support/log.h"
 #include <algorithm>
 #include <cstdint>
+#include <utility>
 #include <vector>
+#include <filesystem>
 
 namespace DdrAfp {
 namespace {
 constexpr int kMaxPackageClips = 4096;
+constexpr const char* kTxp2Mount = "/pkg";
 constexpr int kAfpEngineHeapSize = 64 * 1024 * 1024;
 constexpr int kAfpuEngineHeapSize = 64 * 1024 * 1024;
 AfpDdrFuncs g_afp;
@@ -38,6 +44,7 @@ struct DdrClip {
 };
 std::vector<DdrClip> g_clips;
 std::string g_active_clip;
+Txp2Loaded g_txp2;
 }
 
 void SetTimeScale(float s) {
@@ -131,9 +138,13 @@ bool Boot(DllLoader& afp_dll, DllLoader& afpu_dll, D3D9State& d3d) {
         LOG("DDR", "FAILED to resolve libafp-win64 exports");
         return false;
     }
-    if (!g_afpu.Load(afpu_dll)) {
-        LOG("DDR", "FAILED to resolve libafputils-win64 exports");
-        return false;
+    const bool have_afputils = g_afpu.Load(afpu_dll);
+    if (!have_afputils) {
+        if (!g_afp.HasTxp2PackageApi()) {
+            LOG("DDR", "FAILED to resolve the afp-utils exports");
+            return false;
+        }
+        LOG("DDR", "no afp-utils on this build; the host drives packages via the TXP2 path");
     }
     g_afpu_base = reinterpret_cast<uintptr_t>(afpu_dll.Module());
     g_afp_base = reinterpret_cast<uintptr_t>(afp_dll.Module());
@@ -149,7 +160,7 @@ bool Boot(DllLoader& afp_dll, DllLoader& afpu_dll, D3D9State& d3d) {
     LOG("DDR", "AFP render API: %s", g_afp.HasSplitRenderApi() ? "split (pre-2.13)" : "unified");
 
     DdrRender::Init(d3d.device, d3d.width, d3d.height, g_afp.HasSplitRenderApi());
-    DdrRender::SetTexBindResolver(g_afpu.afpu_get_texture_bind_id);
+    if (have_afputils) DdrRender::SetTexBindResolver(g_afpu.afpu_get_texture_bind_id);
 
     void* render_params = DdrRender::RenderParams();
     void* afpu_config = DdrRender::AfpuConfig();
@@ -160,12 +171,13 @@ bool Boot(DllLoader& afp_dll, DllLoader& afpu_dll, D3D9State& d3d) {
     LOG("DDR", "afp_set_stream_max_nr(2048)...");
     ApplyDdrAfpAttributes();
 
-    if (!BootAfpUtils(afpu_config)) return false;
-
-    ApplyDdrAfpuAttributes(render_params, afpu_config);
+    if (have_afputils) {
+        if (!BootAfpUtils(afpu_config)) return false;
+        ApplyDdrAfpuAttributes(render_params, afpu_config);
+    }
 
     g_booted = true;
-    LOG("DDR", "AFP 2.13.7 booted.");
+    LOG("DDR", "legacy AFP booted (afp-utils %s).", have_afputils ? "present" : "absent");
     return true;
 }
 
@@ -241,8 +253,7 @@ void CreateExtraLayersDiag() {
     int made = 0;
     for (size_t i = 1; i < g_clips.size(); i++) {
         const auto& c = g_clips[i];
-        uint32_t const lid =
-            g_afp.afp_layer_create_with_property(c.stream_id, c.name.c_str(), 0, nullptr);
+        uint32_t const lid = g_afp.LayerCreate(c.stream_id, c.name.c_str());
         if ((g_afp.afp_id_is_valid != nullptr) && g_afp.afp_id_is_valid(5, lid) >= 0) {
             if (g_afp.afp_layer_play != nullptr) g_afp.afp_layer_play(lid, 1.0F);
             made++;
@@ -251,8 +262,15 @@ void CreateExtraLayersDiag() {
     LOG("DDR", "DDR_EXTRA_LAYERS: created+played %d extra layers (advance-context test)", made);
 }
 
+void StartLayerPlayback(uint32_t layer_id) {
+    if (!g_afp.HasSplitRenderApi()) return;
+    if (g_afp.afp_layer_play != nullptr) g_afp.afp_layer_play(layer_id, 1.0F);
+    if (g_afp.afp_layer_set_attribute != nullptr) g_afp.afp_layer_set_attribute(layer_id, 1, 1);
+    LOG("DDR", "layer %#x: play(1.0) + attribute(visible)", layer_id);
+}
+
 void CreateRootLayer(int data_id, uint32_t root_stream_id, const char* root_clip_name) {
-    if (g_afp.afp_layer_create_with_property == nullptr) return;
+    if (!g_afp.HasLayerCreate()) return;
     uint32_t stream_id = 0;
     const char* path = nullptr;
     if ((g_afpu.afpu_get_afp_info_at_package != nullptr) && (root_clip_name != nullptr)) {
@@ -267,9 +285,9 @@ void CreateRootLayer(int data_id, uint32_t root_stream_id, const char* root_clip
     }
     g_root_stream_id = stream_id;
     LOG("DDR", "layer src: stream_id=%#x path='%s'", stream_id, path ? path : "");
-    uint32_t const layer_id = g_afp.afp_layer_create_with_property(stream_id, path, 0, nullptr);
+    uint32_t const layer_id = g_afp.LayerCreate(stream_id, path);
     bool const valid = g_afp.LayerValid(layer_id);
-    LOG("DDR", "afp_layer_create_with_property -> layer=%#x valid=%d", layer_id, (int)valid);
+    LOG("DDR", "layer_create -> layer=%#x valid=%d", layer_id, (int)valid);
     if (valid) {
         g_layer_id = layer_id;
         const char* active = "";
@@ -285,6 +303,7 @@ void CreateRootLayer(int data_id, uint32_t root_stream_id, const char* root_clip
                 break;
             }
         }
+        StartLayerPlayback(g_layer_id);
     }
     if ((g_layer_id != 0U) && (g_afp.afp_layer_set_attribute != nullptr)) {
         int attr = 0;
@@ -303,6 +322,133 @@ void CreateRootLayer(int data_id, uint32_t root_stream_id, const char* root_clip
     if (g_layer_id != 0U) CreateExtraLayersDiag();
 }
 
+}
+
+namespace {
+
+std::vector<int> g_txp2_tex_ids;
+
+bool Txp2BitmapQuery(const char* name, unsigned* out_id, int* out_w, int* out_h, float* out_u0,
+                     float* out_u1, float* out_v0, float* out_v1) {
+    if (name == nullptr) return false;
+    const auto& pkg = g_txp2.package;
+    for (const auto& entry : pkg.cell_names) {
+        if (entry.name != name) continue;
+        if (entry.cell_index >= pkg.cells.size()) return false;
+        const auto& cell = pkg.cells[entry.cell_index];
+        if (cell.texture_index >= g_txp2_tex_ids.size()) return false;
+        int const tex_id = g_txp2_tex_ids[cell.texture_index];
+        if (tex_id < 0 || cell.texture_index >= g_txp2.textures.size()) return false;
+        const auto& tex = g_txp2.textures[cell.texture_index];
+        if (tex.width <= 0 || tex.height <= 0) return false;
+
+        const auto fw = static_cast<float>(tex.width);
+        const auto fh = static_cast<float>(tex.height);
+        *out_id = static_cast<unsigned>(tex_id);
+        *out_w = static_cast<int>(cell.x1 - cell.x0) / 2;
+        *out_h = static_cast<int>(cell.y1 - cell.y0) / 2;
+        *out_u0 = static_cast<float>(cell.x0) * 0.5F / fw;
+        *out_u1 = static_cast<float>(cell.x1) * 0.5F / fw;
+        *out_v0 = static_cast<float>(cell.y0) * 0.5F / fh;
+        *out_v1 = static_cast<float>(cell.y1) * 0.5F / fh;
+        return true;
+    }
+    return false;
+}
+
+void RegisterTxp2Textures() {
+    g_txp2_tex_ids.clear();
+    g_txp2_tex_ids.reserve(g_txp2.textures.size());
+    for (const auto& t : g_txp2.textures) {
+        int id = -1;
+        if (t.width > 0 && t.height > 0 && !t.pixels.empty()) {
+            id = DdrRender::CreateTextureRgba(t.width, t.height, t.pixels.data(), t.pixels.size());
+        }
+        g_txp2_tex_ids.push_back(id);
+    }
+    DdrRender::SetBitmapQuery(Txp2BitmapQuery);
+    BuildGeoRegistry(g_txp2, g_txp2_tex_ids);
+    DdrRender::SetShapeProvider(&GeoProvider());
+    LOG("DDR", "registered %zu TXP2 textures, %zu named cells and %zu shapes",
+        g_txp2_tex_ids.size(), g_txp2.package.cell_names.size(), GeoShapeCount());
+}
+
+void DestroyTxp2Layer(uint32_t layer_id) {
+    if (layer_id == 0U) return;
+    if (g_afp.afp_layer_play != nullptr) g_afp.afp_layer_play(layer_id, 0.0F);
+    if (g_afp.afp_layer_set_attribute != nullptr) g_afp.afp_layer_set_attribute(layer_id, 1, 0);
+    if (g_afp.afp_layer_is_valid == nullptr || g_afp.afp_layer_destroy == nullptr) return;
+    if (g_afp.afp_layer_is_valid(layer_id) >= 0) g_afp.afp_layer_destroy(layer_id);
+}
+
+void UnloadTxp2Package() {
+    if (g_txp2.core.empty() && g_txp2.clips.empty()) return;
+
+    for (const auto& c : g_clips)
+        DestroyTxp2Layer(c.layer_id);
+    DestroyTxp2Layer(g_layer_id);
+    g_layer_id = 0;
+    g_root_stream_id = 0;
+
+    int failed = 0;
+    if (g_afp.afp_stream_destroy_call != nullptr) {
+        for (const auto& c : g_txp2.clips) {
+            if (c.stream_id == 0U) continue;
+            if (g_afp.afp_stream_destroy_call(c.stream_id) != 0) failed++;
+        }
+    }
+
+    for (int const id : g_txp2_tex_ids)
+        DdrRender::DestroyTexture(id);
+    g_txp2_tex_ids.clear();
+
+    DdrRender::SetShapeProvider(nullptr);
+    DdrRender::SetBitmapQuery(nullptr);
+    g_clips.clear();
+    g_active_clip.clear();
+    LOG("DDR", "unloaded previous TXP2 package (%zu streams, %d could not be destroyed)",
+        g_txp2.clips.size(), failed);
+    g_txp2 = Txp2Loaded{};
+}
+
+}
+
+bool LoadTxp2(AvsFuncs& avs, const std::string& disk_path) {
+    if (!g_booted) {
+        LOG("DDR", "LoadTxp2 before Boot");
+        return false;
+    }
+    std::filesystem::path const native(disk_path);
+    std::string const dir = native.parent_path().string();
+    std::string const base = native.filename().string();
+
+    if (avs.avs_fs_umount != nullptr) avs.avs_fs_umount(kTxp2Mount);
+    if (!AvsManager::MountFsRoot(avs, kTxp2Mount, dir)) {
+        LOG("DDR", "could not mount %s at %s", dir.c_str(), kTxp2Mount);
+        return false;
+    }
+    std::string const vfs_path = std::string(kTxp2Mount) + "/" + base;
+
+    UnloadTxp2Package();
+
+    std::string err;
+    Txp2Loaded loaded;
+    if (!LoadTxp2Package(avs, g_afp, vfs_path, 0, loaded, err)) {
+        LOG("DDR", "TXP2 load failed for %s: %s", disk_path.c_str(), err.c_str());
+        return false;
+    }
+
+    g_txp2 = std::move(loaded);
+    RegisterTxp2Textures();
+    g_clips.clear();
+    for (const auto& c : g_txp2.clips)
+        g_clips.push_back({.name = c.name, .stream_id = c.stream_id, .layer_id = 0});
+
+    uint32_t root_stream_id = g_clips.empty() ? 0 : g_clips.front().stream_id;
+    const char* root_clip_name = g_clips.empty() ? nullptr : g_clips.front().name.c_str();
+    ApplyRootClipOverride(root_stream_id, root_clip_name);
+    CreateRootLayer(0, root_stream_id, root_clip_name);
+    return g_layer_id != 0U;
 }
 
 bool LoadIfs(AvsFuncs& avs, DllLoader& avs_dll, const std::string& ifs_disk_path,
@@ -657,7 +803,7 @@ bool CreateClipLayer(DdrClip& clip, const std::string& name) {
         if (p != nullptr) path = p;
     }
     if (stream_id == 0U) stream_id = clip.stream_id;
-    uint32_t const lid = g_afp.afp_layer_create_with_property(stream_id, path, 0, nullptr);
+    uint32_t const lid = g_afp.LayerCreate(stream_id, path);
     if ((g_afp.afp_id_is_valid != nullptr) && g_afp.afp_id_is_valid(5, lid) < 0) {
         LOG("DDR", "SwitchClip: create failed for '%s'", name.c_str());
         return false;
@@ -669,7 +815,7 @@ bool CreateClipLayer(DdrClip& clip, const std::string& name) {
 }
 
 bool SwitchClip(const std::string& name) {
-    if (g_afp.afp_layer_create_with_property == nullptr) return false;
+    if (!g_afp.HasLayerCreate()) return false;
     DdrClip* clip = nullptr;
     for (auto& c : g_clips) {
         if (c.name == name) {

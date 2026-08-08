@@ -1,0 +1,49 @@
+{
+  "ddrworld": {
+    "frames": {
+      "20": "ae380a7104cf528172f9a445f39676f81a3f7eb05f020693223c939661bb2c8a",
+      "60": "ae380a7104cf528172f9a445f39676f81a3f7eb05f020693223c939661bb2c8a"
+    },
+    "ifs": "common_background_v3.arc",
+    "seconds": 2.0
+  },
+  "iidx19": {
+    "frames": {
+      "20": "9a255b909d36d5d144b8fbeb175356ba0324ff2504261cfa84105332734b3be8",
+      "6": "cd389dbf61520383681b460101ca31394f8300d4882f41f10596465a35dced59"
+    },
+    "ifs": "0200.bin",
+    "seconds": 2.2
+  },
+  "iidx19_reload": {
+    "frames": {
+      "11": "704887262cb85622959db721fadcc8f0169d4895a06e75befff84e7c37f637bd"
+    },
+    "ifs": "0200.bin",
+    "seconds": 2.2
+  },
+  "iidx20": {
+    "frames": {
+      "20": "3f596ac08e5c66595a5fc233ca840d6ab01cccdf83a0f0864b1f7db8a322c5da",
+      "40": "527b7d3f0d2543baf96bd4ef391f1f4e12aae293e18e258baca8c7e2f4a6ca0d"
+    },
+    "ifs": "title.ifs",
+    "seconds": 2.5
+  },
+  "iidx24": {
+    "frames": {
+      "20": "ad25e05da2b4cdce1473bf3fa5d699c720bc4b46c581d562469b28d459eef12f",
+      "40": "f7fb0b59040acf96712ba56e71e381c7bb0c0d0cf4cd6d199b433cb215a805e5"
+    },
+    "ifs": "title.ifs",
+    "seconds": 2.5
+  },
+  "iidx26": {
+    "frames": {
+      "20": "023aa8f548ba1de8f267e739e865933408f9a9ebb8b49075f6f98b3a2103491f",
+      "40": "023aa8f548ba1de8f267e739e865933408f9a9ebb8b49075f6f98b3a2103491f"
+    },
+    "ifs": "title.ifs",
+    "seconds": 2.0
+  }
+}

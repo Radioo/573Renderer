@@ -62,6 +62,11 @@ typedef void (*log_body_info_t)(const char* tag, const char* fmt, ...);
 typedef void (*log_body_warning_t)(const char* tag, const char* fmt, ...);
 typedef void (*log_body_misc_t)(const char* tag, const char* fmt, ...);
 
+typedef void* (*avs_cstream_create_t)(int type);
+typedef int (*avs_cstream_execute_t)(void* ctx);
+typedef int (*avs_cstream_finish_t)(void* ctx);
+typedef void (*avs_cstream_destroy_t)(void* ctx);
+
 typedef void (*std_setenv_t)(const char* key, const char* value);
 
 struct AvsOrdinals {
@@ -104,6 +109,13 @@ struct AvsOrdinals {
     int log_body_misc;
 
     bool boot_takes_split_heaps;
+    bool log_writer_ctx_first;
+    bool log_level_is_u32;
+
+    int avs_cstream_create;
+    int avs_cstream_execute;
+    int avs_cstream_finish;
+    int avs_cstream_destroy;
 };
 
 constexpr AvsOrdinals kAvsOrdinals217 = {
@@ -141,6 +153,8 @@ constexpr AvsOrdinals kAvsOrdinals217 = {
     .log_body_warning = 0x17b,
     .log_body_misc = 0x17d,
     .boot_takes_split_heaps = false,
+    .log_writer_ctx_first = false,
+    .log_level_is_u32 = false,
 };
 
 constexpr AvsOrdinals kAvsOrdinals2161 = {
@@ -178,6 +192,8 @@ constexpr AvsOrdinals kAvsOrdinals2161 = {
     .log_body_warning = 0x169,
     .log_body_misc = 0x16b,
     .boot_takes_split_heaps = false,
+    .log_writer_ctx_first = false,
+    .log_level_is_u32 = false,
 };
 
 constexpr AvsOrdinals kAvsOrdinals2158 = {
@@ -215,12 +231,63 @@ constexpr AvsOrdinals kAvsOrdinals2158 = {
     .log_body_warning = 0x018,
     .log_body_misc = 0x075,
     .boot_takes_split_heaps = true,
+    .log_writer_ctx_first = false,
+    .log_level_is_u32 = false,
+};
+
+constexpr AvsOrdinals kAvsOrdinals2134 = {
+    .avs_boot = 0x0f4,
+    .avs_shutdown = 0x154,
+    .avs_is_active = 0x07d,
+    .avs_filesys_imagefs = 0x05a,
+    .avs_fs_addfs = 0x11f,
+    .avs_fs_mount = 0x09c,
+    .avs_fs_umount = 0x06e,
+    .avs_fs_open = 0x0b6,
+    .avs_fs_read = 0x139,
+    .avs_fs_lseek = 0x00f,
+    .avs_fs_close = 0x11b,
+    .avs_fs_fstat = 0x0d0,
+    .avs_fs_opendir = 0x0dd,
+    .avs_fs_readdir = 0x086,
+    .avs_fs_closedir = 0x087,
+    .avs_fs_dump_mountpoint = 0x0c8,
+    .avs_gheap_allocate = 0x155,
+    .avs_gheap_free = 0x0ba,
+    .property_create = 0x107,
+    .property_destroy = 0x10f,
+    .property_search = 0x0fb,
+    .property_node_create = 0x143,
+    .property_node_refer = 0x113,
+    .property_psmap_import = 0x068,
+    .property_insert_read = 0x016,
+    .property_node_traversal = 0x05f,
+    .property_node_name = 0x106,
+    .property_read_query_memsize = 0x066,
+    .property_read_query_memsize_long = 0x091,
+    .log_boot = 0x14c,
+    .log_body_info = 0x15a,
+    .log_body_warning = 0x0e1,
+    .log_body_misc = 0x02d,
+    .boot_takes_split_heaps = true,
+    .log_writer_ctx_first = true,
+    .log_level_is_u32 = true,
+    .avs_cstream_create = 0x118,
+    .avs_cstream_execute = 0x078,
+    .avs_cstream_finish = 0x130,
+    .avs_cstream_destroy = 0x12b,
 };
 
 struct AvsFuncs {
     avs_boot_t avs_boot = nullptr;
     avs_boot_split_heap_t avs_boot_split_heap = nullptr;
+    avs_cstream_create_t avs_cstream_create = nullptr;
+    avs_cstream_execute_t avs_cstream_execute = nullptr;
+    avs_cstream_finish_t avs_cstream_finish = nullptr;
+    avs_cstream_destroy_t avs_cstream_destroy = nullptr;
     bool boot_takes_split_heaps = false;
+    bool log_writer_ctx_first = false;
+    bool log_level_is_u32 = false;
     avs_shutdown_t avs_shutdown = nullptr;
     avs_is_active_t avs_is_active = nullptr;
 
@@ -263,6 +330,14 @@ struct AvsFuncs {
         DLL_LOAD(loader, avs_boot, ord.avs_boot);
         avs_boot_split_heap = reinterpret_cast<avs_boot_split_heap_t>(avs_boot);
         boot_takes_split_heaps = ord.boot_takes_split_heaps;
+        log_writer_ctx_first = ord.log_writer_ctx_first;
+        log_level_is_u32 = ord.log_level_is_u32;
+        if (ord.avs_cstream_create != 0) {
+            DLL_LOAD(loader, avs_cstream_create, ord.avs_cstream_create);
+            DLL_LOAD(loader, avs_cstream_execute, ord.avs_cstream_execute);
+            DLL_LOAD(loader, avs_cstream_finish, ord.avs_cstream_finish);
+            DLL_LOAD(loader, avs_cstream_destroy, ord.avs_cstream_destroy);
+        }
         DLL_LOAD(loader, avs_shutdown, ord.avs_shutdown);
         DLL_LOAD(loader, avs_is_active, ord.avs_is_active);
         DLL_LOAD(loader, avs_filesys_imagefs, ord.avs_filesys_imagefs);

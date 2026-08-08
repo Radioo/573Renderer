@@ -39,7 +39,14 @@ typedef void (*ddr_afp_render_all_t)(float dt);
 typedef int (*ddr_afp_display_all_t)();
 typedef int (*ddr_afp_display_layer_t)(uint32_t layer_id);
 typedef int (*ddr_afp_layer_is_valid_t)(uint32_t layer_id);
+typedef int (*ddr_afp_layer_destroy_t)(uint32_t layer_id);
+typedef int (*ddr_afp_stream_destroy_call_t)(uint32_t stream_id);
 typedef const char* (*ddr_afp_get_version_t)();
+
+typedef uint32_t (*ddr_afp_stream_create_call_t)(const void* afp_data);
+typedef int (*ddr_afp_stream_set_name_call_t)(uint32_t stream_id, const char* name);
+typedef uint32_t (*ddr_afp_layer_create_t)(uint32_t stream_id, const char* layer_name);
+typedef int (*ddr_afp_check_src_t)(void* afp_data, const void* byteorder_info);
 
 struct AfpDdrFuncs {
     ddr_afp_boot_t afp_boot = nullptr;
@@ -74,7 +81,14 @@ struct AfpDdrFuncs {
     ddr_afp_display_all_t afp_display_all = nullptr;
     ddr_afp_display_layer_t afp_display_layer = nullptr;
     ddr_afp_layer_is_valid_t afp_layer_is_valid = nullptr;
+    ddr_afp_layer_destroy_t afp_layer_destroy = nullptr;
+    ddr_afp_stream_destroy_call_t afp_stream_destroy_call = nullptr;
     ddr_afp_get_version_t afp_get_version = nullptr;
+
+    ddr_afp_stream_create_call_t afp_stream_create_call = nullptr;
+    ddr_afp_stream_set_name_call_t afp_stream_set_name_call = nullptr;
+    ddr_afp_layer_create_t afp_layer_create = nullptr;
+    ddr_afp_check_src_t afp_check_src = nullptr;
 
     [[nodiscard]] bool HasSplitRenderApi() const {
         return afp_do_render == nullptr && afp_render_all != nullptr;
@@ -102,6 +116,22 @@ struct AfpDdrFuncs {
         } else if (afp_display_layer != nullptr) {
             afp_display_layer(layer_id);
         }
+    }
+
+    [[nodiscard]] bool HasTxp2PackageApi() const {
+        return afp_stream_create_call != nullptr && afp_layer_create != nullptr;
+    }
+
+    [[nodiscard]] bool HasLayerCreate() const {
+        return afp_layer_create_with_property != nullptr || afp_layer_create != nullptr;
+    }
+
+    [[nodiscard]] uint32_t LayerCreate(uint32_t stream_id, const char* name) const {
+        if (afp_layer_create_with_property != nullptr) {
+            return afp_layer_create_with_property(stream_id, name, 0, nullptr);
+        }
+        if (afp_layer_create != nullptr) return afp_layer_create(stream_id, name);
+        return 0;
     }
 
     [[nodiscard]] bool LayerValid(uint32_t layer_id) const {
@@ -143,7 +173,13 @@ struct AfpDdrFuncs {
         DDR_LOAD(loader, afp_display_all);
         DDR_LOAD(loader, afp_display_layer);
         DDR_LOAD(loader, afp_layer_is_valid);
+        DDR_LOAD(loader, afp_layer_destroy);
+        DDR_LOAD(loader, afp_stream_destroy_call);
         DDR_LOAD(loader, afp_get_version);
+        DDR_LOAD(loader, afp_stream_create_call);
+        DDR_LOAD(loader, afp_stream_set_name_call);
+        DDR_LOAD(loader, afp_layer_create);
+        DDR_LOAD(loader, afp_check_src);
 
         const bool can_render = (afp_do_render != nullptr) || (afp_render_all != nullptr);
         const bool can_display = (afp_do_display != nullptr) || (afp_display_layer != nullptr);

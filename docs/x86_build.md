@@ -281,6 +281,81 @@ Also learned from that mapping pass: `set_mask` takes SIX args in BOTH
 builds - the 7-arg description elsewhere counted the format string's
 duplicate print of arg1 (once as %d, once as %s through a type-name table).
 
+## IIDX 19 (Lincle) - the TXP2 package path
+
+IIDX 19 ships NO libafputils, so the host has to do what afputils did. It does
+NOT reimplement anything afp or avs already provide - every engine operation
+goes through the game's own DLLs. See `IIDX/lincle_bmafp_package.md` in the
+notes repo for the RE this mirrors (`BMAFP::C_MY_AFP_PACKAGE::package_read`).
+
+Working today, verified against real Lincle packages:
+
+- `avs 2.13.4` boots (its own ordinal table, 7-arg split-heap `avs_boot`,
+  ctx-first log writer, u32 `log/level`).
+- `afp 2.9.4` boots with the caller-supplied heap; `DdrAfp::Boot` now tolerates
+  a missing afp-utils when the afp exposes `afp_stream_create_call`.
+- `src/formats/txp2.{h,cpp}` parses the package: big-endian header, the packed
+  section run, the AFP stream table, the texture table and the atlas cells with
+  their name table. Unit-tested, and validated on real files where
+  `texture.offset + texture.size` lands exactly on the file size and the cell
+  count matches the cell-name count.
+- Packages are opened as PLAIN AVS FILES (`avs_fs_open`), not an IFS. The
+  loader mounts the package's own directory at `/pkg` so any `.bin` anywhere in
+  the tree can be selected from the UI file list.
+- Texture payloads are decompressed by **AVS's own cstream INFLATE**, reached
+  through four extra avs ordinals, exactly as `BMAFP::avslz_decode_mem` does.
+  The blob is `{BE u32 uncompressed, BE u32 compressed, data}` and a zero
+  compressed size means a straight copy.
+- `afp_check_src` is applied per stream from the appended byte-order block
+  (whose offset equals the core size) BEFORE `afp_stream_create_call`, without
+  which afp rejects the blob with "This is not afp data."
+- Streams, layers and MC refs are all created through the engine, and afp
+  reports real timelines back (42 / 25 / 20 frames for `0200.bin`).
+- Textures are uploaded to D3D and `get_bitmap_info` (render-params slot 15 =
+  byte 0x3C) is answered from the parsed cells, with half-pixel UVs.
+
+- **Geometry renders.** Most Lincle content never queries `get_bitmap_info`; it
+  goes through the SHAPE path instead. `src/formats/txp2.cpp` parses the 0x2000
+  section (shape bodies with their positions, uvs, colours, bitmap refs and
+  16-byte primitive nodes), `src/afp_ddr_geo.cpp` resolves each bitmap ref
+  against the atlas cell tables and rewrites the per-cell UVs into atlas space
+  exactly as `package_read` does, and `src/afp_ddr_render_shape.cpp` answers
+  slots 0x40 / 0x44 / 0x20. `0200.bin` reports "43 shapes, 43 primitives, 0
+  unresolved bitmap refs" and draws the Lincle angel; `0414.bin` (96 shapes)
+  draws its song background.
+
+Two decisions worth recording:
+
+- The renderer emits one triangle list per primitive node instead of
+  accumulating into bm2dx's 5120-vertex / 512-index batch. The batch size is
+  not observable in the output, only in how many draw calls reach D3D.
+- The shape id keeps the game's exact `SystemShapeID` packing (bit0 clear,
+  bits 1..7 package slot, bits 8.. geometry index + 1) so ids round-trip
+  through afp unchanged.
+
+Package RELOAD (picking a second file from the tree) crashed inside libafp until
+the lifetime was fixed. `afp_stream_create_call` does NOT copy the afp blob - it
+references it in place, which is exactly why `afp_check_src` fixes the bytes up
+in place. Replacing the loaded package therefore freed a buffer afp was still
+reading, and afp faulted on a dangling pointer.
+
+`BMAFP::C_MY_AFP_PACKAGE::package_free` shows the required order, and
+`LoadTxp2` now mirrors it: destroy the LAYERS first
+(`afp_layer_is_valid(l) >= 0` then `afp_layer_destroy(l)`, after `play(0)` and
+`set_attribute(1, 0)`), then every stream via `afp_stream_destroy_call` (which
+returns 0 on success), then release the host's D3D textures, and only then free
+the package buffer. Two supporting fixes: the texture-slot allocator now reuses
+released slots instead of only ever bumping a counter (a long session would
+otherwise exhaust the 4096-slot table and silently stop texturing), and a
+process-wide crash reporter (`src/support/crash_report.cpp`) logs the faulting
+module and offset for any access violation, which is what identified this one.
+
+A resolution bug surfaced while testing this: `CreateRenderWindowAndDevice`
+used to force 1280x720 for every legacy-AFP profile, which silently overrode
+both the profile default and `--render-size`. The profile's
+`default_render_w/h` is now authoritative unless `--render-size` is passed on
+that run, which is what makes Lincle boot at its real 640x480.
+
 ## Still x64-only
 
 The MODERN afp path (`afp_boot.cpp`'s render context / `afpu_data`,

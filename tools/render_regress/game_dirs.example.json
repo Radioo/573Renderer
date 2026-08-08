@@ -1,0 +1,8 @@
+{
+  "iidx20": "<path to your IIDX 20 tricoro dump>",
+  "iidx24": "<path to your IIDX 24 SINOBUZ dump>",
+  "iidx26": "<path to your IIDX 26 Rootage dump>",
+  "ddrworld": "<path to your DDR WORLD dump>",
+  "iidx19": "X:\\path\\to\\IIDX 19",
+  "iidx19_reload": "X:\\path\\to\\IIDX 19"
+}

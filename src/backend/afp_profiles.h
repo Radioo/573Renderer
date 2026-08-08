@@ -34,7 +34,7 @@ extern const DllOffsetSet kFallbackIidxOffsets;
 const DllOffsetSet& ActiveOffsets();
 void SetActiveOffsets(const DllOffsetSet& offsets);
 
-enum class AvsGeneration : uint8_t { Avs217, Avs2161, Avs2158 };
+enum class AvsGeneration : uint8_t { Avs217, Avs2161, Avs2158, Avs2134 };
 
 struct AfpConfig {
     const char* slug;
@@ -70,6 +70,7 @@ struct AfpConfig {
     bool afp_set_verbose_wide_args = false;
 
     bool scan_arc_containers = false;
+    bool scan_txp2_packages = false;
 
     float time_scale = 1.0f;
 

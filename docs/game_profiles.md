@@ -141,6 +141,55 @@ reads; `avs_gheap_allocate` is the one whose NULL-pointer path allocates
 and non-NULL path reallocates (its wrapper logs `realloc(%p,%u)=%p`), NOT
 the 1-arg `alloc(size)` export next to it.
 
+### The avs BOOT CONTRACT also changes, not just the ordinals
+
+Two things beyond the ordinal map differ per avs generation. Both are flags on
+`AvsOrdinals` and both were found only by RE, because both fail SILENTLY or as
+a bare segfault:
+
+**1. `boot_takes_split_heaps` - avs_boot arity.** 2.13.4 and 2.15.8 take SEVEN
+args `(config, heap_std, sz_std, heap_avs, sz_avs, log_writer, log_ctx)` with
+TWO separate heaps; 2.16+ take SIX. Calling the 6-arg shape against a 7-arg
+build puts the log writer where the build expects `sz_avs`. Proof: in the
+2.13.4 avs_boot, arg2 asserts `"heap_std is NULL."` and arg4 asserts
+`"heap_avs is NULL."`, arg4 is 16-byte aligned then carved down through
+desc/thread/fs/net_private, and args 6/7 are passed straight to log_boot.
+
+**2. `log_writer_ctx_first` - the log-callback argument ORDER.** avs calls the
+host log writer through one small dispatcher. In 2.13.4 it is:
+
+```
+if ( g_log_writer != NULL )
+    g_log_writer(g_log_writer_ctx, buf, len);
+```
+
+i.e. **context FIRST**, whereas 2.15.8+ pass `(buf, len, ctx)`. With the newer
+signature installed on 2.13.4 the writer receives `chars = ctx` and
+`nchars = <the buffer pointer>`, so the very first log line segfaults inside
+the host's `fwrite`. The symptom is brutal to diagnose because the crash
+happens BEFORE any avs output exists - `avs_out.log` is never even created, so
+it looks like avs died with no explanation. `src/avs_boot.cpp` keeps both
+`avs_log_writer` and `avs_log_writer_ctx_first` around one shared emitter and
+picks by flag.
+
+How to re-find the writer order on a new build: from `log_boot`, note which
+globals it stores the two trailing avs_boot args into, then xref the writer
+global; its single call site is a 3-line dispatcher and the argument order is
+read straight off it.
+
+**3. `log_level_is_u32` - the /config/log/level NODE TYPE.** avs_boot parses
+its config through `property_psmap_import` against a built-in psmap. The psmap
+is an array of 16-byte entries `{type, ?, offset, len, path*, default}`; dump
+it at the address avs_boot passes as the psmap argument and read the type of
+each entry. In 2.13.4 `log/level` has psmap type **0x07 (u32)** with default 4,
+so the string node newer builds accept is rejected with
+`W:psmap: failed to read 'log/level'` followed by the FATAL
+`F:boot: property_psmap_import() failed.` The renderer creates the node as
+u32 4 (= misc) on that generation and as the string "misc" elsewhere. Neighbour
+entries in the same psmap confirm the decoding: `log/use_netsci` is type 0x03
+(u8) and `desc/nr_desc` is type 0x05 (u16) with default 808, which matches the
+`nr_desc=808` the build then logs.
+
 ## kSkip sentinel
 
 `GameProfile::kSkip` (= -1) as an ordinal means "this game's afp-core does

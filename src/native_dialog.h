@@ -9,4 +9,6 @@ namespace NativeDialog {
 
 std::string BrowseForFolder(HWND parent, const std::string& initial);
 
+bool RevealInFileManager(const std::string& path);
+
 }

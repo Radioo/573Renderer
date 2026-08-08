@@ -47,6 +47,7 @@ target_link_libraries(r573_support PUBLIC tl::expected PRIVATE r573::warnings)
 
 add_library(r573_formats STATIC
     src/formats/ddr_arc.cpp
+    src/formats/txp2.cpp
     src/formats/dxt_decode.cpp
     src/formats/bgra_crop.cpp
     src/formats/hsl_adjust.cpp
@@ -170,8 +171,13 @@ add_executable(renderer WIN32
     src/qpro_composite.cpp
     src/qpro_back.cpp
     src/qpro_composite_debug.cpp
+    src/support/crash_report.cpp
+    src/render/prim_layout.cpp
+    src/afp_ddr_geo.cpp
     src/afp_ddr_render.cpp
+    src/afp_ddr_render_shape.cpp
     src/afp_ddr_boot.cpp
+    src/afp_ddr_txp2.cpp
     src/afp_ddr_test.cpp
 )
 
@@ -214,6 +220,7 @@ include(Catch)
 
 add_executable(formats_tests
     tests/formats/ddr_arc_tests.cpp
+    tests/formats/txp2_tests.cpp
     tests/formats/frame_process_tests.cpp
     tests/formats/dxt_decode_tests.cpp
     tests/formats/bgra_crop_tests.cpp

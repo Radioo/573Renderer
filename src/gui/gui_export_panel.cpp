@@ -1,4 +1,5 @@
 #include "gui_export_panel.h"
+#include "../native_dialog.h"
 #include "../state/app_state.h"
 #include "../state/commands.h"
 #include "../video_encoder.h"
@@ -541,6 +542,14 @@ void PostStartRequest(App::State& state, MediaSink::Format current_format, bool 
     state.PostCommand(App::Cmd::StartExport{.req = std::move(r)});
 }
 
+void DrawRevealButton(const std::string& path) {
+    if (path.empty()) return;
+    if (ImGui::Button("Open folder")) NativeDialog::RevealInFileManager(path);
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("Show the exported file in Explorer.");
+    }
+}
+
 void DrawStartAndStatus(App::State& state, const App::ExportState& ex, bool busy,
                         MediaSink::Format current_format, bool hw_available) {
     if (!busy) {
@@ -582,6 +591,7 @@ void DrawStartAndStatus(App::State& state, const App::ExportState& ex, bool busy
         ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.50F, 0.92F, 0.65F, 1.0F));
         ImGui::TextWrapped("done - %s", ex.output_path.c_str());
         ImGui::PopStyleColor();
+        DrawRevealButton(ex.output_path);
         break;
     case App::ExportPhase::Failed:
         ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0F, 0.45F, 0.45F, 1.0F));

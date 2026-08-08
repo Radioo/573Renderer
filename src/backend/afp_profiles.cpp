@@ -160,6 +160,15 @@ const std::vector<AfpConfig> kConfigs = {
         .offsets = kIidx33Offsets,
     },
     AfpConfig{
+        .slug = "iidx19",
+        .avs_dll = "libavs-win32.dll",
+        .afp_dll = "libafp-win32.dll",
+        .afpu_dll = nullptr,
+        .avs_generation = AvsGeneration::Avs2134,
+        .offsets = kIidx33Offsets,
+        .scan_txp2_packages = true,
+    },
+    AfpConfig{
         .slug = "ddrworld",
         .avs_dll = "libavs-win64.dll",
         .afp_dll = "libafp-win64.dll",

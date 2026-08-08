@@ -20,20 +20,28 @@ bool g_avs_booted = false;
 }
 
 namespace {
+void EmitAvsLine(const char* chars, int nchars) {
+    if ((chars == nullptr) || nchars <= 0) return;
+    fwrite(chars, 1, nchars, stdout);
+    if (chars[nchars - 1] != '\n') fputc('\n', stdout);
+    fflush(stdout);
+    static FILE* af = nullptr;
+    if (af == nullptr) fopen_s(&af, "avs_out.log", "w");
+    if (af != nullptr) {
+        fwrite(chars, 1, nchars, af);
+        if (chars[nchars - 1] != '\n') fputc('\n', af);
+        fflush(af);
+    }
+}
+
 void __cdecl avs_log_writer(const char* chars, int nchars, void* ctx) {
     (void)ctx;
-    if ((chars != nullptr) && nchars > 0) {
-        fwrite(chars, 1, nchars, stdout);
-        if (nchars > 0 && chars[nchars - 1] != '\n') fputc('\n', stdout);
-        fflush(stdout);
-        static FILE* af = nullptr;
-        if (af == nullptr) fopen_s(&af, "avs_out.log", "w");
-        if (af != nullptr) {
-            fwrite(chars, 1, nchars, af);
-            if (chars[nchars - 1] != '\n') fputc('\n', af);
-            fflush(af);
-        }
-    }
+    EmitAvsLine(chars, nchars);
+}
+
+void __cdecl avs_log_writer_ctx_first(void* ctx, const char* chars, int nchars) {
+    (void)ctx;
+    EmitAvsLine(chars, nchars);
 }
 }
 
@@ -50,19 +58,23 @@ bool AllocSplitHeapIfNeeded(const AvsFuncs& avs) {
     return true;
 }
 
+void* AvsLogWriter(const AvsFuncs& avs) {
+    if (avs.log_writer_ctx_first) return reinterpret_cast<void*>(avs_log_writer_ctx_first);
+    return reinterpret_cast<void*>(avs_log_writer);
+}
+
 void CallAvsBoot(const AvsFuncs& avs, void* config_node) {
     if (avs.boot_takes_split_heaps) {
         LOG("AVS",
             "Calling avs_boot(config=%p, std_heap=%p/0x%x, avs_heap=%p/0x%x) [split-heap]...",
             config_node, g_avs_heap, AVS_STD_HEAP_SIZE, g_avs_gheap, AVS_GHEAP_SIZE);
         avs.avs_boot_split_heap(config_node, g_avs_heap, AVS_STD_HEAP_SIZE, g_avs_gheap,
-                                AVS_GHEAP_SIZE, reinterpret_cast<void*>(avs_log_writer), nullptr);
+                                AVS_GHEAP_SIZE, AvsLogWriter(avs), nullptr);
         return;
     }
     LOG("AVS", "Calling avs_boot(config=%p, heap=%p, size=0x%x)...", config_node, g_avs_heap,
         AVS_HEAP_SIZE);
-    avs.avs_boot(config_node, g_avs_heap, AVS_HEAP_SIZE, nullptr,
-                 reinterpret_cast<void*>(avs_log_writer), nullptr);
+    avs.avs_boot(config_node, g_avs_heap, AVS_HEAP_SIZE, nullptr, AvsLogWriter(avs), nullptr);
 }
 }
 
@@ -85,8 +97,7 @@ bool AvsManager::Boot(AvsFuncs& avs) {
     LOG("AVS", "property_create(7, buf, 0xD18) = %p", prop);
     if (prop == nullptr) {
         LOG("AVS", "Failed to create config property tree, trying NULL config");
-        avs.avs_boot(nullptr, g_avs_heap, AVS_HEAP_SIZE, nullptr,
-                     reinterpret_cast<void*>(avs_log_writer), nullptr);
+        CallAvsBoot(avs, nullptr);
     } else {
         char cwd[MAX_PATH];
         GetCurrentDirectoryA(MAX_PATH, cwd);
@@ -97,7 +108,11 @@ bool AvsManager::Boot(AvsFuncs& avs) {
         avs.property_node_create(prop, nullptr, 0x5, "/config/fs/nr_mountpoint", 256);
         avs.property_node_create(prop, nullptr, 0x5, "/config/fs/nr_filedesc", 4096);
         avs.property_node_create(prop, nullptr, 0x5, "/config/thread/nr_mutex", 256);
-        avs.property_node_create(prop, nullptr, 0xB, "/config/log/level", "misc");
+        if (avs.log_level_is_u32) {
+            avs.property_node_create(prop, nullptr, 0x7, "/config/log/level", 4);
+        } else {
+            avs.property_node_create(prop, nullptr, 0xB, "/config/log/level", "misc");
+        }
 
         auto* config_node = avs.property_search(prop, nullptr, "/config");
         LOG("AVS", "property_search('/config') = %p", config_node);

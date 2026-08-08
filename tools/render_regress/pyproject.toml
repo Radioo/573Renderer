@@ -1,0 +1,5 @@
+[project]
+name = "r573-render-regress"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = []
