@@ -3,6 +3,141 @@
 The game-profile system encodes what differs between Konami game versions so
 the renderer can boot the right ordinals + defaults per game.
 
+## IIDX 9 (9th style) - the older index container
+
+9th style writes chunk 0's length **big-endian** and has no chunk 1, so the
+name tables are appended to chunk 0 instead. Everything inside chunk 0 is the
+usual little-endian layout at the usual offsets, and nothing is encrypted.
+`SysIdx::Parse` picks the container by testing whether `4 + BE_length` equals
+the file size, which is exact on all 170 packages and cannot collide with a
+little-endian file. Layout and the split name-table form:
+`IIDX/ninth_style_index_container.md`.
+
+Its packages live under `data/graph/{anime,game,intro}/` plus `data/graph/mdata`,
+with no `sys/` directory and no 3D scenes. Point the tool at the directory that
+holds `data/` - for a standard dump that is `<root>/D/C02`.
+
+## IIDX 11 (RED) - binary DirectX .x models
+
+RED needs no decryption anywhere: its 172 `sys/` packages and all 360 tiles are
+plain LZSS. What it needs is the **binary** `.X` encoding. A `.x` header's third
+field is `txt ` or `bin `, and RED ships 7 of its 9 models as `bin` (DistorteD
+ships 1, Resort Anthem none), so `model/red` failed to load entirely while the
+newer games looked fine.
+
+Both encodings describe the same object graph, so `XFile::Parse` transcodes the
+binary token stream to the text form (`src/formats/xfile_binary.cpp`) and reuses
+the existing parser rather than growing a second one. Token table and the
+transcoding pitfalls: `IIDX/binary_x_models.md`.
+
+## IIDX 13 (DistorteD) - same backend, Blowfish textures
+
+DistorteD shares the whole IIDX 17 stack below (`scene3d` backend, 640x480, GC
+sprite packages) with one difference: its content root is `data/graph/` and its
+`sys/` textures are **Blowfish-CBC encrypted while `system.idx` is plaintext** -
+the inverse of SIRIUS, where the package is sealed as a unit. The key derives
+from the texture's file stem, so the game uses ten keys total. Details and
+re-find anchors: `IIDX/distorted_gc_encryption.md`.
+
+The loader decides per texture by decoding: plaintext LZSS first, and if that
+does not yield a `GC ` header, Blowfish. The `GC ` magic is the acceptance test,
+so a wrong guess cannot be silently accepted. `Lzss::Decompress` rejects a
+declared output size larger than the coded input can produce (one control byte
+covers eight items, longest match 18 bytes), which is what makes probing safe -
+without it a garbage length from encrypted bytes triggers a multi-gigabyte
+allocation.
+
+## IIDX 17 (SIRIUS) - the engine-free `scene3d` backend
+
+SIRIUS has no `bm2dx.dll` and no libafp: the AFP engine is statically linked
+into `bm2dx.exe`, so there is nothing for a host to load. Its 3D model scenes
+need no engine at all, so the `iidx17` profile uses a separate **`scene3d`**
+backend that boots without any DLLs, scans for scene directories, and renders
+them through `Scene3dHost`.
+
+Its **2D sprite packages are decoded too**, by `Gc2dHost`. A package is one
+directory under `data/graph_data/` holding an index (`system.idx`, or
+`system.idr` when the package is encrypted) plus up to twelve LZSS-compressed
+`GC ` texture tiles (`N.gcz`, or `N.gcr` when encrypted). The content scan lists
+both kinds: `[3D scene]` and `[2D package]`. All 349 shipped packages load,
+including the 134 encrypted ones.
+
+Encryption is a per-package property detected by probing for `system.idr`; there
+is no package list anywhere. The payload is AES-256-CBC with ciphertext stealing
+(`src/formats/aes.cpp`), IV = the file's first 16 bytes, key = two constant
+32-byte tables XORed together and then XORed with the package's directory name
+(zero-padded, not repeated). A decrypted index still spells its texture paths
+with the `.gcz` extension, so the loader rewrites it to `.gcr` at open time.
+
+Three render-side rules that the format forces, all covered in the notes repo
+doc (`IIDX/sirius_gc_sprite_formats.md`):
+
+- **Point sampling, plus the half-texel offset.** Unused atlas space is filled
+  with the transparent key colour (green, alpha bit clear), which is exactly the
+  colour key the game hands to `D3DXLoadSurfaceFromMemory`. Anything that
+  interpolates across a cell border drags that green into the sprite edge.
+- **One D3D texture per tile.** Cells address a virtual atlas that stacks the
+  tiles 1024 rows apart, and most packages contain cells that straddle a tile
+  boundary, so a cell can need one quad per tile it touches.
+- **The record table is an ordering table: draw it BACK TO FRONT.** One animation's
+  records are listed front-most first, so drawing in table order makes each
+  background paint over everything ahead of it. `GcAnim::Evaluate` reverses the
+  flattened draw list, which is equivalent to walking the records and every
+  nested group in reverse. Single-layer packages look identical either way, so
+  the regression case for this is `title` / `TITLE_TAIKI`.
+- **Blend mode comes from the alpha track, not from `flags` alone.** `flags` bit
+  `0x0002` means "this record has an alpha track" and bit `0x0010` selects
+  subtractive; the additive-vs-normal choice is made from the alpha keyframe's
+  two bytes. `GcAnim::SelectBlend` implements the game's exact ladder, and a
+  record whose pair is `(0, 100)` draws nothing at all. Without this, cells whose
+  artwork has a baked black background (the copyright line in `title`) paint a
+  solid black rectangle instead of compositing.
+- **`topleft = position - anchor * scale`.** The position is where the record's
+  anchor lands on screen; only the anchor is scaled. Scale is a signed percentage
+  per axis, so `(100, 200)` means the cell is stored at half height, and
+  `(-100, 100)` is a horizontal flip.
+
+A package's alphabetically first animation is not necessarily its content: in
+`sys/0200` animation `00` is built entirely from cells that point at blank atlas
+padding. Use the **2D package** inspector tab (or `--animation`) to pick another.
+
+The install is split into datecoded revision folders with `.orig` (encrypted)
+siblings. `GameRevision::LatestRevisionDir` picks the newest folder whose name
+is exactly ten digits, which excludes `.orig` structurally rather than by
+suffix matching, and logs the choice.
+
+Adding this backend also moved one check off the AFP runtime: startup content
+loading used to gate on `Runtime::Active().IsBooted()`, which is meaningless for
+an engine-free backend. `IBackend::ContentReady()` now lets each backend answer
+for itself.
+
+## IIDX 18 (Resort Anthem) - by-name libavs
+
+IIDX 18 uses the SAME TXP2 pipeline as IIDX 19 (identical flag word 0x67FDB, no
+libafputils, host-driven packages) with two differences worth knowing.
+
+Its `libavs-win32.dll` exports READABLE names (366 exports, no obfuscated
+`XC......` prefix), so `DllLoader` resolves by symbol and the generation's
+ordinal table is bypassed entirely - only the boot-contract flags
+(`boot_takes_split_heaps`, `log_writer_ctx_first`, `log_level_is_u32`) still
+apply, which is why the profile reuses `AvsGeneration::Avs2134`.
+
+libavs does NOT prefix every symbol with `avs_`. The compression stream is
+exported as `cstream_create` / `cstream_operate` / `cstream_finish` /
+`cstream_destroy` while `avs_fs_open` / `avs_boot` / `property_create` keep the
+prefix. Our field names carry the `avs_` form, so the four cstream loads use
+`DLL_LOAD_AS` with the real export names. Obfuscated builds never noticed
+because they resolve by ordinal. When this is wrong every texture fails to
+inflate and the whole screen renders as untextured white quads.
+
+AFP is ver2.7.4 (vs 2.9.4 on Lincle). The render-params slot layout is
+IDENTICAL through slot 17; 2.7.4 additionally populates slot 19 (+0x4C), which
+bm2dx uses as a timeline SOUND callback ("call sound[%s]") and is correctly a
+no-op for a renderer.
+
+Packages live under `data/graph_data/sys/*.bin`, not `data/graphic/`. The
+content scan finds them either way because it walks the tree for packages.
+
 ## P15 split: identity vs engine config
 
 Since P15 the old flat Profile struct is TWO slug-keyed tables:
@@ -98,6 +233,98 @@ initializers must follow declaration order (e.g. SDVX's
 `.afpu_set_config_safe_clean_pos` must appear between `.call_afpu_boot` and
 `.call_afp_set_flag_setup`).
 
+## AvsGeneration - the avs2 ordinal map is NOT stable across versions
+
+`AvsFuncs::Load` resolves avs2 by mangled ordinal (`<prefix><6 hex>`), and
+that ordinal-to-function map CHANGES between avs generations. It is not a
+uniform shift, so it cannot be derived by adding an offset.
+
+`AfpConfig::avs_generation` selects the table; `kAvsOrdinals217` (the
+default) covers avs2 2.16.3 and 2.17.x, and `kAvsOrdinals2161` covers the
+2.16.1 build IIDX 24 ships. `LoadAllDlls` picks one and logs which.
+
+Concrete evidence, IIDX 24's libavs-win32 2.16.1 (390 exports) vs the
+2.16.3 / 2.17.x builds (392 exports):
+
+| block | delta | example |
+|---|---|---|
+| VFS (`avs_fs_*`) | -0x15 | mount 0x04b -> 0x036 |
+| property (`property_*`) | -0x15 | create 0x090 -> 0x07b |
+| log (`log_body_*`) | -0x12 | info 0x17c -> 0x16a |
+| boot (`avs_boot`/`_shutdown`) | -0x0f | boot 0x129 -> 0x11a |
+| `avs_is_active` | -0x11 | 0x12d -> 0x11c |
+| `avs_filesys_imagefs` | -0x0b | 0x158 -> 0x14d |
+| gheap | REORGANISED | allocate 0x02f -> 0x183, free 0x031 -> 0x178 |
+
+Four different deltas plus a wholesale gheap move: the heap API was
+restructured between 2.16.1 and 2.16.3, so `avs_gheap_allocate` is not
+merely shifted. Using the 2.17 map against 2.16.1 makes
+`property_create` (0x090) land on `node_refdata`, and the renderer
+SEGFAULTS inside AVS boot. That was the IIDX 24 boot crash.
+
+How to re-derive for a new avs build (the method that produced the table
+above): these libraries keep their assert/log strings, so locate the source
+file names (`property-api.c`, `vfs-api-mount.c`, `avs-boot.c`,
+`heap-api-gheap.c`) and the function-name literals (`node_create`,
+`mount: fstype==NULL`, `kill application`), data-xref back to the
+referencing function, then walk callers until you reach an export named
+`<prefix><6 hex>` and read off its suffix. Cross-check the shape (arg
+count, callees) against the known-good build. Disambiguating tips found
+this round: `avs_boot` vs its mode-2 sibling both log the same banner - the
+real `avs_boot` writes boot-mode 1 into the state byte that `avs_is_active`
+reads; `avs_gheap_allocate` is the one whose NULL-pointer path allocates
+and non-NULL path reallocates (its wrapper logs `realloc(%p,%u)=%p`), NOT
+the 1-arg `alloc(size)` export next to it.
+
+### The avs BOOT CONTRACT also changes, not just the ordinals
+
+Two things beyond the ordinal map differ per avs generation. Both are flags on
+`AvsOrdinals` and both were found only by RE, because both fail SILENTLY or as
+a bare segfault:
+
+**1. `boot_takes_split_heaps` - avs_boot arity.** 2.13.4 and 2.15.8 take SEVEN
+args `(config, heap_std, sz_std, heap_avs, sz_avs, log_writer, log_ctx)` with
+TWO separate heaps; 2.16+ take SIX. Calling the 6-arg shape against a 7-arg
+build puts the log writer where the build expects `sz_avs`. Proof: in the
+2.13.4 avs_boot, arg2 asserts `"heap_std is NULL."` and arg4 asserts
+`"heap_avs is NULL."`, arg4 is 16-byte aligned then carved down through
+desc/thread/fs/net_private, and args 6/7 are passed straight to log_boot.
+
+**2. `log_writer_ctx_first` - the log-callback argument ORDER.** avs calls the
+host log writer through one small dispatcher. In 2.13.4 it is:
+
+```
+if ( g_log_writer != NULL )
+    g_log_writer(g_log_writer_ctx, buf, len);
+```
+
+i.e. **context FIRST**, whereas 2.15.8+ pass `(buf, len, ctx)`. With the newer
+signature installed on 2.13.4 the writer receives `chars = ctx` and
+`nchars = <the buffer pointer>`, so the very first log line segfaults inside
+the host's `fwrite`. The symptom is brutal to diagnose because the crash
+happens BEFORE any avs output exists - `avs_out.log` is never even created, so
+it looks like avs died with no explanation. `src/avs_boot.cpp` keeps both
+`avs_log_writer` and `avs_log_writer_ctx_first` around one shared emitter and
+picks by flag.
+
+How to re-find the writer order on a new build: from `log_boot`, note which
+globals it stores the two trailing avs_boot args into, then xref the writer
+global; its single call site is a 3-line dispatcher and the argument order is
+read straight off it.
+
+**3. `log_level_is_u32` - the /config/log/level NODE TYPE.** avs_boot parses
+its config through `property_psmap_import` against a built-in psmap. The psmap
+is an array of 16-byte entries `{type, ?, offset, len, path*, default}`; dump
+it at the address avs_boot passes as the psmap argument and read the type of
+each entry. In 2.13.4 `log/level` has psmap type **0x07 (u32)** with default 4,
+so the string node newer builds accept is rejected with
+`W:psmap: failed to read 'log/level'` followed by the FATAL
+`F:boot: property_psmap_import() failed.` The renderer creates the node as
+u32 4 (= misc) on that generation and as the string "misc" elsewhere. Neighbour
+entries in the same psmap confirm the decoding: `log/use_netsci` is type 0x03
+(u8) and `desc/nr_desc` is type 0x05 (u16) with default 808, which matches the
+`nr_desc=808` the build then logs.
+
 ## kSkip sentinel
 
 `GameProfile::kSkip` (= -1) as an ordinal means "this game's afp-core does
@@ -185,6 +412,34 @@ IIDX 33 (`kIidx33Offsets`; from the original dll_offsets.h IDA RE):
 | afpu_data_struct        | 0x281F0 |                                        |
 | afpu_render_context     | 0x28880 |                                        |
 | afpu_set_screen_rect_fn | 0x18550 | the set-screen-rect function body, in IIDX afpu 1.2.19 |
+
+IIDX 26 Rootage (`kIidx26Offsets`; afp-core 2.14.11 / afp-utils 1.2.12 -
+seven and five point releases BEFORE IIDX 33's 2.14.18 / 1.2.19, same
+XCd229cc / XE592acd export schemes but a completely different data-segment
+layout. Derived by decompiling afp_set_afp_data (afp-core ord 0x000: the
+callback table is the destination of its 35-qword copy loop, also passed
+to the rebind helper in the & 0x800 branch; the render-flags dword is the
+& 0x800 gate itself, at table + 0x32C exactly like IIDX 33) and
+afpu_render_init (afp-utils ord 0x070: stores its argument - the render
+context - into one global at function entry and passes the data-struct
+global to afp-core's afp_set_afp_data at the end). The set-screen-rect
+function was found by its body shape, NOT by data-struct+0x630 (that
+offset holds max_nr_nodes in 1.2.12 - the struct layout shifted): search
+afp-utils for the `or byte ptr [rip+X], 1` idiom (80 0D ?? ?? ?? ?? 01)
+and keep the hit whose function takes a pointer arg and stores 4 ints
+(one 16-byte SSE store in this build) into rect globals, ORs 1 into a
+flag byte and zeroes a counter. Cross-check: the function's address sits
+in the afpu data struct at slot +0x70, the SAME slot IIDX 33's set-rect
+function occupies in ITS data struct):
+
+| field                   | value   | note                                     |
+|-------------------------|---------|-------------------------------------------|
+| afp_callback_table      | 0x189988 | in afp_set_afp_data                       |
+| afp_render_flags        | 0x189CB4 | = table + 0x32C, the & 0x800 gate         |
+| afp_nearfar_slot        | 0x1899F0 | = table + 0x68                            |
+| afpu_data_struct        | 0x431A0  | in afpu_render_init                       |
+| afpu_render_context     | 0x43850  | in afpu_render_init                       |
+| afpu_set_screen_rect_fn | 0x30CB0  | body-shape + data-struct slot +0x70 match |
 
 SDVX 7 NABLA (`kSdvx7Offsets`; derived by comparing IIDX afp-core's
 afp_set_afp_data against SDVX 7's - the function structures are identical so
@@ -321,11 +576,27 @@ afp_boot.cpp; false = skip.
 - `call_afpu_set_config` - afp-utils ordinal 0x005. Live SDVX trace shows the
   SDVX game does not call it from its main thread (see the SDVX notes for the
   later, corrected picture).
-- `call_afpu_set_flag_setup` - the bm2dx afpu_set_flag triple (4,4 / 8,8 /
-  16,16). SDVX's trace shows only ONE afpu_set_flag call at boot with
+- `call_afpu_set_flag_setup` - gates the afpu_set_flag boot calls. The exact
+  (flags, mask) pairs fired come from `afpu_set_flag_calls` (see below);
+  the default list is the bm2dx-33-derived triple (4,4 / 8,8 / 16,16).
+  SDVX's trace shows only ONE afpu_set_flag call at boot with
   completely different args (0x1, 0x1000); the triple is skipped on SDVX
   entirely until the real SDVX flags are known (branch instead of skip,
   later).
+- `afpu_set_flag_calls` / `afp_set_flag_calls` - the exact per-profile
+  (flags, mask) pair lists the gated set-flag setup fires, in order. Both
+  DLLs implement the same semantics, verified by decompiling afp-core
+  export 0x005 and afp-utils export 0x003 on IIDX 26 and IIDX 33:
+  `new = mask | (old & ~flags)` - the first argument SELECTS the bits to
+  modify, the second gives their new values. So (16, 16) SETS bit 16,
+  (16, 0) CLEARS it, and a game's mirrored `mov edx, N; mov ecx, edx`
+  call sites mean "set bit N" while `(N, 0)` means "clear bit N". The
+  defaults preserve the renderer's historical bm2dx-33-derived behaviour:
+  afp (16,0 / 8,0 / 65537,0) and afpu (4,4 / 8,8 / 16,16). A profile whose
+  game demonstrably passes different pairs overrides the list with the
+  game's exact calls (read them off the disasm of the boot function's
+  call sites - the decompiler often hides the second argument, so check
+  the edx/ecx setup instructions).
 - `call_afpu_boot` - afp-utils ordinal 0x000. Live SDVX trace showed
   soundvoltex.dll's IAT does NOT call afpu_boot directly; best hypothesis was
   that SDVX's afp_boot internally bootstraps the afp-utils side, making an
@@ -406,13 +677,92 @@ afp_boot.cpp; false = skip.
   to) - it relies solely on afpu_render_init's internal rebind. True = match the game: skip both, but keep the slot 12/13
   (screen-size / near-far) re-patch.
 
-## The five shipped profiles
+## The six shipped profiles
 
 ### IIDX 33 (Sparkle Shower) - slug `iidx33`, dir hint "iidx"
 
 Reference target. Default ordinals, 1920x1080, kIidx33Offsets, all gates
 default-true - its boot sequence is the renderer's reference; nothing to
 override.
+
+### IIDX 26 (Rootage) - slug `iidx26`, dir hint "rootage"
+
+DLLs: avs2-core 2.17.0 / afp-core 2.14.11 / afp-utils 1.2.12 (2018-era, vs
+IIDX 33's avs2 2.17.4 / afp-core 2.14.18 / afp-utils 1.2.19). Same
+XCd229cc / XE592acd / XCgsqzn export schemes and the SAME export counts
+(126 / 123 / 392). The identity row sits BEFORE iidx33 in the registry ON
+PURPOSE: AutoDetect returns the first dir_substring match, and every IIDX
+dir matches iidx33's broad "iidx" hint - "rootage" must win first or the
+Rootage dir boots with IIDX 33 offsets (the original load-crash this
+profile fixes). 1280x720 (Rootage-era cabinets are 720p; FHD IIDX arrived
+with the Lightning Model era), kIidx26Offsets.
+
+Ordinal maps: verified IDENTICAL to IIDX 33 for every export the renderer
+resolves, via a pairwise decompile comparison of all 46 used afp-core
+exports and all 36 used afp-utils exports across both builds (multi-agent
+sweep; 82/82 same-function verdicts, no low-confidence). avs2-core 2.17.0's
+suffix map likewise matches the avs_funcs.h ordinals - spot-verified by
+decompiling the 26 build's exports for avs_boot ("avs-boot.c"),
+property_create / property_node_create ("property-api.c", "node_create"),
+and avs_fs_mount ("vfs-api-mount.c") at the same suffixes, plus a full
+export-table diff (392 names in both).
+
+Version drift found by the sweep (none affects the renderer's call
+surface): afp-core 2.14.11 lacks ext commands 13-17, mc_control mode range
+tops at 0x1039 vs 0x103D, and its set_flag refresh-trigger mask is 0x4011
+vs 0x14011 (bit 0x10000 does not exist yet - see the flag-call list note
+below). afp-utils 1.2.12's set_config has cases 1-8 only (no 9/10), and
+its per-slot render array is 48 bytes vs 24.
+
+The entire afp bring-up lives in ONE bm2dx function - find it via the xref
+to the afp_boot import (afp-core name suffix 000002); every gate below is
+read straight off that decompile/disasm. The sequence: afp_boot(ctx) with
+a STATIC render-context blob (flags dword 0x200, callbacks at +0x008..
++0x068, allocator trio at +0x118..+0x130 - layout identical to
+FillRenderContext's), afp_set_stream_nr(2048), afp_set_verbose(1) 1-arg,
+afp_set_flag(0x10, 0x10), afp_set_flag(8, 8) - MIRRORED args, i.e. SET
+those bits, and NO third 65537 call - afpu_boot(0, data) 2-arg with a NULL
+config node, afpu_render_init(cfg), the afpu memory-hook install (afpu
+suffix 000006, skipped by the renderer as on T44), D3D setup,
+afpu_set_config(1, 4096), then afpu_set_flag(4, 0) - note the xor edx
+CLEAR - afpu_set_flag(8, 8), afpu_set_flag(16, 16). bm2dx 26 never
+imports afp_set_afp_data (0x000) nor afp_render_init (0x00f) at all, and
+never calls afpu_set_config types 2/3.
+
+Gate set and provenance:
+
+- `call_afp_set_stream_nr = true` - game calls afp_set_stream_nr(2048).
+- `call_afp_stream_create_test = false` - diagnostic probe; skip for safety.
+- `call_afp_render_init = false` - bm2dx 26 does not import afp-core 0x00f.
+- `call_afpu_render_init = true` - game calls afpu_render_init.
+- `call_afpu_set_config = true` - game calls (1, 4096). The renderer's
+  extra (2, 10) hits 1.2.12's case 2 (max_nr_masks resize, identical to
+  IIDX 33's) and (3, 0) hits case 3, where value 0 installs a NULL
+  cleanup callback (values 1/2 install real cleanup routines) - so the
+  safe_clean_pos override below makes case 3 a no-op, matching the game
+  never calling it.
+- `call_afpu_set_flag_setup = true` with
+  `afpu_set_flag_calls = {(4,0), (8,8), (16,16)}` - the game's exact
+  pairs; the first call CLEARS afpu bit 4 where the default list sets it.
+- `call_afpu_boot = true` - game calls afpu_boot(NULL, data). The
+  renderer passes its max_nr_masks=16 property instead; 1.2.12's
+  afpu_boot runs the same property_psmap_import path (2 psmap fields
+  fewer than 1.2.19, none of them ours).
+- `afpu_set_config_safe_clean_pos = true` - pass (3, 0), see above.
+- `call_afp_set_flag_setup = true` with
+  `afp_set_flag_calls = {(16,16), (8,8)}` - the game's exact mirrored
+  pairs. NO 65537: afp-core 2.14.11's refresh-trigger mask is 0x4011
+  (bit 0x10000 arrived by 2.14.18), so the bm2dx-33 third call addresses
+  a flag bit that does not exist in this build.
+- `apply_iidx_data_segment_patches = true` - kIidx26Offsets are correct;
+  needed for the poke + slot re-patch.
+- `afp_set_afp_data_wide_args = false` - afp_set_afp_data is 1-arg in
+  2.14.11 (seen directly in its decompile).
+- `afp_set_verbose_wide_args = false` - game calls afp_set_verbose(1) 1-arg.
+- `scan_arc_containers = false` - loose .ifs (modern layout, DLLs and
+  data/ in the game root; no modules/ subdir).
+- `skip_explicit_afp_set_afp_data = true` - like gdxg/T44 the game relies
+  solely on afpu_render_init's internal rebind-path call (0x800 left set).
 
 ### SDVX 7 (NABLA) - slug `sdvx7`, dir hint "sdvx"
 

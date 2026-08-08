@@ -1,0 +1,182 @@
+{
+  "cases": [
+    {
+      "name": "iidx09_title",
+      "arch": "x86",
+      "profile": "iidx09",
+      "ifs_candidates": [
+        "data/graph/game/title9"
+      ],
+      "animation": "TITLE_TAIKI",
+      "frames": [
+        60,
+        200
+      ]
+    },
+    {
+      "name": "iidx11_red",
+      "arch": "x86",
+      "profile": "iidx11",
+      "ifs_candidates": [
+        "data/graph/model/red"
+      ],
+      "frames": [
+        30,
+        120
+      ]
+    },
+    {
+      "name": "iidx13_title",
+      "arch": "x86",
+      "profile": "iidx13",
+      "ifs_candidates": [
+        "data/graph/sys/title"
+      ],
+      "animation": "TITLE_TAIKI",
+      "frames": [
+        100,
+        300
+      ]
+    },
+    {
+      "name": "iidx17_scene",
+      "arch": "x86",
+      "profile": "iidx17",
+      "ifs_candidates": [
+        "data/graph_data/model/mode_bg"
+      ],
+      "frames": [
+        25
+      ]
+    },
+    {
+      "name": "iidx17_package",
+      "arch": "x86",
+      "profile": "iidx17",
+      "ifs_candidates": [
+        "data/graph_data/sys/0200"
+      ],
+      "animation": "01",
+      "frames": [
+        8,
+        16
+      ]
+    },
+    {
+      "name": "iidx17_encrypted",
+      "arch": "x86",
+      "profile": "iidx17",
+      "ifs_candidates": [
+        "data/graph_data/sys/allrank"
+      ],
+      "frames": [
+        10
+      ]
+    },
+    {
+      "name": "iidx17_title",
+      "arch": "x86",
+      "profile": "iidx17",
+      "ifs_candidates": [
+        "data/graph_data/sys/title"
+      ],
+      "animation": "TITLE_TAIKI",
+      "frames": [
+        200,
+        400
+      ]
+    },
+    {
+      "name": "iidx18",
+      "arch": "x86",
+      "profile": "iidx18",
+      "ifs_candidates": [
+        "data/graph_data/sys/title.bin"
+      ],
+      "animation": "logo_taiki",
+      "frames": [
+        30
+      ]
+    },
+    {
+      "name": "iidx19",
+      "arch": "x86",
+      "profile": "iidx19",
+      "ifs_candidates": [
+        "data/graphic/0200.bin"
+      ],
+      "animation": "01",
+      "frames": [
+        6,
+        20
+      ]
+    },
+    {
+      "name": "iidx19_reload",
+      "arch": "x86",
+      "profile": "iidx19",
+      "ifs_candidates": [
+        "data/graphic/0200.bin"
+      ],
+      "swap_to": "data/graphic/fcombo00.bin",
+      "swap_after": 5,
+      "frames": [
+        11
+      ]
+    },
+    {
+      "name": "iidx20",
+      "arch": "x86",
+      "profile": "iidx20",
+      "ifs_candidates": [
+        "data/graphic/0/title.ifs",
+        "data/graphic/1/title.ifs",
+        "data/graphic/title.ifs"
+      ],
+      "frames": [
+        20,
+        40
+      ]
+    },
+    {
+      "name": "iidx24",
+      "arch": "x86",
+      "profile": "iidx24",
+      "ifs_candidates": [
+        "data/graphic/0/title.ifs",
+        "data/graphic/1/title.ifs",
+        "data/graphic/title.ifs"
+      ],
+      "frames": [
+        20,
+        40
+      ]
+    },
+    {
+      "name": "iidx26",
+      "arch": "x64",
+      "profile": "iidx26",
+      "ifs_candidates": [
+        "data/graphic/0/title.ifs",
+        "data/graphic/1/title.ifs",
+        "data/graphic/title.ifs"
+      ],
+      "frames": [
+        20,
+        40
+      ]
+    },
+    {
+      "name": "ddrworld",
+      "arch": "x64",
+      "profile": "ddrworld",
+      "ifs_candidates": [
+        "data/arc/bm2d/common_background_v3.arc"
+      ],
+      "frames": [
+        20,
+        60
+      ]
+    }
+  ]
+}

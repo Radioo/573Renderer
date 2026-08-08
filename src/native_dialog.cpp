@@ -1,7 +1,12 @@
 #include "native_dialog.h"
 
 #include <cstddef>
+#include <cstdint>
+#include <system_error>
 
+#include <filesystem>
+#include <shellapi.h>
+#include <shlobj_core.h>
 #include <shobjidl_core.h>
 #include <string>
 
@@ -75,6 +80,40 @@ std::string BrowseForFolder(HWND parent, const std::string& initial) {
     dlg->Release();
     if (we_inited) CoUninitialize();
     return result;
+}
+
+bool RevealInFileManager(const std::string& path) {
+    if (path.empty()) return false;
+
+    std::error_code ec;
+    std::filesystem::path const target = std::filesystem::absolute(path, ec);
+    if (ec) return false;
+
+    HRESULT const hr_init =
+        CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+    const bool we_inited = SUCCEEDED(hr_init) || hr_init == RPC_E_CHANGED_MODE;
+
+    bool ok = false;
+    if (std::filesystem::exists(target, ec)) {
+        auto* pidl = ILCreateFromPathW(target.wstring().c_str());
+        if (pidl != nullptr) {
+            ok = SUCCEEDED(SHOpenFolderAndSelectItems(pidl, 0, nullptr, 0));
+            ILFree(pidl);
+        }
+    }
+
+    if (!ok) {
+        std::filesystem::path dir = target;
+        if (dir.has_filename()) dir = dir.parent_path();
+        if (!dir.empty() && std::filesystem::exists(dir, ec)) {
+            HINSTANCE rc = ShellExecuteW(nullptr, L"open", dir.wstring().c_str(), nullptr, nullptr,
+                                         SW_SHOWNORMAL);
+            ok = reinterpret_cast<intptr_t>(rc) > 32;
+        }
+    }
+
+    if (we_inited) CoUninitialize();
+    return ok;
 }
 
 }

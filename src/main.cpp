@@ -1,9 +1,9 @@
 #include "state/boot_lifecycle.h"
 #include "gpu_context.h"
 #include "state/live_controls.h"
+#include "support/crash_report.h"
 #include "support/log.h"
 #include "backend/backend.h"
-#include "game_runtime.h"
 #include "render_backend.h"
 #include "state/app_state.h"
 #include "state/commands.h"
@@ -247,11 +247,12 @@ bool ParseCliOrReport(int argc, char** argv, const std::vector<std::string>& arg
     return false;
 }
 
-void PostInitialBootRequest(const std::string& game_dir, int rw, int rh) {
+void PostInitialBootRequest(const std::string& game_dir, int rw, int rh, bool size_explicit) {
     App::Global().PostCommand(App::Cmd::BootGame{.game_dir = game_dir,
                                                  .profile_slug = App::Global().GetGameProfileSlug(),
                                                  .render_width = rw,
-                                                 .render_height = rh});
+                                                 .render_height = rh,
+                                                 .size_explicit = size_explicit});
 }
 
 void RaiseGuiWindow() {
@@ -276,6 +277,10 @@ void InstallGpuStateHooks() {
     };
 }
 
+void InstallProcessDiagnostics() {
+    Support::InstallCrashReporter();
+}
+
 bool WaitForFirstBoot(HINSTANCE hInstance, const Cli::Options& cli, bool have_gui,
                       App::State& state, int& exit_rc) {
     exit_rc = -1;
@@ -290,7 +295,7 @@ bool WaitForFirstBoot(HINSTANCE hInstance, const Cli::Options& cli, bool have_gu
             std::string slug = boot->profile_slug;
             if (slug.empty()) slug = state.GetGameProfileSlug();
             if (BootFromGameDir(hInstance, boot->game_dir, !cli.headless, cli.boot_ifses, rw, rh,
-                                slug, &cli)) {
+                                slug, boot->size_explicit, &cli)) {
                 return true;
             }
             if (!have_gui) {
@@ -352,10 +357,24 @@ bool StartGuiIfWanted(HINSTANCE hInstance, const Cli::Options& cli) {
     return have_gui;
 }
 
+bool SeedStateAndStartGui(HINSTANCE hInstance, const Cli::Options& cli,
+                          const Settings::Config& settings, const std::string& initial_dir) {
+    int const initial_rw = cli.render_width > 0 ? cli.render_width : settings.render_width;
+    int const initial_rh = cli.render_height > 0 ? cli.render_height : settings.render_height;
+    SeedStateFromSettings(cli, settings, initial_dir, initial_rw, initial_rh);
+
+    const bool have_gui = StartGuiIfWanted(hInstance, cli);
+
+    const bool cli_size = cli.render_width > 0 && cli.render_height > 0;
+    if (!cli.game_dir.empty())
+        PostInitialBootRequest(cli.game_dir, initial_rw, initial_rh, cli_size);
+    return have_gui;
+}
+
 void MountStartupContent(App::State& state, const Cli::Options& cli) {
     bool startup_from_arc = false;
     std::string const startup_ifs = ResolveStartupIfs(state, cli.startup_ifs, startup_from_arc);
-    bool const afp_ready = Runtime::Active().IsBooted();
+    bool const afp_ready = Backend::Active()->ContentReady();
     if (!startup_ifs.empty() && afp_ready) {
         MountAndLoadIfs(startup_ifs, startup_from_arc);
         ApplyCliOverrides(cli);
@@ -380,19 +399,15 @@ int WINAPI WinMain(HINSTANCE hInstance, [[maybe_unused]] HINSTANCE hPrevInstance
         return rc;
     }
 
+    InstallProcessDiagnostics();
+
     Cli::Options cli;
     int cli_rc = -1;
     if (!ParseCliOrReport(argc, argv_ptrs.data(), args_utf8, cli, cli_rc)) return cli_rc;
 
     Settings::Config const settings = Settings::Load();
     std::string const initial_dir = !cli.game_dir.empty() ? cli.game_dir : settings.game_dir;
-    int const initial_rw = cli.render_width > 0 ? cli.render_width : settings.render_width;
-    int const initial_rh = cli.render_height > 0 ? cli.render_height : settings.render_height;
-    SeedStateFromSettings(cli, settings, initial_dir, initial_rw, initial_rh);
-
-    const bool have_gui = StartGuiIfWanted(hInstance, cli);
-
-    if (!cli.game_dir.empty()) PostInitialBootRequest(cli.game_dir, initial_rw, initial_rh);
+    const bool have_gui = SeedStateAndStartGui(hInstance, cli, settings, initial_dir);
 
     auto& state = App::Global();
     int wait_rc = -1;

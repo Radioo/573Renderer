@@ -2,6 +2,10 @@
 
 #include "../state/app_state.h"
 #include "gui_panels_internal.h"
+#include "gc2d/gc_host.h"
+#include "gui_gc2d_panel.h"
+#include "gui_scene3d_panel.h"
+#include "scene3d/scene3d_host.h"
 
 #include <span>
 #include <string>
@@ -13,6 +17,14 @@ namespace {
 
 bool QproTabVisible() {
     return App::Global().GetGameProfileSlug() == "iidx33";
+}
+
+bool Scene3dTabVisible() {
+    return Scene3dHost::Active();
+}
+
+bool Gc2dTabVisible() {
+    return Gc2dHost::Active();
 }
 
 constexpr PanelDesc kModernPanels[] = {
@@ -59,6 +71,29 @@ constexpr PanelDesc kDdrPanels[] = {
      .slot = PanelSlot::InspectorTab,
      .draw = &Panels::RenderLiveTab,
      .visible = nullptr},
+    {.id = "scene3d",
+     .tab_label = "3D scene",
+     .slot = PanelSlot::InspectorTab,
+     .draw = &Panels::Scene3dPanel::Render,
+     .visible = &Scene3dTabVisible},
+};
+
+constexpr PanelDesc kScene3dPanels[] = {
+    {.id = "renderer_view",
+     .tab_label = "Renderer",
+     .slot = PanelSlot::MainTab,
+     .draw = &Panels::RenderRendererView,
+     .visible = nullptr},
+    {.id = "scene3d",
+     .tab_label = "3D scene",
+     .slot = PanelSlot::InspectorTab,
+     .draw = &Panels::Scene3dPanel::Render,
+     .visible = &Scene3dTabVisible},
+    {.id = "gc2d",
+     .tab_label = "2D package",
+     .slot = PanelSlot::InspectorTab,
+     .draw = &Panels::Gc2dPanel::Render,
+     .visible = &Gc2dTabVisible},
 };
 
 struct PanelSet {
@@ -69,6 +104,7 @@ struct PanelSet {
 constexpr PanelSet kPanelSets[] = {
     {.backend_id = "afp_modern", .panels = kModernPanels},
     {.backend_id = "afp_ddr", .panels = kDdrPanels},
+    {.backend_id = "scene3d", .panels = kScene3dPanels},
 };
 
 }

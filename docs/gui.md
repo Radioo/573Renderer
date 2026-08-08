@@ -101,7 +101,12 @@ Ready view = fixed shell, top to bottom:
 3. **Timeline dock** (fixed height `kTimelineH`): transport + custom track, section 4.
 4. **Status strip** (`kStatusStripH`, mono font): profile name, render WxH, render health
    (last_error, tooltip carries the full text), the export status tag (clickable, reopens
-   the export modal), right-aligned afp version.
+   the export modal), right-aligned afp version. Once an export finishes, an "Open folder"
+   button appears beside the status tag and inside the export modal; both call
+   `NativeDialog::RevealInFileManager`, which uses `SHOpenFolderAndSelectItems` to open
+   Explorer with the output SELECTED, falling back to opening the parent directory when the
+   item cannot be resolved. Relative export paths are made absolute first, and a PNG-sequence
+   export (which writes a directory) is selected the same way.
 
 - Layout constants live in `gui_layout_constants.h` so WM_GETMINMAXINFO and the pane layout
   cannot drift. Pane minimums: left 240, center 320, right 280; defaults 300/340; splitter 6.
@@ -121,7 +126,9 @@ per-backend `PanelSet` tables keyed by `App::State::ActiveBackendId`. Slots:
   `GetGameProfileSlug() == "iidx33"`); afp_ddr = Renderer only. With one visible entry the
   top-bar switch does not render.
 - `InspectorTab`: right-pane tabs. afp_modern = Properties / Render / Live; afp_ddr =
-  Render (reduced draw fn) / Live.
+  Render (reduced draw fn) / Live / 3D scene; scene3d = 3D scene / 2D package. The last two
+  carry visible predicates (`Scene3dHost::Active()`, `Gc2dHost::Active()`) so only the tab for
+  the kind of content actually loaded is present.
 
 Rules unchanged from the original registry: MEMBERSHIP IS THE CAPABILITY DECLARATION (an
 unsupported control is ABSENT, never greyed); ImGui stays 100% inside src/gui/ (isolation
@@ -312,9 +319,14 @@ Other live-control semantics:
   speed is unchanged at any rate. DDR content is authored at 60; IIDX/SDVX previews
   historically ran at 120.
 - Render resolution presets are NAMED FOR THEIR GAMES (3840x2160 GITADORA 4K, 1920x1080
-  IIDX, 1280x720 DDR, 1080x1920 SDVX / jubeat portrait, 720x1280 SDVX old-era, 520x704 qpro
-  avatar - iidx33 only) because AFP's GetScreenSize callback must match the offscreen RT
-  shape or layout coords land wrong. Values clamp to 64..8192.
+  IIDX, 1280x720 DDR, 640x480 legacy 4:3, 1080x1920 SDVX / jubeat portrait, 720x1280 SDVX
+  old-era, 520x704 qpro avatar - iidx33 only) because AFP's GetScreenSize callback must
+  match the offscreen RT shape or layout coords land wrong. Values clamp to 64..8192.
+  640x480 carries no game name because it is the generic pre-HD arcade size rather than any
+  one title's native mode; it is listed inside the landscape group (after 1280x720) because
+  the qpro entry is located POSITIONALLY as `kCustomIdx - 1`, so any new preset must be
+  inserted before it. The export panel's output-resolution list carries the same 640x480
+  entry, in the same position relative to its trailing Custom row.
 - Settings persist to settings.ini on every change (atomic tempfile + rename).
 - The DDR-only Tools (batch .arc extractor, customize image extractor - docs/ddr.md) render
   inside the card, gated on the EFFECTIVE setup selection (explicit combo slug, else
@@ -340,3 +352,66 @@ a feature: GUI card, `AfpCmd::ToggleCompanion`, `IGameRuntime::ToggleCompanion`,
 package machinery (`AfpManager::LoadCompanion` / `UnloadCompanion` / mount aliasing) remains -
 qpro loads its co-present part packages through it (docs/qpro.md), and the bm2dx locale
 name-shadowing facts stay documented in docs/boot_and_render_loop.md "Companions".
+
+## 3D scene viewer (IIDX 17 / 18)
+
+Directories that contain a `.inz` manifest plus at least one `.xz` model are
+listed in Browse with a `[3D scene]` suffix. Selecting one loads it through the
+normal content path: the backend detects a scene directory in `LoadContent`,
+hands it to `Scene3dHost`, and `RenderScene` draws the scene instead of the AFP
+content until a normal package is loaded again.
+
+A **3D scene** tab appears in the inspector while a scene is live. It shows the
+model / tile / draw-call counts and carries:
+
+- **Pause** and a speed slider, plus a scrubber over the animation in `.x`
+  AnimationKey ticks (the scene loops at its longest key time).
+- **Animate models** and **Animate camera** freeze each independently, holding
+  whatever pose they were in rather than snapping to tick 0. This is the way to
+  stop a scene orbiting or a layer drifting while still letting the rest run;
+  Pause stops the clock for everything at once. "Animate camera" is disabled
+  when the scene has no camera in its `.x`, or while free camera is driving the
+  view, with a tooltip saying which.
+- A **Models** list with a per-model visibility checkbox and a blend-mode combo
+  (opaque / alpha / additive / subtract). The blend value shown is the one the
+  game's per-screen setup code assigns; the combo overrides it so a layer can be
+  isolated or inspected.
+- **Free camera** toggle. OFF uses the camera animated inside the `.x` file;
+  scenes without one (`resort_st`, `boss_st`) start with free look ON because it
+  is the only way to see them. **Reset view** re-frames from the scene bounds.
+- A **move speed** drag, seeded from the scene's bounding radius so a 10-unit
+  scene and a 10000-unit scene both feel the same.
+
+Camera controls, handled in `src/scene3d/scene3d_input.cpp`:
+
+| input | action |
+|---|---|
+| hold RIGHT MOUSE | look around (cursor is hidden and re-centred each frame) |
+| W / A / S / D | move forward / left / back / right |
+| E or Space | move up |
+| Q or Ctrl | move down |
+| Shift | 5x faster |
+| Alt | 5x slower |
+
+Movement keys only apply while the right mouse button is held, so the keyboard
+stays free for the rest of the UI. The look handler runs before the normal
+window proc and swallows only the messages it uses, so crop-pick and the other
+window interactions are unaffected. Pitch is clamped just short of vertical to
+avoid gimbal flip.
+
+## 2D package viewer (IIDX 17)
+
+Directories holding a `system.idx` or `system.idr` are listed in Browse with a
+`[2D package]` suffix and load through the same content path as 3D scenes. A
+**2D package** tab appears in the inspector while one is live, showing the cell /
+record / animation / tile counts and the quad count for the current frame.
+
+- An **animation combo** listing every animation the package names. This is not
+  cosmetic: a package's first animation is often not its content (see
+  `docs/game_profiles.md`), so without the combo some packages look broken.
+- **Pause** and a speed slider, plus a frame scrubber over the current
+  animation's length. Dragging the scrubber pauses first, so the playhead stays
+  where it was put.
+
+`--animation <name>` picks the starting animation from the command line, which
+is what the headless screenshot path uses.

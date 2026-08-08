@@ -1,4 +1,5 @@
 #include "backend/afp_family_backend.h"
+#include "scene3d/scene3d_host.h"
 
 #include "afp_boot.h"
 #include "app_globals.h"
@@ -223,6 +224,10 @@ void AfpFamilyBackend::AdvanceFrame(float dt, int frame_count, bool exporting) {
 }
 
 void AfpFamilyBackend::RenderScene(float dt, int frame_count) {
+    if (Scene3dHost::Active()) {
+        Scene3dHost::RenderFrame(dt);
+        return;
+    }
     const uint32_t stream_id = Runtime::Active().ActiveClipId(AfpManager::StreamId());
     Runtime::Active().RenderFrame(dt, stream_id, frame_count);
 }

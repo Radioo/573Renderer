@@ -1,0 +1,16 @@
+{
+  "iidx20": "<path to your IIDX 20 tricoro dump>",
+  "iidx24": "<path to your IIDX 24 SINOBUZ dump>",
+  "iidx26": "<path to your IIDX 26 Rootage dump>",
+  "ddrworld": "<path to your DDR WORLD dump>",
+  "iidx19": "X:\\path\\to\\IIDX 19",
+  "iidx19_reload": "X:\\path\\to\\IIDX 19",
+  "iidx18": "<path to your IIDX 18 Resort Anthem dump>",
+  "iidx17_scene": "<path to your IIDX 17 SIRIUS dump>",
+  "iidx17_package": "<path to your IIDX 17 SIRIUS dump>",
+  "iidx17_encrypted": "<path to your IIDX 17 SIRIUS dump>",
+  "iidx17_title": "<path to your IIDX 17 SIRIUS dump>",
+  "iidx13_title": "<path to your IIDX 13 DistorteD dump>",
+  "iidx11_red": "<path to your IIDX 11 RED dump>",
+  "iidx09_title": "<path to your IIDX 9 9th style dump, the dir holding data/>"
+}

@@ -2,8 +2,14 @@
 
 #include <cstdint>
 #include <string>
+#include <vector>
 
 namespace AfpProfiles {
+
+struct FlagCall {
+    uint32_t flags;
+    uint32_t mask;
+};
 
 struct DllOffsetSet {
     uintptr_t afp_callback_table;
@@ -28,12 +34,16 @@ extern const DllOffsetSet kFallbackIidxOffsets;
 const DllOffsetSet& ActiveOffsets();
 void SetActiveOffsets(const DllOffsetSet& offsets);
 
+enum class AvsGeneration : uint8_t { Avs217, Avs2161, Avs2158, Avs2134 };
+
 struct AfpConfig {
     const char* slug;
 
     const char* avs_dll = "avs2-core.dll";
     const char* afp_dll = "afp-core.dll";
     const char* afpu_dll = "afp-utils.dll";
+
+    AvsGeneration avs_generation = AvsGeneration::Avs217;
 
     DllOffsetSet offsets;
 
@@ -43,11 +53,15 @@ struct AfpConfig {
     bool call_afpu_render_init = true;
     bool call_afpu_set_config = true;
     bool call_afpu_set_flag_setup = true;
+    std::vector<FlagCall> afpu_set_flag_calls = {
+        {.flags = 4, .mask = 4}, {.flags = 8, .mask = 8}, {.flags = 16, .mask = 16}};
     bool call_afpu_boot = true;
 
     bool afpu_set_config_safe_clean_pos = false;
 
     bool call_afp_set_flag_setup = true;
+    std::vector<FlagCall> afp_set_flag_calls = {
+        {.flags = 16, .mask = 0}, {.flags = 8, .mask = 0}, {.flags = 65537, .mask = 0}};
 
     bool apply_iidx_data_segment_patches = true;
 
@@ -56,6 +70,7 @@ struct AfpConfig {
     bool afp_set_verbose_wide_args = false;
 
     bool scan_arc_containers = false;
+    bool scan_txp2_packages = false;
 
     float time_scale = 1.0f;
 

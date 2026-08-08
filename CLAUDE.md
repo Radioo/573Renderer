@@ -16,7 +16,9 @@
 
 When testing or debugging, ALWAYS use a proper render resolution for the game so that the content is not getting cut off.
 - SDVX - 1080x1920
-- IIDX - 1920x1080
+- IIDX 9 to 19 - 640x480
+- IIDX 20 to 29 - 1280x720
+- IIDX 30 and newer - 1920x1080
 - DDR - 1280x720
 - GD - 3840x2160
 - JB (T44) - 1080x1920

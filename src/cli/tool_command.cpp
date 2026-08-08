@@ -50,10 +50,21 @@ ToolCommand ParseExtractQproJson(std::span<const std::string> args, std::size_t 
     return c;
 }
 
+ToolCommand ParseScene3dTest(std::span<const std::string> args, std::size_t i) {
+    ToolCommand c;
+    c.kind = ToolKind::Scene3dTest;
+    c.in_path = args[i + 1];
+    c.out_path = (i + 2 < args.size() && args[i + 2][0] != '-') ? args[i + 2] : "scene3d_out.png";
+    if (i + 3 < args.size() && args[i + 3][0] != '-') c.frames = ParseIntAtoiLike(args[i + 3]);
+    return c;
+}
+
 }
 
 ToolCommand ParseToolCommand(std::span<const std::string> args) {
-    std::size_t i = FindFlagWithValue(args, "--ddr-test");
+    std::size_t i = FindFlagWithValue(args, "--scene3d-test");
+    if (i < args.size()) return ParseScene3dTest(args, i);
+    i = FindFlagWithValue(args, "--ddr-test");
     if (i < args.size()) return ParseDdrTest(args, i);
     i = FindFlagWithValue(args, "--extract-arc");
     if (i < args.size()) return ParseSinglePath(args, i, ToolKind::ExtractArc);

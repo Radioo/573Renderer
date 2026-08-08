@@ -17,15 +17,38 @@ permissions:
 
 jobs:
   windows:
-    name: Build (Windows x64, RelWithDebInfo)
+    name: Build (Windows ${{ matrix.arch }}, RelWithDebInfo)
     runs-on: windows-2022
     defaults:
       run:
         shell: pwsh
 
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+            triplet: x64-windows-static
+            configure_preset: ci
+            build_preset: ci
+            build_dir: build
+            exe: 573Renderer.exe
+            pdb: 573Renderer.pdb
+            artifact: renderer-win64
+            run_tidy: true
+          - arch: x86
+            triplet: x86-windows-static
+            configure_preset: ci32
+            build_preset: ci32
+            build_dir: build32
+            exe: 573Renderer32.exe
+            pdb: 573Renderer32.pdb
+            artifact: renderer-win32
+            run_tidy: false
+
     env:
       VCPKG_BINARY_SOURCES: "clear;files,${{ github.workspace }}/vcpkg_cache,readwrite"
-      VCPKG_DEFAULT_TRIPLET: x64-windows-static
+      VCPKG_DEFAULT_TRIPLET: ${{ matrix.triplet }}
       VCPKG_FEATURE_FLAGS: "manifests,binarycaching"
 
     steps:
@@ -42,10 +65,10 @@ jobs:
           "sha=$sha" >> $env:GITHUB_OUTPUT
           Write-Host "vcpkg submodule @ $sha"
 
-      - name: Enable MSVC dev cmd (x64)
+      - name: Enable MSVC dev cmd (${{ matrix.arch }})
         uses: ilammy/msvc-dev-cmd@v1
         with:
-          arch: x64
+          arch: ${{ matrix.arch }}
 
       - name: Cache vcpkg.exe
         id: cache-vcpkg-bin
@@ -69,21 +92,22 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ github.workspace }}/vcpkg_cache
-          key: vcpkg-archives-${{ runner.os }}-${{ steps.vcpkg-rev.outputs.sha }}-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json') }}
+          key: vcpkg-archives-${{ runner.os }}-${{ matrix.triplet }}-${{ steps.vcpkg-rev.outputs.sha }}-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json') }}
           restore-keys: |
-            vcpkg-archives-${{ runner.os }}-${{ steps.vcpkg-rev.outputs.sha }}-
-            vcpkg-archives-${{ runner.os }}-
+            vcpkg-archives-${{ runner.os }}-${{ matrix.triplet }}-${{ steps.vcpkg-rev.outputs.sha }}-
+            vcpkg-archives-${{ runner.os }}-${{ matrix.triplet }}-
 
       - name: Configure (CMake + Ninja)
-        run: cmake --preset ci
+        run: cmake --preset ${{ matrix.configure_preset }}
 
       - name: Build
-        run: cmake --build --preset ci
+        run: cmake --build --preset ${{ matrix.build_preset }}
 
       - name: Test
-        run: ctest --test-dir build -LE local_dll --output-on-failure
+        run: ctest --test-dir ${{ matrix.build_dir }} -LE local_dll --output-on-failure
 
       - name: Cache clang-tidy results
+        if: matrix.run_tidy
         uses: actions/cache@v4
         with:
           path: .tidycache
@@ -93,37 +117,60 @@ jobs:
             tidy-cache-${{ runner.os }}-
 
       - name: clang-tidy (cached, whole tree)
+        if: matrix.run_tidy
         run: |
           pip install clang-tidy==21.1.6
           python tools/ci/run_tidy.py
 
       - name: Verify build output
         run: |
-          if (!(Test-Path bin\573Renderer.exe)) {
-            throw "bin\573Renderer.exe not produced by build"
+          $exe = "bin\${{ matrix.exe }}"
+          if (!(Test-Path $exe)) {
+            throw "$exe not produced by build"
           }
-          $size = (Get-Item bin\573Renderer.exe).Length
-          Write-Host "573Renderer.exe: $size bytes"
+          $size = (Get-Item $exe).Length
+          Write-Host "${{ matrix.exe }}: $size bytes"
           if ($size -lt 1MB) {
-            throw "573Renderer.exe is suspiciously small ($size bytes) - link probably failed"
+            throw "$exe is suspiciously small ($size bytes) - link probably failed"
+          }
+          $bytes = [System.IO.File]::ReadAllBytes($exe)
+          $peOff = [BitConverter]::ToInt32($bytes, 0x3C)
+          $machine = [BitConverter]::ToUInt16($bytes, $peOff + 4)
+          $expected = if ("${{ matrix.arch }}" -eq "x64") { 0x8664 } else { 0x14c }
+          Write-Host ("machine = 0x{0:x} (expected 0x{1:x})" -f $machine, $expected)
+          if ($machine -ne $expected) {
+            throw ("$exe has PE machine 0x{0:x}, expected 0x{1:x} for ${{ matrix.arch }}" -f $machine, $expected)
           }
 
       - name: Upload artefact
         uses: actions/upload-artifact@v4
         with:
-          name: renderer-win64-${{ github.sha }}
+          name: ${{ matrix.artifact }}-${{ github.sha }}
           path: |
-            bin/573Renderer.exe
-            bin/573Renderer.pdb
+            bin/${{ matrix.exe }}
+            bin/${{ matrix.pdb }}
           if-no-files-found: error
           retention-days: 30
 
+  release:
+    name: Release (x64 + x86)
+    runs-on: ubuntu-latest
+    needs: windows
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - name: Download build artefacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: renderer-win*-${{ github.sha }}
+          path: release
+          merge-multiple: true
+
+      - name: List release payload
+        run: ls -la release
+
       - name: Create GitHub Release
-        if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: |
-            bin/573Renderer.exe
-            bin/573Renderer.pdb
+          files: release/*
           generate_release_notes: true
           fail_on_unmatched_files: true

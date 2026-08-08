@@ -14,7 +14,6 @@
 #include "window.h"
 
 #include <string>
-#include <string_view>
 #include <utility>
 #include <windows.h>
 
@@ -58,13 +57,9 @@ const GameProfile::Profile* ResolveBootProfile(App::State& state, const std::str
     return profile;
 }
 
-bool CreateRenderWindowAndDevice(App::State& state, int render_w, int render_h, bool legacy_ddr) {
+bool CreateRenderWindowAndDevice(App::State& state, int render_w, int render_h) {
     g_d3d.width = render_w > 0 ? render_w : 1920;
     g_d3d.height = render_h > 0 ? render_h : 1080;
-    if (legacy_ddr) {
-        g_d3d.width = 1280;
-        g_d3d.height = 720;
-    }
     LOG("Boot", "Render resolution: %dx%d", g_d3d.width, g_d3d.height);
     HWND hwnd = AppWindow::Create(g_d3d.width, g_d3d.height);
     if ((hwnd == nullptr) || !g_d3d.Init(hwnd)) {
@@ -93,7 +88,7 @@ void SaveBootSettings(const std::string& game_dir, const GameProfile::Profile& p
 
 bool BootFromGameDir(HINSTANCE hInstance, const std::string& game_dir, bool want_render_window,
                      bool load_boot_ifses, int render_w, int render_h,
-                     const std::string& profile_slug, const Cli::Options* cli) {
+                     const std::string& profile_slug, bool size_explicit, const Cli::Options* cli) {
     auto& state = App::Global();
     state.SetBootState(App::BootState::Booting);
     state.BeginLoad(game_dir);
@@ -104,12 +99,19 @@ bool BootFromGameDir(HINSTANCE hInstance, const std::string& game_dir, bool want
         return FailBoot(state, std::string("Unknown backend id '") + profile->backend_id +
                                    "' for profile '" + profile->slug + "'.");
     }
-    const bool legacy_ddr = std::string_view(Backend::Active()->Id()) == "afp_ddr";
     state.SetActiveBackendId(Backend::Active()->Id());
+
+    int width = render_w;
+    int height = render_h;
+    if (!size_explicit && profile->default_render_w > 0 && profile->default_render_h > 0) {
+        width = profile->default_render_w;
+        height = profile->default_render_h;
+    }
+    state.SetRenderSize(width, height);
 
     if (want_render_window) {
         state.UpdateLoadStage("Creating render window");
-        if (!CreateRenderWindowAndDevice(state, render_w, render_h, legacy_ddr)) return false;
+        if (!CreateRenderWindowAndDevice(state, width, height)) return false;
     }
 
     Backend::BootEnv env;

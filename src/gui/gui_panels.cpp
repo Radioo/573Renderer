@@ -10,6 +10,7 @@
 #include "gui_widgets.h"
 #include "panel_registry.h"
 #include "../game_profile.h"
+#include "../native_dialog.h"
 #include "../state/app_state.h"
 #include "../state/commands.h"
 #include "../support/log.h"
@@ -325,6 +326,13 @@ void DrawExportStatusTag(App::State& state) {
         } else {
             ImGui::SetTooltip("Click to open the export dialog.");
         }
+    }
+
+    if (ex.phase != App::ExportPhase::Done || ex.output_path.empty()) return;
+    ImGui::SameLine(0.0F, 6.0F);
+    if (ImGui::SmallButton("Open folder")) NativeDialog::RevealInFileManager(ex.output_path);
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("Show %s in Explorer.", ex.output_path.c_str());
     }
 }
 

@@ -1,8 +1,11 @@
 #include "backend/afp_family_backend.h"
+#include "scene3d/scene3d.h"
+#include "scene3d/scene3d_host.h"
 
 #include "afp_boot.h"
 #include "app_globals.h"
 #include "avs_boot.h"
+#include "avs_funcs.h"
 #include "backend/afp_profiles.h"
 #include "backend/backend.h"
 #include "cli/cli.h"
@@ -66,6 +69,7 @@ std::string DiscoverDllDir(const std::string& game_dir, const AfpProfiles::AfpCo
     for (const auto& c : candidates) {
         bool all_present = true;
         for (const char* name : required) {
+            if (name == nullptr) continue;
             if (!fs::exists(c / name, ec)) {
                 all_present = false;
                 break;
@@ -80,7 +84,7 @@ std::string DiscoverDllDir(const std::string& game_dir, const AfpProfiles::AfpCo
 
 bool LoadAllDlls(const std::string& dll_dir, const AfpProfiles::AfpConfig& p, bool legacy_afp) {
     LOG("Init", "Loading DLLs from: %s (avs=%s afp=%s afpu=%s)", dll_dir.c_str(), p.avs_dll,
-        p.afp_dll, p.afpu_dll);
+        p.afp_dll, (p.afpu_dll != nullptr) ? p.afpu_dll : "(none)");
     {
         std::string d = dll_dir;
         if (!d.empty() && (d.back() == '\\' || d.back() == '/')) d.pop_back();
@@ -88,8 +92,25 @@ bool LoadAllDlls(const std::string& dll_dir, const AfpProfiles::AfpConfig& p, bo
     }
     if (!g_avs_dll.Load((dll_dir + p.avs_dll).c_str())) return false;
     if (!g_afp_dll.Load((dll_dir + p.afp_dll).c_str())) return false;
-    if (!g_afpu_dll.Load((dll_dir + p.afpu_dll).c_str())) return false;
-    if (!g_avs.Load(g_avs_dll)) {
+    if (p.afpu_dll == nullptr) {
+        LOG("Init", "Profile ships no afp-utils DLL (pre-afputils AFP generation)");
+    } else if (!g_afpu_dll.Load((dll_dir + p.afpu_dll).c_str())) {
+        return false;
+    }
+    const AvsOrdinals* avs_ord = &kAvsOrdinals217;
+    const char* avs_ord_name = "avs 2.16.3/2.17";
+    if (p.avs_generation == AfpProfiles::AvsGeneration::Avs2161) {
+        avs_ord = &kAvsOrdinals2161;
+        avs_ord_name = "avs 2.16.1";
+    } else if (p.avs_generation == AfpProfiles::AvsGeneration::Avs2158) {
+        avs_ord = &kAvsOrdinals2158;
+        avs_ord_name = "avs 2.15.8";
+    } else if (p.avs_generation == AfpProfiles::AvsGeneration::Avs2134) {
+        avs_ord = &kAvsOrdinals2134;
+        avs_ord_name = "avs 2.13.4";
+    }
+    LOG("Init", "AVS ordinal map: %s", avs_ord_name);
+    if (!g_avs.Load(g_avs_dll, *avs_ord)) {
         LOG("Init", "FAILED to resolve AVS functions");
         return false;
     }
@@ -174,7 +195,8 @@ struct ScanProgressThrottle {
 };
 
 std::vector<App::State::IfsEntry> ScanGameDir(const std::string& game_dir,
-                                              const ScanProgressFn& on_progress, bool scan_arcs) {
+                                              const ScanProgressFn& on_progress, bool scan_arcs,
+                                              bool scan_txp2) {
     std::vector<App::State::IfsEntry> out;
     namespace fs = std::filesystem;
     std::error_code ec;
@@ -208,6 +230,12 @@ std::vector<App::State::IfsEntry> ScanGameDir(const std::string& game_dir,
                 out.push_back(std::move(e));
             }
             if (scan_arcs && HasExt(ext, "arc")) AppendArcIfsEntry(p, out);
+            if (scan_txp2 && HasExt(ext, "bin")) {
+                App::State::IfsEntry e;
+                e.name = fs::relative(p, root, ec).string();
+                e.full_path = p.string();
+                out.push_back(std::move(e));
+            }
         }
 
         progress.Tick(on_progress, scanned, out.size(), top.Current());
@@ -218,7 +246,27 @@ std::vector<App::State::IfsEntry> ScanGameDir(const std::string& game_dir,
     return out;
 }
 
-void ScanThreadBody(const std::string& game_dir, bool scan_arcs) noexcept {
+void AppendSceneDirs(const std::string& game_dir, std::vector<App::State::IfsEntry>& out) {
+    std::error_code ec;
+    const std::filesystem::path root(game_dir);
+    if (!std::filesystem::is_directory(root, ec)) return;
+    size_t found = 0;
+    for (const auto& e : std::filesystem::recursive_directory_iterator(
+             root, std::filesystem::directory_options::skip_permission_denied, ec)) {
+        if (ec) break;
+        if (!e.is_directory(ec)) continue;
+        const std::string dir = e.path().string();
+        if (!Scene3d::IsSceneDir(dir)) continue;
+        App::State::IfsEntry entry;
+        entry.full_path = dir;
+        entry.name = std::filesystem::relative(e.path(), root, ec).string() + "  [3D scene]";
+        out.push_back(std::move(entry));
+        found++;
+    }
+    if (found != 0) LOG("Boot", "Found %zu 3D model scenes", found);
+}
+
+void ScanThreadBody(const std::string& game_dir, bool scan_arcs, bool scan_txp2) noexcept {
     try {
         auto& st = App::Global();
         auto ifs_list = ScanGameDir(
@@ -234,7 +282,8 @@ void ScanThreadBody(const std::string& game_dir, bool scan_arcs) noexcept {
                 }
                 st.SetIfsScanStatus(s);
             },
-            scan_arcs);
+            scan_arcs, scan_txp2);
+        AppendSceneDirs(game_dir, ifs_list);
         LOG("Boot", "Found %zu IFS files under %s", ifs_list.size(), game_dir.c_str());
         st.SetAvailableIfs(std::move(ifs_list));
         st.SetIfsScanStatus("");
@@ -348,17 +397,31 @@ void AfpFamilyBackend::Shutdown() {
     AvsManager::Shutdown(g_avs);
 }
 
+bool AfpFamilyBackend::ContentReady() const {
+    return Runtime::Active().IsBooted();
+}
+
 void AfpFamilyBackend::StartContentScan() {
     auto& state = App::Global();
     bool const scan_arcs = cfg_->scan_arc_containers;
+    bool const scan_txp2 = cfg_->scan_txp2_packages;
     state.SetIfsScanning(true);
-    state.SetIfsScanStatus("Scanning for IFS files...");
-    std::thread(ScanThreadBody, game_dir_, scan_arcs).detach();
+    state.SetIfsScanStatus(scan_txp2 ? "Scanning for TXP2 packages..."
+                                     : "Scanning for IFS files...");
+    std::thread(ScanThreadBody, game_dir_, scan_arcs, scan_txp2).detach();
 }
 
 bool AfpFamilyBackend::LoadContent(const std::string& path, bool from_arc) {
     auto& state = App::Global();
     state.BeginLoad(path);
+
+    if (Scene3d::IsSceneDir(path)) {
+        state.UpdateLoadStage("Loading 3D scene");
+        const bool ok = Scene3dHost::Load(path);
+        state.EndLoad();
+        return ok;
+    }
+    Scene3dHost::Unload();
 
     std::string mount_path = path;
     if (from_arc) {

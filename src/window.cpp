@@ -2,6 +2,7 @@
 #include "state/app_state.h"
 #include "state/live_controls.h"
 #include "support/log.h"
+#include "scene3d/scene3d_input.h"
 
 #include <cstdint>
 #include <windowsx.h>
@@ -119,6 +120,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         LRESULT result = 0;
         if (HandleCropPick(hwnd, msg, wParam, lParam, state, result)) return result;
     }
+    if (Scene3d::HandleLookMessage(hwnd, msg, wParam, lParam)) return 0;
 
     switch (msg) {
     case WM_DESTROY:

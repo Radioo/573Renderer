@@ -56,8 +56,10 @@ bool DdrRuntime::LoadScene(const std::string& mount_path, const std::string& ifs
     std::string const ddr_base = std::filesystem::path(mount_path).filename().string();
     std::string ddr_pkg = ddr_base;
     if (ddr_pkg.size() > 4 && ddr_pkg.ends_with(".ifs")) ddr_pkg.resize(ddr_pkg.size() - 4);
-    state.UpdateLoadStage("Loading DDR package (AFP 2.13.7)");
-    bool const ok = DdrAfp::LoadIfs(g_avs, g_avs_dll, mount_path, ddr_pkg);
+    const bool is_txp2 = ddr_base.size() > 4 && ddr_base.ends_with(".bin");
+    state.UpdateLoadStage(is_txp2 ? "Loading TXP2 package" : "Loading DDR package (AFP 2.13.7)");
+    bool const ok = is_txp2 ? DdrAfp::LoadTxp2(g_avs, mount_path)
+                            : DdrAfp::LoadIfs(g_avs, g_avs_dll, mount_path, ddr_pkg);
     if (ok) {
         auto& cfg = state.MutConfig(ddr_base);
         cfg.filename = ddr_base;

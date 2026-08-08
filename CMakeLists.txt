@@ -10,8 +10,12 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 add_compile_definitions(NOMINMAX)
 
-if(NOT CMAKE_SIZEOF_VOID_P EQUAL 8)
-    message(FATAL_ERROR "This project must be built as 64-bit (x64)")
+if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+    set(R573_ARCH_SUFFIX "")
+elseif(CMAKE_SIZEOF_VOID_P EQUAL 4)
+    set(R573_ARCH_SUFFIX "32")
+else()
+    message(FATAL_ERROR "Unsupported pointer size ${CMAKE_SIZEOF_VOID_P}")
 endif()
 
 find_package(imgui CONFIG REQUIRED)
@@ -43,6 +47,17 @@ target_link_libraries(r573_support PUBLIC tl::expected PRIVATE r573::warnings)
 
 add_library(r573_formats STATIC
     src/formats/ddr_arc.cpp
+    src/formats/txp2.cpp
+    src/formats/lzss.cpp
+    src/formats/aes.cpp
+    src/formats/blowfish.cpp
+    src/formats/gcz.cpp
+    src/formats/sysidx.cpp
+    src/formats/gcanim.cpp
+    src/formats/inz.cpp
+    src/formats/xfile.cpp
+    src/formats/xfile_lexer.cpp
+    src/formats/xfile_binary.cpp
     src/formats/dxt_decode.cpp
     src/formats/bgra_crop.cpp
     src/formats/hsl_adjust.cpp
@@ -108,6 +123,11 @@ add_executable(renderer WIN32
     src/tool_commands.cpp
     src/boot.cpp
     src/backend/backend_registry.cpp
+    src/backend/scene3d_backend.cpp
+    src/gc2d/gc_package.cpp
+    src/gc2d/gc_host.cpp
+    src/gc2d/gc_render.cpp
+    src/game_revision.cpp
     src/backend/afp_profiles.cpp
     src/backend/afp_family_backend.cpp
     src/backend/afp_family_frame.cpp
@@ -136,6 +156,8 @@ add_executable(renderer WIN32
     src/mc_control.cpp
     src/gui/gui_window.cpp
     src/gui/gui_panels.cpp
+    src/gui/gui_scene3d_panel.cpp
+    src/gui/gui_gc2d_panel.cpp
     src/gui/panel_registry.cpp
     src/gui/gui_style.cpp
     src/gui/gui_widgets.cpp
@@ -166,9 +188,21 @@ add_executable(renderer WIN32
     src/qpro_composite.cpp
     src/qpro_back.cpp
     src/qpro_composite_debug.cpp
+    src/support/crash_report.cpp
+    src/render/prim_layout.cpp
+    src/afp_ddr_geo.cpp
     src/afp_ddr_render.cpp
+    src/afp_ddr_render_shape.cpp
     src/afp_ddr_boot.cpp
+    src/afp_ddr_txp2.cpp
     src/afp_ddr_test.cpp
+    src/scene3d/anim.cpp
+    src/scene3d/camera.cpp
+    src/scene3d/scene3d_host.cpp
+    src/scene3d/scene3d_input.cpp
+    src/scene3d/scene3d.cpp
+    src/scene3d/scene3d_render.cpp
+    src/scene3d/scene3d_test.cpp
 )
 
 target_compile_options(renderer PRIVATE "$<$<CXX_COMPILER_ID:MSVC>:/utf-8>")
@@ -199,7 +233,7 @@ target_link_libraries(renderer PRIVATE
 )
 
 set_target_properties(renderer PROPERTIES
-    OUTPUT_NAME                      "573Renderer"
+    OUTPUT_NAME                      "573Renderer${R573_ARCH_SUFFIX}"
     RUNTIME_OUTPUT_DIRECTORY         "${CMAKE_SOURCE_DIR}/bin"
     RUNTIME_OUTPUT_DIRECTORY_DEBUG   "${CMAKE_SOURCE_DIR}/bin"
     RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_SOURCE_DIR}/bin"
@@ -210,12 +244,20 @@ include(Catch)
 
 add_executable(formats_tests
     tests/formats/ddr_arc_tests.cpp
+    tests/formats/txp2_tests.cpp
+    tests/formats/model3d_tests.cpp
+    tests/formats/model3d_real_tests.cpp
+    tests/formats/sysidx_tests.cpp
+    tests/formats/aes_tests.cpp
+    tests/formats/blowfish_tests.cpp
+    tests/formats/xfile_binary_tests.cpp
+    src/gc2d/gc_package.cpp
     tests/formats/frame_process_tests.cpp
     tests/formats/dxt_decode_tests.cpp
     tests/formats/bgra_crop_tests.cpp
     tests/formats/hsl_adjust_tests.cpp
 )
-target_link_libraries(formats_tests PRIVATE Catch2::Catch2WithMain r573_formats r573::warnings)
+target_link_libraries(formats_tests PRIVATE Catch2::Catch2WithMain r573_formats r573_support r573::warnings)
 catch_discover_tests(formats_tests DISCOVERY_MODE POST_BUILD PROPERTIES LABELS ci)
 
 add_executable(cli_tests

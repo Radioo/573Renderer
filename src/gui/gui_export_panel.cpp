@@ -1,4 +1,5 @@
 #include "gui_export_panel.h"
+#include "../native_dialog.h"
 #include "../state/app_state.h"
 #include "../state/commands.h"
 #include "../video_encoder.h"
@@ -250,9 +251,10 @@ void DrawResolutionPresetCombo(int rw, int rh) {
     char native_label[48];
     snprintf(native_label, sizeof(native_label), "Native (%dx%d)", rw, rh);
     const ResPreset kPresets[] = {
-        {.label = native_label, .w = 0, .h = 0},    {.label = "1920x1080", .w = 1920, .h = 1080},
-        {.label = "1280x720", .w = 1280, .h = 720}, {.label = "1080x1920", .w = 1080, .h = 1920},
-        {.label = "720x1280", .w = 720, .h = 1280}, {.label = "Custom", .w = -1, .h = -1},
+        {.label = native_label, .w = 0, .h = 0},      {.label = "1920x1080", .w = 1920, .h = 1080},
+        {.label = "1280x720", .w = 1280, .h = 720},   {.label = "640x480", .w = 640, .h = 480},
+        {.label = "1080x1920", .w = 1080, .h = 1920}, {.label = "720x1280", .w = 720, .h = 1280},
+        {.label = "Custom", .w = -1, .h = -1},
     };
     const int kPresetCount = (int)(sizeof(kPresets) / sizeof(kPresets[0]));
     const int kCustomIdx = kPresetCount - 1;
@@ -540,6 +542,14 @@ void PostStartRequest(App::State& state, MediaSink::Format current_format, bool 
     state.PostCommand(App::Cmd::StartExport{.req = std::move(r)});
 }
 
+void DrawRevealButton(const std::string& path) {
+    if (path.empty()) return;
+    if (ImGui::Button("Open folder")) NativeDialog::RevealInFileManager(path);
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("Show the exported file in Explorer.");
+    }
+}
+
 void DrawStartAndStatus(App::State& state, const App::ExportState& ex, bool busy,
                         MediaSink::Format current_format, bool hw_available) {
     if (!busy) {
@@ -581,6 +591,7 @@ void DrawStartAndStatus(App::State& state, const App::ExportState& ex, bool busy
         ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.50F, 0.92F, 0.65F, 1.0F));
         ImGui::TextWrapped("done - %s", ex.output_path.c_str());
         ImGui::PopStyleColor();
+        DrawRevealButton(ex.output_path);
         break;
     case App::ExportPhase::Failed:
         ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0F, 0.45F, 0.45F, 1.0F));
