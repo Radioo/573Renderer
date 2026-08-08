@@ -22,6 +22,15 @@ const std::vector<Profile> kProfiles = {
         .default_render_h = 720,
     },
     Profile{
+        .name = "IIDX 18 (Resort Anthem)",
+        .slug = "iidx18",
+        .dir_substring = "resort anthem",
+        .backend_id = "afp_ddr",
+        .game_dll = "bm2dx.dll",
+        .default_render_w = 640,
+        .default_render_h = 480,
+    },
+    Profile{
         .name = "IIDX 19 (Lincle)",
         .slug = "iidx19",
         .dir_substring = "lincle",

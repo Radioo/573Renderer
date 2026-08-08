@@ -3,6 +3,33 @@
 The game-profile system encodes what differs between Konami game versions so
 the renderer can boot the right ordinals + defaults per game.
 
+## IIDX 18 (Resort Anthem) - by-name libavs
+
+IIDX 18 uses the SAME TXP2 pipeline as IIDX 19 (identical flag word 0x67FDB, no
+libafputils, host-driven packages) with two differences worth knowing.
+
+Its `libavs-win32.dll` exports READABLE names (366 exports, no obfuscated
+`XC......` prefix), so `DllLoader` resolves by symbol and the generation's
+ordinal table is bypassed entirely - only the boot-contract flags
+(`boot_takes_split_heaps`, `log_writer_ctx_first`, `log_level_is_u32`) still
+apply, which is why the profile reuses `AvsGeneration::Avs2134`.
+
+libavs does NOT prefix every symbol with `avs_`. The compression stream is
+exported as `cstream_create` / `cstream_operate` / `cstream_finish` /
+`cstream_destroy` while `avs_fs_open` / `avs_boot` / `property_create` keep the
+prefix. Our field names carry the `avs_` form, so the four cstream loads use
+`DLL_LOAD_AS` with the real export names. Obfuscated builds never noticed
+because they resolve by ordinal. When this is wrong every texture fails to
+inflate and the whole screen renders as untextured white quads.
+
+AFP is ver2.7.4 (vs 2.9.4 on Lincle). The render-params slot layout is
+IDENTICAL through slot 17; 2.7.4 additionally populates slot 19 (+0x4C), which
+bm2dx uses as a timeline SOUND callback ("call sound[%s]") and is correctly a
+no-op for a renderer.
+
+Packages live under `data/graph_data/sys/*.bin`, not `data/graphic/`. The
+content scan finds them either way because it walks the tree for packages.
+
 ## P15 split: identity vs engine config
 
 Since P15 the old flat Profile struct is TWO slug-keyed tables:

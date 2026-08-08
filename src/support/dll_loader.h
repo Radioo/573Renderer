@@ -48,3 +48,5 @@ private:
 };
 
 #define DLL_LOAD(loader, field, ord) field = (loader).GetFunc<decltype(field)>(ord, #field)
+
+#define DLL_LOAD_AS(loader, field, ord, sym) field = (loader).GetFunc<decltype(field)>(ord, sym)

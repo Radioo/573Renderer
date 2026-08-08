@@ -1,6 +1,18 @@
 {
   "cases": [
     {
+      "name": "iidx18",
+      "arch": "x86",
+      "profile": "iidx18",
+      "ifs_candidates": [
+        "data/graph_data/sys/title.bin"
+      ],
+      "animation": "logo_taiki",
+      "frames": [
+        30
+      ]
+    },
+    {
       "name": "iidx19",
       "arch": "x86",
       "profile": "iidx19",

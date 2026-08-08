@@ -333,10 +333,10 @@ struct AvsFuncs {
         log_writer_ctx_first = ord.log_writer_ctx_first;
         log_level_is_u32 = ord.log_level_is_u32;
         if (ord.avs_cstream_create != 0) {
-            DLL_LOAD(loader, avs_cstream_create, ord.avs_cstream_create);
-            DLL_LOAD(loader, avs_cstream_execute, ord.avs_cstream_execute);
-            DLL_LOAD(loader, avs_cstream_finish, ord.avs_cstream_finish);
-            DLL_LOAD(loader, avs_cstream_destroy, ord.avs_cstream_destroy);
+            DLL_LOAD_AS(loader, avs_cstream_create, ord.avs_cstream_create, "cstream_create");
+            DLL_LOAD_AS(loader, avs_cstream_execute, ord.avs_cstream_execute, "cstream_operate");
+            DLL_LOAD_AS(loader, avs_cstream_finish, ord.avs_cstream_finish, "cstream_finish");
+            DLL_LOAD_AS(loader, avs_cstream_destroy, ord.avs_cstream_destroy, "cstream_destroy");
         }
         DLL_LOAD(loader, avs_shutdown, ord.avs_shutdown);
         DLL_LOAD(loader, avs_is_active, ord.avs_is_active);
