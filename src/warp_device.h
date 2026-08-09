@@ -12,6 +12,7 @@ struct Device {
     IDirect3D9* d3d9 = nullptr;
     IDirect3DDevice9* device = nullptr;
     IUnknown* d3d12_device = nullptr;
+    bool owns_window = true;
     bool ok = false;
 
     Device() = default;
@@ -23,6 +24,8 @@ struct Device {
 };
 
 bool Create(Device& out, int width, int height);
+
+bool CreateForWindow(Device& out, HWND hwnd, int width, int height);
 
 const std::string& LastError();
 

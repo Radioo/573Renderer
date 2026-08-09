@@ -4,6 +4,9 @@
 #include "imgui.h"
 #include "imgui_te_context.h"
 #include "imgui_te_engine.h"
+#include "qpro/qpro_extract.h"
+#include "qpro/qpro_model.h"
+#include "qpro/qpro_scan.h"
 #include "state/app_state.h"
 #include "state/commands.h"
 
@@ -11,7 +14,9 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <optional>
+#include <string>
 #include <variant>
+#include <vector>
 
 namespace {
 
@@ -22,6 +27,23 @@ void OpenQproView(ImGuiTestContext* ctx) {
     ctx->Yield(2);
     ctx->SetRef("##main");
     GuiTest::FocusChild(ctx, "main_view");
+}
+
+std::vector<QproExtract::ScanPart> MockScanParts() {
+    std::vector<QproExtract::ScanPart> parts;
+    parts.push_back({.cat = static_cast<int>(QproModel::Category::Body),
+                     .idx = 0,
+                     .label = "body_0",
+                     .ifs = "qpro_body_0.ifs",
+                     .date = "2026-02-01",
+                     .exists = true});
+    parts.push_back({.cat = static_cast<int>(QproModel::Category::Body),
+                     .idx = 1,
+                     .label = "body_1",
+                     .ifs = "qpro_body_1.ifs",
+                     .date = "2025-05-04",
+                     .exists = true});
+    return parts;
 }
 
 template <typename T> const T* TakeAfpCommand(std::optional<App::Command>& slot) {
@@ -150,4 +172,120 @@ TEST_CASE("qpro scan button posts the scan command", "[gui][qpro]") {
     std::optional<App::Command> slot;
     const auto* scan = TakeAfpCommand<AfpCmd::QproStartScan>(slot);
     CHECK(scan != nullptr);
+}
+
+TEST_CASE("qpro scan failure is surfaced without a part list", "[gui][qpro]") {
+    GuiTest::Harness harness;
+    GuiTest::EnterReadyView("afp_modern", "iidx33");
+    QproExtract::PublishScanResult({}, "bm2dx.dll not found");
+
+    ImGuiTest* test = harness.NewTest("qpro_scan_error");
+    test->TestFunc = [](ImGuiTestContext* ctx) {
+        OpenQproView(ctx);
+        IM_CHECK(ctx->ItemExists("All") == false);
+        IM_CHECK(ctx->ItemExists("None") == false);
+    };
+    harness.Run(test);
+}
+
+TEST_CASE("qpro part groups appear once a scan publishes parts", "[gui][qpro]") {
+    GuiTest::Harness harness;
+    GuiTest::EnterReadyView("afp_modern", "iidx33");
+    QproExtract::PublishScanResult(MockScanParts(), {});
+
+    ImGuiTest* test = harness.NewTest("qpro_part_groups");
+    test->TestFunc = [](ImGuiTestContext* ctx) {
+        OpenQproView(ctx);
+        GuiTest::FocusChild(ctx, "qpro_parts");
+        IM_CHECK(ctx->ItemExists("$$0/node"));
+        IM_CHECK(ctx->ItemExists("$$1/node"));
+        IM_CHECK(ctx->ItemExists("$$0/##grp"));
+    };
+    harness.Run(test);
+}
+
+TEST_CASE("qpro None then All flip the whole part selection", "[gui][qpro]") {
+    GuiTest::Harness harness;
+    GuiTest::EnterReadyView("afp_modern", "iidx33");
+    GuiTest::SetBrowseResult("D:/qpro_sel");
+    QproExtract::PublishScanResult(MockScanParts(), {});
+
+    ImGuiTest* none_test = harness.NewTest("qpro_select_none");
+    none_test->TestFunc = [](ImGuiTestContext* ctx) {
+        OpenQproView(ctx);
+        ctx->ItemClick("None");
+        ctx->Yield(2);
+        ImGuiTestItemInfo const info = ctx->ItemInfo("Choose output folder + extract...");
+        IM_CHECK((info.ItemFlags & ImGuiItemFlags_Disabled) != 0);
+    };
+    harness.Run(none_test);
+
+    ImGuiTest* all_test = harness.NewTest("qpro_select_all");
+    all_test->TestFunc = [](ImGuiTestContext* ctx) {
+        OpenQproView(ctx);
+        ctx->ItemClick("All");
+        ctx->ItemCheck("Body");
+        ctx->ItemClick("Choose output folder + extract...");
+    };
+    harness.Run(all_test);
+
+    std::optional<App::Command> slot;
+    const auto* extract = TakeAfpCommand<AfpCmd::QproStartExtract>(slot);
+    REQUIRE(extract != nullptr);
+    REQUIRE(extract->part_sel.sel[0].size() == 2);
+    CHECK(extract->part_sel.sel[0][0] == 1);
+    CHECK(extract->part_sel.sel[0][1] == 1);
+}
+
+TEST_CASE("qpro group checkbox clears just that date group", "[gui][qpro]") {
+    GuiTest::Harness harness;
+    GuiTest::EnterReadyView("afp_modern", "iidx33");
+    GuiTest::SetBrowseResult("D:/qpro_group");
+    QproExtract::PublishScanResult(MockScanParts(), {});
+
+    ImGuiTest* test = harness.NewTest("qpro_group_uncheck");
+    test->TestFunc = [](ImGuiTestContext* ctx) {
+        OpenQproView(ctx);
+        ctx->ItemClick("All");
+        GuiTest::FocusChild(ctx, "qpro_parts");
+        ctx->ItemUncheck("$$0/##grp");
+        ctx->SetRef("##main");
+        GuiTest::FocusChild(ctx, "main_view");
+        ctx->ItemCheck("Body");
+        ctx->ItemClick("Choose output folder + extract...");
+    };
+    harness.Run(test);
+
+    std::optional<App::Command> slot;
+    const auto* extract = TakeAfpCommand<AfpCmd::QproStartExtract>(slot);
+    REQUIRE(extract != nullptr);
+    REQUIRE(extract->part_sel.sel[0].size() == 2);
+    CHECK(extract->part_sel.sel[0][0] == 0);
+    CHECK(extract->part_sel.sel[0][1] == 1);
+}
+
+TEST_CASE("qpro issue list offers a clipboard copy", "[gui][qpro]") {
+    GuiTest::Harness harness;
+    GuiTest::EnterReadyView("afp_modern", "iidx33");
+    QproExtract::Status st;
+    st.finished = true;
+    st.images = 3;
+    st.skipped = 1;
+    st.failed = 1;
+    st.output_dir = "D:/qpro_out/qpro_assets";
+    st.issues.push_back({.text = "head_7 missing atlas", .failure = false});
+    st.issues.push_back({.text = "body_2 render failed", .failure = true});
+    QproExtract::PublishStatus(st);
+
+    ImGuiTest* test = harness.NewTest("qpro_copy_issues");
+    test->TestFunc = [](ImGuiTestContext* ctx) {
+        OpenQproView(ctx);
+        ctx->ItemClick("Copy list");
+        std::string const copied = ctx->Clipboard.empty() ? "" : ctx->Clipboard.Data;
+        IM_CHECK(copied.find("skipped: head_7 missing atlas") != std::string::npos);
+        IM_CHECK(copied.find("FAILED: body_2 render failed") != std::string::npos);
+    };
+    harness.Run(test);
+
+    QproExtract::PublishStatus({});
 }

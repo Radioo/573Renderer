@@ -135,12 +135,12 @@ Device::~Device() {
     if (device != nullptr) device->Release();
     if (d3d9 != nullptr) d3d9->Release();
     if (d3d12_device != nullptr) d3d12_device->Release();
-    if (hwnd != nullptr) DestroyWindow(hwnd);
+    if (hwnd != nullptr && owns_window) DestroyWindow(hwnd);
 }
 
-bool Create(Device& out, int width, int height) {
-    out.hwnd = CreateHiddenWindow();
-    if (out.hwnd == nullptr) return false;
+bool CreateForWindow(Device& out, HWND hwnd, int width, int height) {
+    out.hwnd = hwnd;
+    out.owns_window = false;
     out.d3d12_device = CreateWarpD3D12Device();
     if (out.d3d12_device == nullptr) return false;
     out.d3d9 = Create9On12(out.d3d12_device);
@@ -148,6 +148,18 @@ bool Create(Device& out, int width, int height) {
     out.device = CreateD3D9Device(out.d3d9, out.hwnd, width, height);
     if (out.device == nullptr) return false;
     out.ok = true;
+    return true;
+}
+
+bool Create(Device& out, int width, int height) {
+    HWND hidden = CreateHiddenWindow();
+    if (hidden == nullptr) return false;
+    if (!CreateForWindow(out, hidden, width, height)) {
+        out.hwnd = hidden;
+        out.owns_window = true;
+        return false;
+    }
+    out.owns_window = true;
     return true;
 }
 

@@ -27,6 +27,7 @@ struct ScanResult {
 
 void RunScan(const std::string& game_dir);
 void MarkScanRunning();
+void PublishScanResult(std::vector<ScanPart> parts, std::string error);
 ScanResult GetScanResult();
 
 using PartSelection = QproModel::PartSelection;

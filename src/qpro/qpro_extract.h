@@ -50,6 +50,7 @@ struct Status {
 
 Status GetStatus();
 bool IsRunning();
+void PublishStatus(Status s);
 
 Result Run(EngineSession& es, D3D9State& d3d, const Options& opt);
 

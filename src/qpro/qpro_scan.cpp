@@ -51,18 +51,22 @@ ScanResult GetScanResult() {
     return g_scan;
 }
 
+void PublishScanResult(std::vector<ScanPart> parts, std::string error) {
+    std::scoped_lock const lk(g_scan_mu);
+    g_scan.running = false;
+    g_scan.done = true;
+    g_scan.error = std::move(error);
+    g_scan.parts = std::move(parts);
+    g_scan.generation++;
+}
+
 void RunScan(const std::string& game_dir) {
     ScanResult r;
     r.running = true;
 
     QproDll::Parts const parts = QproDll::Read(game_dir);
     if (!parts.ok()) {
-        std::scoped_lock const lk(g_scan_mu);
-        g_scan.running = false;
-        g_scan.done = true;
-        g_scan.error = parts.error;
-        g_scan.parts.clear();
-        g_scan.generation++;
+        PublishScanResult({}, parts.error);
         return;
     }
 
@@ -85,12 +89,7 @@ void RunScan(const std::string& game_dir) {
 
     LOG("QproScan", "scanned %zu parts from %s", r.parts.size(), parts.dll_path.c_str());
 
-    std::scoped_lock const lk(g_scan_mu);
-    g_scan.running = false;
-    g_scan.done = true;
-    g_scan.error.clear();
-    g_scan.parts = std::move(r.parts);
-    g_scan.generation++;
+    PublishScanResult(std::move(r.parts), {});
 }
 
 }

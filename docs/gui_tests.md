@@ -208,7 +208,7 @@ settings are untouched.
 
 ## 9. Coverage
 
-117 test cases across ten files, one file per panel:
+139 test cases across twelve files, one file per panel:
 
 | file | cases | what it drives |
 |---|---|---|
@@ -220,27 +220,17 @@ settings are untouched.
 | `timeline_tests.cpp` | 12 | jump back, resume, track drag-to-seek, the zero-length guard, label ticks, Space, arrows, Shift+arrows, Ctrl+E, shortcut suppression during capture, the no-scene and no-labels states |
 | `ready_view_tests.cpp` | 7 | transport play/pause, step 1, step 100, wrap at frame 0, label combo, status-strip reveal |
 | `export_panel_tests.cpp` | 22 | stem + format to output path, PNG directory form, fps/quality, resolution preset/native/custom/scale buttons, transparent-bg toggle and its colour gate, hardware-encode gate, keyframe interval, frame limit, loop count, blend seam, crop inputs/Clear/Pick/reopen, Start, Cancel, Close, reveal |
-| `qpro_panel_tests.cpp` | 6 | scan command, category gating of the extract button, the extract payload, picker cancel, fps clamp |
+| `qpro_panel_tests.cpp` | 11 | scan command, category gating, extract payload, picker cancel, fps clamp, scan-error state, the per-date part groups, All / None, a group checkbox, the issue list's clipboard copy |
 | `host_panel_tests.cpp` | 7 | 3D-scene and 2D-package panels while idle, the loading overlay over both views and its absence, the boot-error banner, Load disabled during boot |
+| `host_live_tests.cpp` | 7 | the 3D and 2D panels driving REAL loaded hosts: pause, speed, playhead, animation combo, animate-models, free camera, reset view, move speed, model visibility and blend mode, and the camera-checkbox gates |
+| `window_tests.cpp` | 10 | `Gui::Init` device creation, the min-track-size clamp, `WM_ERASEBKGND`, `WM_SYSCOMMAND`/SC_KEYMENU, live resize, `WM_PAINT` + validation, the pump's WM_QUIT exit, lost-device recovery, and two BACKBUFFER PIXEL assertions |
 
-Every interactive widget in `src/gui` is exercised except the four cases below.
+Every interactive widget in `src/gui` is now exercised. The four gaps the first
+version of this document listed are all closed; sections 12 to 14 record how.
 
-**Not coverable headlessly, and why:**
-
-- **The 3D scene panel and 2D package panel bodies.** `Scene3dHost::Active()` /
-  `Gc2dHost::Active()` only become true after `Load()` builds renderer resources
-  on `g_d3d.device`, so a live D3D9 device plus real game data is required. The
-  tests cover the idle branch (the "no scene loaded" copy and the hidden tab).
-  A WARP device (as `pixel_golden_tests` uses) plus synthetic `.x` / `system.idx`
-  fixtures could reach the rest; that is a separate piece of work.
-- **The qpro part list: `All`, `None`, the per-date groups, and `Copy list`.**
-  Those widgets only render after `QproExtract::GetScanResult()` returns parts,
-  which comes from pattern-scanning a real `bm2dx.dll`. There is no injection
-  seam and adding one would be production code with only a test consumer.
-- **`gui_window.cpp`'s Win32 message pump**, the modal border-drag loop and the
-  DX9 lost-device dance. Those need a real window; they stay manual.
-- **Rendering itself.** These tests assert behaviour, not pixels. The pixel nets
-  are `pixel_golden_tests` and `docs/local_regression.md`.
+The one thing still out of scope is **golden-image comparison**. The pixel
+assertions here are structural (see 14), not reference-image diffs; the
+image-diff nets remain `pixel_golden_tests` and `docs/local_regression.md`.
 
 ## 10. Two defects the suite found on its first run
 
@@ -271,3 +261,119 @@ a native dialog), give it a seam like `NativeDialog::Overrides` rather than
 letting the test touch the real thing. If it depends on a panel-local static,
 set that static through the UI first (see 5.3) instead of trusting the value the
 previous test happened to leave behind.
+
+## 12. Synthetic game assets (`gui_mock_assets`)
+
+The 3D scene and 2D package panels only render their bodies once
+`Scene3dHost::Active()` / `Gc2dHost::Active()` are true, which needs a real
+`Load()` over real files. `gui_mock_assets.cpp` builds those files byte by byte
+into a `TempAssetDir` (created under the OS temp dir, removed in its destructor),
+so no game data is required and nothing is committed.
+
+Both loaders read LZSS-compressed payloads, and the compressor is trivial to
+write for the all-literal case: a 4-byte little-endian uncompressed size, then a
+`0xFF` flag byte before every group of 8 literals. `tests/formats/model3d_tests.cpp`
+already used the same trick; this is the second consumer.
+
+- **2D package** (`WriteMock2dPackage`): a `system.idx` in the two-chunk
+  little-endian form - `[u32 size0][chunk0][u32 size1][chunk1]`. Chunk 0 carries
+  the 0x1B8-byte fixed header (texture count at 0x002, cell-table offset at
+  0x004, record-table offset at 0x010, 32-byte texture path slots from 0x014),
+  then two cells terminated by a zero-width cell, then five 36-byte records:
+  draw, end-animation (`t_end` 30), draw, end-animation (`t_end` 45),
+  end-table. Chunk 1 holds the three consecutive name tables the parser expects
+  (cells, an empty unused table, animations), each a run of NUL-terminated names
+  each followed by a `u16` index and closed by a `0` byte. The animation start
+  indices are what make `anim_intro` 30 frames and `anim_loop` 45, which is
+  exactly what the panel's frame slider is asserted against.
+- **Textures** are 24-byte GC headers (`"GC "` magic, big-endian origin, size and
+  declared byte count, depth byte at 0x13) followed by opaque 16bpp pixels.
+- **3D scene** (`WriteMock3dScene`): a `.inz` manifest (one image slice plus one
+  pattern rect, so `TileForTexture` resolves), the `0.gcz` tile that slice names,
+  and a `.xz` model - plain `xof 0303txt` text with a frame hierarchy, one
+  textured triangle, `MeshTextureCoords`, and an `AnimationSet` whose last key is
+  at tick 600 (which is what `max_time == 600` asserts). Passing
+  `with_camera = true` adds a frame whose name contains `camera`, because
+  `Scene3d::FindCamera` matches on that substring - that is how the
+  **Animate camera** checkbox's enabled and disabled branches are both reached.
+
+## 13. The WARP GPU fixture and the qpro seams
+
+`GuiTest::WarpGpu` creates a D3D9-on-12 WARP device (the same
+`src/warp_device.cpp` `pixel_golden_tests` uses) and points `g_d3d.device` at it
+for the lifetime of the test, restoring the previous pointer afterwards. That is
+all `Scene3dHost::Load` / `Gc2dHost::Load` need in order to upload their tile
+textures and flip `Active()`.
+
+The qpro part list needed two publish seams, both introduced as refactors with
+production callers rather than test-only entry points:
+
+- `QproExtract::PublishScanResult(parts, error)` collapses the two duplicated
+  lock-and-store blocks at the end of `RunScan` into one function; the tests call
+  it with synthetic `ScanPart`s carrying two different dates, which is what makes
+  the per-date groups, `All`, `None` and the group checkbox reachable.
+- `QproExtract::PublishStatus(status)` is what `BeginRunStatus` now uses to
+  install its fresh status; the tests use it to stage a finished run with issues
+  so the **Copy list** button renders.
+
+Note that the clipboard assertion reads `ctx->Clipboard` from inside `TestFunc`,
+not the ImGui platform IO: the test engine swaps its own clipboard handlers in
+while a test runs, so anything the app copies lands in the engine's per-test
+buffer, and a handler installed by the harness would never be called.
+
+## 14. The window and pixel tests
+
+`window_tests.cpp` drives the real `Gui::Init` / `PumpAndRender` / `Gui::Shutdown`
+against a real Win32 window and D3D9 device, so it covers the message handling
+that `Panels::Build`-only tests cannot: the `WM_GETMINMAXINFO` clamp against
+`gui_layout_constants.h`, `WM_ERASEBKGND` returning 1, the SC_KEYMENU swallow,
+`WM_SIZE` servicing a resize from inside the handler, `WM_PAINT` validating its
+region, the pump's WM_QUIT exit, and the lost-device recovery path.
+
+Two contracts this exposed:
+
+- **`Gui::Shutdown` leaves a WM_QUIT in the thread queue** (`DestroyWindow` ->
+  `WM_DESTROY` -> `PostQuitMessage`). That is correct for the app - the GUI
+  thread is meant to end when the window closes - but it means a second
+  `Gui::Init` on the same thread starts with a quit already pending, and the very
+  next `PumpAndRender` returns false. The fixture drains the queue around every
+  window, which is what any code that restarts the GUI would also have to do.
+- **`Gui::Init` now falls back to WARP** when `Direct3DCreate9` cannot produce a
+  HAL device (see docs/gui.md section 1.3). That keeps the control panel usable
+  on machines and VMs without a D3D9 HAL driver, and it is what lets these tests
+  run where no HAL device exists.
+
+The pixel assertions read the backbuffer through `GetRenderTargetData` into a
+system-memory surface and count matching pixels:
+
+- the setup view must actually paint the shell clear colour over a large part of
+  the frame (a blank or unpresented frame fails);
+- the ready view must contain the CURRENT profile's accent button colour and NOT
+  the other profile's. The expected colour is read from
+  `ImGui::GetStyleColorVec4(ImGuiCol_Button)` at capture time rather than
+  hardcoded, because `ApplyAccentColors` MIXES the accent with the surface colour
+  (`Mix(kRaised, accent, 0.28)`), so the raw accent from the profile table never
+  appears on screen. Deriving it from the live style keeps the test honest
+  without freezing the palette. The scene must be marked loaded first, otherwise
+  the only accent-coloured button in the top bar is the disabled Export button,
+  whose alpha blend puts it off the exact colour.
+
+## 15. Running the GPU-backed tests
+
+`WarpGpu`, `LiveWindow` and `pixel_golden_tests` all SKIP (Catch2 `SKIP`, ctest
+reports "Skipped") when no D3D9 device can be created, so the suite is green on
+machines and CI legs without one.
+
+That skip also triggers in any shell that cannot reach the graphics stack - a
+sandboxed or non-interactive parent process will see
+`IDirect3D9::CreateDevice ... hr=0x88760868` for both HAL and WARP while the same
+binary succeeds when launched normally. If the GPU-backed cases skip
+unexpectedly, run the executable detached before concluding anything about the
+code:
+
+```
+powershell -Command "Start-Process -FilePath .\build\gui_tests.exe -Wait -RedirectStandardOutput out.txt"
+```
+
+With a device present the whole suite is 139 cases / 537 assertions and nothing
+skips.

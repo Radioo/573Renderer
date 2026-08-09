@@ -209,6 +209,7 @@ add_library(r573_app STATIC
     src/qpro/qpro_back.cpp
     src/qpro/qpro_composite_debug.cpp
     src/support/crash_report.cpp
+    src/warp_device.cpp
     src/afp_ddr_geo.cpp
     src/afp_ddr_render.cpp
     src/afp_ddr_textures.cpp
@@ -425,6 +426,11 @@ add_executable(gui_tests
     tests/gui/timeline_tests.cpp
     tests/gui/qpro_panel_tests.cpp
     tests/gui/host_panel_tests.cpp
+    tests/gui/host_live_tests.cpp
+    tests/gui/gui_mock_assets.cpp
+    tests/gui/gui_gpu.cpp
+    tests/gui/gui_pixels.cpp
+    tests/gui/window_tests.cpp
 )
 target_include_directories(gui_tests PRIVATE tests/gui src/gui)
 target_link_libraries(gui_tests PRIVATE Catch2::Catch2WithMain r573_app r573::warnings)

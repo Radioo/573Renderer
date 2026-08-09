@@ -52,6 +52,17 @@ mutex-guarded Status structs polled the same way.
   guarded) so the panes track the cursor during the drag. WM_PAINT renders a real frame +
   ValidateRect; WM_ERASEBKGND returns 1 (skip GDI erase, avoids resize flicker).
   SIZE_MINIMIZED reports a 0x0 client that must NOT be reset to.
+- DEVICE FALLBACK: `CreateDevice` tries a D3D9 HAL device (hardware then software vertex
+  processing) and, if both fail, falls back to a D3D9-on-12 WARP device on the same HWND
+  (`WarpD3D9::CreateForWindow`, the same path `pixel_golden_tests` uses). Without it the
+  control panel simply refuses to start on machines with no D3D9 HAL driver - VMs, some RDP
+  sessions, bare Windows Server. `Window::warp_backed` records which path won so `Shutdown`
+  does not double-release a device the `WarpD3D9::Device` member owns. This is also what lets
+  `window_tests` run the real window on hosts without a HAL device (docs/gui_tests.md 14).
+- `Gui::Shutdown` destroys the window, so `WM_DESTROY` posts a WM_QUIT to the THREAD queue.
+  That is what ends the GUI thread when the user closes the panel - but it also means any
+  code that calls `Gui::Init` again on the same thread must drain the queue first, or the
+  next `PumpAndRender` sees the stale quit and returns false immediately.
 - `ResetDevice` re-reads the client rect into the present params EVERY time, so a device-lost
   that happens AFTER a resize restores at the current size instead of snapping back to the
   creation size. ImGui's font atlas + buffers live in D3DPOOL_DEFAULT, so

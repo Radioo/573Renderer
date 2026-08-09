@@ -1,0 +1,2 @@
+InheritParentConfig: true
+Checks: '-cppcoreguidelines-pro-type-reinterpret-cast,-cppcoreguidelines-pro-bounds-pointer-arithmetic,-cppcoreguidelines-pro-bounds-constant-array-index,-cppcoreguidelines-pro-type-cstyle-cast,-cppcoreguidelines-avoid-non-const-global-variables'

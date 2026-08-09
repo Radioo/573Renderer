@@ -106,12 +106,10 @@ std::string ResolveOutRoot(const std::string& out_dir) {
 }
 
 void BeginRunStatus(const std::string& out_root) {
-    {
-        std::scoped_lock const lk(g_mu);
-        g_status = Status{};
-        g_status.running = true;
-        g_status.output_dir = out_root;
-    }
+    Status fresh;
+    fresh.running = true;
+    fresh.output_dir = out_root;
+    PublishStatus(std::move(fresh));
     App::Global().BeginLoad("qpro asset extraction");
     g_done = 0;
     g_total = 0;
@@ -405,6 +403,11 @@ Result Run(EngineSession& es, D3D9State& d3d, const Options& opt) {
 Status GetStatus() {
     std::scoped_lock const lk(g_mu);
     return g_status;
+}
+
+void PublishStatus(Status s) {
+    std::scoped_lock const lk(g_mu);
+    g_status = std::move(s);
 }
 
 bool IsRunning() {
