@@ -37,7 +37,11 @@ AFP-backend commands (`AfpCmd::Wrap` over `SeekFrame`, `SetPaused`, `SwitchAnima
 `GotoLabel`, `ForceReplay`, `QproStartScan`, `QproStartExtract`) that the
 render thread consumes (see docs/state.md "Command semantics"); the render thread publishes
 `App::Status` / LiveState / ExportState / LoadProgress snapshots that the GUI polls once per
-frame. Background workers (arc/customize extractors, qpro scan) publish into their own
+frame. This seam is also what makes the GUI testable headlessly: `gui_tests` prefills
+`App::State`, clicks a widget through the Dear ImGui Test Engine, and asserts on the command
+that came out - no window, no device, no game data (docs/gui_tests.md). Keeping a widget
+free of direct engine calls is therefore a testability requirement, not just tidiness.
+Background workers (arc/customize extractors, qpro scan) publish into their own
 mutex-guarded Status structs polled the same way.
 
 ### 1.3 gui_window internals (Win32 + DX9 lost-device dance)
@@ -48,6 +52,17 @@ mutex-guarded Status structs polled the same way.
   guarded) so the panes track the cursor during the drag. WM_PAINT renders a real frame +
   ValidateRect; WM_ERASEBKGND returns 1 (skip GDI erase, avoids resize flicker).
   SIZE_MINIMIZED reports a 0x0 client that must NOT be reset to.
+- DEVICE FALLBACK: `CreateDevice` tries a D3D9 HAL device (hardware then software vertex
+  processing) and, if both fail, falls back to a D3D9-on-12 WARP device on the same HWND
+  (`WarpD3D9::CreateForWindow`, the same path `pixel_golden_tests` uses). Without it the
+  control panel simply refuses to start on machines with no D3D9 HAL driver - VMs, some RDP
+  sessions, bare Windows Server. `Window::warp_backed` records which path won so `Shutdown`
+  does not double-release a device the `WarpD3D9::Device` member owns. This is also what lets
+  `window_tests` run the real window on hosts without a HAL device (docs/gui_tests.md 14).
+- `Gui::Shutdown` destroys the window, so `WM_DESTROY` posts a WM_QUIT to the THREAD queue.
+  That is what ends the GUI thread when the user closes the panel - but it also means any
+  code that calls `Gui::Init` again on the same thread must drain the queue first, or the
+  next `PumpAndRender` sees the stale quit and returns false immediately.
 - `ResetDevice` re-reads the client rect into the present params EVERY time, so a device-lost
   that happens AFTER a resize restores at the current size instead of snapping back to the
   creation size. ImGui's font atlas + buffers live in D3DPOOL_DEFAULT, so
@@ -172,6 +187,28 @@ One tree replaces the old Layers + Sub-layers + Variants panels:
 - Bottom row: add-slot-by-clip-path input (probed by the render thread next frame).
 - Selection model (`Panels::Scene::Selection`, GUI-thread-local): None / Layer / Child with
   path + name; reset on IFS switch.
+- COMMIT SEMANTICS: `InputInt`/`InputText` return true on EVERY keystroke unless given
+  `ImGuiInputTextFlags_EnterReturnsTrue`. Any numeric field whose value ESCAPES the panel -
+  to `App::State`, to `SaveCurrentSettings()`, or to a live override - must therefore stage
+  the value and commit on `ImGui::IsItemDeactivatedAfterEdit()`, not on the widget's return
+  value. Setup fps and render W/H and the inspector trim field do this. Fields that only
+  feed a panel-local static (the whole export modal) are fine committing per keystroke.
+  Two traps: a stepped `InputInt` (step != 0) appends -/+ buttons, so
+  `IsItemDeactivatedAfterEdit()` must be taken after wrapping the call in
+  `BeginGroup`/`EndGroup` or it reports on the "+" button; and any sibling button that sets
+  the same value (the quick-fps row) still has to commit immediately.
+- DISABLED TOOLTIPS: `IsItemHovered()` returns false for an item inside `BeginDisabled`, so
+  a tooltip attached after `EndDisabled` never shows in exactly the state it is usually
+  written to explain. Every tooltip on a gateable control passes
+  `ImGuiHoveredFlags_AllowWhenDisabled`. Both live cases (3D **Animate camera**, export
+  **HW accel**) exist to say WHY the control is greyed out.
+- `IsItem*` GOTCHA: `RenderSceneNode` LATCHES `ImGui::IsItemToggledOpen()` into a local on
+  the line after `TreeNodeEx`, before anything else is submitted. `IsItem*` reads
+  `g.LastItemData`, which every later `ItemAdd` overwrites - and this row submits more items
+  after the tree node (the `(x, y)` position text, the variant badge). Querying it at the
+  bottom of the function silently dropped the expansion write for exactly those clips that
+  had a position or a badge, so lazy enumeration never fired for them while a bare clip
+  worked. Found by `gui_tests` (docs/gui_tests.md section 10); do not re-inline the call.
 - DDR: no afplist, no bulk child-enumerate in afp 2.13.7, so the pane shows only the
   no-layers hint; everything else is driven by absent data.
 
@@ -237,8 +274,16 @@ One tree replaces the old Layers + Sub-layers + Variants panels:
   WxH + scale buttons), transparent-bg + HW-accel. Everything else - keyframe interval,
   frame limit, loop count, blend seam, crop, bg color - sits behind one "Advanced"
   CollapsingHeader.
+- Escape closes the modal, guarded on the modal being the focused window and
+  `io.WantTextInput` being false so a field's Escape-to-revert and a combo's
+  Escape-to-dismiss still win. `BeginPopupModal` with `p_open == nullptr` gives no Escape
+  handling of its own, which is why this is explicit.
 - Starting an export closes the modal; progress lives in the status strip (capturing N /
   encoding / done / failed, clickable to reopen) and as the timeline capture tint.
+- The scale buttons build their label AND their `##` id into one `snprintf` buffer that must
+  stay wide enough for both ("x0.25 (480x270)##exp_scl_x0.25##exp_scl" is 39 bytes). A short
+  buffer truncates the id, not the visible text, so a collision would appear as two buttons
+  sharing one id with nothing on screen to explain it. Found by `gui_tests`.
 - Crop pick handshake: arming "Pick region" CLOSES the modal (the drag happens on the render
   window), and the modal auto-reopens when pick mode ends (`g_reopen_after_pick`).
 - Form state is file-scope statics so choices survive modal close and IFS reloads. The whole

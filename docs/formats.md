@@ -96,9 +96,83 @@ most atlas content as DXT5. Without the decoder every dxt-encoded slot
 stayed at the D3D create-time default (transparent black) - the historical
 "missing assets" symptom.
 
-Uncompressed format ids seen in `TexUpload` (same afp-utils table): `0x01`
-i4 (1 bpp), `0x0E` rgb888 (3 bpp), `0x10`/`0x20` (a/x)rgb8888 (4 bpp),
-`0x1E` la88, `0x1F` rgb565 (2 bpp).
+### The afp-utils texture-format id table (re-read from the DLL)
+
+Read directly out of IIDX 33 `modules/afp-utils.dll`. How to re-find it on
+a new DLL version: string-search `argb8888rev` (or `rgb565rev`, `ati2n` -
+names unique to this table), take the DATA xref to the string, then walk
+BACKWARDS to the table base. The base is named by a descriptor record that
+also carries the entry count - here `{..., "compress", 0x180021100, 61}` at
+`0x1800216c0`. Entry layout is **`[id(4), pad(4), name_ptr(8)]`**, 16 bytes,
+ids ascending from 0. Anchor the layout on the FIRST entry: it must read
+`id = 0`. (Misreading the layout as `[name_ptr, id]` shifts every name by
+one slot and produces a plausible-looking but wrong table - that mistake
+was made and caught here.)
+
+| id | name | id | name | id | name |
+|---|---|---|---|---|---|
+| 0x00 | a4 | 0x0D | rgba4444 | 0x1A | **dxt5** |
+| 0x01 | a8 | 0x0E | **rgb888** | 0x1B | la88 |
+| 0x02 | i4 | 0x0F | rgbx8888 | 0x1C | al44 |
+| 0x03 | i8 | 0x10 | **rgba8888** | 0x1D | al26 |
+| 0x04 | l4 | 0x11 | p4 | 0x1E | al88 |
+| 0x05 | l8 | 0x12 | p8 | 0x1F | **argb4444** |
+| 0x06 | la44 | 0x13 | argb1555 | 0x20 | **argb8888rev** |
+| 0x07 | la62 | 0x14 | xrgb8888 | 0x21 | ati2n |
+| 0x08 | rgba2222 | 0x15 | argb8888 | 0x22 | rgba4444rev |
+| 0x09 | rgb332 | 0x16 | **dxt1** | 0x23 | rgb565rev |
+| 0x0A | rgbx5551 | 0x17 | dxt2 | 0x24 | rgba5551rev |
+| 0x0B | rgb565 | 0x18 | **dxt3** | 0x3C | xrgb8888rev |
+| 0x0C | rgba5551 | 0x19 | dxt4 | 0x3D | xrgb1555 |
+
+Bold = an id the renderer actually decodes today, and all of those now
+agree with the table: `0x0E` rgb888 (3 bpp), `0x10` rgba8888 (4 bpp),
+`0x1F` argb4444 (our 4x4-bit-nibble x17 decode IS argb4444, 2 bpp), `0x20`
+argb8888rev (4 bpp), and the DXT block.
+
+The id space is shared across engine generations, not per-game: the DDR
+decoder (libafp 2.13.7, `afp_ddr_textures.cpp`) was derived independently
+from DDR RE and uses `0x16` -> DXT1 and `0x1A` -> DXT5, which matches this
+table exactly on both.
+
+### The DXT ids were off by one until this was checked
+
+`Dxt::kFmtDxt1..kFmtDxt5` used to be `0x17..0x1B`. They are now
+`0x16..0x1A`, matching the table. The old numbering made `0x1B` (really
+`la88`) decode as a DXT format and left real `dxt1`/`dxt2` falling through
+to the 4-bpp raw default.
+
+Why it was invisible: DXT2/DXT3 share one block layout (explicit alpha) and
+DXT4/DXT5 share the other (interpolated alpha), and the decoder only
+branches on those two families. Under the old off-by-one, real `dxt3`
+(0x18) landed on our "dxt2" label -> explicit alpha -> correct anyway, and
+real `dxt5` (0x1A) landed on "dxt4" -> interpolated -> correct anyway. Since
+dxt3 and dxt5 are what the assets actually use, output was right by
+accident. Only `0x16`/`0x17`/`0x19`/`0x1B` were wrong, and nothing in the
+net uses them - confirmed empirically: the whole 14-case byte-compare net
+is byte-identical before and after the renumber.
+
+`FormatBpp` in afp_d3d9_textures.cpp now asks `Dxt::IsDxtFormat` instead of
+carrying its own `0x18..0x1B` list, so the two ranges cannot drift apart
+again (they already had: `IsDxtFormat` said `0x17..0x1B`, `FormatBpp` said
+`0x18..0x1B`).
+
+### Still unverified (do not "fix" on the table alone)
+
+- `0x01`: we splat 1 bpp to all four channels; the table says `a8`. Same
+  bpp, different semantics (alpha-only vs luminance splat).
+- `0x1E`: we treat it as a 1 bpp splat; the table says `al88`, which is
+  2 bpp. If a real asset ever uses it the stride would be wrong - but no
+  covered asset does, so there is nothing to verify against.
+- DDR `0x1F`: `afp_ddr_textures.cpp` decodes it as RGB565 while the table
+  (and the modern decoder) say argb4444. The modern side is the one that
+  matches; the DDR branch is unexercised by the net, so it is recorded here
+  rather than changed blind.
+
+To settle any of these, get ground truth rather than guessing: instrument
+the live game through the afp hook and log `(format, w, h, byte_count)` for
+a texture known to use the id - the byte count divided by w*h gives the bpp
+directly.
 
 ## AES-256-CBC-CTS (`aes.h`)
 

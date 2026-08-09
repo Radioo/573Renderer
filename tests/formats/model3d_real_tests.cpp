@@ -40,9 +40,11 @@ std::vector<uint8_t> Inflate(const std::filesystem::path& p) {
 
 }
 
-TEST_CASE("mode_bg scene decodes from the real IIDX 18 data", "[.real]") {
+TEST_CASE("mode_bg scene decodes from the real IIDX 18 data", "[real]") {
     const std::filesystem::path dir = SceneDir();
-    if (dir.empty() || !std::filesystem::exists(dir)) return;
+    if (dir.empty() || !std::filesystem::exists(dir)) {
+        SKIP("R573_IIDX18_DIR not set or data missing");
+    }
 
     const std::vector<uint8_t> manifest_bytes = Inflate(dir / "mode_bg.inz");
     Inz::Manifest manifest;

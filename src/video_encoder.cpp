@@ -1,5 +1,6 @@
 #include "video_encoder.h"
 #include "video_encoder_codecs.h"
+#include "media/media_format.h"
 #include "support/log.h"
 
 #include <cstdint>
@@ -130,6 +131,23 @@ struct Encoder::Impl {
         return sws_main != nullptr;
     }
 
+    using OpenHwFn = bool (*)(AVCodecContext*&, const AVCodec*, const Params&, int, int, bool,
+                              std::string&);
+
+    bool TryHwEncoder(const AVCodec* hw, OpenHwFn open_fn, const Params& p, int out_w, int out_h,
+                      bool global_header, const char* label) {
+        if (hw == nullptr) return false;
+        std::string hw_err;
+        if (open_fn(enc_color, hw, p, out_w, out_h, global_header, hw_err)) {
+            using_hw = true;
+            LOG("VideoEncoder", "%s: NVENC yuv420p active", label);
+            return true;
+        }
+        LOG("VideoEncoder", "%s: NVENC unavailable (%s); falling back to software", label,
+            hw_err.c_str());
+        return false;
+    }
+
     bool OpenAvif(const Params& p, int out_w, int out_h, bool global_header, std::string& err) {
         const AVCodec* nvenc_av1 =
             p.prefer_hardware ? avcodec_find_encoder_by_name("av1_nvenc") : nullptr;
@@ -147,19 +165,9 @@ struct Encoder::Impl {
         }
 
         AVPixelFormat color_pix = AV_PIX_FMT_YUV444P;
-        bool opened = false;
-        if (nvenc_av1 != nullptr) {
-            std::string hw_err;
-            if (OpenAv1Nvenc(enc_color, nvenc_av1, p, out_w, out_h, global_header, hw_err)) {
-                opened = true;
-                using_hw = true;
-                color_pix = AV_PIX_FMT_YUV420P;
-                LOG("VideoEncoder", "AVIF colour: av1_nvenc yuv420p active");
-            } else {
-                LOG("VideoEncoder", "av1_nvenc unavailable (%s); falling back to libaom",
-                    hw_err.c_str());
-            }
-        }
+        bool const opened = TryHwEncoder(nvenc_av1, OpenAv1Nvenc, p, out_w, out_h, global_header,
+                                         "AVIF colour (av1_nvenc)");
+        if (opened) color_pix = AV_PIX_FMT_YUV420P;
         if (!opened) {
             if (!OpenLibaom(enc_color, libaom, p, out_w, out_h, color_pix, global_header, err))
                 return false;
@@ -225,18 +233,8 @@ struct Encoder::Impl {
         }
         if (!NewColorStream(err)) return false;
 
-        bool opened = false;
-        if (nvenc_av1 != nullptr) {
-            std::string hw_err;
-            if (OpenAv1Nvenc(enc_color, nvenc_av1, p, out_w, out_h, global_header, hw_err)) {
-                opened = true;
-                using_hw = true;
-                LOG("VideoEncoder", "WebM-AV1: av1_nvenc yuv420p active");
-            } else {
-                LOG("VideoEncoder", "av1_nvenc unavailable (%s); falling back to libaom",
-                    hw_err.c_str());
-            }
-        }
+        bool const opened = TryHwEncoder(nvenc_av1, OpenAv1Nvenc, p, out_w, out_h, global_header,
+                                         "WebM-AV1 (av1_nvenc)");
         if (!opened) {
             if (libaom == nullptr) {
                 err = "av1_nvenc failed and libaom-av1 not built in";
@@ -263,18 +261,8 @@ struct Encoder::Impl {
         }
         if (!NewColorStream(err)) return false;
 
-        bool opened = false;
-        if (nvenc_h264 != nullptr) {
-            std::string hw_err;
-            if (OpenH264Nvenc(enc_color, nvenc_h264, p, out_w, out_h, global_header, hw_err)) {
-                opened = true;
-                using_hw = true;
-                LOG("VideoEncoder", "MP4-H264: h264_nvenc yuv420p active");
-            } else {
-                LOG("VideoEncoder", "h264_nvenc unavailable (%s); falling back to libx264",
-                    hw_err.c_str());
-            }
-        }
+        bool const opened = TryHwEncoder(nvenc_h264, OpenH264Nvenc, p, out_w, out_h, global_header,
+                                         "MP4-H264 (h264_nvenc)");
         if (!opened) {
             if (libx264 == nullptr) {
                 err = "MP4 H.264: h264_nvenc unavailable and this ffmpeg "
@@ -360,46 +348,6 @@ bool Encoder::UsingHardware() const {
     return impl_ && impl_->using_hw;
 }
 
-namespace {
-
-const char* MuxerName(Format f) {
-    switch (f) {
-    case Format::WebP_Anim:
-        return "webp";
-    case Format::WebM_VP9:
-    case Format::WebM_AV1:
-        return "webm";
-    case Format::MP4_H264:
-    case Format::MP4_HEVC_Alpha:
-        return "mp4";
-    case Format::AVIF:
-    case Format::PNG_Sequence:
-        break;
-    }
-    return "avif";
-}
-
-const char* FmtLabel(Format f) {
-    switch (f) {
-    case Format::WebP_Anim:
-        return "WebP-Anim";
-    case Format::WebM_VP9:
-        return "WebM-VP9";
-    case Format::WebM_AV1:
-        return "WebM-AV1";
-    case Format::MP4_H264:
-        return "MP4-H264";
-    case Format::MP4_HEVC_Alpha:
-        return "MP4-HEVC-Alpha";
-    case Format::AVIF:
-    case Format::PNG_Sequence:
-        break;
-    }
-    return "AVIF";
-}
-
-}
-
 bool Encoder::Create(const Params& raw) {
     Params fixed = raw;
     if (fixed.format == Format::PNG_Sequence) fixed.format = Format::AVIF;
@@ -417,7 +365,7 @@ bool Encoder::Create(const Params& raw) {
         out_h &= ~1;
     }
 
-    const char* muxer_name = MuxerName(p.format);
+    const char* muxer_name = MediaSink::FormatMuxer(p.format);
     int const rc =
         avformat_alloc_output_context2(&impl_->fmt_ctx, nullptr, muxer_name, p.output_path.c_str());
     if (rc < 0 || (impl_->fmt_ctx == nullptr)) {
@@ -454,7 +402,7 @@ bool Encoder::Create(const Params& raw) {
     if (!impl_->OpenOutputAndWriteHeader(p, err_)) return false;
 
     LOG("VideoEncoder", "created: src %dx%d -> out %dx%d @ %d fps, q=%d, fmt=%s%s", p.src_width,
-        p.src_height, out_w, out_h, p.fps, p.quality, FmtLabel(p.format),
+        p.src_height, out_w, out_h, p.fps, p.quality, MediaSink::FormatShortLabel(p.format),
         impl_->using_hw ? " [HW NVENC]" : " [SW]");
     return true;
 }
@@ -599,23 +547,6 @@ bool HardwareAvailable(Format f) {
     static const bool av1_ok = ProbeNvencEncoder("av1_nvenc");
     static const bool h264_ok = ProbeNvencEncoder("h264_nvenc");
     return (f == Format::MP4_H264) ? h264_ok : av1_ok;
-}
-
-const char* DefaultExtension(Format f) {
-    switch (f) {
-    case Format::AVIF:
-    case Format::PNG_Sequence:
-        return ".avif";
-    case Format::WebP_Anim:
-        return ".webp";
-    case Format::WebM_VP9:
-    case Format::WebM_AV1:
-        return ".webm";
-    case Format::MP4_H264:
-    case Format::MP4_HEVC_Alpha:
-        return ".mp4";
-    }
-    return "";
 }
 
 }

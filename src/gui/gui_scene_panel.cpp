@@ -105,7 +105,8 @@ void RenderSceneNode(App::State& state, const std::string& active, const App::St
     if (!lower_filter.empty()) flags |= ImGuiTreeNodeFlags_DefaultOpen;
 
     const bool open = ImGui::TreeNodeEx(node.name.c_str(), flags);
-    if (ImGui::IsItemClicked(ImGuiMouseButton_Left) && !ImGui::IsItemToggledOpen()) {
+    const bool toggled_open = ImGui::IsItemToggledOpen();
+    if (ImGui::IsItemClicked(ImGuiMouseButton_Left) && !toggled_open) {
         Scene::Select(
             {.kind = Scene::Selection::Kind::Child, .path = node.path, .name = node.name});
     }
@@ -119,7 +120,7 @@ void RenderSceneNode(App::State& state, const std::string& active, const App::St
     if (slot != nullptr && slot->is_valid) DrawVariantBadge();
 
     if (!is_leaf) {
-        if (ImGui::IsItemToggledOpen()) state.SetSublayerExpanded(node.path, open);
+        if (toggled_open) state.SetSublayerExpanded(node.path, open);
         if (open) {
             int ci = 0;
             for (const auto& c : node.children)

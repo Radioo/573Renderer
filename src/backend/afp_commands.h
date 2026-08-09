@@ -1,6 +1,6 @@
 #pragma once
 
-#include "qpro_model.h"
+#include "qpro/qpro_model.h"
 #include "state/commands.h"
 
 #include <string>

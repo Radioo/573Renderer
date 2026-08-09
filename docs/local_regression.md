@@ -90,3 +90,19 @@ IfsInspect::AtlasFilter carried never-populated width/height fields
 
 Not covered here (needs a D3D device + full AFP boot): afp-core playhead /
 stream semantics. Those stay on the render-regression net above.
+
+## The real-data format cases ([real] tag)
+
+`formats_tests` carries five cases tagged `[real]` that decode REAL game
+data instead of synthetic fixtures: `tests/formats/model3d_real_tests.cpp`
+(the IIDX 18 mode_bg scene: inz manifest + gcz tiles + xfile models, keyed
+by `R573_IIDX18_DIR`) and four package sweeps in
+`tests/formats/sysidx_tests.cpp` (`R573_IIDX17_DIR` sirius index
+invariants, `R573_IIDX13_DIR` blowfish texture path, `R573_IIDX11_DIR`
+unencrypted red packages, `R573_IIDX09_DIR` big-endian 9th-style chunks).
+Each SKIPs cleanly when its env var is unset or the directory is missing,
+so they are registered with ctest everywhere (they show as Skipped in CI)
+and only assert on a machine with the dumps. They were previously hidden
+`[.real]` tags, which Catch's test discovery never registers - a manual-only
+path that silently returned green without data; the SKIP form replaced it
+so a data-less run is visibly a skip, not a pass.

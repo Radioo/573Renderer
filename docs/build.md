@@ -19,7 +19,7 @@ working tree with: `git rm --cached -r . && git reset --hard`.
 |---|---|
 | `build.bat` | Local developer build: locates VS via vswhere, runs `vcvarsall x64`, bootstraps the vcpkg submodule if needed, then `cmake --preset dev` + `cmake --build --preset dev`. |
 | `CMakePresets.json` | Single source of truth for configure/build knobs. `dev` = local, `ci` = same plus `CMAKE_COMPILE_WARNING_AS_ERROR=ON`. CI and build.bat both go through presets so the two can never drift. |
-| `CMakeLists.txt` | One executable target (`renderer`, output name `573Renderer.exe`) plus the `r573::warnings` interface target. |
+| `CMakeLists.txt` | The gated libs (`r573_support`, `r573_formats`, ...), the `r573_app` static library holding everything the app is made of, the `renderer` executable (output name `573Renderer.exe`, just `src/main.cpp` linked against `r573_app`), the test targets, and the `r573::warnings` interface target. |
 
 ## Why the CMake project is `Renderer573` but the exe is `573Renderer.exe`
 
@@ -51,9 +51,13 @@ file that the presets point at (`vendor/vcpkg` submodule, pinned baseline in
 `vcpkg-configuration.json`). No in-tree source builds of imgui/ffmpeg - vcpkg
 owns them.
 
-- `imgui` with `dx9-binding` + `win32-binding` features baked into the vcpkg
-  build; exposes the `imgui::imgui` CMake target (headers for
+- `imgui` with `dx9-binding` + `win32-binding` + `test-engine` features baked
+  into the vcpkg build; exposes the `imgui::imgui` CMake target (headers for
   `imgui_impl_dx9.h` / `imgui_impl_win32.h` are part of its include tree).
+  `test-engine` makes the port fetch `ocornut/imgui_test_engine` at the matching
+  tag and patch `imconfig.h` to define `IMGUI_ENABLE_TEST_ENGINE`, which is what
+  the headless `gui_tests` suite needs; see docs/gui_tests.md for the licence
+  terms and why the define is global to the package.
 - `ffmpeg` via vcpkg's custom `FindFFMPEG.cmake` (module mode, not config
   mode): populates `FFMPEG_LIBRARIES` / `FFMPEG_INCLUDE_DIRS` for the
   components requested. Because this is variable-style (not an IMPORTED

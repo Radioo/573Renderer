@@ -26,7 +26,10 @@ void DestroySceneStreams(AfpFuncs& afp);
 
 void UnloadPackages(EngineSession& es);
 
-bool SwitchAnimation(EngineSession& es, const std::string& anim_name, bool force = false);
+void UmountPackagesAndData(AvsFuncs& avs);
+
+[[nodiscard]] bool SwitchAnimation(EngineSession& es, const std::string& anim_name,
+                                   bool force = false);
 
 bool PlayBitmapAnimation(EngineSession& es, const std::string& bitmap_name);
 

@@ -149,17 +149,19 @@ TEST_CASE("ReadToc and ExtractFirstIfs work from disk") {
             f.put(static_cast<char>(b));
     }
 
-    DdrArc::Toc toc;
-    REQUIRE(DdrArc::ReadToc(path.string(), toc));
-    REQUIRE(toc.entries.size() == 2);
-    CHECK(toc.entries[0].name == "scene/a.ifs");
+    const auto toc = DdrArc::ReadToc(path.string());
+    REQUIRE(toc.has_value());
+    REQUIRE(toc->entries.size() == 2);
+    CHECK(toc->entries[0].name == "scene/a.ifs");
 
     std::string inner;
-    const std::vector<uint8_t> ifs = DdrArc::ExtractFirstIfs(path.string(), inner);
+    const auto ifs = DdrArc::ExtractFirstIfs(path.string(), inner);
+    REQUIRE(ifs.has_value());
     CHECK(inner == "scene/a.ifs");
-    CHECK(AsString(ifs) == "ABCABCABC");
+    CHECK(AsString(*ifs) == "ABCABCABC");
 
     std::filesystem::remove(path);
-    DdrArc::Toc missing;
-    CHECK_FALSE(DdrArc::ReadToc(path.string(), missing));
+    const auto missing = DdrArc::ReadToc(path.string());
+    REQUIRE_FALSE(missing.has_value());
+    CHECK(missing.error().find("cannot open") == 0);
 }

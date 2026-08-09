@@ -1,5 +1,21 @@
 #pragma once
 
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#include <objbase.h>
+
+struct ComInit {
+    bool inited;
+    ComInit() : inited(SUCCEEDED(CoInitializeEx(nullptr, COINIT_MULTITHREADED))) {}
+    ~ComInit() {
+        if (inited) CoUninitialize();
+    }
+    ComInit(const ComInit&) = delete;
+    ComInit& operator=(const ComInit&) = delete;
+    ComInit(ComInit&&) = delete;
+    ComInit& operator=(ComInit&&) = delete;
+};
+
 template <typename T> struct ComPtr {
     T* ptr = nullptr;
 

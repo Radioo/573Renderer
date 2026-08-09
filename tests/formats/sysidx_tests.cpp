@@ -140,9 +140,11 @@ TEST_CASE("sysidx rejects a chunk chain that does not tile the file") {
     REQUIRE_FALSE(SysIdx::Parse(file, pkg, err));
 }
 
-TEST_CASE("sirius index invariants hold on the real IIDX 17 data", "[.real]") {
+TEST_CASE("sirius index invariants hold on the real IIDX 17 data", "[real]") {
     const std::filesystem::path sys = SysDir();
-    if (sys.empty() || !std::filesystem::exists(sys)) return;
+    if (sys.empty() || !std::filesystem::exists(sys)) {
+        SKIP("R573_IIDX17_DIR not set or data missing");
+    }
 
     int packages = 0;
     int encrypted = 0;
@@ -195,9 +197,11 @@ TEST_CASE("sirius index invariants hold on the real IIDX 17 data", "[.real]") {
     REQUIRE(tiles_total > 1300);
 }
 
-TEST_CASE("distorted packages load through the blowfish texture path", "[.real]") {
+TEST_CASE("distorted packages load through the blowfish texture path", "[real]") {
     const std::filesystem::path sys = Sirius13Dir();
-    if (sys.empty() || !std::filesystem::exists(sys)) return;
+    if (sys.empty() || !std::filesystem::exists(sys)) {
+        SKIP("R573_IIDX13_DIR not set or data missing");
+    }
 
     int packages = 0;
     int tiles_total = 0;
@@ -232,9 +236,11 @@ TEST_CASE("distorted packages load through the blowfish texture path", "[.real]"
     REQUIRE(past_last_tile == 26);
 }
 
-TEST_CASE("iidx red packages load with no encryption at all", "[.real]") {
+TEST_CASE("iidx red packages load with no encryption at all", "[real]") {
     const std::filesystem::path sys = Red11Dir();
-    if (sys.empty() || !std::filesystem::exists(sys)) return;
+    if (sys.empty() || !std::filesystem::exists(sys)) {
+        SKIP("R573_IIDX11_DIR not set or data missing");
+    }
 
     int packages = 0;
     int tiles_total = 0;
@@ -267,9 +273,11 @@ TEST_CASE("iidx red packages load with no encryption at all", "[.real]") {
     REQUIRE(past_last_tile == 0);
 }
 
-TEST_CASE("9th style packages load from the single big-endian chunk", "[.real]") {
+TEST_CASE("9th style packages load from the single big-endian chunk", "[real]") {
     const std::filesystem::path graph = Ninth09Dir();
-    if (graph.empty() || !std::filesystem::exists(graph)) return;
+    if (graph.empty() || !std::filesystem::exists(graph)) {
+        SKIP("R573_IIDX09_DIR not set or data missing");
+    }
 
     int packages = 0;
     int tiles_total = 0;

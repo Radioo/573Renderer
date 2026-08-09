@@ -16,3 +16,4 @@ __pycache__/
 /local_baselines/
 /.idea/
 tools/render_regress/game_dirs.json
+/build-asan/

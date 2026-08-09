@@ -6,8 +6,10 @@
 #include <optional>
 #include <cstdlib>
 #include <cstdio>
+#include <utility>
 #include "afp_ddr_test.h"
 #include "afp_ddr.h"
+#include "afp_boot.h"
 #include "formats/ddr_arc.h"
 #include "avs_boot.h"
 #include "window.h"
@@ -88,11 +90,13 @@ int BootDdrTestStack(const std::string& modules_dir) {
 
 bool LoadArcAsIfs(const std::string& apath) {
     std::string inner;
-    std::vector<uint8_t> ifs = DdrArc::ExtractFirstIfs(apath, inner);
-    if (ifs.empty()) {
-        LOG("DDR-T", "arc has no .ifs: %s", apath.c_str());
+    auto extracted = DdrArc::ExtractFirstIfs(apath, inner);
+    if (!extracted || extracted->empty()) {
+        LOG("DDR-T", "arc extract failed: %s",
+            !extracted ? extracted.error().c_str() : "empty .ifs entry");
         return false;
     }
+    std::vector<uint8_t> ifs = std::move(*extracted);
     std::string base = inner;
     size_t const slash = base.find_last_of("/\\");
     if (slash != std::string::npos) base = base.substr(slash + 1);
@@ -108,10 +112,7 @@ bool LoadArcAsIfs(const std::string& apath) {
     }
     LOG("DDR-T", "load arc '%s' inner='%s' (%zu bytes) pkg='%s'", apath.c_str(), inner.c_str(),
         ifs.size(), pkg.c_str());
-    if (g_avs.avs_fs_umount != nullptr) {
-        g_avs.avs_fs_umount("/afp/packages");
-        g_avs.avs_fs_umount("/data");
-    }
+    AfpManager::UmountPackagesAndData(g_avs);
     return DdrAfp::LoadIfs(g_avs, g_avs_dll, tmp_ifs.string(), pkg);
 }
 

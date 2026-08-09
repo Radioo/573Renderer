@@ -21,7 +21,7 @@ struct D3d9Blend {
     uint32_t dst = kFactorInvSrcAlpha;
 };
 
-inline constexpr D3d9Blend kAlphaCoverage{kOpMax, kFactorOne, kFactorOne};
+inline constexpr D3d9Blend kAlphaCoverage{.op = kOpMax, .src = kFactorOne, .dst = kFactorOne};
 
 [[nodiscard]] bool IsAdditiveAfpMode(uint32_t mode);
 

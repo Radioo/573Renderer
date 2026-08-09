@@ -237,3 +237,107 @@ TEST_CASE("ParseToolCommand keeps the historical priority order and value rule")
     const std::vector<std::string> none = {"exe", "--no-gui"};
     CHECK(Cli::ParseToolCommand(none).kind == Cli::ToolKind::None);
 }
+
+TEST_CASE("Parse handles every string-valued qpro flag") {
+    const ParseResult r =
+        Run({"--extract-qpro",        "out/qpro", "--qpro-parts",          "head,hand",
+             "--qpro-only",           "body",     "--qpro-dump",           "qpro_body.ifs",
+             "--qpro-body-one",       "b1",       "--qpro-back-one",       "k1",
+             "--qpro-head-one",       "h1",       "--qpro-hand-one",       "n1",
+             "--qpro-hair-one",       "r1",       "--qpro-face-one",       "f1",
+             "--qpro-clip-one",       "c1",       "--qpro-hand-composite", "hc",
+             "--qpro-head-composite", "dc",       "--qpro-back-composite", "bc"});
+    REQUIRE(r.ok);
+    CHECK(r.opts.extract_qpro_dir == "out/qpro");
+    CHECK(r.opts.qpro_parts == "head,hand");
+    CHECK(r.opts.qpro_only == "body");
+    CHECK(r.opts.qpro_dump_ifs == "qpro_body.ifs");
+    CHECK(r.opts.qpro_body_one == "b1");
+    CHECK(r.opts.qpro_back_one == "k1");
+    CHECK(r.opts.qpro_head_one == "h1");
+    CHECK(r.opts.qpro_hand_one == "n1");
+    CHECK(r.opts.qpro_hair_one == "r1");
+    CHECK(r.opts.qpro_face_one == "f1");
+    CHECK(r.opts.qpro_clip_one == "c1");
+    CHECK(r.opts.qpro_hand_composite == "hc");
+    CHECK(r.opts.qpro_head_composite == "dc");
+    CHECK(r.opts.qpro_back_composite == "bc");
+}
+
+TEST_CASE("Parse handles the qpro hue-scope switch") {
+    const ParseResult r = Run({"--qpro-no-hue-scope"});
+    REQUIRE(r.ok);
+    CHECK(r.opts.qpro_no_hue_scope);
+    CHECK_FALSE(Run({}).opts.qpro_no_hue_scope);
+}
+
+TEST_CASE("Parse handles the full export option set") {
+    const ParseResult r =
+        Run({"--export", "out/clip.webm", "--export-fps", "48", "--export-quality", "82",
+             "--export-keyframe-interval", "250", "--export-size", "960x540",
+             "--export-dump-frames", "out/frames", "--blend-loop", "--export-no-hw"});
+    REQUIRE(r.ok);
+    CHECK(r.opts.export_path == "out/clip.webm");
+    CHECK(r.opts.export_fps == 48);
+    CHECK(r.opts.export_quality == 82);
+    CHECK(r.opts.export_keyframe_interval == 250);
+    CHECK(r.opts.export_width == 960);
+    CHECK(r.opts.export_height == 540);
+    CHECK(r.opts.export_dump_frames_dir == "out/frames");
+    CHECK(r.opts.export_blend_loop);
+    CHECK_FALSE(r.opts.export_prefer_hardware);
+}
+
+TEST_CASE("Parse accepts the export software alias") {
+    const ParseResult r = Run({"--export-sw"});
+    REQUIRE(r.ok);
+    CHECK_FALSE(r.opts.export_prefer_hardware);
+    CHECK(Run({}).opts.export_prefer_hardware);
+}
+
+TEST_CASE("Parse handles the submonitor option set") {
+    const ParseResult r =
+        Run({"--submonitor-slideshow", "--submonitor-swap-layers", "--submonitor-loop-frames",
+             "300", "--submonitor-fade-frames", "45", "--submonitor-fade-in-label", "in_lbl",
+             "--submonitor-fade-out-label", "out_lbl"});
+    REQUIRE(r.ok);
+    CHECK(r.opts.submonitor_slideshow);
+    CHECK(r.opts.submonitor_swap_layers);
+    CHECK(r.opts.submonitor_loop_frames == 300);
+    CHECK(r.opts.submonitor_fade_frames == 45);
+    CHECK(r.opts.submonitor_fade_in_label == "in_lbl");
+    CHECK(r.opts.submonitor_fade_out_label == "out_lbl");
+}
+
+TEST_CASE("Parse handles the remaining playback and diagnostic flags") {
+    const ParseResult r =
+        Run({"--animation-label", "chorus", "--continuous-loop", "1", "--deferred-replay",
+             "--cmd-trace", "trace.txt", "--exit-after-frames", "900", "--swap-after-frames", "120",
+             "--ifs2", "second.ifs", "--screenshot-prefix", "shots/f"});
+    REQUIRE(r.ok);
+    CHECK(r.opts.animation_label == "chorus");
+    CHECK(r.opts.continuous_loop_mode == 1);
+    CHECK(r.opts.deferred_replay);
+    CHECK(r.opts.cmd_trace_path == "trace.txt");
+    CHECK(r.opts.exit_after_frames == 900);
+    CHECK(r.opts.swap_after_frames == 120);
+    CHECK(r.opts.swap_ifs == "second.ifs");
+    CHECK(r.opts.screenshot_prefix == "shots/f");
+}
+
+TEST_CASE("Parse defaults match the documented option table") {
+    const ParseResult r = Run({});
+    REQUIRE(r.ok);
+    CHECK(r.opts.export_quality == 60);
+    CHECK(r.opts.export_loop_count == 1);
+    CHECK(r.opts.export_blend_frames == 15);
+    CHECK(r.opts.export_bg_transparent);
+    CHECK(r.opts.submonitor_dwell_frames == 720);
+    CHECK(r.opts.submonitor_fade_frames == 120);
+    CHECK(r.opts.submonitor_clip == "subbg_usr/bg_usr");
+    CHECK(r.opts.submonitor_fade_in_label == "fade_in");
+    CHECK(r.opts.submonitor_fade_out_label == "fade_out");
+    CHECK(r.opts.screenshot_prefix == "screenshots/auto_f");
+    CHECK(r.opts.root_loop_mode == -1);
+    CHECK(r.opts.seek_frame == -1);
+}

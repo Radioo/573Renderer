@@ -273,7 +273,7 @@ void RenderTopBar(const App::Status& status) {
         Export::RequestOpen();
     }
     ImGui::EndDisabled();
-    if (ImGui::IsItemHovered()) {
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
         ImGui::SetTooltip("Export the playing animation to video / image (Ctrl+E).");
     }
     ImGui::SameLine(ImGui::GetWindowWidth() - fps_w - 18.0F);

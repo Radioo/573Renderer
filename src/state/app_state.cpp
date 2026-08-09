@@ -7,6 +7,7 @@
 #include "state/live_controls.h"
 #include "state/telemetry.h"
 
+#include <functional>
 #include <optional>
 #include <string>
 #include <utility>
@@ -232,6 +233,14 @@ State::LiveOverrides State::GetLiveOverrides() const {
 
 void State::SetLiveOverrides(LiveOverrides o) {
     live_.SetLiveOverrides(o);
+}
+
+void State::MutateLiveOverrides(const std::function<void(LiveOverrides&)>& fn) {
+    live_.MutateLiveOverrides(fn);
+}
+
+void State::ApplyLiveOverridesDelta(const LiveOverrides& before, const LiveOverrides& after) {
+    live_.ApplyLiveOverridesDelta(before, after);
 }
 
 State::LiveState State::GetLiveState() const {

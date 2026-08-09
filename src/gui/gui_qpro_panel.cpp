@@ -1,15 +1,15 @@
-#include "qpro_scan.h"
+#include "qpro/qpro_scan.h"
 #include <algorithm>
 #include <cstdint>
 #include <utility>
-#include "qpro_dll.h"
+#include "qpro/qpro_dll.h"
 
 #include "gui_panels_internal.h"
 #include "gui_window.h"
 #include "../backend/afp_commands.h"
 #include "../state/app_state.h"
 #include "../native_dialog.h"
-#include "../qpro_extract.h"
+#include "qpro/qpro_extract.h"
 #include "imgui.h"
 
 #include <cfloat>
@@ -96,7 +96,7 @@ void DrawScanButton(bool busy, const QproExtract::ScanResult& scan) {
         App::Global().PostCommand(AfpCmd::Wrap(AfpCmd::QproStartScan{}));
     }
     ImGui::EndDisabled();
-    if (ImGui::IsItemHovered()) {
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
         ImGui::SetTooltip("Enumerate every qpro part in the loaded game (read directly from "
                           "bm2dx.dll) and group them\n"
                           "by their source IFS's modified date, so you can render ONLY the parts "

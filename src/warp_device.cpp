@@ -1,5 +1,7 @@
 #include "warp_device.h"
 
+#include "support/module_handle.h"
+
 #include <d3d12.h>
 #include <d3d9.h>
 #include <d3d9on12.h>
@@ -44,16 +46,18 @@ HWND CreateHiddenWindow() {
 }
 
 IUnknown* CreateWarpD3D12Device() {
-    HMODULE dxgi = LoadLibraryA("dxgi.dll");
-    HMODULE d3d12 = LoadLibraryA("d3d12.dll");
-    if (dxgi == nullptr || d3d12 == nullptr) {
+    static Support::ModuleHandle s_dxgi_mod;
+    static Support::ModuleHandle s_d3d12_mod;
+    if (s_dxgi_mod == nullptr) s_dxgi_mod = Support::LoadModule("dxgi.dll");
+    if (s_d3d12_mod == nullptr) s_d3d12_mod = Support::LoadModule("d3d12.dll");
+    if (s_dxgi_mod == nullptr || s_d3d12_mod == nullptr) {
         Fail("LoadLibrary dxgi/d3d12", 0);
         return nullptr;
     }
     using CreateFactoryFn = HRESULT(WINAPI*)(REFIID, void**);
     using CreateDeviceFn = HRESULT(WINAPI*)(IUnknown*, D3D_FEATURE_LEVEL, REFIID, void**);
-    auto create_factory = (CreateFactoryFn)GetProcAddress(dxgi, "CreateDXGIFactory1");
-    auto create_device = (CreateDeviceFn)GetProcAddress(d3d12, "D3D12CreateDevice");
+    auto create_factory = (CreateFactoryFn)GetProcAddress(s_dxgi_mod.get(), "CreateDXGIFactory1");
+    auto create_device = (CreateDeviceFn)GetProcAddress(s_d3d12_mod.get(), "D3D12CreateDevice");
     if (create_factory == nullptr || create_device == nullptr) {
         Fail("GetProcAddress CreateDXGIFactory1/D3D12CreateDevice", 0);
         return nullptr;
@@ -83,13 +87,14 @@ IUnknown* CreateWarpD3D12Device() {
 }
 
 IDirect3D9* Create9On12(IUnknown* dev12) {
-    HMODULE d3d9 = LoadLibraryA("d3d9.dll");
-    if (d3d9 == nullptr) {
+    static Support::ModuleHandle s_d3d9_mod;
+    if (s_d3d9_mod == nullptr) s_d3d9_mod = Support::LoadModule("d3d9.dll");
+    if (s_d3d9_mod == nullptr) {
         Fail("LoadLibrary d3d9", 0);
         return nullptr;
     }
     using Create9On12Fn = IDirect3D9*(WINAPI*)(UINT, D3D9ON12_ARGS*, UINT);
-    auto create = (Create9On12Fn)GetProcAddress(d3d9, "Direct3DCreate9On12");
+    auto create = (Create9On12Fn)GetProcAddress(s_d3d9_mod.get(), "Direct3DCreate9On12");
     if (create == nullptr) {
         Fail("Direct3DCreate9On12 export missing", 0);
         return nullptr;
@@ -130,12 +135,12 @@ Device::~Device() {
     if (device != nullptr) device->Release();
     if (d3d9 != nullptr) d3d9->Release();
     if (d3d12_device != nullptr) d3d12_device->Release();
-    if (hwnd != nullptr) DestroyWindow(hwnd);
+    if (hwnd != nullptr && owns_window) DestroyWindow(hwnd);
 }
 
-bool Create(Device& out, int width, int height) {
-    out.hwnd = CreateHiddenWindow();
-    if (out.hwnd == nullptr) return false;
+bool CreateForWindow(Device& out, HWND hwnd, int width, int height) {
+    out.hwnd = hwnd;
+    out.owns_window = false;
     out.d3d12_device = CreateWarpD3D12Device();
     if (out.d3d12_device == nullptr) return false;
     out.d3d9 = Create9On12(out.d3d12_device);
@@ -143,6 +148,18 @@ bool Create(Device& out, int width, int height) {
     out.device = CreateD3D9Device(out.d3d9, out.hwnd, width, height);
     if (out.device == nullptr) return false;
     out.ok = true;
+    return true;
+}
+
+bool Create(Device& out, int width, int height) {
+    HWND hidden = CreateHiddenWindow();
+    if (hidden == nullptr) return false;
+    if (!CreateForWindow(out, hidden, width, height)) {
+        out.hwnd = hidden;
+        out.owns_window = true;
+        return false;
+    }
+    out.owns_window = true;
     return true;
 }
 

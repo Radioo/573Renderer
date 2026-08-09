@@ -52,6 +52,21 @@ TEST_CASE("extensions and directory outputs are consistent") {
     CHECK_FALSE(MediaSink::WritesDirectory(Format::MP4_H264));
 }
 
+TEST_CASE("muxer and short label come from the single format table") {
+    CHECK(MediaSink::FormatMuxer(Format::AVIF) == std::string{"avif"});
+    CHECK(MediaSink::FormatMuxer(Format::WebM_VP9) == std::string{"webm"});
+    CHECK(MediaSink::FormatMuxer(Format::WebM_AV1) == std::string{"webm"});
+    CHECK(MediaSink::FormatMuxer(Format::WebP_Anim) == std::string{"webp"});
+    CHECK(MediaSink::FormatMuxer(Format::MP4_H264) == std::string{"mp4"});
+    CHECK(MediaSink::FormatMuxer(Format::MP4_HEVC_Alpha) == std::string{"mp4"});
+    CHECK(MediaSink::FormatMuxer(Format::PNG_Sequence) == std::string{"avif"});
+
+    CHECK(MediaSink::FormatShortLabel(Format::AVIF) == std::string{"AVIF"});
+    CHECK(MediaSink::FormatShortLabel(Format::WebM_VP9) == std::string{"WebM-VP9"});
+    CHECK(MediaSink::FormatShortLabel(Format::MP4_HEVC_Alpha) == std::string{"MP4-HEVC-Alpha"});
+    CHECK(MediaSink::FormatShortLabel(Format::PNG_Sequence) == std::string{"AVIF"});
+}
+
 TEST_CASE("keyframe interval applies to video codecs only") {
     CHECK(MediaSink::UsesKeyframeInterval(Format::AVIF));
     CHECK(MediaSink::UsesKeyframeInterval(Format::WebM_VP9));

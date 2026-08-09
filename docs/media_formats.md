@@ -3,10 +3,44 @@
 The export-format vocabulary shared by the GUI dropdown, the CLI parser,
 and the export pipeline: `MediaSink::Format` plus the pure helper functions
 (label/token/extension/directory-ness, token parsing, index mapping, output
-path building). Split out of media_sink so the CLI and tests link a tiny
-pure library instead of the ffmpeg-backed Sink. The Sink itself
-(media_sink.h) re-exports the enum by including this header, so all
-existing `MediaSink::` call sites are unchanged.
+path building, and the muxer / short-label columns the encoder needs).
+Split out of media_sink so the CLI and tests link a tiny pure library
+instead of the ffmpeg-backed Sink. The Sink itself (media_sink.h)
+re-exports the enum by including this header, so all existing
+`MediaSink::` call sites are unchanged.
+
+One table, one place: `kTable` in media_format.cpp carries token,
+extension, is_dir, label, muxer and short_label per format.
+video_encoder.cpp used to hand-roll `MuxerName` and `FmtLabel` as separate
+switches (and a third, `DefaultExtension`, that had no callers at all and
+is deleted) - adding a seventh format meant editing four places in two
+files. The muxer/label mapping is now covered by media_format_tests.
+
+## Library split (r573_media_format vs r573_media)
+
+Two libraries, deliberately:
+
+- `r573_media_format` - the pure table. No ffmpeg, no Win32. `r573_cli`
+  links it, so cli_tests stays dependency-free.
+- `r573_media` - the ffmpeg-backed encoder stack (media_sink.cpp,
+  video_encoder.cpp, video_encoder_codecs.cpp). PUBLIC-links
+  r573_media_format plus the ffmpeg and Win32 libs, so consumers inherit
+  them. `export_capture_tests` and `media_encode_tests` used to re-list
+  those three .cpp files as target sources and recompile them per target;
+  they now link this library.
+
+The three r573_media TUs still physically live in flat `src/`, NOT in
+`src/media/`. That is deliberate and temporary: `src/media/.clang-tidy`
+re-enables the FFI check set (vararg, macro-usage, reinterpret/c-style
+casts, c-arrays), and every migrated module TU in the tree is `LOG`-free
+by construction - `LOG` is a vararg macro, so it trips both
+`cppcoreguidelines-pro-type-vararg` and `-macro-usage`. video_encoder.cpp
+and media_sink.cpp carry 13 LOG calls between them. Moving the files
+without first deciding how the encoder reports failures would mean either
+deleting real diagnostics or weakening the module config (which would also
+weaken media_format.cpp). The physical move is therefore queued behind
+that migration; the library boundary above already delivers the
+build-level win.
 
 ## Stability contract
 
@@ -73,7 +107,13 @@ Stream construction per format:
   alpha plane).
 - MP4_HEVC_Alpha: libx265 with an x265 auxiliary alpha layer (single
   yuva420p, no hardware path); forces the `hvc1` tag (MKTAG) so Safari's
-  transparent-video path plays it.
+  transparent-video path plays it. NVENC's HEVC encoder has no alpha
+  channel, so this format can never use hardware encode on any GPU - the
+  export dialog's HW-accel tooltip says exactly that, ahead of its
+  machine-capability probe, because the reason is intrinsic to the format
+  (`DrawHwAccelTooltip`; note `MediaSink::HardwareProbeFormat` folds every
+  non-H.264 format onto AVIF, so its answer is about AV1 NVENC and is
+  meaningless here).
 
 Keyframe interval (`Params::keyframe_interval`, `KeyframeGop` helper): every
 codec path sets `gop_size` and `keyint_min` from it. 0 (default) keeps the

@@ -4,6 +4,7 @@
 
 #include <array>
 #include <cstdint>
+#include <functional>
 #include <mutex>
 
 namespace App {
@@ -78,6 +79,8 @@ public:
 
     [[nodiscard]] LiveOverrides GetLiveOverrides() const;
     void SetLiveOverrides(LiveOverrides o);
+    void MutateLiveOverrides(const std::function<void(LiveOverrides&)>& fn);
+    void ApplyLiveOverridesDelta(const LiveOverrides& before, const LiveOverrides& after);
 
     [[nodiscard]] LiveState GetLiveState() const;
     void SetLiveState(const LiveState& s);

@@ -173,6 +173,7 @@ void DrawFrameLimitControls() {
     if (g_limit_frames && g_max_frames <= 0) g_max_frames = 60;
     ImGui::SetNextItemWidth(120);
     ImGui::InputInt("frames##exp_maxf", &g_max_frames, 1, 10);
+    const bool frames_hovered = ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled);
     g_max_frames = std::clamp(g_max_frames, 1, 100000);
     ImGui::SameLine();
     {
@@ -180,7 +181,7 @@ void DrawFrameLimitControls() {
         ImGui::TextDisabled("(~%.2fs at %d fps)", secs, g_fps > 0 ? g_fps : 60);
     }
     ImGui::EndDisabled();
-    if (ImGui::IsItemHovered()) {
+    if (frames_hovered) {
         ImGui::SetTooltip("Number of frames the encoder receives before the export\n"
                           "auto-finalises. Counted post-capture: a value of 60\n"
                           "produces a file with exactly 60 encoded frames.");
@@ -343,7 +344,7 @@ void DrawScaleButtons(int w_disp, int h_disp) {
         int new_h = (int)std::lroundf((float)h_disp * sb.mul);
         new_w = std::clamp(new_w, 64, 8192);
         new_h = std::clamp(new_h, 64, 8192);
-        char btn_label[32];
+        char btn_label[64];
         const char* visible_end = strstr(sb.label, "##");
         int const prefix_len =
             (visible_end != nullptr) ? (int)(visible_end - sb.label) : (int)strlen(sb.label);
@@ -442,7 +443,12 @@ bool DrawCrop(App::State& state) {
 }
 
 void DrawHwAccelTooltip(MediaSink::Format current_format, bool hw_available, bool is_h264) {
-    if (!hw_available && is_h264) {
+    if (current_format == MediaSink::Format::MP4_HEVC_Alpha) {
+        ImGui::SetTooltip("MP4 HEVC-alpha is software only (libx265).\n"
+                          "NVENC's HEVC encoder has no alpha path, so\n"
+                          "the alpha layer this format exists for rules\n"
+                          "hardware encode out on every GPU.");
+    } else if (!hw_available && is_h264) {
         ImGui::SetTooltip("h264_nvenc unavailable on this machine.\n"
                           "H.264 export needs an NVIDIA GPU with NVENC -\n"
                           "this ffmpeg build has no software H.264\n"
@@ -513,7 +519,9 @@ void DrawBackgroundAndHw(MediaSink::Format current_format, bool hw_available) {
     } else {
         ImGui::Checkbox("HW accel##exp_hw", &g_prefer_hw);
     }
-    if (ImGui::IsItemHovered()) DrawHwAccelTooltip(current_format, hw_available, is_h264);
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+        DrawHwAccelTooltip(current_format, hw_available, is_h264);
+    }
 }
 
 void PostStartRequest(App::State& state, MediaSink::Format current_format, bool hw_applies) {
@@ -660,6 +668,10 @@ void RenderModal() {
 
     if (close_for_pick) {
         g_reopen_after_pick = true;
+        ImGui::CloseCurrentPopup();
+    }
+    if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) &&
+        !ImGui::GetIO().WantTextInput && ImGui::IsKeyPressed(ImGuiKey_Escape, false)) {
         ImGui::CloseCurrentPopup();
     }
     ImGui::EndPopup();

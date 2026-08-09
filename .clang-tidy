@@ -20,7 +20,7 @@ Checks: >
   -misc-no-recursion,
   -clang-analyzer-optin.core.EnumCastOutOfRange
 WarningsAsErrors: '*'
-HeaderFilterRegex: '[/\\]src[/\\](formats|media|cli|settings|state)[/\\]'
+HeaderFilterRegex: '[/\\]src[/\\](formats|media|cli|settings|state|loop|render)[/\\]'
 FormatStyle: file
 CheckOptions:
   readability-function-size.LineThreshold: 60

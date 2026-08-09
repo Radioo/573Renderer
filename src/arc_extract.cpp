@@ -1,19 +1,16 @@
 #include "arc_extract.h"
 #include "formats/ddr_arc.h"
+#include "support/folder_job.h"
 #include "support/log.h"
 
-#include <atomic>
 #include <cctype>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <ios>
-#include <iterator>
-#include <mutex>
 #include <string>
 #include <system_error>
-#include <thread>
 #include <utility>
 #include <vector>
 
@@ -22,14 +19,7 @@ namespace {
 
 namespace fs = std::filesystem;
 
-std::mutex g_mu;
-Status g_status;
-std::atomic<bool> g_running{false};
-
-void Publish(const Status& s) {
-    std::scoped_lock const lk(g_mu);
-    g_status = s;
-}
+Support::FolderJob<Status> g_job;
 
 std::string EntryBasename(const std::string& name) {
     size_t const cut = name.find_last_of("/\\");
@@ -47,12 +37,6 @@ std::string ArcStem(const fs::path& arc) {
         if (tail == ".arc") stem.resize(stem.size() - 4);
     }
     return stem;
-}
-
-std::vector<uint8_t> ReadAll(const fs::path& p) {
-    std::ifstream f(p, std::ios::binary);
-    if (!f) return {};
-    return {std::istreambuf_iterator<char>(f), std::istreambuf_iterator<char>()};
 }
 
 fs::path UniquePath(const fs::path& desired) {
@@ -74,26 +58,21 @@ fs::path UniquePath(const fs::path& desired) {
 
 std::vector<fs::path> CollectArcs(const fs::path& root, Status& st, long long& scanned) {
     std::vector<fs::path> arcs;
-    std::error_code ec;
-    for (fs::recursive_directory_iterator
-             it(root, fs::directory_options::skip_permission_denied, ec),
-         end;
-         it != end; it.increment(ec)) {
-        if (ec) {
-            ec.clear();
-            continue;
-        }
-        if (((++scanned) & 511) == 0) {
+    scanned = Support::ScanFolder(
+        root,
+        [&](const fs::path& cur) {
             st.done_arcs = (int)arcs.size();
-            st.current = it->path().lexically_relative(root).string();
-            Publish(st);
-        }
-        if (!it->is_regular_file(ec)) continue;
-        std::string ext = it->path().extension().string();
-        for (char& c : ext)
-            c = (char)std::tolower((unsigned char)c);
-        if (ext == ".arc") arcs.push_back(it->path());
-    }
+            st.current = cur.lexically_relative(root).string();
+            g_job.Publish(st);
+        },
+        [&](auto& it) {
+            std::error_code ec;
+            if (!it->is_regular_file(ec)) return;
+            std::string ext = it->path().extension().string();
+            for (char& c : ext)
+                c = (char)std::tolower((unsigned char)c);
+            if (ext == ".arc") arcs.push_back(it->path());
+        });
     return arcs;
 }
 
@@ -120,7 +99,7 @@ void WriteArcEntries(const std::vector<uint8_t>& bytes, const DdrArc::Toc& toc,
 
 void ExtractOneArc(const fs::path& arc, const fs::path& root, const fs::path& out_root,
                    Status& st) {
-    std::vector<uint8_t> const bytes = ReadAll(arc);
+    std::vector<uint8_t> const bytes = Support::ReadFileBytes(arc);
     DdrArc::Toc toc;
     if (bytes.empty() || !DdrArc::ParseToc(bytes, toc)) {
         st.failed_arcs++;
@@ -146,33 +125,31 @@ void Run(std::string folder) {
     Status st;
     st.running = true;
 
-    std::string clean = std::move(folder);
-    while (!clean.empty() && (clean.back() == '/' || clean.back() == '\\'))
-        clean.pop_back();
+    std::string const clean = Support::StripTrailingSlashes(std::move(folder));
     fs::path const root(clean);
     fs::path const out_root(clean + "_extracted");
     st.output_dir = out_root.string();
-    Publish(st);
+    g_job.Publish(st);
 
     std::error_code ec;
     if (clean.empty() || !fs::is_directory(root, ec)) {
         st.running = false;
         st.finished = true;
         st.error = "not a folder: " + clean;
-        Publish(st);
+        g_job.Publish(st);
         LOG("ArcExtract", "abort: %s", st.error.c_str());
-        g_running = false;
+        g_job.Finish();
         return;
     }
 
     st.current = "Scanning for .arc files...";
-    Publish(st);
+    g_job.Publish(st);
     long long scanned = 0;
     std::vector<fs::path> const arcs = CollectArcs(root, st, scanned);
     st.total_arcs = (int)arcs.size();
     st.done_arcs = 0;
     st.current.clear();
-    Publish(st);
+    g_job.Publish(st);
     LOG("ArcExtract", "scanned %lld entries, found %d .arc under '%s' -> '%s'", scanned,
         st.total_arcs, clean.c_str(), out_root.string().c_str());
 
@@ -180,36 +157,33 @@ void Run(std::string folder) {
 
     for (const fs::path& arc : arcs) {
         st.current = arc.filename().string();
-        Publish(st);
+        g_job.Publish(st);
         ExtractOneArc(arc, root, out_root, st);
         st.done_arcs++;
-        Publish(st);
+        g_job.Publish(st);
     }
 
     st.running = false;
     st.finished = true;
     st.current.clear();
-    Publish(st);
+    g_job.Publish(st);
     LOG("ArcExtract", "done: wrote %d files from %d arcs (%d failed) -> %s", st.entries_written,
         st.done_arcs - st.failed_arcs, st.failed_arcs, out_root.string().c_str());
-    g_running = false;
+    g_job.Finish();
 }
 
 }
 
 void Start(const std::string& folder) {
-    bool expected = false;
-    if (!g_running.compare_exchange_strong(expected, true)) return;
-    std::thread(Run, folder).detach();
+    g_job.Start(folder, Run);
 }
 
 bool IsRunning() {
-    return g_running.load();
+    return g_job.IsRunning();
 }
 
 Status GetStatus() {
-    std::scoped_lock const lk(g_mu);
-    return g_status;
+    return g_job.Get();
 }
 
 }

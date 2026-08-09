@@ -222,7 +222,8 @@ void DrawContinuousLoopRow(App::State::LiveOverrides& ov, bool& changed) {
 void DrawTrimRow(App::State::LiveOverrides& ov, bool& changed) {
     ImGui::TextDisabled("Trim frames");
     ImGui::SetNextItemWidth(120.0F);
-    if (ImGui::InputInt("##live_trim", &ov.trim_frames, 0, 0)) {
+    ImGui::InputInt("##live_trim", &ov.trim_frames, 0, 0);
+    if (ImGui::IsItemDeactivatedAfterEdit()) {
         changed = true;
     }
     if (ImGui::IsItemHovered()) {
@@ -318,7 +319,8 @@ void DrawResetOverridesRow(App::State& state) {
 
 void RenderRenderTabModern() {
     auto& state = App::Global();
-    auto ov = state.GetLiveOverrides();
+    const auto before = state.GetLiveOverrides();
+    auto ov = before;
     bool changed = false;
 
     DrawLoopMasterRow();
@@ -337,19 +339,20 @@ void RenderRenderTabModern() {
     ImGui::Spacing();
     DrawFilterMcNameRows(ov, changed);
 
-    if (changed) state.SetLiveOverrides(ov);
+    if (changed) state.ApplyLiveOverridesDelta(before, ov);
     ImGui::Spacing();
     DrawResetOverridesRow(state);
 }
 
 void RenderRenderTabDdr() {
     auto& state = App::Global();
-    auto ov = state.GetLiveOverrides();
+    const auto before = state.GetLiveOverrides();
+    auto ov = before;
     bool changed = false;
 
     DrawBackgroundRow(ov, changed);
 
-    if (changed) state.SetLiveOverrides(ov);
+    if (changed) state.ApplyLiveOverridesDelta(before, ov);
     DrawResetOverridesRow(state);
 }
 

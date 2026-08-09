@@ -2,10 +2,18 @@
 
 #include "support/dll_loader.h"
 #include "support/expected.h"
+#include "support/folder_job.h"
 #include "support/log.h"
 #include "support/module_handle.h"
 
+#include <atomic>
+#include <cstdint>
+#include <filesystem>
+#include <fstream>
+#include <ios>
 #include <string>
+#include <system_error>
+#include <thread>
 #include <vector>
 
 TEST_CASE("ClassifyFirstExport detects the mangled Konami scheme") {
@@ -94,4 +102,89 @@ TEST_CASE("Expected carries values and errors") {
     }();
     REQUIRE_FALSE(bad.has_value());
     CHECK(bad.error() == "nope");
+}
+
+TEST_CASE("StripTrailingSlashes drops any run of trailing separators") {
+    CHECK(Support::StripTrailingSlashes("F:/games/") == "F:/games");
+    CHECK(Support::StripTrailingSlashes("F:\\games\\\\") == "F:\\games");
+    CHECK(Support::StripTrailingSlashes("F:/games") == "F:/games");
+    CHECK(Support::StripTrailingSlashes("///").empty());
+    CHECK(Support::StripTrailingSlashes("").empty());
+}
+
+namespace {
+
+struct TempTree {
+    std::filesystem::path root;
+    TempTree() {
+        root = std::filesystem::temp_directory_path() /
+               ("r573_folder_job_" + std::to_string(GetCurrentProcessId()));
+        std::filesystem::remove_all(root);
+        std::filesystem::create_directories(root / "sub");
+    }
+    TempTree(const TempTree&) = delete;
+    TempTree& operator=(const TempTree&) = delete;
+    TempTree(TempTree&&) = delete;
+    TempTree& operator=(TempTree&&) = delete;
+    ~TempTree() {
+        std::error_code ec;
+        std::filesystem::remove_all(root, ec);
+    }
+    void Put(const char* rel, const std::string& content) const {
+        std::ofstream f(root / rel, std::ios::binary);
+        f << content;
+    }
+};
+
+}
+
+TEST_CASE("ReadFileBytes reads whole files and returns empty on a missing path") {
+    const TempTree tree;
+    tree.Put("a.bin", "hello");
+    const std::vector<uint8_t> bytes = Support::ReadFileBytes(tree.root / "a.bin");
+    CHECK(bytes == std::vector<uint8_t>{'h', 'e', 'l', 'l', 'o'});
+    CHECK(Support::ReadFileBytes(tree.root / "missing.bin").empty());
+}
+
+TEST_CASE("ScanFolder visits every entry recursively and reports the scan count") {
+    const TempTree tree;
+    tree.Put("a.arc", "x");
+    tree.Put("b.txt", "x");
+    tree.Put("sub/c.arc", "x");
+
+    int arcs = 0;
+    const long long scanned = Support::ScanFolder(
+        tree.root, [](const std::filesystem::path&) {},
+        [&](auto& it) {
+            std::error_code ec;
+            if (it->is_regular_file(ec) && it->path().extension() == ".arc") arcs++;
+        });
+    CHECK(arcs == 2);
+    CHECK(scanned == 4);
+}
+
+TEST_CASE("FolderJob publishes snapshots and only starts one run at a time") {
+    struct DemoStatus {
+        bool finished = false;
+        int done = 0;
+    };
+    Support::FolderJob<DemoStatus> job;
+    CHECK_FALSE(job.IsRunning());
+
+    job.Publish(DemoStatus{.finished = false, .done = 3});
+    CHECK(job.Get().done == 3);
+
+    std::atomic<int> runs{0};
+    REQUIRE(job.Start("dir", [&](const std::string&) { runs++; }));
+    CHECK_FALSE(job.Start("dir", [&](const std::string&) { runs++; }));
+    while (runs.load() < 1)
+        std::this_thread::yield();
+    CHECK(job.IsRunning());
+    job.Finish();
+    CHECK_FALSE(job.IsRunning());
+    REQUIRE(job.Start("dir", [&](const std::string&) { runs++; }));
+    while (runs.load() < 2)
+        std::this_thread::yield();
+    job.Finish();
+    CHECK(runs.load() == 2);
 }

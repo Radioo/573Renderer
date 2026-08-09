@@ -245,10 +245,7 @@ bool ModernRuntime::LoadScene(const std::string& mount_path, const std::string& 
 
 void ModernRuntime::UnloadScene() {
     AfpManager::UnloadPackages(g_engine);
-    if (g_avs.avs_fs_umount != nullptr) {
-        g_avs.avs_fs_umount("/afp/packages");
-        g_avs.avs_fs_umount("/data");
-    }
+    AfpManager::UmountPackagesAndData(g_avs);
 }
 
 void ModernRuntime::Shutdown() {

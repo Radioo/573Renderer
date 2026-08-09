@@ -1,9 +1,59 @@
 # qpro (IIDX Q-pro avatar) extractor
 
-Knowledge captured from `src/qpro_dll.*`, `src/qpro_scan.*`, `src/qpro_extract.*`,
-`src/qpro_internal.h`, `src/qpro_walk.*`, `src/qpro_composite.cpp`,
-`src/qpro_composite_debug.cpp`, plus `src/ifs_inspect.*` (IFS/texturelist inspection shared
+Knowledge captured from `src/qpro/qpro_dll.*`, `src/qpro/qpro_scan.*`, `src/qpro/qpro_extract.*`,
+`src/qpro/qpro_internal.h`, `src/qpro/qpro_walk.*`, `src/qpro/qpro_composite.cpp`,
+`src/qpro/qpro_composite_debug.cpp`, plus `src/ifs_inspect.*` (IFS/texturelist inspection shared
 with the general renderer).
+
+TU layout of the extractor itself (split out of a single 966-line
+qpro_extract.cpp when it approached the 1000-line gate):
+
+| TU | Holds |
+|---|---|
+| `qpro/qpro_extract.cpp` | the `Run` orchestrator, the category sweep (MountCategorySweep / SweepOneItem / RunCategorySweep / placeholders), the two JSON writers, and the status plumbing that backs `qpro/qpro_status.h` |
+| `qpro/qpro_detail.cpp` | the shared `detail` primitives every qpro TU uses: texturelist parse + atlas lookup, hue-scope rects, the WIC PNG writer, still-AVIF write, IfsPath/Stem, ReadPiece, RenderFrame/WarmUpFrames, the LayerJob category map (`CompositeJobs`), and `QproLimit` |
+| `qpro/qpro_body.cpp` | everything body-specific: the 520x704 canvas gate, qp_main2 mount, per-body piece re-pointing (`SwapBodyPieces`), the body pass, and the `BodyOne` debug driver |
+| `qpro/qpro_debug.cpp` | the screenshot-dumping single-item drivers (`BackOne`, and `HeadOne`/`HandOne`/`HairOne`/`FaceOne` over one shared `CategoryOne`) |
+
+`qpro/qpro_status.h` is the seam that lets the body pass and the sweep share one
+progress/issue channel: the mutex, `Status`, and the done/total counters stay
+private to qpro_extract.cpp, and the other TUs reach them only through
+`PublishProgress` / `Note` / `NoteIssue` / `BumpDone` / `DoneCount` /
+`TotalCount`.
+
+### Shared composite primitives
+
+Five near-identical copies of the item-clip attach walk (hand real + hand
+debug + head debug + generic item + back) collapsed into one
+`AttachClipStream(pkg, sid, layer, clip_name, log_tag)` in qpro_detail.cpp.
+It resolves the layer's head mc, looks the clip's stream up once (falling
+back from `item_clip` to `layer`, which is what the generic item path
+needed), then attaches + invalidates down the `dir 6` same-name sibling
+chain, capped at 64. It returns `{head_mc, attached, have_stream, data_id}`
+so the callers keep their own distinct follow-ups: the back path wants
+`head_mc` even when nothing attached, and the generic item path falls back
+to an atlas texture-swap when `have_stream` is false. The two debug callers
+pass a log tag; passing none is silent. Hoisting the lookup out of the
+per-sibling loop is safe because it is a pure `(pkg, name)` query.
+
+Three hand-maintained "hide everything except..." arrays (kNonHand,
+kNonHead, kHideForBody) are gone in favour of
+`HideAllLayersExcept(sid, keep)` over `kAllAvatarLayers`. This DOES change
+the order the hides are issued in (the old arrays were in their own order);
+that is verified inert - see the byte-compare below. Note it only ever
+hides: it never sets a kept layer visible, which is why `HideAllButQproBg`
+in qpro_back.cpp stays separate (it deliberately forces `qpro_bg` visible).
+
+`WriteStillFrameWithDump` + `AvifPathToPng` replace three copies of the
+"write the still AVIF, and if `g_clip_dump_raw` also drop the same pixels
+as .png next to it" block.
+
+Verification for all of the above: a QPRO_LIMIT=2 extraction over ALL six
+categories at 520x704 (`--qpro-parts hand,back,head,hair,face,body`)
+produces 20 files; every one is byte-identical before and after. That run
+is the only byte-level check that covers the qpro pipelines - the
+render-regression net (docs/render_regression.md) does not touch them - so
+it is the thing to re-run when changing anything in this directory.
 
 GUI: the qpro tab is registered only for the `iidx33` profile since P17 (panel
 registry, docs/gui.md 2.0) - it reads bm2dx.dll and was meaningless on every

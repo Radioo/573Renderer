@@ -103,6 +103,20 @@ TEST_CASE("MutConfig creates and FindConfig locates by filename") {
     CHECK(found->bitmap_names[0] == "coin");
 }
 
+TEST_CASE("MutConfig references stay valid as the catalog grows") {
+    App::State s;
+    App::IfsConfig& first = s.MutConfig("first.ifs");
+    for (int i = 0; i < 64; i++)
+        s.MutConfig("grow_" + std::to_string(i) + ".ifs");
+    first.bitmap_names.emplace_back("still_alive");
+
+    const App::IfsConfig* found = s.FindConfig("first.ifs");
+    REQUIRE(found != nullptr);
+    REQUIRE(found->bitmap_names.size() == 1);
+    CHECK(found->bitmap_names[0] == "still_alive");
+    CHECK(found == &first);
+}
+
 TEST_CASE("Sublayer overrides upsert and copy out") {
     App::State s;
     s.SetSublayerOverride("bg.ifs", "content_usr", false);
@@ -192,6 +206,35 @@ TEST_CASE("SetLiveOverrides clamps loop mode and trim") {
     const App::State::LiveOverrides back = s.GetLiveOverrides();
     CHECK(back.continuous_loop_mode == 1);
     CHECK(back.trim_frames == 0);
+}
+
+TEST_CASE("MutateLiveOverrides applies under the lock and keeps the clamps") {
+    App::State s;
+    s.MutateLiveOverrides([](App::State::LiveOverrides& o) {
+        o.paused = true;
+        o.continuous_loop_mode = 7;
+        o.trim_frames = -1;
+    });
+    const App::State::LiveOverrides back = s.GetLiveOverrides();
+    CHECK(back.paused);
+    CHECK(back.continuous_loop_mode == 1);
+    CHECK(back.trim_frames == 0);
+}
+
+TEST_CASE("ApplyLiveOverridesDelta writes only fields the caller changed") {
+    App::State s;
+    const App::State::LiveOverrides before = s.GetLiveOverrides();
+    auto edited = before;
+    edited.filter_enabled = true;
+    edited.bg_color_index = 2;
+
+    s.MutateLiveOverrides([](App::State::LiveOverrides& o) { o.continuous_loop_mode = 1; });
+    s.ApplyLiveOverridesDelta(before, edited);
+
+    const App::State::LiveOverrides back = s.GetLiveOverrides();
+    CHECK(back.filter_enabled);
+    CHECK(back.bg_color_index == 2);
+    CHECK(back.continuous_loop_mode == 1);
 }
 
 TEST_CASE("SetRenderSize ignores non-positive values") {

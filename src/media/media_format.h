@@ -19,6 +19,8 @@ constexpr int kFormatCount = 7;
 [[nodiscard]] const char* FormatLabel(Format f);
 [[nodiscard]] const char* FormatToken(Format f);
 [[nodiscard]] const char* FormatExtension(Format f);
+[[nodiscard]] const char* FormatMuxer(Format f);
+[[nodiscard]] const char* FormatShortLabel(Format f);
 [[nodiscard]] bool WritesDirectory(Format f);
 [[nodiscard]] bool UsesKeyframeInterval(Format f);
 [[nodiscard]] bool ParseToken(const char* s, Format* out);

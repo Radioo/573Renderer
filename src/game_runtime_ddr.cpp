@@ -1,5 +1,6 @@
 #include "game_runtime_internal.h"
 
+#include "afp_boot.h"
 #include "afp_ddr.h"
 #include "game_runtime.h"
 #include "app_globals.h"
@@ -49,10 +50,7 @@ void DdrRuntime::ForceReplayMaster() {
 
 bool DdrRuntime::LoadScene(const std::string& mount_path, const std::string& ifs_path) {
     auto& state = App::Global();
-    if (g_avs.avs_fs_umount != nullptr) {
-        g_avs.avs_fs_umount("/afp/packages");
-        g_avs.avs_fs_umount("/data");
-    }
+    AfpManager::UmountPackagesAndData(g_avs);
     std::string const ddr_base = std::filesystem::path(mount_path).filename().string();
     std::string ddr_pkg = ddr_base;
     if (ddr_pkg.size() > 4 && ddr_pkg.ends_with(".ifs")) ddr_pkg.resize(ddr_pkg.size() - 4);

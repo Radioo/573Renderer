@@ -15,6 +15,8 @@ struct Row {
     const char* extension;
     bool is_dir;
     const char* label;
+    const char* muxer;
+    const char* short_label;
 };
 
 constexpr std::array<Row, kFormatCount> kTable = {{
@@ -22,37 +24,51 @@ constexpr std::array<Row, kFormatCount> kTable = {{
      .token = "avif",
      .extension = ".avif",
      .is_dir = false,
-     .label = "AVIF (image, alpha)"},
+     .label = "AVIF (image, alpha)",
+     .muxer = "avif",
+     .short_label = "AVIF"},
     {.format = Format::WebM_VP9,
      .token = "webm-vp9",
      .extension = ".webm",
      .is_dir = false,
-     .label = "WebM VP9 (video, alpha, software)"},
+     .label = "WebM VP9 (video, alpha, software)",
+     .muxer = "webm",
+     .short_label = "WebM-VP9"},
     {.format = Format::WebM_AV1,
      .token = "webm-av1",
      .extension = ".webm",
      .is_dir = false,
-     .label = "WebM AV1 (video, opaque, NVENC)"},
+     .label = "WebM AV1 (video, opaque, NVENC)",
+     .muxer = "webm",
+     .short_label = "WebM-AV1"},
     {.format = Format::WebP_Anim,
      .token = "webp",
      .extension = ".webp",
      .is_dir = false,
-     .label = "WebP (image, alpha, software) - recommended"},
+     .label = "WebP (image, alpha, software) - recommended",
+     .muxer = "webp",
+     .short_label = "WebP-Anim"},
     {.format = Format::PNG_Sequence,
      .token = "png",
      .extension = "",
      .is_dir = true,
-     .label = "PNG sequence (folder of frames, lossless)"},
+     .label = "PNG sequence (folder of frames, lossless)",
+     .muxer = "avif",
+     .short_label = "AVIF"},
     {.format = Format::MP4_H264,
      .token = "mp4",
      .extension = ".mp4",
      .is_dir = false,
-     .label = "MP4 H.264 (video, opaque, most compatible)"},
+     .label = "MP4 H.264 (video, opaque, most compatible)",
+     .muxer = "mp4",
+     .short_label = "MP4-H264"},
     {.format = Format::MP4_HEVC_Alpha,
      .token = "mp4-hevc-alpha",
      .extension = ".mp4",
      .is_dir = false,
-     .label = "MP4 HEVC alpha (video, alpha, Safari)"},
+     .label = "MP4 HEVC alpha (video, alpha, Safari)",
+     .muxer = "mp4",
+     .short_label = "MP4-HEVC-Alpha"},
 }};
 
 struct Alias {
@@ -93,6 +109,14 @@ const char* FormatToken(Format f) {
 
 const char* FormatExtension(Format f) {
     return RowOf(f).extension;
+}
+
+const char* FormatMuxer(Format f) {
+    return RowOf(f).muxer;
+}
+
+const char* FormatShortLabel(Format f) {
+    return RowOf(f).short_label;
 }
 
 bool WritesDirectory(Format f) {

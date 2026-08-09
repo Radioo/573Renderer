@@ -4,6 +4,7 @@
 #include <atomic>
 #include <chrono>
 #include <cstdint>
+#include <functional>
 #include <mutex>
 #include <optional>
 #include <string>
@@ -86,6 +87,8 @@ public:
     static constexpr std::array<uint32_t, 5> kBgPresets = LiveControls::kBgPresets;
     [[nodiscard]] LiveOverrides GetLiveOverrides() const;
     void SetLiveOverrides(LiveOverrides o);
+    void MutateLiveOverrides(const std::function<void(LiveOverrides&)>& fn);
+    void ApplyLiveOverridesDelta(const LiveOverrides& before, const LiveOverrides& after);
 
     using LiveState = LiveControls::LiveState;
     [[nodiscard]] LiveState GetLiveState() const;

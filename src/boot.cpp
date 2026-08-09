@@ -137,38 +137,37 @@ bool MountAndLoadIfs(const std::string& ifs_path, bool from_arc) {
     return Backend::Active()->LoadContent(ifs_path, from_arc);
 }
 
+namespace {
+
+void ApplyLiveOverrideCliOpts(const Cli::Options& opts) {
+    if (!opts.start_paused && !opts.filter_enabled && !opts.show_mc_names) return;
+    App::Global().MutateLiveOverrides([&opts](App::State::LiveOverrides& lo) {
+        if (opts.start_paused) lo.paused = true;
+        if (opts.filter_enabled) lo.filter_enabled = true;
+        if (opts.show_mc_names) {
+            lo.show_mc_names = true;
+            lo.mc_name_type = (opts.mc_name_type != 0) ? 1 : 0;
+        }
+    });
+}
+
+}
+
 void ApplyCliOverrides(const Cli::Options& opts) {
     if (opts.afp_speed > 0.0F && Runtime::Active().SetGlobalSpeed(g_afp, opts.afp_speed)) {
         LOG("Main", "afp global speed set to %.3f (--afp-speed)", opts.afp_speed);
     }
     if (opts.continuous_loop_mode != 0) {
-        App::State::LiveOverrides lo = App::Global().GetLiveOverrides();
-        lo.continuous_loop_mode = opts.continuous_loop_mode;
-        App::Global().SetLiveOverrides(lo);
+        App::Global().MutateLiveOverrides([&opts](App::State::LiveOverrides& lo) {
+            lo.continuous_loop_mode = opts.continuous_loop_mode;
+        });
     }
     if (opts.root_loop_mode == 0) {
         App::Global().SetRootLoopMode(App::State::RootLoopMode::Hold);
     } else if (opts.root_loop_mode == 1) {
         App::Global().SetRootLoopMode(App::State::RootLoopMode::Force);
     }
-    {
-        App::State::LiveOverrides lo = App::Global().GetLiveOverrides();
-        bool touched = false;
-        if (opts.start_paused) {
-            lo.paused = true;
-            touched = true;
-        }
-        if (opts.filter_enabled) {
-            lo.filter_enabled = true;
-            touched = true;
-        }
-        if (opts.show_mc_names) {
-            lo.show_mc_names = true;
-            lo.mc_name_type = (opts.mc_name_type != 0) ? 1 : 0;
-            touched = true;
-        }
-        if (touched) App::Global().SetLiveOverrides(lo);
-    }
+    ApplyLiveOverrideCliOpts(opts);
     auto active = App::Global().ActiveIfs();
     if (active.empty()) return;
     auto& cfg = App::Global().MutConfig(active);

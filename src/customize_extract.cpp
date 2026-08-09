@@ -1,8 +1,8 @@
 #include "customize_extract.h"
 #include "formats/ddr_arc.h"
+#include "support/folder_job.h"
 #include "support/log.h"
 
-#include <atomic>
 #include <cctype>
 #include <cstdint>
 #include <cstdlib>
@@ -10,11 +10,8 @@
 #include <filesystem>
 #include <fstream>
 #include <ios>
-#include <iterator>
-#include <mutex>
 #include <string>
 #include <system_error>
-#include <thread>
 #include <utility>
 #include <vector>
 
@@ -23,14 +20,7 @@ namespace {
 
 namespace fs = std::filesystem;
 
-std::mutex g_mu;
-Status g_status;
-std::atomic<bool> g_running{false};
-
-void Publish(const Status& s) {
-    std::scoped_lock const lk(g_mu);
-    g_status = s;
-}
+Support::FolderJob<Status> g_job;
 
 struct Mapped {
     std::string subdir;
@@ -156,12 +146,6 @@ bool MinifyPng(const std::vector<uint8_t>& in, std::vector<uint8_t>& out) {
     return true;
 }
 
-std::vector<uint8_t> ReadAll(const fs::path& p) {
-    std::ifstream f(p, std::ios::binary);
-    if (!f) return {};
-    return {std::istreambuf_iterator<char>(f), std::istreambuf_iterator<char>()};
-}
-
 bool WriteAll(const fs::path& p, const uint8_t* data, size_t len) {
     std::ofstream o(p, std::ios::binary | std::ios::trunc);
     if (!o) return false;
@@ -170,7 +154,7 @@ bool WriteAll(const fs::path& p, const uint8_t* data, size_t len) {
 }
 
 std::vector<uint8_t> ExtractPngFromArc(const fs::path& arc) {
-    std::vector<uint8_t> bytes = ReadAll(arc);
+    std::vector<uint8_t> bytes = Support::ReadFileBytes(arc);
     if (bytes.empty()) return {};
     DdrArc::Toc toc;
     if (!DdrArc::ParseToc(bytes, toc) || toc.entries.empty()) return {};
@@ -197,34 +181,29 @@ struct Job {
 std::vector<Job> CollectJobs(const fs::path& root, const fs::path& out_root, Status& st,
                              long long& scanned) {
     std::vector<Job> jobs;
-    std::error_code ec;
-    for (fs::recursive_directory_iterator
-             it(root, fs::directory_options::skip_permission_denied, ec),
-         end;
-         it != end; it.increment(ec)) {
-        if (ec) {
-            ec.clear();
-            continue;
-        }
-        if (((++scanned) & 511) == 0) {
+    scanned = Support::ScanFolder(
+        root,
+        [&](const fs::path& cur) {
             st.done = (int)jobs.size();
-            st.current = it->path().lexically_relative(root).string();
-            Publish(st);
-        }
-        if (it->is_directory(ec)) {
-            if (it->path().filename() == "customize_assets") it.disable_recursion_pending();
-            continue;
-        }
-        if (!it->is_regular_file(ec)) continue;
-        std::string const fn = it->path().filename().string();
-        std::string ext = it->path().extension().string();
-        for (char& c : ext)
-            c = (char)std::tolower((unsigned char)c);
-        if (ext != ".arc") continue;
-        Mapped m;
-        if (!ParseAssetName(fn.substr(0, fn.size() - 4), m)) continue;
-        jobs.push_back({.arc = it->path(), .dst = out_root / m.subdir / m.filename});
-    }
+            st.current = cur.lexically_relative(root).string();
+            g_job.Publish(st);
+        },
+        [&](auto& it) {
+            std::error_code ec;
+            if (it->is_directory(ec)) {
+                if (it->path().filename() == "customize_assets") it.disable_recursion_pending();
+                return;
+            }
+            if (!it->is_regular_file(ec)) return;
+            std::string const fn = it->path().filename().string();
+            std::string ext = it->path().extension().string();
+            for (char& c : ext)
+                c = (char)std::tolower((unsigned char)c);
+            if (ext != ".arc") return;
+            Mapped m;
+            if (!ParseAssetName(fn.substr(0, fn.size() - 4), m)) return;
+            jobs.push_back({.arc = it->path(), .dst = out_root / m.subdir / m.filename});
+        });
     return jobs;
 }
 
@@ -253,69 +232,64 @@ void Run(std::string folder) {
     Status st;
     st.running = true;
 
-    std::string clean = std::move(folder);
-    while (!clean.empty() && (clean.back() == '/' || clean.back() == '\\'))
-        clean.pop_back();
+    std::string const clean = Support::StripTrailingSlashes(std::move(folder));
     fs::path const root(clean);
     fs::path const out_root = root / "customize_assets";
     st.output_dir = out_root.string();
-    Publish(st);
+    g_job.Publish(st);
 
     std::error_code ec;
     if (clean.empty() || !fs::is_directory(root, ec)) {
         st.running = false;
         st.finished = true;
         st.error = "not a folder: " + clean;
-        Publish(st);
+        g_job.Publish(st);
         LOG("Customize", "abort: %s", st.error.c_str());
-        g_running = false;
+        g_job.Finish();
         return;
     }
 
     st.current = "Scanning for customize .arc files...";
-    Publish(st);
+    g_job.Publish(st);
 
     long long scanned = 0;
     std::vector<Job> const jobs = CollectJobs(root, out_root, st, scanned);
     st.total = (int)jobs.size();
     st.done = 0;
     st.current.clear();
-    Publish(st);
+    g_job.Publish(st);
     LOG("Customize", "scanned %lld entries, found %d customize .arc under '%s' -> '%s'", scanned,
         st.total, clean.c_str(), out_root.string().c_str());
 
     for (const Job& j : jobs) {
         st.current = j.arc.filename().string();
-        Publish(st);
+        g_job.Publish(st);
         ProcessJob(j, st);
         st.done++;
-        Publish(st);
+        g_job.Publish(st);
     }
 
     st.running = false;
     st.finished = true;
     st.current.clear();
-    Publish(st);
+    g_job.Publish(st);
     LOG("Customize", "done: %d written (%d optimized, %d failed), %lld -> %lld bytes -> %s",
         st.written, st.optimized, st.failed, st.bytes_in, st.bytes_out, out_root.string().c_str());
-    g_running = false;
+    g_job.Finish();
 }
 
 }
 
 void Start(const std::string& folder) {
-    bool expected = false;
-    if (!g_running.compare_exchange_strong(expected, true)) return;
-    std::thread(Run, folder).detach();
+    g_job.Start(folder, Run);
 }
 
 bool IsRunning() {
-    return g_running.load();
+    return g_job.IsRunning();
 }
 
 Status GetStatus() {
-    std::scoped_lock const lk(g_mu);
-    return g_status;
+    return g_job.Get();
 }
 
 }

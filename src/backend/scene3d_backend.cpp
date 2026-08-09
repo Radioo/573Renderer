@@ -37,8 +37,8 @@ public:
 };
 
 void ScanScenes(const std::string& game_dir) noexcept {
+    auto& st = App::Global();
     try {
-        auto& st = App::Global();
         std::vector<App::State::IfsEntry> out;
         std::error_code ec;
         const std::filesystem::path root(game_dir);
@@ -59,11 +59,11 @@ void ScanScenes(const std::string& game_dir) noexcept {
         }
         LOG("Boot", "Found %zu renderable packages under %s", out.size(), game_dir.c_str());
         st.SetAvailableIfs(std::move(out));
-        st.SetIfsScanStatus("");
-        st.SetIfsScanning(false);
     } catch (...) {
         LOG("Boot", "3D scene scan thread: unexpected exception");
     }
+    st.SetIfsScanStatus("");
+    st.SetIfsScanning(false);
 }
 
 class Scene3dBackend final : public IBackend {

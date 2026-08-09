@@ -282,6 +282,39 @@ folders, and the move would churn 40+ files plus every src/ path in these
 docs for zero behavioral value. Do it, if ever, as a standalone mechanical
 commit with a full doc-path sweep.
 
+## The qpro slice (src/qpro/ is shim-free)
+
+The qpro cluster no longer reads a single process global. Every function in
+`src/qpro/` that touches the engine takes `EngineSession& es` (and
+`D3D9State& d3d` where it renders) as its leading parameters, right through
+the public surface: `Run`, the six `*One` debug drivers, `ClipOne`,
+`DumpIfs`, the three `*Composite` dumpers, and the `Render*Composite` /
+`ProbeBackNativeFps` / `RenderBackRealtime` entry points. The globals are
+now supplied ONLY at the two boundaries that own them - `main.cpp`'s qpro
+CLI one-shots and `AfpFamilyBackend`'s qpro command - both passing
+`g_engine, g_gpu.d3d`. No file under `src/qpro/` includes app_globals.h
+any more, which is what makes the cluster constructible against a test
+session.
+
+Method, and why it was safe to do mechanically: `g_afp` is literally a
+reference to `g_engine.afp` (app_globals.h), so `g_afp` -> `es.afp` is a
+rename, not a semantic change. The conversion was driven by DELETING the
+app_globals.h include first, which turns every remaining site into a
+compile error and lets the compiler enumerate the work - then iterating
+"add the parameter to any function whose body now names `es`/`d3d`" and
+"pass it at every call site" to a fixpoint (three rounds; 33 functions,
+plus the header declarations). Two classes of site the automation could
+not see and that had to be fixed by hand: multi-line signatures, and
+functions that only needed `d3d` once a callee had gained it.
+
+Verification: the 20-file qpro byte-compare (QPRO_LIMIT=2 over all six
+categories at 520x704) is byte-identical before and after, plus the
+14-case render-regression net, 272 tests, and a clean whole-tree tidy.
+
+What this leaves: the remaining shim readers are the afp_d3d9_* TUs
+(g_gpu, the largest single block), the DDR TUs, boot/render_loop and the
+GUI. Those are separate slices.
+
 Deferred deliberately (each is a seam with NO consumer today; cutting them
 now would be speculative generality):
 - The P16b state-block migration (IfsConfig / LiveState / AFP telemetry
@@ -289,7 +322,8 @@ now would be speculative generality):
   first non-AFP backend lands - its real needs should shape the split, and
   today every reader of that state is an AFP-registered panel already gated
   by the P17 registry, so the generality would be speculative.
-- qpro RenderService seam: revisit with the multi-package "Scene designer"
-  work.
+- qpro RenderService seam (an object owning the mount/slot lifetime rather
+  than free functions taking `es`): the parameter threading above was the
+  prerequisite; revisit with the multi-package "Scene designer" work.
 - Formal per-panel view-model structs: panels are already thin; add VMs when
   a GUI test harness exists to consume them.

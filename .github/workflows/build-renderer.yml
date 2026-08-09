@@ -35,7 +35,7 @@ jobs:
             exe: 573Renderer.exe
             pdb: 573Renderer.pdb
             artifact: renderer-win64
-            run_tidy: true
+            tidy: always
           - arch: x86
             triplet: x86-windows-static
             configure_preset: ci32
@@ -44,7 +44,7 @@ jobs:
             exe: 573Renderer32.exe
             pdb: 573Renderer32.pdb
             artifact: renderer-win32
-            run_tidy: false
+            tidy: push
 
     env:
       VCPKG_BINARY_SOURCES: "clear;files,${{ github.workspace }}/vcpkg_cache,readwrite"
@@ -107,17 +107,19 @@ jobs:
         run: ctest --test-dir ${{ matrix.build_dir }} -LE local_dll --output-on-failure
 
       - name: Cache clang-tidy results
-        if: matrix.run_tidy
+        if: matrix.tidy == 'always' || (matrix.tidy == 'push' && github.event_name == 'push')
         uses: actions/cache@v4
         with:
           path: .tidycache
-          key: tidy-cache-${{ runner.os }}-${{ hashFiles('.clang-tidy', 'tools/ci/run_tidy.py') }}-${{ github.sha }}
+          key: tidy-cache-${{ runner.os }}-${{ matrix.arch }}-${{ hashFiles('.clang-tidy', 'src/**/.clang-tidy', 'tests/**/.clang-tidy', 'tools/ci/run_tidy.py') }}-${{ github.sha }}
           restore-keys: |
-            tidy-cache-${{ runner.os }}-${{ hashFiles('.clang-tidy', 'tools/ci/run_tidy.py') }}-
-            tidy-cache-${{ runner.os }}-
+            tidy-cache-${{ runner.os }}-${{ matrix.arch }}-${{ hashFiles('.clang-tidy', 'src/**/.clang-tidy', 'tests/**/.clang-tidy', 'tools/ci/run_tidy.py') }}-
+            tidy-cache-${{ runner.os }}-${{ matrix.arch }}-
 
       - name: clang-tidy (cached, whole tree)
-        if: matrix.run_tidy
+        if: matrix.tidy == 'always' || (matrix.tidy == 'push' && github.event_name == 'push')
+        env:
+          TIDY_BUILD_DIR: ${{ matrix.build_dir }}
         run: |
           pip install clang-tidy==21.1.6
           python tools/ci/run_tidy.py
@@ -151,6 +153,70 @@ jobs:
             bin/${{ matrix.pdb }}
           if-no-files-found: error
           retention-days: 30
+
+  asan:
+    name: ASan (x64 pure-logic tests)
+    runs-on: windows-2022
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      VCPKG_BINARY_SOURCES: "clear;files,${{ github.workspace }}/vcpkg_cache,readwrite"
+      VCPKG_DEFAULT_TRIPLET: x64-windows-static
+      VCPKG_FEATURE_FLAGS: "manifests,binarycaching"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Resolve vcpkg revision
+        id: vcpkg-rev
+        run: |
+          $sha = (git -C vendor/vcpkg rev-parse HEAD).Trim()
+          "sha=$sha" >> $env:GITHUB_OUTPUT
+
+      - name: Enable MSVC dev cmd (x64)
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Cache vcpkg.exe
+        id: cache-vcpkg-bin
+        uses: actions/cache@v4
+        with:
+          path: vendor/vcpkg/vcpkg.exe
+          key: vcpkg-bin-${{ runner.os }}-${{ steps.vcpkg-rev.outputs.sha }}-${{ hashFiles('vendor/vcpkg/bootstrap-vcpkg.bat', 'vendor/vcpkg/scripts/bootstrap.ps1') }}
+
+      - name: Bootstrap vcpkg
+        if: steps.cache-vcpkg-bin.outputs.cache-hit != 'true'
+        run: .\vendor\vcpkg\bootstrap-vcpkg.bat -disableMetrics
+
+      - name: Cache vcpkg binary archives
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/vcpkg_cache
+          key: vcpkg-archives-${{ runner.os }}-x64-windows-static-${{ steps.vcpkg-rev.outputs.sha }}-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json') }}
+          restore-keys: |
+            vcpkg-archives-${{ runner.os }}-x64-windows-static-${{ steps.vcpkg-rev.outputs.sha }}-
+            vcpkg-archives-${{ runner.os }}-x64-windows-static-
+
+      - name: Configure (ASan)
+        run: cmake --preset asan
+
+      - name: Build pure-logic test targets (ASan)
+        run: cmake --build --preset asan --target formats_tests loop_tests render_tests state_tests settings_tests cli_tests support_tests media_format_tests
+
+      - name: Test (ASan)
+        run: |
+          $exes = "formats_tests", "loop_tests", "render_tests", "state_tests",
+                  "settings_tests", "cli_tests", "support_tests", "media_format_tests"
+          foreach ($e in $exes) {
+            Write-Host "=== $e (ASan) ==="
+            & "build-asan\$e.exe"
+            if ($LASTEXITCODE -ne 0) { throw "$e failed under ASan (exit $LASTEXITCODE)" }
+          }
 
   release:
     name: Release (x64 + x86)

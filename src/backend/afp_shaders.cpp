@@ -2,13 +2,38 @@
 
 #include "gpu_context.h"
 #include "support/log.h"
+#include "support/module_handle.h"
 
 #include <d3d9.h>
+#include <utility>
 #include <windows.h>
 
 namespace Render {
 
 namespace {
+
+using D3DXAssembleShaderFn = HRESULT(WINAPI*)(LPCSTR, UINT, const void*, void*, DWORD, void**,
+                                              void**);
+
+D3DXAssembleShaderFn ResolveD3dxAssembler() {
+    static Support::ModuleHandle s_d3dx_mod;
+    static D3DXAssembleShaderFn s_assemble = nullptr;
+    static bool s_resolved = false;
+    if (s_resolved) return s_assemble;
+    s_resolved = true;
+    const char* d3dx_dlls[] = {"d3dx9_43.dll",  "d3dx9_42.dll",  "d3dx9_41.dll",
+                               "d3dx9d_43.dll", "d3dx9d_42.dll", "d3dx9d_41.dll"};
+    for (const char* n : d3dx_dlls) {
+        Support::ModuleHandle m = Support::LoadModule(n);
+        if (m == nullptr) continue;
+        s_assemble = (D3DXAssembleShaderFn)GetProcAddress(m.get(), "D3DXAssembleShader");
+        if (s_assemble != nullptr) {
+            s_d3dx_mod = std::move(m);
+            break;
+        }
+    }
+    return s_assemble;
+}
 
 void CreateAfpVertexShader(IDirect3DDevice9* device, GpuContext& gpu) {
     HRESULT hr = 0;
@@ -20,22 +45,7 @@ void CreateAfpVertexShader(IDirect3DDevice9* device, GpuContext& gpu) {
                                     "mul oD0, v1, c4\n"
                                     "mov oT0.xy, v2\n";
 
-    using D3DXAssembleShaderFn =
-        HRESULT(WINAPI*)(LPCSTR, UINT, const void*, void*, DWORD, void**, void**);
-
-    D3DXAssembleShaderFn pD3DXAssembleShader = nullptr;
-
-    const char* d3dx_dlls[] = {"d3dx9_43.dll",  "d3dx9_42.dll",  "d3dx9_41.dll", "d3dx9d_43.dll",
-                               "d3dx9d_42.dll", "d3dx9d_41.dll", nullptr};
-    HMODULE d3dx = nullptr;
-    for (int i = 0; d3dx_dlls[i] != nullptr; i++) {
-        d3dx = LoadLibraryA(d3dx_dlls[i]);
-        if (d3dx != nullptr) break;
-    }
-    if (d3dx != nullptr) {
-        pD3DXAssembleShader = (D3DXAssembleShaderFn)GetProcAddress(d3dx, "D3DXAssembleShader");
-    }
-
+    D3DXAssembleShaderFn pD3DXAssembleShader = ResolveD3dxAssembler();
     if (pD3DXAssembleShader != nullptr) {
         void* blob = nullptr;
         void* errors = nullptr;
@@ -114,11 +124,22 @@ using D3DXCompileShaderFn = HRESULT(WINAPI*)(LPCSTR, UINT, const void*, void*, L
                                              DWORD, void**, void**, void**);
 
 D3DXCompileShaderFn ResolveD3dxCompiler() {
-    HMODULE d3dx = LoadLibraryA("d3dx9_43.dll");
-    if (d3dx == nullptr) d3dx = LoadLibraryA("d3dx9_42.dll");
-    if (d3dx == nullptr) d3dx = LoadLibraryA("d3dx9_41.dll");
-    return (d3dx != nullptr) ? (D3DXCompileShaderFn)GetProcAddress(d3dx, "D3DXCompileShader")
-                             : nullptr;
+    static Support::ModuleHandle s_d3dx_mod;
+    static D3DXCompileShaderFn s_compile = nullptr;
+    static bool s_resolved = false;
+    if (s_resolved) return s_compile;
+    s_resolved = true;
+    const char* d3dx_dlls[] = {"d3dx9_43.dll", "d3dx9_42.dll", "d3dx9_41.dll"};
+    for (const char* n : d3dx_dlls) {
+        Support::ModuleHandle m = Support::LoadModule(n);
+        if (m == nullptr) continue;
+        s_compile = (D3DXCompileShaderFn)GetProcAddress(m.get(), "D3DXCompileShader");
+        if (s_compile != nullptr) {
+            s_d3dx_mod = std::move(m);
+            break;
+        }
+    }
+    return s_compile;
 }
 
 void CompilePs2b(D3DXCompileShaderFn pCompile, IDirect3DDevice9* device, const char* src, UINT len,

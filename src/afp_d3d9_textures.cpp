@@ -4,6 +4,7 @@
 #include <cstdint>
 #include "formats/dxt_decode.h"
 #include "render_backend.h"
+#include "support/com_ptr.h"
 #include "support/log.h"
 #include <algorithm>
 #include <cstdio>
@@ -65,24 +66,11 @@ int __cdecl TexCreate(void* ctx, unsigned int width, unsigned int height) {
 namespace {
 
 struct WicDecodeTarget {
-    IWICImagingFactory* factory = nullptr;
-    IWICBitmapDecoder* decoder = nullptr;
-    IWICBitmapFrameDecode* frame = nullptr;
-    IWICFormatConverter* conv = nullptr;
-    bool com_inited = false;
-
-    WicDecodeTarget() = default;
-    WicDecodeTarget(const WicDecodeTarget&) = delete;
-    WicDecodeTarget& operator=(const WicDecodeTarget&) = delete;
-    WicDecodeTarget(WicDecodeTarget&&) = delete;
-    WicDecodeTarget& operator=(WicDecodeTarget&&) = delete;
-    ~WicDecodeTarget() {
-        if (conv != nullptr) conv->Release();
-        if (frame != nullptr) frame->Release();
-        if (decoder != nullptr) decoder->Release();
-        if (factory != nullptr) factory->Release();
-        if (com_inited) CoUninitialize();
-    }
+    ComInit com;
+    ComPtr<IWICImagingFactory> factory;
+    ComPtr<IWICBitmapDecoder> decoder;
+    ComPtr<IWICBitmapFrameDecode> frame;
+    ComPtr<IWICFormatConverter> conv;
 };
 
 std::wstring WidenUtf8Path(const std::string& path) {
@@ -133,7 +121,6 @@ int LoadExternalImageSlot(const std::string& path, int& out_w, int& out_h) {
     }
 
     WicDecodeTarget t;
-    t.com_inited = SUCCEEDED(CoInitializeEx(nullptr, COINIT_MULTITHREADED));
     std::vector<uint8_t> bgra;
     UINT w = 0;
     UINT h = 0;
@@ -302,7 +289,8 @@ void __cdecl TexDestroy(unsigned int tex_id) {
 namespace {
 
 int FormatBpp(unsigned int format, bool& is_dxt) {
-    is_dxt = false;
+    is_dxt = Dxt::IsDxtFormat(format);
+    if (is_dxt) return 1;
     switch (format) {
     case 0x01:
     case 0x1E:
@@ -311,12 +299,6 @@ int FormatBpp(unsigned int format, bool& is_dxt) {
         return 3;
     case 0x1F:
         return 2;
-    case 0x18:
-    case 0x19:
-    case 0x1A:
-    case 0x1B:
-        is_dxt = true;
-        return 1;
     case 0x10:
     case 0x20:
     default:

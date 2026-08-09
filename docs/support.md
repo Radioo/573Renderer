@@ -30,15 +30,51 @@ truly unrecoverable construction failures; SEH stays isolated in
 render_seh (see docs/boot_and_render_loop.md) and never crosses into
 C++ unwinding.
 
+Adoption state: the FILE-LEVEL entry points of `formats/ddr_arc`
+(`ReadToc(path)`, `ExtractFirstIfs(path, out_name)`) return
+`Expected<..., std::string>` - `ExtractFirstIfs` previously returned an
+empty vector for BOTH "file has no .ifs" and "read/decompress failed",
+which a caller could not distinguish. The span-level parsers across
+`formats/` keep the majority convention (`bool` + out-param + `std::string&
+err` where failure has interesting detail); new file-level fallible APIs
+should prefer `Expected`.
+
 ## ComPtr (com_ptr.h)
 
-Minimal move-only RAII guard for D3D9 COM interfaces - not a full CComPtr,
+Minimal move-only RAII guard for COM interfaces - not a full CComPtr,
 just leak prevention. The one contract worth knowing: `operator&()` RESETS
 (releases) before returning `&ptr`, so it is safe to pass `&comptr` to a
-D3D9 create call that overwrites the slot; `GetAddressOf()` does NOT reset,
+create call that overwrites the slot; `GetAddressOf()` does NOT reset,
 so use it only when the slot is known null. `Detach()` releases ownership
 without releasing the interface (for handing a raw pointer to code that
 takes ownership).
+
+The header also carries `ComInit`, a non-copyable guard that calls
+`CoInitializeEx(MULTITHREADED)` on construction and `CoUninitialize` on
+destruction only when its own init succeeded. The WIC helper structs
+(`WicPngTarget` in media_sink.cpp and qpro_extract.cpp, `WicDecodeTarget`
+in afp_d3d9_textures.cpp) are plain aggregates of `ComInit` + `ComPtr`
+members: declaration order puts `ComInit` FIRST so reverse-order member
+destruction releases every interface before COM shuts down. Those structs
+previously hand-rolled the rule-of-five and per-member Release chains;
+the member ordering is the entire contract now.
+
+## FolderJob (folder_job.h)
+
+The shared runner for background folder-batch tools (the .arc extractor and
+the customize-asset extractor were byte-identical on this scaffolding
+before it existed). `FolderJob<StatusT>` owns the mutex-guarded status
+snapshot (`Publish`/`Get`), the start-once atomic (`Start` detaches a
+thread only when not already running; `Finish` clears the flag - the run
+function must call it on EVERY exit path), and `IsRunning`. Free helpers:
+`ReadFileBytes` (whole-file read, empty on failure), `StripTrailingSlashes`
+(input-folder normalization), and `ScanFolder(root, progress, entry)` - the
+recursive walk with skip_permission_denied, per-entry error clearing, and a
+progress callback every `kScanProgressEvery` (512) entries so the GUI never
+looks frozen mid-scan (the progress rule in CLAUDE.md). The entry callback
+receives the ITERATOR, not the path, so a consumer can call
+`disable_recursion_pending()` to prune (the customize extractor prunes its
+own output dir).
 
 ## DllLoader (dll_loader.h / .cpp)
 

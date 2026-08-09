@@ -1,6 +1,6 @@
 #pragma once
 
-#include "qpro_dll.h"
+#include "qpro/qpro_dll.h"
 
 #include <cstdint>
 #include <string>
@@ -27,6 +27,7 @@ struct ScanResult {
 
 void RunScan(const std::string& game_dir);
 void MarkScanRunning();
+void PublishScanResult(std::vector<ScanPart> parts, std::string error);
 ScanResult GetScanResult();
 
 using PartSelection = QproModel::PartSelection;

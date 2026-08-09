@@ -43,14 +43,16 @@ int KeyframeGop(const Params& p, int floor_frames) {
     return gop < floor_frames ? floor_frames : gop;
 }
 
-bool OpenLibaom(AVCodecContext*& out_ctx, const AVCodec* codec, const Params& p, int out_w,
-                int out_h, AVPixelFormat pix_fmt, bool global_header, std::string& err) {
+namespace {
+
+bool BeginCodecContext(AVCodecContext*& out_ctx, const AVCodec* codec, const Params& p, int out_w,
+                       int out_h, AVPixelFormat pix_fmt, bool global_header, const char* name,
+                       std::string& err) {
     out_ctx = avcodec_alloc_context3(codec);
     if (out_ctx == nullptr) {
-        err = "avcodec_alloc_context3(libaom)";
+        err = std::string("avcodec_alloc_context3(") + name + ")";
         return false;
     }
-
     out_ctx->width = out_w;
     out_ctx->height = out_h;
     out_ctx->pix_fmt = pix_fmt;
@@ -58,6 +60,35 @@ bool OpenLibaom(AVCodecContext*& out_ctx, const AVCodec* codec, const Params& p,
     out_ctx->framerate = AVRational{p.fps, 1};
     if (global_header) out_ctx->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
     SetSrgbColorMetadata(out_ctx);
+    return true;
+}
+
+bool FinishCodecOpen(AVCodecContext*& ctx, const AVCodec* codec, const char* name,
+                     std::string& err) {
+    int const rc = avcodec_open2(ctx, codec, nullptr);
+    if (rc < 0) {
+        err = std::string("avcodec_open2(") + name + "): " + AvErr(rc);
+        avcodec_free_context(&ctx);
+        return false;
+    }
+    return true;
+}
+
+void SetNvencConstQp(AVCodecContext* ctx, const Params& p, int lo, int hi) {
+    av_opt_set(ctx->priv_data, "rc", "constqp", 0);
+    av_opt_set_int(ctx->priv_data, "qp", QualityToCRF(p.quality, lo, hi), 0);
+    av_opt_set(ctx->priv_data, "preset", "p5", 0);
+    av_opt_set(ctx->priv_data, "tune", "hq", 0);
+}
+
+}
+
+bool OpenLibaom(AVCodecContext*& out_ctx, const AVCodec* codec, const Params& p, int out_w,
+                int out_h, AVPixelFormat pix_fmt, bool global_header, std::string& err) {
+    if (!BeginCodecContext(out_ctx, codec, p, out_w, out_h, pix_fmt, global_header, "libaom-av1",
+                           err)) {
+        return false;
+    }
 
     int const crf = QualityToCRF(p.quality, 4, 40);
     av_opt_set_int(out_ctx->priv_data, "crf", crf, 0);
@@ -78,65 +109,30 @@ bool OpenLibaom(AVCodecContext*& out_ctx, const AVCodec* codec, const Params& p,
     av_opt_set_int(out_ctx->priv_data, "tile-rows", tile_log2(out_h), 0);
     av_opt_set_int(out_ctx->priv_data, "threads", 16, 0);
 
-    int const rc = avcodec_open2(out_ctx, codec, nullptr);
-    if (rc < 0) {
-        err = "avcodec_open2(libaom-av1): " + AvErr(rc);
-        avcodec_free_context(&out_ctx);
-        return false;
-    }
-    return true;
+    return FinishCodecOpen(out_ctx, codec, "libaom-av1", err);
 }
 
 bool OpenAv1Nvenc(AVCodecContext*& out_ctx, const AVCodec* codec, const Params& p, int out_w,
                   int out_h, bool global_header, std::string& err) {
-    out_ctx = avcodec_alloc_context3(codec);
-    if (out_ctx == nullptr) {
-        err = "avcodec_alloc_context3(nvenc)";
+    if (!BeginCodecContext(out_ctx, codec, p, out_w, out_h, AV_PIX_FMT_YUV420P, global_header,
+                           "av1_nvenc", err)) {
         return false;
     }
 
-    out_ctx->width = out_w;
-    out_ctx->height = out_h;
-    out_ctx->pix_fmt = AV_PIX_FMT_YUV420P;
-    out_ctx->time_base = AVRational{1, p.fps};
-    out_ctx->framerate = AVRational{p.fps, 1};
-    if (global_header) out_ctx->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
-    SetSrgbColorMetadata(out_ctx);
-
-    av_opt_set(out_ctx->priv_data, "rc", "constqp", 0);
-    int const cqp = QualityToCRF(p.quality, 10, 40);
-    av_opt_set_int(out_ctx->priv_data, "qp", cqp, 0);
-    av_opt_set(out_ctx->priv_data, "preset", "p5", 0);
-    av_opt_set(out_ctx->priv_data, "tune", "hq", 0);
-
+    SetNvencConstQp(out_ctx, p, 10, 40);
     out_ctx->max_b_frames = 0;
     out_ctx->gop_size = KeyframeGop(p, 2);
     out_ctx->keyint_min = out_ctx->gop_size;
 
-    int const rc = avcodec_open2(out_ctx, codec, nullptr);
-    if (rc < 0) {
-        err = "avcodec_open2(av1_nvenc): " + AvErr(rc);
-        avcodec_free_context(&out_ctx);
-        return false;
-    }
-    return true;
+    return FinishCodecOpen(out_ctx, codec, "av1_nvenc", err);
 }
 
 bool OpenLibwebpAnim(AVCodecContext*& out_ctx, const AVCodec* codec, const Params& p, int out_w,
                      int out_h, bool global_header, std::string& err) {
-    out_ctx = avcodec_alloc_context3(codec);
-    if (out_ctx == nullptr) {
-        err = "avcodec_alloc_context3(libwebp_anim)";
+    if (!BeginCodecContext(out_ctx, codec, p, out_w, out_h, AV_PIX_FMT_YUVA420P, global_header,
+                           "libwebp_anim", err)) {
         return false;
     }
-
-    out_ctx->width = out_w;
-    out_ctx->height = out_h;
-    out_ctx->pix_fmt = AV_PIX_FMT_YUVA420P;
-    out_ctx->time_base = AVRational{1, p.fps};
-    out_ctx->framerate = AVRational{p.fps, 1};
-    if (global_header) out_ctx->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
-    SetSrgbColorMetadata(out_ctx);
 
     int const q = std::clamp(p.quality, 0, 100);
     av_opt_set_int(out_ctx->priv_data, "quality", q, 0);
@@ -145,30 +141,15 @@ bool OpenLibwebpAnim(AVCodecContext*& out_ctx, const AVCodec* codec, const Param
 
     out_ctx->thread_count = 0;
 
-    int const rc = avcodec_open2(out_ctx, codec, nullptr);
-    if (rc < 0) {
-        err = "avcodec_open2(libwebp_anim): " + AvErr(rc);
-        avcodec_free_context(&out_ctx);
-        return false;
-    }
-    return true;
+    return FinishCodecOpen(out_ctx, codec, "libwebp_anim", err);
 }
 
 bool OpenLibvpxVp9(AVCodecContext*& out_ctx, const AVCodec* codec, const Params& p, int out_w,
                    int out_h, bool global_header, std::string& err) {
-    out_ctx = avcodec_alloc_context3(codec);
-    if (out_ctx == nullptr) {
-        err = "avcodec_alloc_context3(libvpx)";
+    if (!BeginCodecContext(out_ctx, codec, p, out_w, out_h, AV_PIX_FMT_YUVA420P, global_header,
+                           "libvpx-vp9", err)) {
         return false;
     }
-
-    out_ctx->width = out_w;
-    out_ctx->height = out_h;
-    out_ctx->pix_fmt = AV_PIX_FMT_YUVA420P;
-    out_ctx->time_base = AVRational{1, p.fps};
-    out_ctx->framerate = AVRational{p.fps, 1};
-    if (global_header) out_ctx->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
-    SetSrgbColorMetadata(out_ctx);
 
     int const crf = QualityToCRF(p.quality, 4, 50);
     av_opt_set_int(out_ctx->priv_data, "crf", crf, 0);
@@ -182,65 +163,30 @@ bool OpenLibvpxVp9(AVCodecContext*& out_ctx, const AVCodec* codec, const Params&
     out_ctx->gop_size = KeyframeGop(p, 1);
     out_ctx->keyint_min = out_ctx->gop_size;
 
-    int const rc = avcodec_open2(out_ctx, codec, nullptr);
-    if (rc < 0) {
-        err = "avcodec_open2(libvpx-vp9): " + AvErr(rc);
-        avcodec_free_context(&out_ctx);
-        return false;
-    }
-    return true;
+    return FinishCodecOpen(out_ctx, codec, "libvpx-vp9", err);
 }
 
 bool OpenH264Nvenc(AVCodecContext*& out_ctx, const AVCodec* codec, const Params& p, int out_w,
                    int out_h, bool global_header, std::string& err) {
-    out_ctx = avcodec_alloc_context3(codec);
-    if (out_ctx == nullptr) {
-        err = "avcodec_alloc_context3(h264_nvenc)";
+    if (!BeginCodecContext(out_ctx, codec, p, out_w, out_h, AV_PIX_FMT_YUV420P, global_header,
+                           "h264_nvenc", err)) {
         return false;
     }
 
-    out_ctx->width = out_w;
-    out_ctx->height = out_h;
-    out_ctx->pix_fmt = AV_PIX_FMT_YUV420P;
-    out_ctx->time_base = AVRational{1, p.fps};
-    out_ctx->framerate = AVRational{p.fps, 1};
-    if (global_header) out_ctx->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
-    SetSrgbColorMetadata(out_ctx);
-
-    av_opt_set(out_ctx->priv_data, "rc", "constqp", 0);
-    int const cqp = QualityToCRF(p.quality, 18, 38);
-    av_opt_set_int(out_ctx->priv_data, "qp", cqp, 0);
-    av_opt_set(out_ctx->priv_data, "preset", "p5", 0);
-    av_opt_set(out_ctx->priv_data, "tune", "hq", 0);
+    SetNvencConstQp(out_ctx, p, 18, 38);
     av_opt_set(out_ctx->priv_data, "profile", "high", 0);
-
     out_ctx->gop_size = KeyframeGop(p, 1);
     out_ctx->keyint_min = out_ctx->gop_size;
 
-    int const rc = avcodec_open2(out_ctx, codec, nullptr);
-    if (rc < 0) {
-        err = "avcodec_open2(h264_nvenc): " + AvErr(rc);
-        avcodec_free_context(&out_ctx);
-        return false;
-    }
-    return true;
+    return FinishCodecOpen(out_ctx, codec, "h264_nvenc", err);
 }
 
 bool OpenLibx264(AVCodecContext*& out_ctx, const AVCodec* codec, const Params& p, int out_w,
                  int out_h, bool global_header, std::string& err) {
-    out_ctx = avcodec_alloc_context3(codec);
-    if (out_ctx == nullptr) {
-        err = "avcodec_alloc_context3(libx264)";
+    if (!BeginCodecContext(out_ctx, codec, p, out_w, out_h, AV_PIX_FMT_YUV420P, global_header,
+                           "libx264", err)) {
         return false;
     }
-
-    out_ctx->width = out_w;
-    out_ctx->height = out_h;
-    out_ctx->pix_fmt = AV_PIX_FMT_YUV420P;
-    out_ctx->time_base = AVRational{1, p.fps};
-    out_ctx->framerate = AVRational{p.fps, 1};
-    if (global_header) out_ctx->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
-    SetSrgbColorMetadata(out_ctx);
 
     int const crf = QualityToCRF(p.quality, 16, 34);
     av_opt_set_int(out_ctx->priv_data, "crf", crf, 0);
@@ -250,31 +196,16 @@ bool OpenLibx264(AVCodecContext*& out_ctx, const AVCodec* codec, const Params& p
     out_ctx->keyint_min = out_ctx->gop_size;
     out_ctx->thread_count = 0;
 
-    int const rc = avcodec_open2(out_ctx, codec, nullptr);
-    if (rc < 0) {
-        err = "avcodec_open2(libx264): " + AvErr(rc);
-        avcodec_free_context(&out_ctx);
-        return false;
-    }
-    return true;
+    return FinishCodecOpen(out_ctx, codec, "libx264", err);
 }
 
 bool OpenLibx265Alpha(AVCodecContext*& out_ctx, const AVCodec* codec, const Params& p, int out_w,
                       int out_h, bool global_header, std::string& err) {
-    out_ctx = avcodec_alloc_context3(codec);
-    if (out_ctx == nullptr) {
-        err = "avcodec_alloc_context3(libx265)";
+    if (!BeginCodecContext(out_ctx, codec, p, out_w, out_h, AV_PIX_FMT_YUVA420P, global_header,
+                           "libx265-alpha", err)) {
         return false;
     }
-
-    out_ctx->width = out_w;
-    out_ctx->height = out_h;
-    out_ctx->pix_fmt = AV_PIX_FMT_YUVA420P;
-    out_ctx->time_base = AVRational{1, p.fps};
-    out_ctx->framerate = AVRational{p.fps, 1};
     out_ctx->codec_tag = MKTAG('h', 'v', 'c', '1');
-    if (global_header) out_ctx->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
-    SetSrgbColorMetadata(out_ctx);
 
     int const crf = QualityToCRF(p.quality, 16, 34);
     char x265p[128];
@@ -285,13 +216,7 @@ bool OpenLibx265Alpha(AVCodecContext*& out_ctx, const AVCodec* codec, const Para
     out_ctx->keyint_min = out_ctx->gop_size;
     out_ctx->thread_count = 0;
 
-    int const rc = avcodec_open2(out_ctx, codec, nullptr);
-    if (rc < 0) {
-        err = "avcodec_open2(libx265-alpha): " + AvErr(rc);
-        avcodec_free_context(&out_ctx);
-        return false;
-    }
-    return true;
+    return FinishCodecOpen(out_ctx, codec, "libx265-alpha", err);
 }
 
 bool AllocYuvFrame(AVFrame*& f, int w, int h, AVPixelFormat fmt, std::string& err) {

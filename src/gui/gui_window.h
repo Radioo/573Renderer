@@ -1,5 +1,7 @@
 #pragma once
 
+#include "../warp_device.h"
+
 #include <windows.h>
 #include <d3d9.h>
 
@@ -11,6 +13,8 @@ struct Window {
     IDirect3D9* d3d = nullptr;
     IDirect3DDevice9* device = nullptr;
     D3DPRESENT_PARAMETERS pp = {};
+    WarpD3D9::Device warp;
+    bool warp_backed = false;
     bool device_lost = false;
     bool resize_pending = false;
 };

@@ -63,7 +63,7 @@ void DrawAnimationToggles(const Scene3dHost::Status& st) {
     bool camera = st.animate_camera;
     if (ImGui::Checkbox("Animate camera##s3d", &camera)) Scene3dHost::SetAnimateCamera(camera);
     ImGui::EndDisabled();
-    if (ImGui::IsItemHovered()) {
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
         if (!st.has_authored_camera) {
             ImGui::SetTooltip("This scene has no camera in its .x file.");
         } else if (st.free_camera) {
@@ -87,7 +87,9 @@ void DrawModelList() {
         if (ImGui::Checkbox("##vis", &vis)) Scene3dHost::SetModelVisible((int)i, vis);
         ImGui::SameLine();
         ImGui::SetNextItemWidth(110);
-        if (ImGui::BeginCombo("##blend", BlendLabel(models[i].blend_mode))) {
+        const bool blend_open = ImGui::BeginCombo("##blend", BlendLabel(models[i].blend_mode));
+        const bool blend_hovered = ImGui::IsItemHovered();
+        if (blend_open) {
             const int modes[] = {Scene3d::kBlendOpaque, Scene3d::kBlendAlpha,
                                  Scene3d::kBlendAdditive, Scene3d::kBlendSubtract};
             for (const int mode : modes) {
@@ -101,10 +103,10 @@ void DrawModelList() {
         ImGui::SameLine();
         ImGui::TextUnformatted(models[i].name.c_str());
         ImGui::PopID();
-    }
-    if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("Blend mode comes from the game's per-screen setup code.\n"
-                          "Override it here to inspect a layer.");
+        if (blend_hovered) {
+            ImGui::SetTooltip("Blend mode comes from the game's per-screen setup code.\n"
+                              "Override it here to inspect a layer.");
+        }
     }
 }
 

@@ -42,6 +42,14 @@
     {
       "name": "ci32",
       "inherits": "base32"
+    },
+    {
+      "name": "asan",
+      "inherits": "base",
+      "binaryDir": "${sourceDir}/build-asan",
+      "cacheVariables": {
+        "R573_ASAN": "ON"
+      }
     }
   ],
   "buildPresets": [
@@ -60,6 +68,10 @@
     {
       "name": "ci32",
       "configurePreset": "ci32"
+    },
+    {
+      "name": "asan",
+      "configurePreset": "asan"
     }
   ]
 }

@@ -21,16 +21,16 @@ void PostSeekPaused(App::State& state, int frame, int maxf) {
     frame = std::max(frame, 0);
     frame = std::min(frame, maxf);
     state.PostCommand(AfpCmd::Wrap(AfpCmd::SeekFrame{.frame = frame}));
-    auto o = state.GetLiveOverrides();
-    o.paused = true;
-    state.SetLiveOverrides(o);
+    state.MutateLiveOverrides([](App::State::LiveOverrides& o) { o.paused = true; });
 }
 
 void PostTogglePause(App::State& state) {
-    auto o = state.GetLiveOverrides();
-    o.paused = !o.paused;
-    state.PostCommand(AfpCmd::Wrap(AfpCmd::SetPaused{.paused = o.paused}));
-    state.SetLiveOverrides(o);
+    bool new_paused = false;
+    state.MutateLiveOverrides([&new_paused](App::State::LiveOverrides& o) {
+        o.paused = !o.paused;
+        new_paused = o.paused;
+    });
+    state.PostCommand(AfpCmd::Wrap(AfpCmd::SetPaused{.paused = new_paused}));
 }
 
 void StepWrapped(App::State& state, const App::State::LiveState& live, int delta) {
@@ -167,7 +167,9 @@ void DrawTrack(App::State& state, const App::Status& status, const App::State::L
     if (exporting) return;
 
     const float mouse_x = ImGui::GetIO().MousePos.x;
-    int const label_hit = hovered ? LabelHitTest(status, total, p0.x, w, mouse_x) : -1;
+    const bool scrubbing = ImGui::IsMouseDragging(ImGuiMouseButton_Left);
+    int const label_hit =
+        (hovered && !scrubbing) ? LabelHitTest(status, total, p0.x, w, mouse_x) : -1;
     if (label_hit >= 0) {
         const auto& l = status.labels[(size_t)label_hit];
         ImGui::SetTooltip("label %s (frame %d) - click to play from here",

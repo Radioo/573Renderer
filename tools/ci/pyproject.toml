@@ -6,3 +6,16 @@ dependencies = [
     "clang-format==19.1.7",
     "clang-tidy==21.1.6",
 ]
+
+[dependency-groups]
+dev = [
+    "ruff==0.14.14",
+]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "B", "UP", "SIM", "PL"]
+ignore = ["PLR0912", "PLR0915", "PLR2004"]

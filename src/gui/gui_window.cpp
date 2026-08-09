@@ -1,4 +1,6 @@
 #include "gui_window.h"
+
+#include "../warp_device.h"
 #include "gui_panels.h"
 #include "gui_layout_constants.h"
 #include "gui_style.h"
@@ -98,7 +100,22 @@ bool CreateDevice(Window& w) {
     if (FAILED(hr) || (w.device == nullptr)) {
         w.d3d->Release();
         w.d3d = nullptr;
-        return false;
+        w.device = nullptr;
+        RECT rc{};
+        GetClientRect(w.hwnd, &rc);
+        int const cw = std::max<int>(rc.right - rc.left, 1);
+        int const ch = std::max<int>(rc.bottom - rc.top, 1);
+        if (!WarpD3D9::CreateForWindow(w.warp, w.hwnd, cw, ch)) {
+            LOG("Gui", "D3D9 HAL and WARP both unavailable: %s", WarpD3D9::LastError().c_str());
+            return false;
+        }
+        w.warp_backed = true;
+        w.device = w.warp.device;
+        w.pp.BackBufferWidth = (UINT)cw;
+        w.pp.BackBufferHeight = (UINT)ch;
+        w.pp.BackBufferFormat = D3DFMT_X8R8G8B8;
+        w.pp.EnableAutoDepthStencil = FALSE;
+        LOG("Gui", "D3D9 HAL unavailable, GUI running on the WARP 9on12 device");
     }
     return true;
 }
@@ -155,6 +172,10 @@ void Shutdown(Window& w) {
         ImGui_ImplDX9_Shutdown();
         ImGui_ImplWin32_Shutdown();
         ImGui::DestroyContext();
+    }
+    if (w.warp_backed) {
+        w.device = nullptr;
+        w.warp_backed = false;
     }
     if (w.device != nullptr) {
         w.device->Release();
