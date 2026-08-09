@@ -4,7 +4,7 @@ import subprocess
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
-GUI_PREFIXES = ("src/gui/",)
+GUI_PREFIXES = ("src/gui/", "tests/gui/")
 SOURCE_SUFFIXES = (".cpp", ".h", ".hpp", ".inl")
 PATTERNS = [
     re.compile(rb"\bImGui::"),

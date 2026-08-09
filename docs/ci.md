@@ -109,6 +109,17 @@ instrumented triplet) would rebuild every dependency including ffmpeg.
 UBSan is deliberately absent: MSVC has no `/fsanitize=undefined`, and a
 clang-cl leg would need a second Catch2 triplet.
 
+## GUI tests in the hosted matrix
+
+`gui_tests` carries the `ci` label like every other suite, so the existing
+`ctest -LE local_dll` step picks it up with no workflow change. It needs no
+display, no D3D9 device and no game data: it drives the real panels through the
+Dear ImGui Test Engine against a null backend (docs/gui_tests.md). It is
+deliberately absent from the ASan job's target list, which stays restricted to
+the dependency-light pure-logic suites - `gui_tests` links `r573_app`, and with
+it FFmpeg and D3D9, so adding it there would trade a large rebuild for coverage
+of code that is not doing raw buffer decoding.
+
 ## Local-only tiers
 
 Tests that need the proprietary game DLLs or real game data can never run

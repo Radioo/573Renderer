@@ -36,7 +36,17 @@ std::string WideToUtf8(PCWSTR in) {
 }
 }
 
+namespace {
+Overrides g_overrides;
+}
+
+void SetOverrides(Overrides o) {
+    g_overrides = o;
+}
+
 std::string BrowseForFolder(HWND parent, const std::string& initial) {
+    if (g_overrides.browse_for_folder != nullptr) return g_overrides.browse_for_folder(initial);
+
     HRESULT const hr_init =
         CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
     const bool we_inited = SUCCEEDED(hr_init) || hr_init == RPC_E_CHANGED_MODE;
@@ -83,6 +93,9 @@ std::string BrowseForFolder(HWND parent, const std::string& initial) {
 }
 
 bool RevealInFileManager(const std::string& path) {
+    if (g_overrides.reveal_in_file_manager != nullptr) {
+        return g_overrides.reveal_in_file_manager(path);
+    }
     if (path.empty()) return false;
 
     std::error_code ec;

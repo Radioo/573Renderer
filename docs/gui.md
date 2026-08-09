@@ -37,7 +37,11 @@ AFP-backend commands (`AfpCmd::Wrap` over `SeekFrame`, `SetPaused`, `SwitchAnima
 `GotoLabel`, `ForceReplay`, `QproStartScan`, `QproStartExtract`) that the
 render thread consumes (see docs/state.md "Command semantics"); the render thread publishes
 `App::Status` / LiveState / ExportState / LoadProgress snapshots that the GUI polls once per
-frame. Background workers (arc/customize extractors, qpro scan) publish into their own
+frame. This seam is also what makes the GUI testable headlessly: `gui_tests` prefills
+`App::State`, clicks a widget through the Dear ImGui Test Engine, and asserts on the command
+that came out - no window, no device, no game data (docs/gui_tests.md). Keeping a widget
+free of direct engine calls is therefore a testability requirement, not just tidiness.
+Background workers (arc/customize extractors, qpro scan) publish into their own
 mutex-guarded Status structs polled the same way.
 
 ### 1.3 gui_window internals (Win32 + DX9 lost-device dance)

@@ -139,8 +139,7 @@ add_library(r573_render STATIC
 target_include_directories(r573_render PUBLIC src)
 target_link_libraries(r573_render PRIVATE r573::warnings)
 
-add_executable(renderer WIN32
-    src/main.cpp
+add_library(r573_app STATIC
     src/tool_commands.cpp
     src/boot.cpp
     src/backend/backend_registry.cpp
@@ -228,32 +227,35 @@ add_executable(renderer WIN32
     src/scene3d/scene3d_test.cpp
 )
 
-target_compile_options(renderer PRIVATE "$<$<CXX_COMPILER_ID:MSVC>:/utf-8>")
+target_include_directories(r573_app PUBLIC src)
+target_include_directories(r573_app SYSTEM PUBLIC ${FFMPEG_INCLUDE_DIRS})
 
-target_include_directories(renderer PRIVATE src)
-target_include_directories(renderer SYSTEM PRIVATE ${FFMPEG_INCLUDE_DIRS})
-
-target_link_libraries(renderer PRIVATE
-    r573::warnings
-    r573_support
-    r573_formats
-    r573_media
-    r573_cli
-    r573_settings
-    r573_state
-    r573_loop
-    r573_render
-    imgui::imgui
-    ${FFMPEG_LIBRARIES}
-    d3d9.lib
-    bcrypt.lib
-    ws2_32.lib
-    secur32.lib
-    mfuuid.lib
-    strmiids.lib
-    windowscodecs.lib
-    ole32.lib
+target_link_libraries(r573_app
+    PUBLIC
+        r573_support
+        r573_formats
+        r573_media
+        r573_cli
+        r573_settings
+        r573_state
+        r573_loop
+        r573_render
+        imgui::imgui
+        ${FFMPEG_LIBRARIES}
+        d3d9.lib
+        bcrypt.lib
+        ws2_32.lib
+        secur32.lib
+        mfuuid.lib
+        strmiids.lib
+        windowscodecs.lib
+        ole32.lib
+    PRIVATE
+        r573::warnings
 )
+
+add_executable(renderer WIN32 src/main.cpp)
+target_link_libraries(renderer PRIVATE r573_app r573::warnings)
 
 set_target_properties(renderer PROPERTIES
     OUTPUT_NAME                      "573Renderer${R573_ARCH_SUFFIX}"
@@ -410,6 +412,15 @@ target_include_directories(media_encode_tests SYSTEM PRIVATE ${FFMPEG_INCLUDE_DI
 target_link_libraries(media_encode_tests PRIVATE Catch2::Catch2WithMain r573_media r573_support
                                                  r573::warnings)
 catch_discover_tests(media_encode_tests DISCOVERY_MODE POST_BUILD PROPERTIES LABELS ci)
+
+add_executable(gui_tests
+    tests/gui/gui_test_harness.cpp
+    tests/gui/setup_view_tests.cpp
+    tests/gui/ready_view_tests.cpp
+)
+target_include_directories(gui_tests PRIVATE tests/gui src/gui)
+target_link_libraries(gui_tests PRIVATE Catch2::Catch2WithMain r573_app r573::warnings)
+catch_discover_tests(gui_tests DISCOVERY_MODE POST_BUILD PROPERTIES LABELS ci)
 
 get_directory_property(R573_ALL_TARGETS BUILDSYSTEM_TARGETS)
 foreach(r573_target IN LISTS R573_ALL_TARGETS)

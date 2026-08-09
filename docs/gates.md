@@ -87,11 +87,15 @@ under `docs/` is exempt by nature - prose is the point.
 ### GUI isolation (`check_gui_isolation.py`)
 
 The P8 shell rule made checkable: `ImGui::` / `ImGuiIO` / `#include <imgui...`
-may appear ONLY under `src/gui/`. Everything outside the gui module talks to
-the UI through App::State (requests, view state) - business logic never
-renders widgets. The gate scans tracked + untracked `src/**.cpp|.h` excluding
-`src/gui/`; the codebase was already 100% clean when the gate was
-introduced, so it starts with no baseline and any hit fails CI.
+may appear ONLY under `src/gui/` and `tests/gui/`. Everything outside the gui
+module talks to the UI through App::State (requests, view state) - business
+logic never renders widgets. The gate scans tracked + untracked
+`src/**.cpp|.h` and `tests/**.cpp|.h` excluding those two directories; the
+codebase was already 100% clean when the gate was introduced, so it starts
+with no baseline and any hit fails CI. `tests/gui/` is exempt because the
+headless GUI suite necessarily drives ImGui directly (docs/gui_tests.md); it
+is the only test directory allowed to, and it tests the shell rather than
+violating it.
 
 ### Format (`clang-format --dry-run --Werror`)
 
