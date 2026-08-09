@@ -1,6 +1,6 @@
 # Untested interactions
 
-**236** of **526** interactions have no test that names their
+**228** of **526** interactions have no test that names their
 item path or CLI flag. Grouped by surface, ordered by how many are missing.
 
 ## Read this before trusting the number
@@ -11,12 +11,12 @@ a LOWER BOUND on what is tested and an UPPER BOUND on what is missing:
 - An interaction driven without naming its path is not credited. The keyboard-shortcut
   tests, the timeline track drag, the splitter drag and the crop-pick flow all drive
   real interactions through mouse coordinates or key chords.
-- The matcher cannot tell a click from a hover. A tooltip entry sharing a path with a
-  button shows as covered once either is tested, and vice versa - so hover coverage is
-  both over- and under-counted here. The authoritative list of asserted tooltips is
-  `tests/gui/tooltip_tests.cpp`.
 - Several entries document the ABSENCE of behaviour ("dragging a tab does not reorder",
   "clicking the loading overlay passes through"). Those are invariants, not actions.
+- Tooltips are NOT part of the residue. Every `ImGui::SetTooltip` call site in `src/gui`
+  is asserted by `tests/gui/tooltip_tests.cpp`, including the branch-dependent texts;
+  see `docs/gui_tests.md` section 16. A tooltip row appearing below means only that the
+  matcher could not tie the hover to that row's path, not that the tooltip is untested.
 
 Use this list to find candidates, then read the surface doc before concluding a gap is
 real.
@@ -213,30 +213,6 @@ Breakdown: left-click 6, drag 4, key 3, right-click 2, double-click 1, hover 1
 | `crop-pick-other-mouse-buttons` | Right-click / middle-click / mouse wheel inside the client area while crop pick mode is active | right-click | `src/window.cpp:112` |
 | `rbutton-look-aborts-crop-drag` | Right mouse button press/release inside the client area while a crop drag is in progress | right-click | `src/window.cpp:112` |
 
-## Setup view (17)
-
-Breakdown: combo-select 6, hover 3, left-click 3, scroll 3, drag 1, key 1
-
-| id | control | input | source |
-|---|---|---|---|
-| `game-profile-combo-open` | Game profile combo (open/close the dropdown) | combo-select | `src/gui/gui_setup_view.cpp:121` |
-| `game-profile-select-auto` | 'Auto (...)' entry in the game profile combo | combo-select | `src/gui/gui_setup_view.cpp:122` |
-| `game-profile-select-row` | Profile row in the game profile combo (one per GameProfile::All() entry) | combo-select | `src/gui/gui_setup_view.cpp:128` |
-| `render-preset-combo-open` | Render resolution preset combo (open/close) | combo-select | `src/gui/gui_setup_view.cpp:226` |
-| `render-preset-select-custom` | 'Custom' row in the render preset combo | combo-select | `src/gui/gui_setup_view.cpp:230` |
-| `render-preset-select-row` | Resolution preset row in the render preset combo | combo-select | `src/gui/gui_setup_view.cpp:230` |
-| `setup-window-scrollbar-drag` | '##setup' window vertical scrollbar grab | drag | `src/gui/gui_setup_view.cpp:404` |
-| `error-banner-region` | Last-attempt-failed error banner | hover | `src/gui/gui_setup_view.cpp:62` |
-| `game-profile-combo-tooltip` | Game profile combo hover tooltip | hover | `src/gui/gui_setup_view.cpp:136` |
-| `render-preset-combo-tooltip` | Render resolution combo hover tooltip | hover | `src/gui/gui_setup_view.cpp:243` |
-| `combo-popup-dismiss` | Combo popup dismissal (both '##game_profile' and '##render_preset') | key | `src/gui/gui_setup_view.cpp:121` |
-| `render-fps-quick-preset` | Quick frame-rate preset button (30 / 60 / 120 / 144) | left-click | `src/gui/gui_setup_view.cpp:169` |
-| `render-fps-step-minus` | InputInt step-down button ('-') on the frame rate field | left-click | `src/gui/gui_setup_view.cpp:152` |
-| `render-fps-step-plus` | InputInt step-up button ('+') on the frame rate field | left-click | `src/gui/gui_setup_view.cpp:152` |
-| `game-profile-popup-scroll` | Game profile combo popup list (scroll) | scroll | `src/gui/gui_setup_view.cpp:121` |
-| `render-preset-popup-scroll` | Render resolution preset combo popup list (scroll) | scroll | `src/gui/gui_setup_view.cpp:226` |
-| `setup-window-scroll` | Setup full-viewport window background (scroll) | scroll | `src/gui/gui_setup_view.cpp:404` |
-
 ## Ready-view shell (16)
 
 Breakdown: hover 7, left-click 5, drag 3, key 1
@@ -300,13 +276,12 @@ Breakdown: cli-arg 12
 | `unknown-argument` | any unrecognised token | cli-arg | `src/cli/cli.cpp:649` |
 | `value-flag-consumes-following-flag` | any value-taking flag whose next argv token is itself a flag | cli-arg | `src/cli/cli.cpp:185-192 (NextArg), consumed by src/cli/cli.cpp:575, :585, :593, :602 and every Handle* special` |
 
-## Inspector (11)
+## Inspector (10)
 
-Breakdown: left-click 7, scroll 2, hover 1, key 1
+Breakdown: left-click 7, scroll 2, key 1
 
 | id | control | input | source |
 |---|---|---|---|
-| `render-background-tooltip` | Hover tooltip on the "Background" segmented control | hover | `src/gui/gui_inspector.cpp:274` |
 | `properties-slot-bitmap-combo-keyboard-nav` | Bitmap combo popup keyboard navigation (arrows / Enter / Escape) | key | `src/gui/gui_inspector.cpp:54` |
 | `inspector-tab-select` | Inspector tab (Properties / Render / Live / 3D scene / 2D package) | left-click | `src/gui/gui_inspector.cpp:446` |
 | `properties-play-replay-button` | Play / Replay button (label is "Replay" when this layer is already the playing animation, otherwise "Play") | left-click | `src/gui/gui_inspector.cpp:107` |
@@ -317,6 +292,23 @@ Breakdown: left-click 7, scroll 2, hover 1, key 1
 | `render-root-loop-segment` | "Loop root" segmented control ("Auto-hold" / "Force loop") | left-click | `src/gui/gui_inspector.cpp:184` |
 | `live-mc-names-list-scroll` | "MC names (N)" list child window | scroll | `src/gui/gui_inspector.cpp:415` |
 | `properties-slot-bitmap-combo-popup-scroll` | Bitmap combo popup list | scroll | `src/gui/gui_inspector.cpp:48` |
+
+## Setup view (10)
+
+Breakdown: combo-select 4, left-click 3, drag 1, hover 1, scroll 1
+
+| id | control | input | source |
+|---|---|---|---|
+| `game-profile-select-auto` | 'Auto (...)' entry in the game profile combo | combo-select | `src/gui/gui_setup_view.cpp:122` |
+| `game-profile-select-row` | Profile row in the game profile combo (one per GameProfile::All() entry) | combo-select | `src/gui/gui_setup_view.cpp:128` |
+| `render-preset-select-custom` | 'Custom' row in the render preset combo | combo-select | `src/gui/gui_setup_view.cpp:230` |
+| `render-preset-select-row` | Resolution preset row in the render preset combo | combo-select | `src/gui/gui_setup_view.cpp:230` |
+| `setup-window-scrollbar-drag` | '##setup' window vertical scrollbar grab | drag | `src/gui/gui_setup_view.cpp:404` |
+| `error-banner-region` | Last-attempt-failed error banner | hover | `src/gui/gui_setup_view.cpp:62` |
+| `render-fps-quick-preset` | Quick frame-rate preset button (30 / 60 / 120 / 144) | left-click | `src/gui/gui_setup_view.cpp:169` |
+| `render-fps-step-minus` | InputInt step-down button ('-') on the frame rate field | left-click | `src/gui/gui_setup_view.cpp:152` |
+| `render-fps-step-plus` | InputInt step-up button ('+') on the frame rate field | left-click | `src/gui/gui_setup_view.cpp:152` |
+| `setup-window-scroll` | Setup full-viewport window background (scroll) | scroll | `src/gui/gui_setup_view.cpp:404` |
 
 ## qpro panel (10)
 

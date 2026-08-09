@@ -37,6 +37,10 @@ void SetDisplaySize(float w, float h);
 
 bool TooltipShown(ImGuiTestContext* ctx);
 
+std::string HoverAndCaptureText(ImGuiTestContext* ctx, const char* item_path);
+
+std::string CaptureFrameText(ImGuiTestContext* ctx);
+
 bool HoverShowsTooltip(ImGuiTestContext* ctx, const char* item_path);
 
 void SetBrowseResult(std::string path);

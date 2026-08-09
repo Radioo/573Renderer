@@ -443,7 +443,12 @@ bool DrawCrop(App::State& state) {
 }
 
 void DrawHwAccelTooltip(MediaSink::Format current_format, bool hw_available, bool is_h264) {
-    if (!hw_available && is_h264) {
+    if (current_format == MediaSink::Format::MP4_HEVC_Alpha) {
+        ImGui::SetTooltip("MP4 HEVC-alpha is software only (libx265).\n"
+                          "NVENC's HEVC encoder has no alpha path, so\n"
+                          "the alpha layer this format exists for rules\n"
+                          "hardware encode out on every GPU.");
+    } else if (!hw_available && is_h264) {
         ImGui::SetTooltip("h264_nvenc unavailable on this machine.\n"
                           "H.264 export needs an NVIDIA GPU with NVENC -\n"
                           "this ffmpeg build has no software H.264\n"

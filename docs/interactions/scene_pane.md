@@ -5,30 +5,30 @@ reader against the source (see README.md for method).
 
 | # | id | control | input | tooltip | tests |
 |---|---|---|---|---|---|
-| 1 | `sublayer-visibility-checkbox` | Sublayer visibility checkbox | checkbox | - | 2 |
-| 2 | `layer-row-double-click-play` | Layer row (double-click to play/replay) | double-click | yes | 4 |
-| 3 | `add-slot-tooltip` | Add button hover tooltip | hover | yes | 3 |
-| 4 | `layer-row-tooltip` | Layer row hover tooltip | hover | yes | 4 |
-| 5 | `add-slot-button-keyboard-activate` *(audit)* | Add button activated with the keyboard (Space / Enter) | key | yes | 3 |
+| 1 | `sublayer-visibility-checkbox` | Sublayer visibility checkbox | checkbox | - | 3 |
+| 2 | `layer-row-double-click-play` | Layer row (double-click to play/replay) | double-click | yes | 6 |
+| 3 | `add-slot-tooltip` | Add button hover tooltip | hover | yes | 4 |
+| 4 | `layer-row-tooltip` | Layer row hover tooltip | hover | yes | 6 |
+| 5 | `add-slot-button-keyboard-activate` *(audit)* | Add button activated with the keyboard (Space / Enter) | key | yes | 4 |
 | 6 | `add-slot-input-editing-keys` *(audit)* | New variant slot text box editing keymap, and Enter having no effect | key | - | 3 |
-| 7 | `layer-row-keyboard-toggle` *(audit)* | Layer row activated with the keyboard (Space / Enter) | key | yes | 4 |
-| 8 | `scene-filter-input-editing-keys` *(audit)* | Clip filter text box editing keymap and mouse text selection | key | - | 4 |
+| 7 | `layer-row-keyboard-toggle` *(audit)* | Layer row activated with the keyboard (Space / Enter) | key | yes | 6 |
+| 8 | `scene-filter-input-editing-keys` *(audit)* | Clip filter text box editing keymap and mouse text selection | key | - | 5 |
 | 9 | `scene-keyboard-nav-focus` *(audit)* | Keyboard nav cursor over the scene pane items | key | - | **none** |
 | 10 | `scene-tree-keyboard-arrow-expand` *(audit)* | Left / Right arrow on a nav-focused tree node (layer row or sublayer node) | key | - | **none** |
 | 11 | `sublayer-node-keyboard-toggle` *(audit)* | Sublayer tree node activated with the keyboard (Space / Enter) | key | - | **none** |
-| 12 | `sublayer-vis-checkbox-keyboard-toggle` *(audit)* | Sublayer visibility checkbox activated with the keyboard (Space / Enter) | key | - | 2 |
-| 13 | `add-slot-button` | Add (register variant slot) button | left-click | yes | 3 |
-| 14 | `layer-row-expand` | Layer row expand/collapse arrow | left-click | yes | 4 |
-| 15 | `layer-row-select` | Layer row (click on the label, not the arrow) | left-click | yes | 4 |
+| 12 | `sublayer-vis-checkbox-keyboard-toggle` *(audit)* | Sublayer visibility checkbox activated with the keyboard (Space / Enter) | key | - | 3 |
+| 13 | `add-slot-button` | Add (register variant slot) button | left-click | yes | 4 |
+| 14 | `layer-row-expand` | Layer row expand/collapse arrow | left-click | yes | 6 |
+| 15 | `layer-row-select` | Layer row (click on the label, not the arrow) | left-click | yes | 6 |
 | 16 | `sublayer-node-expand` | Sublayer tree node expand/collapse arrow | left-click | - | **none** |
 | 17 | `sublayer-node-select` | Sublayer tree node (click on the label) | left-click | - | **none** |
 | 18 | `unresolved-slot-selectable` | Unresolved / unmatched variant slot row | left-click | - | **none** |
-| 19 | `scene-scroll-child` | Scene tree scroll region | scroll | - | 12 |
+| 19 | `scene-scroll-child` | Scene tree scroll region | scroll | - | 14 |
 | 20 | `scene-empty-no-ifs-gate` | Empty-state message when no IFS is selected | state-change | - | n/a |
 | 21 | `scene-empty-no-layers-gate` | Empty-state message when afplist.xml lists no layers | state-change | - | n/a |
 | 22 | `scene-selection-reset-on-ifs-change` | Implicit selection reset when the user picks a different IFS elsewhere | state-change | - | n/a |
 | 23 | `add-slot-input` | New variant slot path text box (hint "add slot by clip path, e.g. coin") | text-entry | - | 3 |
-| 24 | `scene-filter-input` | Clip filter text box (hint "find clip...") | text-entry | - | 4 |
+| 24 | `scene-filter-input` | Clip filter text box (hint "find clip...") | text-entry | - | 5 |
 
 ## Detail
 
@@ -41,7 +41,7 @@ reader against the source (see README.md for method).
 - **effect**: ImGui::Checkbox("##vis", &visible) returning true calls state.SetSublayerOverride(active, node.path, visible), recording a per-IFS visibility override for that clip path.
 - **source**: `src/gui/gui_scene_panel.cpp:96`
 - **notes**: ONE entry for a control drawn in the recursive loop RenderSceneNode over status.mc_tree children (line 126-127 and 190-191); each level pushes ImGui::PushID(idx).
-- **tests**: `3D scene model list toggles visibility and blend mode`, `scene pane child visibility checkbox records a sublayer override`
+- **tests**: `3D scene model list toggles visibility and blend mode`, `scenario: loading and unloading a 3D scene adds and removes its tab`, `scene pane child visibility checkbox records a sublayer override`
 - **audit correction**: The effect stops at 'recording a per-IFS visibility override', which reads as UI-only bookkeeping. The override actually drives clip visibility in the live render and is persisted across runs. -> ImGui::Checkbox("##vis", &visible) returning true calls state.SetSublayerOverride(active, node.path, visible) (line 96), stored per-IFS in IfsCatalog (src/state/ifs_catalog.cpp:41). ModernRuntime::ApplySublayerOverrides then pushes every override to the engine with McControl::SetClipVisible (src/game_runtime_modern.cpp:189-194), so unchecking actually hides that clip in the rendered output. The set is reloaded from the saved config at startup via App::Global().SetSublayerOverride in src/boot.cpp:193, so the toggle survives a restart.
 
 ### 2. Layer row (double-click to play/replay)
@@ -54,7 +54,7 @@ reader against the source (see README.md for method).
 - **source**: `src/gui/gui_scene_panel.cpp:181`
 - **tooltip**: yes
 - **notes**: Same looped row. The first click of the double-click also fires layer-row-select, so a double-click both selects and plays.
-- **tests**: `properties tab Play posts SwitchAnimation for an idle layer`, `properties tab Replay posts SwitchAnimation for the playing layer`, `scene pane double-click on a layer posts SwitchAnimation`, `scene pane filter narrows the layer list`
+- **tests**: `properties tab Play posts SwitchAnimation for an idle layer`, `properties tab Replay posts SwitchAnimation for the playing layer`, `scenario: browse, load an IFS, then play one of its layers`, `scene pane double-click on a layer posts SwitchAnimation` (+2 more)
 
 ### 3. Add button hover tooltip
 
@@ -65,7 +65,7 @@ reader against the source (see README.md for method).
 - **effect**: ImGui::SetTooltip(...) explains that the entry registers a clip path as a variant slot, that the render thread probes it next frame, and that unresolved slots remain listed under the playing layer until they resolve.
 - **source**: `src/gui/gui_scene_panel.cpp:221`
 - **tooltip**: yes
-- **tests**: `scene pane Add ignores an empty slot name`, `scene pane Add refuses a duplicate slot path`, `scene pane Add registers a variant slot`
+- **tests**: `scene pane Add ignores an empty slot name`, `scene pane Add refuses a duplicate slot path`, `scene pane Add registers a variant slot`, `scene pane rows explain themselves on hover`
 
 ### 4. Layer row hover tooltip
 
@@ -77,7 +77,7 @@ reader against the source (see README.md for method).
 - **source**: `src/gui/gui_scene_panel.cpp:184`
 - **tooltip**: yes
 - **notes**: One tooltip, drawn once per looped layer row.
-- **tests**: `properties tab Play posts SwitchAnimation for an idle layer`, `properties tab Replay posts SwitchAnimation for the playing layer`, `scene pane double-click on a layer posts SwitchAnimation`, `scene pane filter narrows the layer list`
+- **tests**: `properties tab Play posts SwitchAnimation for an idle layer`, `properties tab Replay posts SwitchAnimation for the playing layer`, `scenario: browse, load an IFS, then play one of its layers`, `scene pane double-click on a layer posts SwitchAnimation` (+2 more)
 
 ### 5. Add button activated with the keyboard (Space / Enter)
 
@@ -90,7 +90,7 @@ reader against the source (see README.md for method).
 - **source**: `src/gui/gui_scene_panel.cpp:203`
 - **tooltip**: yes
 - **notes**: Tab out of ##new_slot deactivates the text field first (no ImGuiInputTextFlags_AllowTabInput at line 201), so a tab character is never inserted.
-- **tests**: `scene pane Add ignores an empty slot name`, `scene pane Add refuses a duplicate slot path`, `scene pane Add registers a variant slot`
+- **tests**: `scene pane Add ignores an empty slot name`, `scene pane Add refuses a duplicate slot path`, `scene pane Add registers a variant slot`, `scene pane rows explain themselves on hover`
 
 ### 6. New variant slot text box editing keymap, and Enter having no effect
 
@@ -114,7 +114,7 @@ reader against the source (see README.md for method).
 - **source**: `src/gui/gui_scene_panel.cpp:175`
 - **tooltip**: yes
 - **notes**: The Space double-effect (expand row + pause playback) is a real conflict, not a theoretical one: HandleShortcuts is called every frame from RenderTimelineDock (src/gui/gui_timeline.cpp:228) whenever an IFS is loaded.
-- **tests**: `properties tab Play posts SwitchAnimation for an idle layer`, `properties tab Replay posts SwitchAnimation for the playing layer`, `scene pane double-click on a layer posts SwitchAnimation`, `scene pane filter narrows the layer list`
+- **tests**: `properties tab Play posts SwitchAnimation for an idle layer`, `properties tab Replay posts SwitchAnimation for the playing layer`, `scenario: browse, load an IFS, then play one of its layers`, `scene pane double-click on a layer posts SwitchAnimation` (+2 more)
 
 ### 8. Clip filter text box editing keymap and mouse text selection
 
@@ -125,7 +125,7 @@ reader against the source (see README.md for method).
 - **effect**: The InputTextWithHint at line 261 carries no flags, so the full ImGui text-edit keymap is live: Left/Right/Home/End and Ctrl+Left/Right caret motion, Shift+motion selection, Ctrl+A select-all, Ctrl+C / Ctrl+X / Ctrl+V clipboard, Ctrl+Z / Ctrl+Y undo-redo, Backspace/Delete (with Ctrl for word delete), click-drag selection and double-click word selection. Every edit takes effect on the same frame because lower_filter is recomputed from filter_buf on line 262 each frame. Escape reverts the buffer to its value at activation and deactivates, which is the fastest way to clear a typed filter (no clear button exists). While the field is active io.WantTextInput is true, which makes Panels::HandleShortcuts return immediately (src/gui/gui_timeline.cpp:193), disabling Space=pause, Left/Right=step and Ctrl+E=export for as long as the filter box has focus.
 - **source**: `src/gui/gui_scene_panel.cpp:261`
 - **notes**: The inventory's scene-filter-input entry covers only 'typing'; the implicit editing keymap, the Escape revert, and the global-shortcut suppression are all unrecorded.
-- **tests**: `scene pane filter narrows the layer list`, `scene pane prompts for an IFS while none is active`, `scene pane reports an IFS with no listed layers`, `scene pane rows explain themselves on hover`
+- **tests**: `scene pane filter narrows the layer list`, `scene pane prompts for an IFS while none is active`, `scene pane reports an IFS with no listed layers`, `scene pane rows explain themselves on hover` (+1 more)
 
 ### 9. Keyboard nav cursor over the scene pane items
 
@@ -172,7 +172,7 @@ reader against the source (see README.md for method).
 - **effect**: ImGui::Checkbox returns true on NavActivate exactly as on a mouse click (ButtonBehavior nav-activate path, imgui_widgets.cpp:696-699), so line 96 runs state.SetSublayerOverride(active, node.path, visible) and the clip is hidden/shown in the live render on the next ApplySublayerOverrides pass.
 - **source**: `src/gui/gui_scene_panel.cpp:96`
 - **notes**: Also note Space here collides with the timeline pause shortcut (src/gui/gui_timeline.cpp:201), same mechanism as layer-row-keyboard-toggle.
-- **tests**: `3D scene model list toggles visibility and blend mode`, `scene pane child visibility checkbox records a sublayer override`
+- **tests**: `3D scene model list toggles visibility and blend mode`, `scenario: loading and unloading a 3D scene adds and removes its tab`, `scene pane child visibility checkbox records a sublayer override`
 
 ### 13. Add (register variant slot) button
 
@@ -185,7 +185,7 @@ reader against the source (see README.md for method).
 - **source**: `src/gui/gui_scene_panel.cpp:203`
 - **tooltip**: yes
 - **notes**: Button size ImVec2(-FLT_MIN, 0) stretches it to the remaining width.
-- **tests**: `scene pane Add ignores an empty slot name`, `scene pane Add refuses a duplicate slot path`, `scene pane Add registers a variant slot`
+- **tests**: `scene pane Add ignores an empty slot name`, `scene pane Add refuses a duplicate slot path`, `scene pane Add registers a variant slot`, `scene pane rows explain themselves on hover`
 
 ### 14. Layer row expand/collapse arrow
 
@@ -198,7 +198,7 @@ reader against the source (see README.md for method).
 - **source**: `src/gui/gui_scene_panel.cpp:174`
 - **tooltip**: yes
 - **notes**: ONE entry describing a row drawn in a loop over cfg.anim_names (line 269-270), each wrapped in ImGui::PushID(idx). Flags include OpenOnArrow and SpanAvailWidth; the playing layer gets DefaultOpen and a green text color plus an ICON_PLAY suffix.
-- **tests**: `properties tab Play posts SwitchAnimation for an idle layer`, `properties tab Replay posts SwitchAnimation for the playing layer`, `scene pane double-click on a layer posts SwitchAnimation`, `scene pane filter narrows the layer list`
+- **tests**: `properties tab Play posts SwitchAnimation for an idle layer`, `properties tab Replay posts SwitchAnimation for the playing layer`, `scenario: browse, load an IFS, then play one of its layers`, `scene pane double-click on a layer posts SwitchAnimation` (+2 more)
 - **audit correction**: Wrong source line. Line 174 holds only the `const bool open =` fragment; the item is submitted on line 175. -> src/gui/gui_scene_panel.cpp:175
 
 ### 15. Layer row (click on the label, not the arrow)
@@ -211,7 +211,7 @@ reader against the source (see README.md for method).
 - **source**: `src/gui/gui_scene_panel.cpp:178`
 - **tooltip**: yes
 - **notes**: Same looped row as layer-row-expand; separate entry because selection and expansion are distinct gestures guarded against each other by IsItemToggledOpen().
-- **tests**: `properties tab Play posts SwitchAnimation for an idle layer`, `properties tab Replay posts SwitchAnimation for the playing layer`, `scene pane double-click on a layer posts SwitchAnimation`, `scene pane filter narrows the layer list`
+- **tests**: `properties tab Play posts SwitchAnimation for an idle layer`, `properties tab Replay posts SwitchAnimation for the playing layer`, `scenario: browse, load an IFS, then play one of its layers`, `scene pane double-click on a layer posts SwitchAnimation` (+2 more)
 
 ### 16. Sublayer tree node expand/collapse arrow
 
@@ -258,7 +258,7 @@ reader against the source (see README.md for method).
 - **effect**: ImGui::BeginChild("scene_scroll", ImVec2(0, -38.0F), 0) creates a scrollable child holding every layer row and its expanded sublayer tree; mouse wheel / scrollbar drag scrolls it. Purely view-level, no state change.
 - **source**: `src/gui/gui_scene_panel.cpp:267`
 - **notes**: Height reserves 38px at the bottom for the add-slot row, which stays outside the scroll region.
-- **tests**: `properties tab Play posts SwitchAnimation for an idle layer`, `properties tab Replay posts SwitchAnimation for the playing layer`, `scene pane child tree expansion is recorded`, `scene pane child visibility checkbox records a sublayer override` (+8 more)
+- **tests**: `properties tab Play posts SwitchAnimation for an idle layer`, `properties tab Replay posts SwitchAnimation for the playing layer`, `scenario: browse, load an IFS, then play one of its layers`, `scene pane child tree expansion is recorded` (+10 more)
 - **audit correction**: Effect implies general scrolling; the child is submitted with flags = 0, so only vertical scrolling exists. -> ImGui::BeginChild("scene_scroll", ImVec2(0, -38.0F), 0) with no ImGuiWindowFlags_HorizontalScrollbar: mouse wheel and vertical scrollbar drag scroll it, and keyboard nav auto-scrolls to the focused item, but deeply indented sublayer rows are clipped at the right edge with no way to scroll horizontally (Shift+wheel does nothing). Purely view-level, no state change.
 
 ### 20. Empty-state message when no IFS is selected
@@ -311,5 +311,5 @@ reader against the source (see README.md for method).
 - **effect**: Types into the static filter_buf[128]. The text is lowercased into lower_filter and used to filter rows: RenderLayerRow returns early for layers whose lowercased name does not contain the filter unless the playing layer's mc_tree subtree matches (SubtreeMatches); RenderSceneNode returns early for nodes whose subtree does not match. A non-empty filter also adds ImGuiTreeNodeFlags_DefaultOpen to every sublayer node. No App::Command is posted and no state setter runs.
 - **source**: `src/gui/gui_scene_panel.cpp:261`
 - **notes**: Full-width (SetNextItemWidth(-FLT_MIN)). Filter state is a function-static buffer, so it persists across IFS switches even though Scene::Reset() clears the selection.
-- **tests**: `scene pane filter narrows the layer list`, `scene pane prompts for an IFS while none is active`, `scene pane reports an IFS with no listed layers`, `scene pane rows explain themselves on hover`
+- **tests**: `scene pane filter narrows the layer list`, `scene pane prompts for an IFS while none is active`, `scene pane reports an IFS with no listed layers`, `scene pane rows explain themselves on hover` (+1 more)
 

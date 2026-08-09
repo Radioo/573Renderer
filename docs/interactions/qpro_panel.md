@@ -6,34 +6,34 @@ reader against the source (see README.md for method).
 | # | id | control | input | tooltip | tests |
 |---|---|---|---|---|---|
 | 1 | `cat-back` | Back category checkbox | checkbox | - | 1 |
-| 2 | `cat-body` | Body category checkbox | checkbox | - | 2 |
+| 2 | `cat-body` | Body category checkbox | checkbox | - | 3 |
 | 3 | `cat-face` | Face category checkbox | checkbox | - | **none** |
 | 4 | `cat-hair` | Hair category checkbox | checkbox | - | **none** |
 | 5 | `cat-hand` | Hand category checkbox | checkbox | - | **none** |
 | 6 | `cat-head` | Head category checkbox | checkbox | - | 4 |
-| 7 | `group-select-checkbox` | Per-date-group select-all checkbox | checkbox | - | 2 |
-| 8 | `hue-scope-checkbox` | Keep static base fills un-hue-shifted | checkbox | yes | 2 |
+| 7 | `group-select-checkbox` | Per-date-group select-all checkbox | checkbox | - | 3 |
+| 8 | `hue-scope-checkbox` | Keep static base fills un-hue-shifted | checkbox | yes | 3 |
 | 9 | `part-checkbox` | Individual scanned part checkbox | checkbox | - | **none** |
 | 10 | `animated-parts-note-tooltip` | "Animated parts -> .webm (VP9) + .mp4 (HEVC-alpha, Safari) + .avif poster" label (hover tooltip) | hover | yes | **none** |
-| 11 | `hue-scope-tooltip` | Keep static base fills un-hue-shifted (hover tooltip) | hover | yes | 2 |
-| 12 | `output-fps-tooltip` | Output fps (hover tooltip) | hover | yes | 2 |
-| 13 | `scan-button-tooltip` | Scan parts from bm2dx.dll (hover tooltip) | hover | yes | 1 |
+| 11 | `hue-scope-tooltip` | Keep static base fills un-hue-shifted (hover tooltip) | hover | yes | 3 |
+| 12 | `output-fps-tooltip` | Output fps (hover tooltip) | hover | yes | 5 |
+| 13 | `scan-button-tooltip` | Scan parts from bm2dx.dll (hover tooltip) | hover | yes | 2 |
 | 14 | `output-fps-keyboard-edit` *(audit)* | Output fps text field, keyboard editing keymap | key | - | **none** |
-| 15 | `extract-button` | Choose output folder + extract... | left-click | - | 6 |
+| 15 | `extract-button` | Choose output folder + extract... | left-click | - | 7 |
 | 16 | `folder-picker-dialog` | Native "browse for folder" shell dialog raised by the extract button | left-click | - | **none** |
 | 17 | `group-treenode` | Per-date-group tree node (date - N parts (M selected)) | left-click | - | 1 |
 | 18 | `issues-copy-list` | Copy list (copy skipped/failed part report) | left-click | - | 1 |
 | 19 | `main-tab-renderer-select` *(audit)* | "Renderer" main tab button (leaves the qpro panel) | left-click | - | 2 |
 | 20 | `output-fps-minus` | Output fps decrement step button | left-click | - | **none** |
 | 21 | `output-fps-plus` | Output fps increment step button | left-click | - | **none** |
-| 22 | `qpro-tab-select` | "qpro" main tab | left-click | - | 3 |
-| 23 | `scan-button` | Scan parts from bm2dx.dll | left-click | yes | 1 |
-| 24 | `select-all-parts` | All (select every scanned part) | left-click | - | 3 |
+| 22 | `qpro-tab-select` | "qpro" main tab | left-click | - | 5 |
+| 23 | `scan-button` | Scan parts from bm2dx.dll | left-click | yes | 2 |
+| 24 | `select-all-parts` | All (select every scanned part) | left-click | - | 4 |
 | 25 | `select-no-parts` | None (deselect every scanned part) | left-click | - | 2 |
 | 26 | `issues-list-scroll` | Skipped/failed issues list scroll region | scroll | - | **none** |
-| 27 | `parts-list-scroll` | Scanned parts list scroll region | scroll | - | 2 |
-| 28 | `qpro-body-scroll` *(audit)* | qpro tab body scroll region ("main_view" child window) | scroll | - | 3 |
-| 29 | `output-fps-text` | Output fps (numeric text field) | text-entry | yes | 2 |
+| 27 | `parts-list-scroll` | Scanned parts list scroll region | scroll | - | 3 |
+| 28 | `qpro-body-scroll` *(audit)* | qpro tab body scroll region ("main_view" child window) | scroll | - | 5 |
+| 29 | `output-fps-text` | Output fps (numeric text field) | text-entry | yes | 5 |
 
 ## Detail
 
@@ -57,7 +57,7 @@ reader against the source (see README.md for method).
 - **effect**: Toggles s_ex_body; copied into AfpCmd::QproStartExtract::parts.body on extract, and feeds the any_cat gate
 - **source**: `src/gui/gui_qpro_panel.cpp:268`
 - **notes**: Default true. Body assembly only actually works when App::State render size is 520x704 (checked and reported by DrawQproIntro at gui_qpro_panel.cpp:206-218), but the checkbox is never disabled for it.
-- **tests**: `qpro None then All flip the whole part selection`, `qpro group checkbox clears just that date group`
+- **tests**: `qpro None then All flip the whole part selection`, `qpro group checkbox clears just that date group`, `scenario: qpro scan, narrow to one date group, then extract`
 
 ### 3. Face category checkbox
 
@@ -112,7 +112,7 @@ reader against the source (see README.md for method).
 - **effect**: Sets s_checked[pi] = new value for every part index in that group (whole date group selected/deselected at once)
 - **source**: `src/gui/gui_qpro_panel.cpp:126`
 - **notes**: ONE entry describing a row drawn in a loop over s_groups (DrawPartGroup called from gui_qpro_panel.cpp:177 under ImGui::PushID((int)gi)). Its displayed state is computed as "all parts in group checked".
-- **tests**: `qpro group checkbox clears just that date group`, `qpro part groups appear once a scan publishes parts`
+- **tests**: `qpro group checkbox clears just that date group`, `qpro part groups appear once a scan publishes parts`, `scenario: qpro scan, narrow to one date group, then extract`
 
 ### 8. Keep static base fills un-hue-shifted
 
@@ -124,7 +124,7 @@ reader against the source (see README.md for method).
 - **source**: `src/gui/gui_qpro_panel.cpp:223`
 - **tooltip**: yes
 - **notes**: Default true.
-- **tests**: `qpro extract posts the selected options`, `qpro tab warns unless the render size matches the avatar`
+- **tests**: `qpro controls explain themselves on hover`, `qpro extract posts the selected options`, `qpro tab warns unless the render size matches the avatar`
 
 ### 9. Individual scanned part checkbox
 
@@ -159,7 +159,7 @@ reader against the source (see README.md for method).
 - **source**: `src/gui/gui_qpro_panel.cpp:224`
 - **tooltip**: yes
 - **notes**: IsItemHovered() on the preceding Checkbox.
-- **tests**: `qpro extract posts the selected options`, `qpro tab warns unless the render size matches the avatar`
+- **tests**: `qpro controls explain themselves on hover`, `qpro extract posts the selected options`, `qpro tab warns unless the render size matches the avatar`
 
 ### 12. Output fps (hover tooltip)
 
@@ -171,7 +171,7 @@ reader against the source (see README.md for method).
 - **source**: `src/gui/gui_qpro_panel.cpp:237`
 - **tooltip**: yes
 - **notes**: IsItemHovered() on the InputInt.
-- **tests**: `qpro extract posts the selected options`, `qpro output fps clamps to the accepted range`
+- **tests**: `qpro animated-parts note lists the three browser outputs`, `qpro controls explain themselves on hover`, `qpro extract posts the selected options`, `qpro output fps clamps to the accepted range` (+1 more)
 
 ### 13. Scan parts from bm2dx.dll (hover tooltip)
 
@@ -183,7 +183,7 @@ reader against the source (see README.md for method).
 - **source**: `src/gui/gui_qpro_panel.cpp:99`
 - **tooltip**: yes
 - **notes**: IsItemHovered() is evaluated after ImGui::EndDisabled(), so the tooltip is reachable in the disabled state too.
-- **tests**: `qpro scan button posts the scan command`
+- **tests**: `qpro controls explain themselves on hover`, `qpro scan button posts the scan command`
 
 ### 14. Output fps text field, keyboard editing keymap
 
@@ -206,7 +206,7 @@ reader against the source (see README.md for method).
 - **effect**: Opens the native folder picker via NativeDialog::BrowseForFolder(Gui::GetHwnd(), ""); if a folder is returned, builds AfpCmd::QproStartExtract{out_dir, hue_scope=s_scope_hue, fps=s_qpro_fps, parts.head/hand/hair/face/body/back from the category checkboxes, and part_sel=BuildSelection() only when nsel >= 0} and calls state.PostCommand(AfpCmd::Wrap(...))
 - **source**: `src/gui/gui_qpro_panel.cpp:283`
 - **notes**: Fixed size ImVec2(280,32). If no scan was ever run (nsel == -1) part_sel is omitted, so the whole part set is extracted.
-- **tests**: `qpro None then All flip the whole part selection`, `qpro category checkboxes gate the extract button`, `qpro extract is abandoned when the folder picker is cancelled`, `qpro extract posts the selected options` (+2 more)
+- **tests**: `qpro None then All flip the whole part selection`, `qpro category checkboxes gate the extract button`, `qpro extract is abandoned when the folder picker is cancelled`, `qpro extract posts the selected options` (+3 more)
 
 ### 16. Native "browse for folder" shell dialog raised by the extract button
 
@@ -283,7 +283,7 @@ reader against the source (see README.md for method).
 - **effect**: Selects the qpro MainTab panel, causing Panels::RenderQproTabBody() to be the drawn body for the main tab area
 - **source**: `src/gui/panel_registry.cpp:37`
 - **notes**: Gate for every other entry on this surface. The tab item itself is created by the generic tab-bar loop from PanelDesc.tab_label; registry entry id is "qpro_view".
-- **tests**: `qpro controls explain themselves on hover`, `top bar hides the view switch when only one main panel is active`, `top bar view switch appears for iidx33 and swaps the main panel`
+- **tests**: `qpro animated-parts note lists the three browser outputs`, `qpro controls explain themselves on hover`, `scenario: qpro scan, narrow to one date group, then extract`, `top bar hides the view switch when only one main panel is active` (+1 more)
 - **audit correction**: Wrong control type, wrong source line and wrong imgui path, plus an incomplete precondition. src/gui/panel_registry.cpp:37 is the .tab_label field of a constexpr PanelDesc table entry, not an interactive control, and there is NO tab bar for main tabs - panel_registry.cpp contains no ImGui calls at all (the only BeginTabBar/BeginTabItem in the GUI is the inspector's, src/gui/gui_inspector.cpp:444-446, which does not carry MainTab panels). The note "the tab item itself is created by the generic tab-bar loop" is therefore wrong. The precondition also omits the app-level boot gate. -> The control is a plain ImGui::Button labelled with PanelDesc::tab_label, emitted by the loop in RenderTopBar: `if (ImGui::Button(tabs[i]->tab_label)) g_main_view = (int)i;` at src/gui/gui_panels.cpp:251, inside ImGui::BeginChild("topbar", ...) at gui_panels.cpp:234. source = src/gui/gui_panels.cpp:251; imgui_path = "##main/topbar/qpro"; input remains left-click. Effect: sets the file-static int g_main_view (declared src/gui/gui_panels.cpp:207) to this panel's index; RenderReadyView then clamps it and calls tabs[view]->draw() (= Panels::RenderQproTabBody) inside ImGui::BeginChild("main_view", ...) at gui_panels.cpp:449-451. Full precondition: App::Global().GetBootState() == App::BootState::Ready, otherwise Build() draws Panels::Setup::RenderView() and no top bar exists at all (src/gui/gui_panels.cpp:468-471); AND ActiveBackendId() == "afp_modern" (kPanelSets match, panel_registry.cpp:104-118); AND GetGameProfileSlug() == "iidx33" (QproTabVisible, panel_registry.cpp:18-20); AND tabs.size() > 1 (gui_panels.cpp:243), which holds here because kModernPanels contributes Renderer + qpro to the MainTab slot. Also note the button is styled active/inactive via ImGuiCol_HeaderActive vs ImGuiCol_FrameBg (gui_panels.cpp:247-250) but is never disabled.
 
 ### 23. Scan parts from bm2dx.dll
@@ -297,7 +297,7 @@ reader against the source (see README.md for method).
 - **source**: `src/gui/gui_qpro_panel.cpp:94`
 - **tooltip**: yes
 - **notes**: While scan.running a "scanning bm2dx.dll ..." TextDisabled is shown SameLine; on failure a red "Scan failed: <err>" line appears (both non-interactive).
-- **tests**: `qpro scan button posts the scan command`
+- **tests**: `qpro controls explain themselves on hover`, `qpro scan button posts the scan command`
 - **audit correction**: Incomplete/misleading effect: it only lists the PostCommand, and omits the destructive side effect that lands on the GUI when the scan finishes. That side effect silently discards the user's per-part selection, which changes the meaning of every other part-list entry. -> Effect should also state the completion path: on the first frame after the background scan completes, DrawPartScanList sees scan.done && scan.generation != s_scan_gen (src/gui/gui_qpro_panel.cpp:152-157) and then (a) latches s_scan_gen = scan.generation, (b) replaces s_parts with scan.parts, (c) calls s_checked.assign(s_parts.size(), 1), i.e. RESETS every part checkbox to checked and throws away any manual per-part / per-date-group selection made before the rescan, and (d) calls RebuildGroups() (gui_qpro_panel.cpp:63-78), rebuilding s_groups by source-IFS date (unknown-date bucket "(no source IFS / unknown date)" sorted last, other dates descending). As a knock-on effect the return value of DrawPartScanList flips from -1 (no scan yet, extract sends the whole part set because `if (nsel >= 0) r.part_sel = BuildSelection();` at gui_qpro_panel.cpp:296 is skipped) to the full part count, from which point on the extract button always sends an explicit PartSelection.
 
 ### 24. All (select every scanned part)
@@ -310,7 +310,7 @@ reader against the source (see README.md for method).
 - **effect**: std::ranges::fill(s_checked, 1) - marks every scanned part selected, which changes the "%d / %zu parts selected" count and the PartSelection built by BuildSelection()
 - **source**: `src/gui/gui_qpro_panel.cpp:169`
 - **notes**: SmallButton placed SameLine after the selected-count text.
-- **tests**: `qpro None then All flip the whole part selection`, `qpro group checkbox clears just that date group`, `qpro scan failure is surfaced without a part list`
+- **tests**: `qpro None then All flip the whole part selection`, `qpro group checkbox clears just that date group`, `qpro scan failure is surfaced without a part list`, `scenario: qpro scan, narrow to one date group, then extract`
 
 ### 25. None (deselect every scanned part)
 
@@ -343,7 +343,7 @@ reader against the source (see README.md for method).
 - **effect**: Scrolls the bordered fixed-height (0,300) child window containing the per-date part groups; content is clipper-driven so scrolling changes which part checkboxes are instantiated
 - **source**: `src/gui/gui_qpro_panel.cpp:175`
 - **notes**: ImGui::BeginChild("qpro_parts", ImVec2(0,300), border=1). Also drag-scrollable via its scrollbar.
-- **tests**: `qpro group checkbox clears just that date group`, `qpro part groups appear once a scan publishes parts`
+- **tests**: `qpro group checkbox clears just that date group`, `qpro part groups appear once a scan publishes parts`, `scenario: qpro scan, narrow to one date group, then extract`
 
 ### 28. qpro tab body scroll region ("main_view" child window)
 
@@ -354,7 +354,7 @@ reader against the source (see README.md for method).
 - **effect**: Scrolls the child window that wraps the ENTIRE qpro panel body (ImGui::BeginChild("main_view", ImVec2(0, content_h), 0) - no NoScrollbar flag, so a vertical scrollbar appears whenever the body exceeds content_h). The qpro body is intro text + options + category row + a fixed 300px parts child + extract button + status/issues, which overflows a normal window height, so the extract button, the progress bar and the issues list are only reachable after scrolling this outer region. Mouse wheel over the panel background, or dragging its scrollbar, moves it.
 - **source**: `src/gui/gui_panels.cpp:449`
 - **notes**: Distinct from the two inner children already inventoried (qpro_parts at gui_qpro_panel.cpp:175 and qpro_issues at gui_qpro_panel.cpp:40). Wheel over qpro_parts scrolls that inner child first and only chains to main_view at its scroll limit, so an automated driver must target the outer region explicitly. content_h = GetContentRegionAvail().y - kStatusStripH - ItemSpacing.y (gui_panels.cpp:447-448).
-- **tests**: `qpro controls explain themselves on hover`, `qpro group checkbox clears just that date group`, `splitter drag moves the boundary between the left and centre panes`
+- **tests**: `qpro animated-parts note lists the three browser outputs`, `qpro controls explain themselves on hover`, `qpro group checkbox clears just that date group`, `scenario: qpro scan, narrow to one date group, then extract` (+1 more)
 
 ### 29. Output fps (numeric text field)
 
@@ -366,5 +366,5 @@ reader against the source (see README.md for method).
 - **source**: `src/gui/gui_qpro_panel.cpp:234`
 - **tooltip**: yes
 - **notes**: Item width forced to 120 via SetNextItemWidth. Default 60. Typing an out-of-range number is silently clamped on the next frame.
-- **tests**: `qpro extract posts the selected options`, `qpro output fps clamps to the accepted range`
+- **tests**: `qpro animated-parts note lists the three browser outputs`, `qpro controls explain themselves on hover`, `qpro extract posts the selected options`, `qpro output fps clamps to the accepted range` (+1 more)
 

@@ -5,33 +5,33 @@ reader against the source (see README.md for method).
 
 | # | id | control | input | tooltip | tests |
 |---|---|---|---|---|---|
-| 1 | `game-profile-combo-open` | Game profile combo (open/close the dropdown) | combo-select | yes | **none** |
+| 1 | `game-profile-combo-open` | Game profile combo (open/close the dropdown) | combo-select | yes | 1 |
 | 2 | `game-profile-select-auto` | 'Auto (...)' entry in the game profile combo | combo-select | - | **none** |
 | 3 | `game-profile-select-row` | Profile row in the game profile combo (one per GameProfile::All() entry) | combo-select | - | **none** |
-| 4 | `render-preset-combo-open` | Render resolution preset combo (open/close) | combo-select | yes | **none** |
+| 4 | `render-preset-combo-open` | Render resolution preset combo (open/close) | combo-select | yes | 1 |
 | 5 | `render-preset-select-custom` | 'Custom' row in the render preset combo | combo-select | - | **none** |
 | 6 | `render-preset-select-row` | Resolution preset row in the render preset combo | combo-select | - | **none** |
 | 7 | `setup-window-scrollbar-drag` *(audit)* | '##setup' window vertical scrollbar grab | drag | - | **none** |
 | 8 | `error-banner-region` | Last-attempt-failed error banner | hover | - | **none** |
-| 9 | `game-profile-combo-tooltip` | Game profile combo hover tooltip | hover | yes | **none** |
-| 10 | `render-fps-tooltip` | Frame rate field hover tooltip | hover | yes | 1 |
-| 11 | `render-preset-combo-tooltip` | Render resolution combo hover tooltip | hover | yes | **none** |
-| 12 | `combo-popup-dismiss` *(audit)* | Combo popup dismissal (both '##game_profile' and '##render_preset') | key | - | **none** |
-| 13 | `setup-card-nav-activate` *(audit)* | Keyboard activation of the focused setup control | key | - | 19 |
-| 14 | `setup-card-nav-focus-move` *(audit)* | Keyboard focus traversal across the setup card items | key | - | 19 |
-| 15 | `browse-game-dir` | Browse... button (game directory) | left-click | - | 2 |
+| 9 | `game-profile-combo-tooltip` | Game profile combo hover tooltip | hover | yes | 1 |
+| 10 | `render-fps-tooltip` | Frame rate field hover tooltip | hover | yes | 2 |
+| 11 | `render-preset-combo-tooltip` | Render resolution combo hover tooltip | hover | yes | 1 |
+| 12 | `combo-popup-dismiss` *(audit)* | Combo popup dismissal (both '##game_profile' and '##render_preset') | key | - | 1 |
+| 13 | `setup-card-nav-activate` *(audit)* | Keyboard activation of the focused setup control | key | - | 20 |
+| 14 | `setup-card-nav-focus-move` *(audit)* | Keyboard focus traversal across the setup card items | key | - | 20 |
+| 15 | `browse-game-dir` | Browse... button (game directory) | left-click | - | 3 |
 | 16 | `extract-arc-button` | 'Extract .arc files...' button | left-click | - | 4 |
 | 17 | `extract-customize-button` | 'Extract customize images...' button | left-click | - | 4 |
-| 18 | `load-button` | Load button | left-click | - | 4 |
+| 18 | `load-button` | Load button | left-click | - | 5 |
 | 19 | `render-fps-quick-preset` | Quick frame-rate preset button (30 / 60 / 120 / 144) | left-click | - | **none** |
 | 20 | `render-fps-step-minus` | InputInt step-down button ('-') on the frame rate field | left-click | - | **none** |
 | 21 | `render-fps-step-plus` | InputInt step-up button ('+') on the frame rate field | left-click | - | **none** |
-| 22 | `game-profile-popup-scroll` | Game profile combo popup list (scroll) | scroll | - | **none** |
-| 23 | `render-preset-popup-scroll` *(audit)* | Render resolution preset combo popup list (scroll) | scroll | - | **none** |
+| 22 | `game-profile-popup-scroll` | Game profile combo popup list (scroll) | scroll | - | 1 |
+| 23 | `render-preset-popup-scroll` *(audit)* | Render resolution preset combo popup list (scroll) | scroll | - | 1 |
 | 24 | `setup-window-scroll` | Setup full-viewport window background (scroll) | scroll | - | **none** |
 | 25 | `game-dir-input` | Game directory text field | text-entry | - | 1 |
 | 26 | `numeric-field-text-editing` *(audit)* | Numeric text editing inside ##render_fps / ##render_w / ##render_h | text-entry | - | 1 |
-| 27 | `render-fps-input` | Frame rate InputInt text field | text-entry | yes | 1 |
+| 27 | `render-fps-input` | Frame rate InputInt text field | text-entry | yes | 2 |
 | 28 | `render-height-input` | Render height InputInt | text-entry | - | 1 |
 | 29 | `render-width-input` | Render width InputInt | text-entry | - | 2 |
 
@@ -47,7 +47,7 @@ reader against the source (see README.md for method).
 - **source**: `src/gui/gui_setup_view.cpp:121`
 - **tooltip**: yes
 - **notes**: Item width -FLT_MIN (full card width). Tooltip is attached to this item - see entry game-profile-combo-tooltip.
-- **tests**: none
+- **tests**: `setup view controls explain themselves on hover`
 
 ### 2. 'Auto (...)' entry in the game profile combo
 
@@ -81,7 +81,7 @@ reader against the source (see README.md for method).
 - **source**: `src/gui/gui_setup_view.cpp:226`
 - **tooltip**: yes
 - **notes**: Item width -120.
-- **tests**: none
+- **tests**: `setup view controls explain themselves on hover`
 
 ### 5. 'Custom' row in the render preset combo
 
@@ -139,7 +139,7 @@ reader against the source (see README.md for method).
 - **effect**: ImGui::SetTooltip shows a 6-line explanation of what the profile selects: per-game DLL ordinal tables and boot-call gating, why Konami's per-game afp-core.dll builds share export names but differ in ordinal mapping, that auto-detect keys off the game directory path, and that this control overrides a wrong detection.
 - **source**: `src/gui/gui_setup_view.cpp:136`
 - **tooltip**: yes
-- **tests**: none
+- **tests**: `setup view controls explain themselves on hover`
 - **audit correction**: Precondition 'pointer hovering the ##game_profile combo' is incomplete in a way that changes observed behaviour: IsItemHovered() with default flags goes through IsWindowContentHoverable, which returns false while a popup owns nav focus. So once the combo popup is open, hovering the combo header shows NO tooltip. -> Precondition: pointer hovering the '##game_profile' combo header AND no combo/popup is currently open (default IsItemHovered lacks ImGuiHoveredFlags_AllowWhenBlockedByPopup, so an open popup suppresses the tooltip).
 
 ### 10. Frame rate field hover tooltip
@@ -152,7 +152,7 @@ reader against the source (see README.md for method).
 - **source**: `src/gui/gui_setup_view.cpp:153`
 - **tooltip**: yes
 - **notes**: Tooltip binds to the InputInt, not to the quick-preset buttons.
-- **tests**: `setup view fps commits once, on edit completion`
+- **tests**: `setup view controls explain themselves on hover`, `setup view fps commits once, on edit completion`
 - **audit correction**: The note 'Tooltip binds to the InputInt, not to the quick-preset buttons' understates the hover target. IsItemHovered() after an InputInt with step != 0 tests the group rect, so the hover region is the text box PLUS the '-' and '+' buttons. (The claim about the quick-preset buttons is correct - they are separate items submitted after the tooltip call.) -> Precondition: pointer hovering ANY part of the ##render_fps InputInt group - the text box or either step button - because InputScalar's BeginGroup/EndGroup makes the group the last item. Not raised over the 30/60/120/144 buttons, and not raised while a combo popup is open.
 
 ### 11. Render resolution combo hover tooltip
@@ -164,7 +164,7 @@ reader against the source (see README.md for method).
 - **effect**: ImGui::SetTooltip explains that this is the native screen size of the game whose IFSes are being loaded, and that the user can pick a preset or type a custom WxH in the fields below.
 - **source**: `src/gui/gui_setup_view.cpp:243`
 - **tooltip**: yes
-- **tests**: none
+- **tests**: `setup view controls explain themselves on hover`
 - **audit correction**: Same incompleteness as the profile combo tooltip: the IsItemHovered() at line 243 does not fire while the '##render_preset' popup is open, because default hover flags reject hover blocked by an open popup. -> Precondition: pointer hovering the '##render_preset' combo header AND no popup is open. The tooltip is unreachable while the user is browsing the preset rows.
 
 ### 12. Combo popup dismissal (both '##game_profile' and '##render_preset')
@@ -176,7 +176,7 @@ reader against the source (see README.md for method).
 - **effect**: Escape, or a left-click anywhere outside the popup rectangle, closes the popup with NO selection applied - so no SetGameProfileSlug / SetRenderSize / SaveCurrentSettings runs. Distinct from clicking a row. Standard ImGui BeginPopup behaviour, not written in this file, but it is the only way to back out of an opened combo.
 - **source**: `src/gui/gui_setup_view.cpp:121`
 - **notes**: Second call site is line 226. While a popup is open the parent window's items stop reporting hovered (IsWindowContentHoverable rejects popup-blocked hover), which is why the combo tooltips at lines 136/243 do not fire while their own popup is open.
-- **tests**: none
+- **tests**: `setup view controls explain themselves on hover`
 
 ### 13. Keyboard activation of the focused setup control
 
@@ -188,7 +188,7 @@ reader against the source (see README.md for method).
 - **effect**: Space or Enter activates the focused item, running exactly the same code path as a left-click: Browse... opens the Win32 folder picker, a quick-fps button sets fps and persists, Load posts App::Cmd::BootGame, an extractor button opens its picker and calls Start(). On a combo, Space/Enter opens the popup, arrow keys move between rows (opening on the row that called SetItemDefaultFocus at line 132 / 239), Enter commits the row, Escape closes without applying. On a text/numeric field, Enter enters edit mode and Escape reverts the value.
 - **source**: `src/gui/gui_window.cpp:153`
 - **notes**: This is what makes SetItemDefaultFocus() at lines 132 and 239 observable - the inventory mentions those calls only as a note on the mouse-click entries.
-- **tests**: `keyboard activation runs the same path as a click`, `keyboard nav moves focus between setup controls`, `setup view Browse adopts the picked folder`, `setup view Browse keeps the current folder when cancelled` (+15 more)
+- **tests**: `keyboard activation runs the same path as a click`, `keyboard nav moves focus between setup controls`, `scenario: first run picks a game, a profile and a resolution then boots`, `setup view Browse adopts the picked folder` (+16 more)
 
 ### 14. Keyboard focus traversal across the setup card items
 
@@ -200,7 +200,7 @@ reader against the source (see README.md for method).
 - **effect**: Tab / Shift+Tab and the arrow keys move the ImGui nav cursor between the interactive items of the card in submission order: ##gamedir -> Browse... -> ##game_profile -> ##render_fps (group incl. -/+) -> 30/60/120/144 -> ##render_preset -> ##render_w -> ##render_h -> Load -> Extract .arc files... -> Extract customize images... Moving focus alone changes no state; ImGui auto-scrolls the '##setup' window to keep the focused item visible.
 - **source**: `src/gui/gui_window.cpp:153`
 - **notes**: Entirely absent from the inventory, which documents mouse input only. Inside an active text field Tab is consumed by the text edit and moves to the next inputable item.
-- **tests**: `keyboard activation runs the same path as a click`, `keyboard nav moves focus between setup controls`, `setup view Browse adopts the picked folder`, `setup view Browse keeps the current folder when cancelled` (+15 more)
+- **tests**: `keyboard activation runs the same path as a click`, `keyboard nav moves focus between setup controls`, `scenario: first run picks a game, a profile and a resolution then boots`, `setup view Browse adopts the picked folder` (+16 more)
 
 ### 15. Browse... button (game directory)
 
@@ -211,7 +211,7 @@ reader against the source (see README.md for method).
 - **effect**: Calls NativeDialog::BrowseForFolder(Gui::GetHwnd(), g_dir_buf) which opens the Win32 modal folder picker rooted at the current buffer. If a non-empty path is returned it is copied into g_dir_buf (clamped to 1023 chars) and PersistSetup() runs: state.SetGameDir(path) + App::SaveCurrentSettings().
 - **source**: `src/gui/gui_setup_view.cpp:82`
 - **notes**: Button size ImVec2(-FLT_MIN, 0) so it fills the remaining row width.
-- **tests**: `setup view Browse adopts the picked folder`, `setup view Browse keeps the current folder when cancelled`
+- **tests**: `scenario: first run picks a game, a profile and a resolution then boots`, `setup view Browse adopts the picked folder`, `setup view Browse keeps the current folder when cancelled`
 
 ### 16. 'Extract .arc files...' button
 
@@ -247,7 +247,7 @@ reader against the source (see README.md for method).
 - **effect**: Builds App::Cmd::BootGame{game_dir = g_dir_buf}, fills render_width/render_height from state.GetRenderSize(), posts it via state.PostCommand(std::move(r)), then clears the previous error with state.SetBootError({}). While booting a 'Booting...' disabled label is shown on the same line.
 - **source**: `src/gui/gui_setup_view.cpp:376`
 - **notes**: Button size ImVec2(160, 32). The BeginDisabled gate is at line 375.
-- **tests**: `keyboard activation runs the same path as a click`, `setup view Load is disabled while no directory is set`, `setup view Load posts BootGame with the typed directory`, `setup view disables Load while a boot is in flight`
+- **tests**: `keyboard activation runs the same path as a click`, `scenario: first run picks a game, a profile and a resolution then boots`, `setup view Load is disabled while no directory is set`, `setup view Load posts BootGame with the typed directory` (+1 more)
 
 ### 19. Quick frame-rate preset button (30 / 60 / 120 / 144)
 
@@ -292,7 +292,7 @@ reader against the source (see README.md for method).
 - **effect**: Scrolls the combo popup's item list. No state change.
 - **source**: `src/gui/gui_setup_view.cpp:121`
 - **notes**: Standard ImGui combo popup scrolling; the popup holds 1 + GameProfile::All().size() Selectables.
-- **tests**: none
+- **tests**: `setup view controls explain themselves on hover`
 
 ### 23. Render resolution preset combo popup list (scroll)
 
@@ -303,7 +303,7 @@ reader against the source (see README.md for method).
 - **effect**: Scrolls the combo popup's Selectable list. No state change. The inventory has this entry for the game-profile combo (game-profile-popup-scroll) but omits the exact same behaviour for the render-preset combo.
 - **source**: `src/gui/gui_setup_view.cpp:226`
 - **notes**: Row count comes from kPresets (lines 192-201) minus the qpro row when EffectiveSetupSlug(state) != "iidx33" (gate at line 228).
-- **tests**: none
+- **tests**: `setup view controls explain themselves on hover`
 
 ### 24. Setup full-viewport window background (scroll)
 
@@ -348,7 +348,7 @@ reader against the source (see README.md for method).
 - **source**: `src/gui/gui_setup_view.cpp:152`
 - **tooltip**: yes
 - **notes**: Item width 120. Controls preview render/advance rate only (dt = 1/fps); video export fps is separate.
-- **tests**: `setup view fps commits once, on edit completion`
+- **tests**: `setup view controls explain themselves on hover`, `setup view fps commits once, on edit completion`
 - **audit correction**: Effect says 'Typing a number and committing sets changed=true'. ImGui::InputInt is called WITHOUT ImGuiInputTextFlags_EnterReturnsTrue (line 152 passes only AutoSelectAll), so InputScalar returns true on EVERY keystroke that changes the buffer, not on commit. Every intermediate value is therefore clamped, applied and written to disk. -> Each keystroke returns changed=true: fps is clamped to [1,1000], state.SetRenderFps(fps) runs and PersistSetup() calls App::SaveCurrentSettings(), which writes the settings file. Typing '144' over the preselected value applies and persists 1, then 14, then 144 (three disk writes). Escape afterwards restores the displayed text but does not roll back the already-persisted value. Also, the SetNextItemWidth(120) at line 151 is the width of the whole InputInt GROUP; the editable box is 120 minus two step buttons (2 * (GetFrameHeight() + ItemInnerSpacing.x)).
 
 ### 28. Render height InputInt

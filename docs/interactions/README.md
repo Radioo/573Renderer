@@ -47,29 +47,46 @@ including the render window and the 3D scene camera, not just the GUI panels.
 | | |
 |---|---|
 | interactions inventoried | 526 |
-| matched to a test by path or flag | 261 |
-| not matched | 236 |
-| GUI test cases | 162 (596 assertions) |
+| matched to a test by path or flag | 269 |
+| not matched | 228 |
+| GUI test cases | 192 (761 assertions) |
 | CLI test cases | 29 (162 assertions) |
+
+Testing runs at two levels. Per-interaction tests drive one control and assert one effect.
+On top of those sit **user-scenario tests** (`tests/gui/scenario_tests.cpp`) that walk a
+whole journey the way a person would:
+
+| scenario | what it walks |
+|---|---|
+| first run | Browse for a game dir, pick a profile, pick a resolution, set fps, Load, assert the BootGame payload |
+| browse and play | filter the tree, select an IFS, assert LoadContent, then double-click a layer and assert SwitchAnimation |
+| scrub | pause, step, jump to a label, resume - asserting all four commands in order |
+| export | Ctrl+E, name it, pick format, fps, quality, size, open Advanced, limit frames, set loop count, Start, assert the whole request |
+| cancel | click the capturing tag in the status strip, land in the modal, Cancel |
+| crop | arm Pick region in the modal, watch it close, DRAW THE RECT ON THE REAL RENDER WINDOW with Win32 messages, watch the modal reopen, Start, assert the crop reached the request |
+| qpro | scan, All, uncheck one date group, pick a category, set fps, extract, assert the per-part selection |
+| live overrides | stack four overrides, then reset them all in one click |
+| 3D scene | tab absent, load a synthetic scene, tab appears and drives, unload, tab disappears |
+
+The crop scenario is the only test that spans both windows: it proves the modal, the
+render-window WndProc and `App::State` agree about a rect the user drew.
 
 What is deliberately, verifiably complete:
 
-- **Every one of the 74 CLI flags** the parser accepts is referenced by a test in
-  `tests/cli/cli_tests.cpp`.
-- **Every tooltip that a test can reach** is asserted to actually appear
-  (`tests/gui/tooltip_tests.cpp`), including on DISABLED controls, which is where two
-  unreachable-tooltip bugs were found.
-- **Keyboard navigation** is exercised (`tests/gui/input_mode_tests.cpp`): focus movement,
-  nav activation of a button, and nav activation of a transport control. The harness now
-  sets `ImGuiConfigFlags_NavEnableKeyboard` to match `Gui::Init`; before that the tests ran
-  a subtly different application from the shipped one.
-- **Scrolling** is exercised for the browse tree, the scene tree and the export modal, the
-  last of which also asserts the documented height cap keeps the Start/Close footer
-  reachable on a short window.
+- **Every one of the 74 CLI flags** the parser accepts is referenced by a test.
+- **Every tooltip a test can reach** is asserted to actually appear, including on DISABLED
+  controls, where two unreachable-tooltip bugs were found.
+- **Keyboard navigation**: focus movement and nav activation. The harness now sets
+  `ImGuiConfigFlags_NavEnableKeyboard` to match `Gui::Init`.
+- **Scrolling** for the browse tree, scene tree and export modal, the last asserting the
+  height cap keeps the footer reachable on a short window.
+- **The render window**: crop-pick drag, zero-area discard, Escape cancel, crosshair cursor,
+  capture loss - driven by real Win32 messages against a real `AppWindow`.
+- **The 3D camera**: right-button look begin/end, the enable gate, capture loss, movement
+  polling only while looking, camera integration and scene framing.
 
 See [coverage_gaps.md](coverage_gaps.md) for what is still unmatched, and read its preamble
-before treating the count as a to-do list - the matcher cannot see interactions driven by
-coordinates or key chords, and it cannot distinguish a click from a hover.
+before treating the count as a to-do list.
 
 ## How this was built
 
@@ -136,6 +153,16 @@ the rest are behaviour worth knowing. Each fix carries a regression test.
    `src/gui/gui_timeline.cpp:170`.
 7. **`ImGuiWindowFlags_NoScrollbar` does not disable wheel scrolling** - only
    `NoScrollWithMouse` does. Several regions that look unscrollable do scroll.
+8. **FIXED - the HW-accel tooltip described AV1 while MP4 HEVC-alpha was selected.**
+   `DrawHwAccelTooltip` had no branch for `Format::MP4_HEVC_Alpha`, and
+   `MediaSink::HardwareProbeFormat` maps that format onto `AVIF`, so the probe answered a
+   question about AV1 NVENC that has nothing to do with it. The selected format fell through
+   to either "Needs an NVIDIA GPU with AV1 encode support" or "Encode the AV1 stream with
+   NVENC (av1_nvenc)". HEVC-alpha is encoded by `libx265` in `VideoEncoder::OpenMp4HevcAlpha`
+   and has no hardware path on any GPU - NVENC's HEVC encoder carries no alpha, which is the
+   whole point of this format. The branch now says that, and it runs before the machine probe
+   because the reason is intrinsic to the format. Found by extending the branch-text tooltip
+   test to all seven formats instead of six. `src/gui/gui_export_panel.cpp:445`.
 
 ## Regenerating
 

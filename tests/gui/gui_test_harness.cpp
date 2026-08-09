@@ -40,6 +40,16 @@ std::string& RevealedPath() {
     return value;
 }
 
+bool& CaptureArmed() {
+    static bool armed = false;
+    return armed;
+}
+
+std::string& CapturedText() {
+    static std::string value;
+    return value;
+}
+
 std::string BrowseStub(const std::string& initial) {
     (void)initial;
     return BrowseResult();
@@ -133,7 +143,14 @@ ImGuiTest* Harness::NewTest(const char* name) {
 
 void Harness::Frame() {
     ImGui::NewFrame();
+    bool const capturing = CaptureArmed();
+    if (capturing) ImGui::LogToBuffer();
     Panels::Build();
+    if (capturing) {
+        CapturedText() = ImGui::GetCurrentContext()->LogBuffer.c_str();
+        ImGui::LogFinish();
+        CaptureArmed() = false;
+    }
     ImGui::Render();
     ServiceTextures();
     ImGuiTestEngine_PostSwap(engine_);
@@ -188,6 +205,19 @@ bool TooltipShown(ImGuiTestContext* ctx) {
     return std::ranges::any_of(g.Windows, [](const ImGuiWindow* w) {
         return w->Active && strncmp(w->Name, "##Tooltip", 9) == 0;
     });
+}
+
+std::string CaptureFrameText(ImGuiTestContext* ctx) {
+    CapturedText().clear();
+    CaptureArmed() = true;
+    ctx->Yield(3);
+    return CapturedText();
+}
+
+std::string HoverAndCaptureText(ImGuiTestContext* ctx, const char* item_path) {
+    ctx->MouseMove(item_path);
+    ctx->Yield(3);
+    return CaptureFrameText(ctx);
 }
 
 bool HoverShowsTooltip(ImGuiTestContext* ctx, const char* item_path) {

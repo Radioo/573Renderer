@@ -107,7 +107,13 @@ Stream construction per format:
   alpha plane).
 - MP4_HEVC_Alpha: libx265 with an x265 auxiliary alpha layer (single
   yuva420p, no hardware path); forces the `hvc1` tag (MKTAG) so Safari's
-  transparent-video path plays it.
+  transparent-video path plays it. NVENC's HEVC encoder has no alpha
+  channel, so this format can never use hardware encode on any GPU - the
+  export dialog's HW-accel tooltip says exactly that, ahead of its
+  machine-capability probe, because the reason is intrinsic to the format
+  (`DrawHwAccelTooltip`; note `MediaSink::HardwareProbeFormat` folds every
+  non-H.264 format onto AVIF, so its answer is about AV1 NVENC and is
+  meaningless here).
 
 Keyframe interval (`Params::keyframe_interval`, `KeyframeGop` helper): every
 codec path sets `gop_size` and `keyint_min` from it. 0 (default) keeps the

@@ -375,5 +375,40 @@ code:
 powershell -Command "Start-Process -FilePath .\build\gui_tests.exe -Wait -RedirectStandardOutput out.txt"
 ```
 
-With a device present the whole suite is 139 cases / 537 assertions and nothing
-skips.
+With a device present the whole suite is 192 cases / 761 assertions and nothing
+skips (`cli_tests` adds 29 cases / 162 assertions).
+
+## 16. Asserting tooltip TEXT, not just presence
+
+`GuiTest::HoverShowsTooltip` only answers "did a `##Tooltip` window appear". That
+is enough for a tooltip whose text is a constant, but several tooltips change
+what they say depending on state - the hardware-accel note names a different
+reason per format, the animate-camera note names a different reason for each way
+it can be greyed out, the export status tag carries either the output path or
+the encoder error. Presence alone would pass while the wrong branch renders.
+
+`GuiTest::HoverAndCaptureText` hovers an item and returns the text imgui
+actually rendered that frame, so the test can assert the branch:
+
+- The harness owns the capture because the log has to be armed inside its frame
+  loop: `ImGui::LogToBuffer()` right after `NewFrame()`, `Panels::Build()`, then
+  read `GetCurrentContext()->LogBuffer` **before** `ImGui::LogFinish()`.
+  `LogFinish` clears the buffer, so reading after it always yields an empty
+  string. That ordering bug cost a debugging cycle.
+- `GuiTest::CaptureFrameText` is the same capture without the hover, for
+  tooltips owned by an item that has no id and therefore no addressable path.
+  Two exist: the timeline label tick (drawn on the `##tl_track` invisible
+  button, hit-tested by mouse x) and the qpro "Animated parts ->" note
+  (`ImGui::TextDisabled`, id 0). Both are reached with `MouseMoveToPos`. For the
+  qpro note the y is derived from the preceding `Output fps` item rect plus
+  `2 * ItemSpacing.y + FontSize * 0.5` - that is exactly what `ImGui::Spacing()`
+  followed by one text line advances, so it does not drift with the style.
+- `MouseMoveToPos` does not set the mouse viewport. Call `MouseMove` on any item
+  in the target window first, as `ClickTreeArrow` does.
+
+The suite asserts every `ImGui::SetTooltip` call site in `src/gui` (58 sites at
+the time of writing: 22 export modal, 9 inspector, 7 3D scene, 6 shell/status
+strip, 4 timeline, 4 qpro, 3 setup, 2 scene pane, 1 2D package). Branch-carrying
+tooltips are driven through each branch rather than once. If you add a
+`SetTooltip`, add its assertion in the same change - `grep -rn SetTooltip src/`
+is the checklist.

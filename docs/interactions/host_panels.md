@@ -6,25 +6,25 @@ reader against the source (see README.md for method).
 | # | id | control | input | tooltip | tests |
 |---|---|---|---|---|---|
 | 1 | `gc2d-pause-checkbox` | "Pause" checkbox (2D package playback) | checkbox | - | 1 |
-| 2 | `s3d-animate-camera-checkbox` | "Animate camera" checkbox | checkbox | yes | 2 |
+| 2 | `s3d-animate-camera-checkbox` | "Animate camera" checkbox | checkbox | yes | 3 |
 | 3 | `s3d-animate-models-checkbox` | "Animate models" checkbox | checkbox | yes | 1 |
-| 4 | `s3d-free-camera-checkbox` | "Free camera" checkbox | checkbox | yes | 1 |
-| 5 | `s3d-model-visible-checkbox` | Per-model visibility checkbox (one per model row) | checkbox | - | 2 |
-| 6 | `s3d-pause-checkbox` | "Pause" checkbox (3D scene playback) | checkbox | - | 2 |
+| 4 | `s3d-free-camera-checkbox` | "Free camera" checkbox | checkbox | yes | 2 |
+| 5 | `s3d-model-visible-checkbox` | Per-model visibility checkbox (one per model row) | checkbox | - | 3 |
+| 6 | `s3d-pause-checkbox` | "Pause" checkbox (3D scene playback) | checkbox | - | 3 |
 | 7 | `gc2d-animation-combo-open` | Animation picker combo (2D package) | combo-select | - | 2 |
 | 8 | `s3d-model-blend-combo-open` | Per-model blend mode combo (one per model row) | combo-select | - | 1 |
-| 9 | `gc2d-frame-slider-drag` | Frame scrubber ("frame %d", 0 .. length-1) | drag | yes | 1 |
+| 9 | `gc2d-frame-slider-drag` | Frame scrubber ("frame %d", 0 .. length-1) | drag | yes | 2 |
 | 10 | `gc2d-speed-slider-drag` | "speed" slider (2D package playback speed, 0.00x - 4.00x) | drag | - | 1 |
 | 11 | `s3d-freelook-mouse-move` | Mouse movement while holding right mouse (look around) | drag | - | **none** |
 | 12 | `s3d-move-speed-drag` | "move speed" drag float (free camera translation speed, units/s) | drag | - | 1 |
 | 13 | `s3d-speed-slider-drag` | "speed" slider (3D scene playback speed, 0.00x - 4.00x) | drag | - | 1 |
-| 14 | `s3d-time-slider-drag` | Animation time scrubber (full width, "tick %.0f") | drag | yes | 1 |
-| 15 | `gc2d-frame-slider-tooltip` | Frame scrubber hover tooltip | hover | yes | 1 |
-| 16 | `s3d-animate-camera-tooltip` | "Animate camera" hover tooltip (three variants) | hover | yes | 2 |
+| 14 | `s3d-time-slider-drag` | Animation time scrubber (full width, "tick %.0f") | drag | yes | 2 |
+| 15 | `gc2d-frame-slider-tooltip` | Frame scrubber hover tooltip | hover | yes | 2 |
+| 16 | `s3d-animate-camera-tooltip` | "Animate camera" hover tooltip (three variants) | hover | yes | 3 |
 | 17 | `s3d-animate-models-tooltip` | "Animate models" hover tooltip | hover | yes | 1 |
-| 18 | `s3d-free-camera-tooltip` | "Free camera" hover tooltip | hover | yes | 1 |
+| 18 | `s3d-free-camera-tooltip` | "Free camera" hover tooltip | hover | yes | 2 |
 | 19 | `s3d-model-row-blend-tooltip` | Model-list hover tooltip (blend mode explanation) | hover | yes | **none** |
-| 20 | `s3d-time-slider-tooltip` | Animation time scrubber hover tooltip | hover | yes | 1 |
+| 20 | `s3d-time-slider-tooltip` | Animation time scrubber hover tooltip | hover | yes | 2 |
 | 21 | `panel-keyboard-nav-focus` *(audit)* | Keyboard navigation across every control in both panels (arrow keys / Tab to move focus, Space or Enter to activate) | key | - | 2 |
 | 22 | `panel-slider-enter-key-text-input` *(audit)* | Enter key on a nav-focused slider or drag (opens the value text box) | key | - | **none** |
 | 23 | `panel-slider-keyboard-tweak` *(audit)* | Left / Right arrow keys on a nav-activated slider or drag | key | - | **none** |
@@ -39,15 +39,15 @@ reader against the source (see README.md for method).
 | 32 | `s3d-models-collapsing-header` | "Models" collapsing header | left-click | - | **none** |
 | 33 | `s3d-reset-view-button` | "Reset view" button | left-click | - | 1 |
 | 34 | `select-2d-package-tab` | "2D package" inspector tab | left-click | - | 2 |
-| 35 | `select-3d-scene-tab` | "3D scene" inspector tab | left-click | - | 3 |
+| 35 | `select-3d-scene-tab` | "3D scene" inspector tab | left-click | - | 5 |
 | 36 | `s3d-freelook-rmb-down` | Hold right mouse button in the render window to enter free look | right-click | - | **none** |
 | 37 | `gc2d-animation-combo-popup-scroll` *(audit)* | Scroll region inside the animation picker combo popup (##gc2danim) | scroll | - | **none** |
-| 38 | `scroll-inspector-pane` | Inspector pane scroll region containing both panels | scroll | - | 11 |
-| 39 | `gc2d-frame-slider-ctrl-click-entry` | Frame scrubber keyboard value entry | text-entry | - | 1 |
+| 38 | `scroll-inspector-pane` | Inspector pane scroll region containing both panels | scroll | - | 15 |
+| 39 | `gc2d-frame-slider-ctrl-click-entry` | Frame scrubber keyboard value entry | text-entry | - | 2 |
 | 40 | `gc2d-speed-slider-ctrl-click-entry` | "speed" slider keyboard value entry (2D package) | text-entry | - | 1 |
 | 41 | `s3d-move-speed-ctrl-click-entry` | "move speed" keyboard value entry | text-entry | - | 1 |
 | 42 | `s3d-speed-slider-ctrl-click-entry` | "speed" slider keyboard value entry | text-entry | - | 1 |
-| 43 | `s3d-time-slider-ctrl-click-entry` | Animation time scrubber keyboard value entry | text-entry | - | 1 |
+| 43 | `s3d-time-slider-ctrl-click-entry` | Animation time scrubber keyboard value entry | text-entry | - | 2 |
 | 44 | `s3d-freelook-capture-lost` | Loss of mouse capture during free look (alt-tab, focus steal) | window-message | - | n/a |
 | 45 | `s3d-freelook-rmb-up` | Release right mouse button to leave free look | window-message | - | n/a |
 
@@ -76,7 +76,7 @@ reader against the source (see README.md for method).
 - **source**: `src/gui/gui_scene3d_panel.cpp:64`
 - **tooltip**: yes
 - **notes**: Drawn on the same line as Animate models (SameLine at line 61).
-- **tests**: `3D scene camera checkbox is gated on an authored camera`, `3D scene free camera and reset drive the camera state`
+- **tests**: `3D scene camera checkbox is gated on an authored camera`, `3D scene free camera and reset drive the camera state`, `animate-camera tooltip explains why it is greyed out`
 
 ### 3. "Animate models" checkbox
 
@@ -98,7 +98,7 @@ reader against the source (see README.md for method).
 - **effect**: Calls Scene3dHost::SetFreeCamera(freecam), which flips g_camera.active; when on, Scene3dHost::RenderFrame feeds the free camera view matrix to the renderer instead of the authored camera (scene3d_host.cpp:93, :111). Turning it on also disables the Animate camera checkbox
 - **source**: `src/gui/gui_scene3d_panel.cpp:113`
 - **tooltip**: yes
-- **tests**: `3D scene free camera and reset drive the camera state`
+- **tests**: `3D scene free camera and reset drive the camera state`, `animate-camera tooltip explains why it is greyed out`
 
 ### 5. Per-model visibility checkbox (one per model row)
 
@@ -109,7 +109,7 @@ reader against the source (see README.md for method).
 - **effect**: Calls Scene3dHost::SetModelVisible(index, vis) for that row's model index
 - **source**: `src/gui/gui_scene3d_panel.cpp:87`
 - **notes**: ONE entry describing a row drawn in a loop over Scene3dHost::ListModels(); each row is scoped by ImGui::PushID((int)i) at line 85.
-- **tests**: `3D scene model list toggles visibility and blend mode`, `scene pane child visibility checkbox records a sublayer override`
+- **tests**: `3D scene model list toggles visibility and blend mode`, `scenario: loading and unloading a 3D scene adds and removes its tab`, `scene pane child visibility checkbox records a sublayer override`
 
 ### 6. "Pause" checkbox (3D scene playback)
 
@@ -120,7 +120,7 @@ reader against the source (see README.md for method).
 - **effect**: On toggle calls Scene3dHost::SetPaused(paused), which stops/resumes advancing g_time in Scene3dHost::RenderFrame (scene3d_host.cpp:95)
 - **source**: `src/gui/gui_scene3d_panel.cpp:20`
 - **notes**: Checkbox state is mirrored from Scene3dHost::Status::paused each frame.
-- **tests**: `3D scene panel drives a loaded mock scene`, `3D scene panel explains how to load a scene while none is live`
+- **tests**: `3D scene panel drives a loaded mock scene`, `3D scene panel explains how to load a scene while none is live`, `scenario: loading and unloading a 3D scene adds and removes its tab`
 
 ### 7. Animation picker combo (2D package)
 
@@ -156,7 +156,7 @@ reader against the source (see README.md for method).
 - **source**: `src/gui/gui_gc2d_panel.cpp:42`
 - **tooltip**: yes
 - **notes**: Item width -FLT_MIN (full pane width). The implicit auto-pause is the behavioural difference from the 3D time scrubber.
-- **tests**: `2D package panel drives a loaded mock package`
+- **tests**: `2D package frame slider explains itself on hover`, `2D package panel drives a loaded mock package`
 
 ### 10. "speed" slider (2D package playback speed, 0.00x - 4.00x)
 
@@ -213,7 +213,7 @@ reader against the source (see README.md for method).
 - **source**: `src/gui/gui_scene3d_panel.cpp:30`
 - **tooltip**: yes
 - **notes**: Item width is -FLT_MIN (stretches to pane width). Unlike the 2D frame slider, scrubbing does NOT auto-pause playback.
-- **tests**: `3D scene panel drives a loaded mock scene`
+- **tests**: `3D scene panel drives a loaded mock scene`, `scenario: loading and unloading a 3D scene adds and removes its tab`
 
 ### 15. Frame scrubber hover tooltip
 
@@ -225,7 +225,7 @@ reader against the source (see README.md for method).
 - **source**: `src/gui/gui_gc2d_panel.cpp:46`
 - **tooltip**: yes
 - **notes**: Only tooltip in gui_gc2d_panel.cpp.
-- **tests**: `2D package panel drives a loaded mock package`
+- **tests**: `2D package frame slider explains itself on hover`, `2D package panel drives a loaded mock package`
 
 ### 16. "Animate camera" hover tooltip (three variants)
 
@@ -237,7 +237,7 @@ reader against the source (see README.md for method).
 - **source**: `src/gui/gui_scene3d_panel.cpp:66`
 - **tooltip**: yes
 - **notes**: Counted as one tooltip site with branching text (lines 67-75).
-- **tests**: `3D scene camera checkbox is gated on an authored camera`, `3D scene free camera and reset drive the camera state`
+- **tests**: `3D scene camera checkbox is gated on an authored camera`, `3D scene free camera and reset drive the camera state`, `animate-camera tooltip explains why it is greyed out`
 - **audit correction**: Precondition claims "the tooltip is emitted after EndDisabled so it also shows while the control is disabled", and the effect lists three reachable messages. That is wrong: IsItemHovered() with default flags returns false for an item whose recorded ItemFlags carry ImGuiItemFlags_Disabled (imgui.cpp:4868-4870 for the mouse path, imgui.cpp:4821-4822 for the nav path). EndDisabled() at gui_scene3d_panel.cpp:65 does not clear g.LastItemData, so the checkbox submitted inside BeginDisabled still reports as disabled at line 66. -> Only ONE of the three branches is ever reachable. The two disabled-state messages at gui_scene3d_panel.cpp:68 ("This scene has no camera in its .x file.") and :70 ("Free camera is on, ...") are dead code, because they are only selected when the checkbox was disabled - exactly the case in which IsItemHovered() returns false. The user only ever sees the line-73 message ("Freeze the camera animated inside the .x file..."). Fixing it needs ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled).
 
 ### 17. "Animate models" hover tooltip
@@ -261,7 +261,7 @@ reader against the source (see README.md for method).
 - **source**: `src/gui/gui_scene3d_panel.cpp:114`
 - **tooltip**: yes
 - **notes**: One tooltip site with a branching second line (lines 117-120).
-- **tests**: `3D scene free camera and reset drive the camera state`
+- **tests**: `3D scene free camera and reset drive the camera state`, `animate-camera tooltip explains why it is greyed out`
 
 ### 19. Model-list hover tooltip (blend mode explanation)
 
@@ -285,7 +285,7 @@ reader against the source (see README.md for method).
 - **source**: `src/gui/gui_scene3d_panel.cpp:33`
 - **tooltip**: yes
 - **notes**: Single tooltip, formatted with st.max_time.
-- **tests**: `3D scene panel drives a loaded mock scene`
+- **tests**: `3D scene panel drives a loaded mock scene`, `scenario: loading and unloading a 3D scene adds and removes its tab`
 
 ### 21. Keyboard navigation across every control in both panels (arrow keys / Tab to move focus, Space or Enter to activate)
 
@@ -453,7 +453,7 @@ reader against the source (see README.md for method).
 - **effect**: ImGui activates the tab item inside BeginTabBar("##inspector_tabs") and calls Panels::Scene3dPanel::Render() for the tab body on every subsequent frame
 - **source**: `src/gui/gui_inspector.cpp:446`
 - **notes**: Tab label comes from PanelDesc.tab_label "3D scene" (panel_registry.cpp:75). Rendered in a loop over CollectActivePanels; this entry covers the 3D scene row of that loop.
-- **tests**: `3D scene panel explains how to load a scene while none is live`, `inspector exposes the modern backend tab set`, `inspector hides host tabs while no 3D scene or 2D package is live`
+- **tests**: `3D scene panel explains how to load a scene while none is live`, `animate-camera tooltip explains why it is greyed out`, `inspector exposes the modern backend tab set`, `inspector hides host tabs while no 3D scene or 2D package is live` (+1 more)
 - **audit correction**: Precondition says "the active game profile uses the modern or scene3d panel set". kModernPanels (panel_registry.cpp:30-55) contains renderer_view, qpro_view, properties, render and live - it has NO scene3d entry, so the 3D scene tab never appears for that set. The cited lines 74 and 87 are in kDdrPanels and kScene3dPanels. The selection key is also not the game profile slug (that is only used by QproTabVisible, panel_registry.cpp:19); it is App::Global().ActiveBackendId(). -> Precondition: Scene3dHost::Active() is true (panel_registry.cpp:21-23 Scene3dTabVisible gate) AND App::Global().ActiveBackendId() is "afp_ddr" or "scene3d", the two sets that declare the scene3d panel (panel_registry.cpp:74 in kDdrPanels, :87 in kScene3dPanels; set lookup at :105-107 and :114-116).
 
 ### 36. Hold right mouse button in the render window to enter free look
@@ -487,7 +487,7 @@ reader against the source (see README.md for method).
 - **effect**: Scrolls the ImGui child window "pane_right" that hosts the inspector tab bar and the 3D scene / 2D package panel bodies; no application state changes
 - **source**: `src/gui/gui_panels.cpp:421`
 - **notes**: Neither panel file creates its own BeginChild; both draw directly into the enclosing scrollable pane child.
-- **tests**: `2D package panel stays hidden while no package is live`, `3D scene panel explains how to load a scene while none is live`, `inspector exposes the ddr backend tab set`, `inspector exposes the modern backend tab set` (+7 more)
+- **tests**: `2D package panel stays hidden while no package is live`, `3D scene panel explains how to load a scene while none is live`, `animate-camera tooltip explains why it is greyed out`, `inspector exposes the ddr backend tab set` (+11 more)
 
 ### 39. Frame scrubber keyboard value entry
 
@@ -498,7 +498,7 @@ reader against the source (see README.md for method).
 - **effect**: Committing a typed frame number calls Gc2dHost::SetPaused(true) then Gc2dHost::SetFrame(frame)
 - **source**: `src/gui/gui_gc2d_panel.cpp:42`
 - **notes**: Built-in ImGui SliderInt behaviour.
-- **tests**: `2D package panel drives a loaded mock package`
+- **tests**: `2D package frame slider explains itself on hover`, `2D package panel drives a loaded mock package`
 
 ### 40. "speed" slider keyboard value entry (2D package)
 
@@ -545,7 +545,7 @@ reader against the source (see README.md for method).
 - **effect**: Committing a typed tick value calls Scene3dHost::SetTime(t)
 - **source**: `src/gui/gui_scene3d_panel.cpp:30`
 - **notes**: Built-in ImGui SliderFloat behaviour.
-- **tests**: `3D scene panel drives a loaded mock scene`
+- **tests**: `3D scene panel drives a loaded mock scene`, `scenario: loading and unloading a 3D scene adds and removes its tab`
 
 ### 44. Loss of mouse capture during free look (alt-tab, focus steal)
 

@@ -6,20 +6,20 @@ reader against the source (see README.md for method).
 | # | id | control | input | tooltip | tests |
 |---|---|---|---|---|---|
 | 1 | `properties-slot-visible-checkbox` | "Slot visible" checkbox | checkbox | - | 2 |
-| 2 | `render-filter-checkbox` | "Filter (F7)" checkbox | checkbox | yes | 2 |
-| 3 | `render-loop-master-checkbox` | "Loop master animation" checkbox | checkbox | yes | 3 |
+| 2 | `render-filter-checkbox` | "Filter (F7)" checkbox | checkbox | yes | 4 |
+| 3 | `render-loop-master-checkbox` | "Loop master animation" checkbox | checkbox | yes | 4 |
 | 4 | `render-show-mc-names-checkbox` | "Show MC names (F3)" checkbox | checkbox | yes | 2 |
-| 5 | `properties-slot-bitmap-combo-open` | Variant-slot bitmap combo (preview shows "(default)" or the overridden bitmap name) | combo-select | yes | 2 |
+| 5 | `properties-slot-bitmap-combo-open` | Variant-slot bitmap combo (preview shows "(default)" or the overridden bitmap name) | combo-select | yes | 3 |
 | 6 | `render-master-scale-slider-drag` | "Master scale" slider (0.25x - 4.00x, format "%.2fx") | drag | - | 1 |
-| 7 | `properties-slot-bitmap-tooltip` *(audit)* | Hover tooltip on the variant-slot bitmap widget (combo or text field) | hover | yes | 2 |
-| 8 | `render-background-tooltip` | Hover tooltip on the "Background" segmented control | hover | yes | **none** |
-| 9 | `render-continuous-loop-tooltip` | Hover tooltip on the "Continuous loop" segmented control | hover | yes | 1 |
-| 10 | `render-filter-tooltip` | Hover tooltip on "Filter (F7)" | hover | yes | 2 |
-| 11 | `render-loop-master-tooltip` | Hover tooltip on "Loop master animation" | hover | yes | 3 |
-| 12 | `render-master-scale-tooltip` | Hover tooltip on the master-scale row | hover | yes | 1 |
-| 13 | `render-root-loop-tooltip` | Hover tooltip on the "Loop root" segmented control | hover | yes | 1 |
+| 7 | `properties-slot-bitmap-tooltip` *(audit)* | Hover tooltip on the variant-slot bitmap widget (combo or text field) | hover | yes | 3 |
+| 8 | `render-background-tooltip` | Hover tooltip on the "Background" segmented control | hover | yes | 1 |
+| 9 | `render-continuous-loop-tooltip` | Hover tooltip on the "Continuous loop" segmented control | hover | yes | 3 |
+| 10 | `render-filter-tooltip` | Hover tooltip on "Filter (F7)" | hover | yes | 4 |
+| 11 | `render-loop-master-tooltip` | Hover tooltip on "Loop master animation" | hover | yes | 4 |
+| 12 | `render-master-scale-tooltip` | Hover tooltip on the master-scale row | hover | yes | 2 |
+| 13 | `render-root-loop-tooltip` | Hover tooltip on the "Loop root" segmented control | hover | yes | 2 |
 | 14 | `render-show-mc-names-tooltip` | Hover tooltip on "Show MC names (F3)" | hover | yes | 2 |
-| 15 | `render-trim-frames-tooltip` | Hover tooltip on "Trim frames" | hover | yes | 1 |
+| 15 | `render-trim-frames-tooltip` | Hover tooltip on "Trim frames" | hover | yes | 3 |
 | 16 | `properties-slot-bitmap-combo-keyboard-nav` *(audit)* | Bitmap combo popup keyboard navigation (arrows / Enter / Escape) | key | - | **none** |
 | 17 | `render-master-scale-slider-ctrl-click` | "Master scale" slider keyboard entry | key | - | 1 |
 | 18 | `inspector-tab-select` | Inspector tab (Properties / Render / Live / 3D scene / 2D package) | left-click | - | **none** |
@@ -28,15 +28,15 @@ reader against the source (see README.md for method).
 | 21 | `properties-slot-bitmap-combo-name-item` | Bitmap name entry inside the bitmap combo | left-click | - | **none** |
 | 22 | `render-background-segment` | "Background" segmented control ("default" / "grey" / "black" / "red" / "green" / "blue") | left-click | yes | **none** |
 | 23 | `render-continuous-loop-segment` | "Continuous loop" segmented control ("OFF" / "default" / "ON") | left-click | yes | **none** |
-| 24 | `render-master-scale-preset-15x` | "1.5x" small button | left-click | yes | 1 |
+| 24 | `render-master-scale-preset-15x` | "1.5x" small button | left-click | yes | 2 |
 | 25 | `render-master-scale-reset-1x` | "1.0x" small button | left-click | - | 1 |
 | 26 | `render-mc-name-type-segment` | MC name type segmented control ("at clip pos" / "column") | left-click | - | **none** |
-| 27 | `render-reset-live-overrides-button` | "Reset live overrides" button | left-click | - | 1 |
+| 27 | `render-reset-live-overrides-button` | "Reset live overrides" button | left-click | - | 2 |
 | 28 | `render-root-loop-segment` | "Loop root" segmented control ("Auto-hold" / "Force loop") | left-click | yes | **none** |
 | 29 | `live-mc-names-list-scroll` | "MC names (N)" list child window | scroll | - | **none** |
 | 30 | `properties-slot-bitmap-combo-popup-scroll` | Bitmap combo popup list | scroll | - | **none** |
-| 31 | `properties-slot-bitmap-input` | Variant-slot bitmap name text field (hint: "bitmap name (blank = IFS default)") | text-entry | yes | 2 |
-| 32 | `render-trim-frames-input` | "Trim frames" integer input | text-entry | yes | 1 |
+| 31 | `properties-slot-bitmap-input` | Variant-slot bitmap name text field (hint: "bitmap name (blank = IFS default)") | text-entry | yes | 3 |
+| 32 | `render-trim-frames-input` | "Trim frames" integer input | text-entry | yes | 3 |
 
 ## Detail
 
@@ -60,7 +60,7 @@ reader against the source (see README.md for method).
 - **effect**: Toggles ov.filter_enabled on the local LiveOverrides copy and sets changed=true; state.ApplyLiveOverridesDelta(before, ov) at line 341 pushes it to the backend (afp-core set-filter, ord 0x032, on the active stream).
 - **source**: `src/gui/gui_inspector.cpp:282`
 - **tooltip**: yes
-- **tests**: `ddr render tab offers background and reset only`, `render tab filter checkbox toggles the live override`
+- **tests**: `ddr render tab offers background and reset only`, `inspector render tab controls all explain themselves`, `render tab filter checkbox toggles the live override`, `scenario: live overrides can be stacked then reset in one click`
 
 ### 3. "Loop master animation" checkbox
 
@@ -72,7 +72,7 @@ reader against the source (see README.md for method).
 - **source**: `src/gui/gui_inspector.cpp:167`
 - **tooltip**: yes
 - **notes**: Value is read fresh each frame from App::Global().GetLoopMaster().
-- **tests**: `ddr render tab offers background and reset only`, `inspector tabs switch the visible body`, `render tab loop-master checkbox persists to state`
+- **tests**: `ddr render tab offers background and reset only`, `inspector render tab controls all explain themselves`, `inspector tabs switch the visible body`, `render tab loop-master checkbox persists to state`
 
 ### 4. "Show MC names (F3)" checkbox
 
@@ -95,7 +95,7 @@ reader against the source (see README.md for method).
 - **source**: `src/gui/gui_inspector.cpp:42`
 - **tooltip**: yes
 - **notes**: Tooltip is emitted by the IsItemHovered() check at line 86-87 in DrawSlotProperties, which fires for whichever of the combo/input was drawn last; it explains that this swaps the clip's bitmap and that "(default)" drops the override and replays the master because afp has no restore-authored call.
-- **tests**: `slot bitmap combo picks an override and restores the default`, `slot bitmap falls back to a text field with no listed bitmaps`
+- **tests**: `slot bitmap combo explains the default restore`, `slot bitmap combo picks an override and restores the default`, `slot bitmap falls back to a text field with no listed bitmaps`
 
 ### 6. "Master scale" slider (0.25x - 4.00x, format "%.2fx")
 
@@ -118,7 +118,7 @@ reader against the source (see README.md for method).
 - **source**: `src/gui/gui_inspector.cpp:86`
 - **tooltip**: yes
 - **notes**: This is the 9th IsItemHovered/SetTooltip pair in the file (86, 171, 189, 209, 228, 257, 274, 285, 295). The inventory has dedicated hover entries for the other 8 but only flagged this one via has_tooltip:true on properties-slot-bitmap-combo-open / properties-slot-bitmap-input, so the one-entry-per-tooltip rule is violated exactly once. Verified the tooltip still targets the combo itself while its popup is open: ImGui::End() restores g.LastItemData from window_stack_data.ParentLastItemDataBackup (vendor/vcpkg/buildtrees/imgui/src/v1.92.7-b588f89316.clean/imgui.cpp:8230), so EndCombo -> EndPopup -> End does not leave LastItemData pointing at the last Selectable.
-- **tests**: `slot bitmap combo picks an override and restores the default`, `slot bitmap falls back to a text field with no listed bitmaps`
+- **tests**: `slot bitmap combo explains the default restore`, `slot bitmap combo picks an override and restores the default`, `slot bitmap falls back to a text field with no listed bitmaps`
 
 ### 8. Hover tooltip on the "Background" segmented control
 
@@ -129,7 +129,7 @@ reader against the source (see README.md for method).
 - **effect**: ImGui::SetTooltip - explains this is the AFP debug viewer F4 preview background, that default means transparent, and that it affects the live preview only because export uses its own Background setting.
 - **source**: `src/gui/gui_inspector.cpp:274`
 - **tooltip**: yes
-- **tests**: none
+- **tests**: `inspector render tab controls all explain themselves`
 
 ### 9. Hover tooltip on the "Continuous loop" segmented control
 
@@ -141,7 +141,7 @@ reader against the source (see README.md for method).
 - **source**: `src/gui/gui_inspector.cpp:209`
 - **tooltip**: yes
 - **notes**: Same last-item-hover behaviour as the other Segmented tooltips.
-- **tests**: `render tab continuous-loop segmented applies each mode`
+- **tests**: `inspector render tab controls all explain themselves`, `render tab continuous-loop segmented applies each mode`, `scenario: live overrides can be stacked then reset in one click`
 
 ### 10. Hover tooltip on "Filter (F7)"
 
@@ -152,7 +152,7 @@ reader against the source (see README.md for method).
 - **effect**: ImGui::SetTooltip - explains it toggles the AFP layer filter (debug viewer F7) by calling afp-core set-filter (ord 0x032) on the active stream with filter id 0x80000000\|enable, the same call the scene's CLayer slot-32 wrapper makes.
 - **source**: `src/gui/gui_inspector.cpp:285`
 - **tooltip**: yes
-- **tests**: `ddr render tab offers background and reset only`, `render tab filter checkbox toggles the live override`
+- **tests**: `ddr render tab offers background and reset only`, `inspector render tab controls all explain themselves`, `render tab filter checkbox toggles the live override`, `scenario: live overrides can be stacked then reset in one click`
 
 ### 11. Hover tooltip on "Loop master animation"
 
@@ -164,7 +164,7 @@ reader against the source (see README.md for method).
 - **source**: `src/gui/gui_inspector.cpp:171`
 - **tooltip**: yes
 - **notes**: Separate entry per the one-entry-per-tooltip rule.
-- **tests**: `ddr render tab offers background and reset only`, `inspector tabs switch the visible body`, `render tab loop-master checkbox persists to state`
+- **tests**: `ddr render tab offers background and reset only`, `inspector render tab controls all explain themselves`, `inspector tabs switch the visible body`, `render tab loop-master checkbox persists to state`
 
 ### 12. Hover tooltip on the master-scale row
 
@@ -175,7 +175,7 @@ reader against the source (see README.md for method).
 - **effect**: ImGui::SetTooltip - explains that the value multiplies the master stream's transform matrix (default 1.0x) and that 1.5x matches what SDVX 7's BG dispatcher applies to SDVX-I-through-IV-era 720x1280 select_bg variants on a 1080x1920 game.
 - **source**: `src/gui/gui_inspector.cpp:257`
 - **tooltip**: yes
-- **tests**: `render tab master-scale preset buttons set the scale`
+- **tests**: `inspector render tab controls all explain themselves`, `render tab master-scale preset buttons set the scale`
 
 ### 13. Hover tooltip on the "Loop root" segmented control
 
@@ -187,7 +187,7 @@ reader against the source (see README.md for method).
 - **source**: `src/gui/gui_inspector.cpp:189`
 - **tooltip**: yes
 - **notes**: Because Gui::Segmented leaves LastItemData pointing at its final button, this tooltip only shows when hovering the last segment, not the whole row.
-- **tests**: `render tab root-loop segmented switches to force mode`
+- **tests**: `inspector render tab controls all explain themselves`, `render tab root-loop segmented switches to force mode`
 
 ### 14. Hover tooltip on "Show MC names (F3)"
 
@@ -209,7 +209,7 @@ reader against the source (see README.md for method).
 - **effect**: ImGui::SetTooltip - explains 0 = no trim (loop forever via the engine) and >0 = at frame N (rendered frames since the last stream-switch/hot-swap) restart the master via ForceReplay so a loop of exactly N frames can be inspected at full framerate.
 - **source**: `src/gui/gui_inspector.cpp:228`
 - **tooltip**: yes
-- **tests**: `render tab trim input feeds the live overrides`
+- **tests**: `inspector render tab controls all explain themselves`, `render tab trim input feeds the live overrides`, `scenario: live overrides can be stacked then reset in one click`
 
 ### 16. Bitmap combo popup keyboard navigation (arrows / Enter / Escape)
 
@@ -313,7 +313,7 @@ reader against the source (see README.md for method).
 - **effect**: App::Global().SetMasterScale(1.5F) then App::SaveCurrentSettings().
 - **source**: `src/gui/gui_inspector.cpp:253`
 - **tooltip**: yes
-- **tests**: `render tab master-scale preset buttons set the scale`
+- **tests**: `inspector render tab controls all explain themselves`, `render tab master-scale preset buttons set the scale`
 
 ### 25. "1.0x" small button
 
@@ -345,7 +345,7 @@ reader against the source (see README.md for method).
 - **precondition**: Render tab active. Drawn by both RenderRenderTabModern (line 343) and RenderRenderTabDdr (line 355).
 - **effect**: state.SetLiveOverrides(App::State::LiveOverrides{}) - replaces the whole live-override struct with a default-constructed one (clears continuous_loop_mode, trim_frames, bg_color_index, filter_enabled, show_mc_names, mc_name_type). Does not touch the persisted loop-master / root-loop / master-scale settings.
 - **source**: `src/gui/gui_inspector.cpp:312`
-- **tests**: `render tab reset button clears every live override`
+- **tests**: `render tab reset button clears every live override`, `scenario: live overrides can be stacked then reset in one click`
 - **audit correction**: The effect enumerates the fields a default-constructed LiveOverrides clears and gets the list wrong: it omits the `paused` field entirely, and it implies bg_color_index resets to a cleared/zero value. -> App::State::LiveOverrides (src/state/live_controls.h:26-34) has SEVEN fields: continuous_loop_mode(0), trim_frames(0), bg_color_index(-1), mc_name_type(0), filter_enabled(false), paused(false), show_mc_names(false). state.SetLiveOverrides(LiveOverrides{}) assigns the whole struct after ClampOverrides (src/state/live_controls.cpp:75-79), so the button ALSO clears `paused` - a preview paused from the transport resumes when "Reset live overrides" is clicked, which is a side effect the current entry does not mention. And bg_color_index resets to -1, i.e. the "default" (transparent) Background segment, not 0 ("grey").
 
 ### 28. "Loop root" segmented control ("Auto-hold" / "Force loop")
@@ -393,7 +393,7 @@ reader against the source (see README.md for method).
 - **source**: `src/gui/gui_inspector.cpp:66`
 - **tooltip**: yes
 - **notes**: Same "##bitmap" id as the combo (mutually exclusive branches). Shares the bitmap-swap tooltip at line 86-87. Item width -FLT_MIN.
-- **tests**: `slot bitmap combo picks an override and restores the default`, `slot bitmap falls back to a text field with no listed bitmaps`
+- **tests**: `slot bitmap combo explains the default restore`, `slot bitmap combo picks an override and restores the default`, `slot bitmap falls back to a text field with no listed bitmaps`
 
 ### 32. "Trim frames" integer input
 
@@ -405,6 +405,6 @@ reader against the source (see README.md for method).
 - **source**: `src/gui/gui_inspector.cpp:225`
 - **tooltip**: yes
 - **notes**: Step and step_fast are both 0, so ImGui draws NO -/+ buttons; the only input is keyboard text entry (Enter/focus-loss commits). Item width fixed at 120px.
-- **tests**: `render tab trim input feeds the live overrides`
+- **tests**: `inspector render tab controls all explain themselves`, `render tab trim input feeds the live overrides`, `scenario: live overrides can be stacked then reset in one click`
 - **audit correction**: The notes say the field's "only input is keyboard text entry (Enter/focus-loss commits)". The commit semantics are wrong: InputInt here commits on EVERY keystroke, not on Enter/focus loss. The entry also omits that the value is clamped before it lands in state, and that clicking the field selects all of it. -> ImGui::InputInt("##live_trim", &ov.trim_frames, 0, 0) -> InputScalar with p_step == NULL (step/step_fast are 0, imgui_widgets.cpp:3929), which calls InputText WITHOUT ImGuiInputTextFlags_EnterReturnsTrue (explicitly unsupported, asserted at imgui_widgets.cpp:3788) and sets value_changed = DataTypeApplyFromText(...) on any returned edit (imgui_widgets.cpp:3825). So ov.trim_frames is written and state.ApplyLiveOverridesDelta(before, ov) at line 341 fires per character typed, not on Enter or focus loss. Escape reverts the field to its value at activation and ALSO returns true (imgui_widgets.cpp:5263-5271), so the revert propagates. InputScalar adds ImGuiInputTextFlags_AutoSelectAll (imgui_widgets.cpp:3804), so clicking into the field selects the whole value and the first keystroke replaces it. A typed negative survives in the local copy but is clamped by ClampOverrides (src/state/live_controls.cpp:65, o.trim_frames = std::max(o.trim_frames, 0)) inside ApplyLiveOverridesDelta before it reaches live_overrides_. The "step and step_fast are both 0, so ImGui draws NO -/+ buttons" part of the entry is correct (has_step_buttons = (p_step != NULL), imgui_widgets.cpp:3806).
 
