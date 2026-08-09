@@ -343,7 +343,7 @@ void DrawScaleButtons(int w_disp, int h_disp) {
         int new_h = (int)std::lroundf((float)h_disp * sb.mul);
         new_w = std::clamp(new_w, 64, 8192);
         new_h = std::clamp(new_h, 64, 8192);
-        char btn_label[32];
+        char btn_label[64];
         const char* visible_end = strstr(sb.label, "##");
         int const prefix_len =
             (visible_end != nullptr) ? (int)(visible_end - sb.label) : (int)strlen(sb.label);

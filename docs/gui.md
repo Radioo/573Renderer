@@ -176,6 +176,13 @@ One tree replaces the old Layers + Sub-layers + Variants panels:
 - Bottom row: add-slot-by-clip-path input (probed by the render thread next frame).
 - Selection model (`Panels::Scene::Selection`, GUI-thread-local): None / Layer / Child with
   path + name; reset on IFS switch.
+- `IsItem*` GOTCHA: `RenderSceneNode` LATCHES `ImGui::IsItemToggledOpen()` into a local on
+  the line after `TreeNodeEx`, before anything else is submitted. `IsItem*` reads
+  `g.LastItemData`, which every later `ItemAdd` overwrites - and this row submits more items
+  after the tree node (the `(x, y)` position text, the variant badge). Querying it at the
+  bottom of the function silently dropped the expansion write for exactly those clips that
+  had a position or a badge, so lazy enumeration never fired for them while a bare clip
+  worked. Found by `gui_tests` (docs/gui_tests.md section 10); do not re-inline the call.
 - DDR: no afplist, no bulk child-enumerate in afp 2.13.7, so the pane shows only the
   no-layers hint; everything else is driven by absent data.
 
@@ -243,6 +250,10 @@ One tree replaces the old Layers + Sub-layers + Variants panels:
   CollapsingHeader.
 - Starting an export closes the modal; progress lives in the status strip (capturing N /
   encoding / done / failed, clickable to reopen) and as the timeline capture tint.
+- The scale buttons build their label AND their `##` id into one `snprintf` buffer that must
+  stay wide enough for both ("x0.25 (480x270)##exp_scl_x0.25##exp_scl" is 39 bytes). A short
+  buffer truncates the id, not the visible text, so a collision would appear as two buttons
+  sharing one id with nothing on screen to explain it. Found by `gui_tests`.
 - Crop pick handshake: arming "Pick region" CLOSES the modal (the drag happens on the render
   window), and the modal auto-reopens when pick mode ends (`g_reopen_after_pick`).
 - Form state is file-scope statics so choices survive modal close and IFS reloads. The whole

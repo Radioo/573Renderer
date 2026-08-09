@@ -1,5 +1,7 @@
 #include "gui_test_harness.h"
 
+#include "arc_extract.h"
+#include "customize_extract.h"
 #include "imgui.h"
 #include "imgui_te_context.h"
 #include "imgui_te_engine.h"
@@ -8,7 +10,10 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <filesystem>
 #include <optional>
+#include <string>
+#include <system_error>
 #include <variant>
 
 namespace {
@@ -133,6 +138,110 @@ TEST_CASE("setup view resolution preset sets the render size", "[gui][setup]") {
     App::Global().GetRenderSize(w, h);
     CHECK(w == 1920);
     CHECK(h == 1080);
+}
+
+TEST_CASE("setup view hides the DDR extractors for other profiles", "[gui][setup]") {
+    GuiTest::Harness harness;
+    App::Global().SetGameProfileSlug("sdvx7");
+
+    ImGuiTest* test = harness.NewTest("setup_no_extractors");
+    test->TestFunc = [](ImGuiTestContext* ctx) {
+        ctx->SetRef("##setup");
+        GuiTest::FocusChild(ctx, "setup_card");
+        IM_CHECK(ctx->ItemExists("Extract .arc files...") == false);
+        IM_CHECK(ctx->ItemExists("Extract customize images...") == false);
+    };
+    harness.Run(test);
+}
+
+TEST_CASE("setup view offers the DDR extractors for ddrworld", "[gui][setup]") {
+    GuiTest::Harness harness;
+    App::Global().SetGameProfileSlug("ddrworld");
+
+    ImGuiTest* test = harness.NewTest("setup_extractors_present");
+    test->TestFunc = [](ImGuiTestContext* ctx) {
+        ctx->SetRef("##setup");
+        GuiTest::FocusChild(ctx, "setup_card");
+        IM_CHECK(ctx->ItemExists("Extract .arc files..."));
+        IM_CHECK(ctx->ItemExists("Extract customize images..."));
+    };
+    harness.Run(test);
+}
+
+TEST_CASE("setup view arc extractor does nothing when the picker is cancelled", "[gui][setup]") {
+    GuiTest::Harness harness;
+    App::Global().SetGameProfileSlug("ddrworld");
+    GuiTest::SetBrowseResult("");
+
+    ImGuiTest* test = harness.NewTest("setup_arc_cancel");
+    test->TestFunc = [](ImGuiTestContext* ctx) {
+        ctx->SetRef("##setup");
+        GuiTest::FocusChild(ctx, "setup_card");
+        ctx->ItemClick("Extract .arc files...");
+        ctx->ItemClick("Extract customize images...");
+    };
+    harness.Run(test);
+
+    CHECK_FALSE(ArcExtract::IsRunning());
+    CHECK_FALSE(CustomizeExtract::IsRunning());
+}
+
+TEST_CASE("setup view arc extractor runs over the picked folder", "[gui][setup]") {
+    GuiTest::Harness harness;
+    App::Global().SetGameProfileSlug("ddrworld");
+
+    std::filesystem::path const dir =
+        std::filesystem::temp_directory_path() / "r573_gui_arc_extract";
+    std::error_code ec;
+    std::filesystem::remove_all(dir, ec);
+    std::filesystem::create_directories(dir, ec);
+    REQUIRE_FALSE(ec);
+    GuiTest::SetBrowseResult(dir.string());
+
+    ImGuiTest* test = harness.NewTest("setup_arc_run");
+    test->TestFunc = [](ImGuiTestContext* ctx) {
+        ctx->SetRef("##setup");
+        GuiTest::FocusChild(ctx, "setup_card");
+        ctx->ItemClick("Extract .arc files...");
+        for (int i = 0; i < 600 && ArcExtract::IsRunning(); i++)
+            ctx->Yield();
+    };
+    harness.Run(test);
+
+    ArcExtract::Status const st = ArcExtract::GetStatus();
+    CHECK_FALSE(st.running);
+    CHECK(st.finished);
+    CHECK(st.done_arcs == 0);
+    std::filesystem::remove_all(dir, ec);
+}
+
+TEST_CASE("setup view customize extractor runs over the picked folder", "[gui][setup]") {
+    GuiTest::Harness harness;
+    App::Global().SetGameProfileSlug("ddrworld");
+
+    std::filesystem::path const dir =
+        std::filesystem::temp_directory_path() / "r573_gui_customize_extract";
+    std::error_code ec;
+    std::filesystem::remove_all(dir, ec);
+    std::filesystem::create_directories(dir, ec);
+    REQUIRE_FALSE(ec);
+    GuiTest::SetBrowseResult(dir.string());
+
+    ImGuiTest* test = harness.NewTest("setup_customize_run");
+    test->TestFunc = [](ImGuiTestContext* ctx) {
+        ctx->SetRef("##setup");
+        GuiTest::FocusChild(ctx, "setup_card");
+        ctx->ItemClick("Extract customize images...");
+        for (int i = 0; i < 600 && CustomizeExtract::IsRunning(); i++)
+            ctx->Yield();
+    };
+    harness.Run(test);
+
+    CustomizeExtract::Status const st = CustomizeExtract::GetStatus();
+    CHECK_FALSE(st.running);
+    CHECK(st.finished);
+    CHECK(st.written == 0);
+    std::filesystem::remove_all(dir, ec);
 }
 
 TEST_CASE("setup view custom resolution inputs clamp and apply", "[gui][setup]") {

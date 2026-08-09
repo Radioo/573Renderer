@@ -417,6 +417,14 @@ add_executable(gui_tests
     tests/gui/gui_test_harness.cpp
     tests/gui/setup_view_tests.cpp
     tests/gui/ready_view_tests.cpp
+    tests/gui/shell_tests.cpp
+    tests/gui/inspector_tests.cpp
+    tests/gui/browse_panel_tests.cpp
+    tests/gui/scene_panel_tests.cpp
+    tests/gui/export_panel_tests.cpp
+    tests/gui/timeline_tests.cpp
+    tests/gui/qpro_panel_tests.cpp
+    tests/gui/host_panel_tests.cpp
 )
 target_include_directories(gui_tests PRIVATE tests/gui src/gui)
 target_link_libraries(gui_tests PRIVATE Catch2::Catch2WithMain r573_app r573::warnings)

@@ -117,6 +117,55 @@ Transport buttons are labelled with the Segoe Fluent Icons PUA glyphs from
 `gui_icons.h`, so tests include that header and click `ICON_STEP_FWD` directly.
 The id is the string, so this works whether or not the glyph has a font.
 
+### 5.1 Four more id-scoping rules the suite depends on
+
+- **A selected tab pushes its own id.** `BeginTabItem` calls `PushOverrideID`, so
+  everything inside the Render tab lives at `##inspector_tabs/Render/<item>`, not
+  at `<item>`. Same for the `mc_names_list` child inside the Live tab. Every
+  inspector test opens the tab first and then uses the prefixed path.
+- **`Gui::Segmented` nests two id levels.** It does `PushID(id)` then `PushID(i)`
+  per button, so the second option of the root-loop control is
+  `##root_loop/$$1/Force loop`. `$$N` is the test engine's syntax for an integer
+  id pushed with `PushID(int)`.
+- **`ComboClick` splits its path at the FIRST slash**, so it only works for
+  `combo/item` - it cannot reach a combo that is itself nested (inside a tab,
+  say). `GuiTest::ComboPick` does the same job the long way: click the combo by
+  full path, then click the entry inside `//$FOCUSED`. Use it for anything
+  deeper than one level.
+- **`ColorEdit3` with `NoInputs` submits its swatch as a child id.** The item to
+  query is `##exp_bg_color/##ColorButton`, not `##exp_bg_color`.
+
+### 5.2 Tree nodes that only open on their arrow
+
+Scene-tree child rows use `ImGuiTreeNodeFlags_OpenOnArrow`, and clicking the
+label deliberately selects instead of expanding. The engine's `ItemOpen` clicks
+the item CENTRE, which for these nodes does nothing, so it reports "Unable to
+Open item". `GuiTest::ClickTreeArrow` hovers the item first (which also sets the
+mouse viewport - `MouseMoveToPos` with a raw position is a no-op without it),
+then clicks at `RectFull.Min.x + fontSize/2`, which is inside ImGui's arrow hit
+box.
+
+### 5.3 Panel-local statics leak between test cases
+
+The panels keep filter buffers, the selected main view, the export settings and
+the resolution-combo index in file-scope statics, exactly as the running app
+does. A `Harness` resets `App::State` but cannot reset those. Two consequences,
+both handled in the suite rather than papered over:
+
+- Tests that type into a filter (`##ifsfilter`, `##scene_filter`) clear it again
+  before finishing, and tests that need the unfiltered tree clear it on entry.
+- Tests whose assertion depends on a specific setting (export format, resolution
+  preset) set that setting explicitly instead of trusting the default; and each
+  scene-panel test loads a UNIQUE ifs path, because `Scene::Reset` only fires
+  when the active ifs actually changes, and without that the selection from the
+  previous test survives.
+
+### 5.4 `Yield` is a Windows macro
+
+`winbase.h` defines `Yield()`, so any translation unit that reaches `windows.h`
+(the harness does, via `native_dialog.h`) cannot call `ctx->Yield(2)`. The
+harness `#undef`s it after its includes.
+
 ## 6. Native dialogs are stubbed
 
 `NativeDialog::SetOverrides()` installs two function pointers consulted at the
@@ -157,20 +206,68 @@ which writes `settings.ini` next to the running executable. For `gui_tests` that
 is `build/settings.ini`, never `bin/settings.ini`, so the developer's real
 settings are untouched.
 
-## 9. Coverage today and how to extend
+## 9. Coverage
 
-Covered: the setup view (game dir input, Browse accept + cancel, the disabled
-Load gate, fps quick buttons, profile combo, resolution preset combo, custom
-resolution clamping, the BootGame payload) and the ready view (transport
-play/pause, step 1, step 100, wrap-around at frame 0, the label combo, the
-no-scene hint, and the status strip's export reveal).
+117 test cases across ten files, one file per panel:
 
-Not covered, and not coverable this way: `gui_window.cpp`'s Win32 message pump,
-the modal border-drag path, and the DX9 lost-device dance. Those need a real
-window and stay manual.
+| file | cases | what it drives |
+|---|---|---|
+| `setup_view_tests.cpp` | 13 | game-dir input, Browse accept/cancel, the disabled Load gate, fps quick buttons, profile combo, resolution preset + custom clamping, the BootGame payload, the DDR-only arc and customize extractors (visibility, cancel, and a real run over an empty temp dir) |
+| `shell_tests.cpp` | 13 | setup-vs-ready view swap, top-bar Export (enabled + disabled), the per-profile main-view switch, all three backend tab sets, tab switching, splitter drag, status-strip export tag and reveal button |
+| `browse_panel_tests.cpp` | 8 | empty catalog, scanning state, selection posting LoadContent, the `from_arc` flag, the no-reload-of-active guard, filter, directory grouping, expand/collapse |
+| `scene_panel_tests.cpp` | 13 | layer double-click, child visibility override, child expansion, filter, add-slot (accept, empty, duplicate), slot visibility, bitmap combo pick + restore-default, the text-field fallback, unresolved slots |
+| `inspector_tests.cpp` | 16 | Play/Replay, loop-master, root-loop and continuous-loop segmenteds, trim, master-scale slider + both presets, background segmented, filter and MC-names toggles, name-type segmented, reset overrides, the DDR-reduced Render tab, the Live tab's MC list |
+| `timeline_tests.cpp` | 12 | jump back, resume, track drag-to-seek, the zero-length guard, label ticks, Space, arrows, Shift+arrows, Ctrl+E, shortcut suppression during capture, the no-scene and no-labels states |
+| `ready_view_tests.cpp` | 7 | transport play/pause, step 1, step 100, wrap at frame 0, label combo, status-strip reveal |
+| `export_panel_tests.cpp` | 22 | stem + format to output path, PNG directory form, fps/quality, resolution preset/native/custom/scale buttons, transparent-bg toggle and its colour gate, hardware-encode gate, keyframe interval, frame limit, loop count, blend seam, crop inputs/Clear/Pick/reopen, Start, Cancel, Close, reveal |
+| `qpro_panel_tests.cpp` | 6 | scan command, category gating of the extract button, the extract payload, picker cancel, fps clamp |
+| `host_panel_tests.cpp` | 7 | 3D-scene and 2D-package panels while idle, the loading overlay over both views and its absence, the boot-error banner, Load disabled during boot |
 
-To add a case: pick the view, prefill `App::State` for the scenario, `SetRef` +
-`FocusChild` to the owning child window, act, then assert on the drained
-command or the mutated state. If the widget you are testing calls something
-outside `App::State` (a background worker, a native dialog), give it a seam like
-`NativeDialog::Overrides` rather than letting the test touch the real thing.
+Every interactive widget in `src/gui` is exercised except the four cases below.
+
+**Not coverable headlessly, and why:**
+
+- **The 3D scene panel and 2D package panel bodies.** `Scene3dHost::Active()` /
+  `Gc2dHost::Active()` only become true after `Load()` builds renderer resources
+  on `g_d3d.device`, so a live D3D9 device plus real game data is required. The
+  tests cover the idle branch (the "no scene loaded" copy and the hidden tab).
+  A WARP device (as `pixel_golden_tests` uses) plus synthetic `.x` / `system.idx`
+  fixtures could reach the rest; that is a separate piece of work.
+- **The qpro part list: `All`, `None`, the per-date groups, and `Copy list`.**
+  Those widgets only render after `QproExtract::GetScanResult()` returns parts,
+  which comes from pattern-scanning a real `bm2dx.dll`. There is no injection
+  seam and adding one would be production code with only a test consumer.
+- **`gui_window.cpp`'s Win32 message pump**, the modal border-drag loop and the
+  DX9 lost-device dance. Those need a real window; they stay manual.
+- **Rendering itself.** These tests assert behaviour, not pixels. The pixel nets
+  are `pixel_golden_tests` and `docs/local_regression.md`.
+
+## 10. Two defects the suite found on its first run
+
+Both were fixed in the same change; they are recorded here because each is a
+bug class that will recur.
+
+1. **`ImGui::IsItemToggledOpen()` queried too late** (`gui_scene_panel.cpp`).
+   `RenderSceneNode` called it several items after the `TreeNodeEx`, past the
+   `TextDisabled` that prints a clip's `(x, y)` position and past the variant
+   badge. `IsItem*` reads `g.LastItemData`, which every subsequent `ItemAdd`
+   overwrites - so expanding any child clip THAT HAS A POSITION never recorded
+   its expansion, while a bare clip worked. The fix latches
+   `const bool toggled_open = ImGui::IsItemToggledOpen();` immediately after the
+   `TreeNodeEx` and uses the latched value. Rule: capture `IsItem*` results on
+   the line after the widget, never further down.
+2. **Truncated button id** (`gui_export_panel.cpp`). The export scale buttons
+   build `"%.*s (%dx%d)##exp_scl_%s"` into a 32-byte buffer; the real string is
+   37+ bytes, so every id was silently cut short. The visible text was fine
+   (it precedes the `##`), which is why nobody noticed - but ids that differ only
+   past the cut would collide. Buffer raised to 64.
+
+## 11. How to add a case
+
+Pick the view, prefill `App::State` for the scenario, `SetRef` + `FocusChild` to
+the owning child window, act, then assert on the drained command or the mutated
+state. If the widget calls something outside `App::State` (a background worker,
+a native dialog), give it a seam like `NativeDialog::Overrides` rather than
+letting the test touch the real thing. If it depends on a panel-local static,
+set that static through the UI first (see 5.3) instead of trusting the value the
+previous test happened to leave behind.

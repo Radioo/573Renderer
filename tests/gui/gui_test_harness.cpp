@@ -8,6 +8,7 @@
 #include "native_dialog.h"
 #include "state/app_state.h"
 #include "state/boot_lifecycle.h"
+#include "state/telemetry.h"
 
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
@@ -15,6 +16,10 @@
 #include <cstdint>
 #include <string>
 #include <utility>
+
+#ifdef Yield
+#undef Yield
+#endif
 
 namespace GuiTest {
 
@@ -58,6 +63,8 @@ void ResetAppState() {
     state.SetLiveOverrides({});
     state.SetExport({});
     state.SetLoadProgress({});
+    state.SetCropRect({});
+    state.SetCropPickMode(false);
     state.SetRenderSize(1280, 720);
     state.SetRenderFps(120);
 }
@@ -148,6 +155,46 @@ void FocusChild(ImGuiTestContext* ctx, const char* child_path) {
     ImGuiTestItemInfo const info = ctx->WindowInfo(child_path);
     IM_CHECK_SILENT(info.Window != nullptr);
     ctx->SetRef(info.Window);
+}
+
+void ComboPick(ImGuiTestContext* ctx, const char* combo_path, const char* item_label) {
+    ctx->ItemClick(combo_path);
+    ctx->Yield(2);
+    ctx->ItemClick(ctx->GetID(item_label, ctx->GetID("//$FOCUSED")));
+    ctx->Yield(3);
+}
+
+void ClickTreeArrow(ImGuiTestContext* ctx, const char* item_path) {
+    ctx->MouseMove(item_path);
+    ImGuiTestItemInfo const info = ctx->ItemInfo(item_path);
+    IM_CHECK_SILENT(info.ID != 0);
+    ImVec2 const arrow(info.RectFull.Min.x + (ImGui::GetFontSize() * 0.5F),
+                       (info.RectFull.Min.y + info.RectFull.Max.y) * 0.5F);
+    ctx->MouseMoveToPos(arrow);
+    ctx->MouseClick(0);
+    ctx->Yield(2);
+}
+
+void EnterReadyView(const char* backend_id, const char* profile_slug) {
+    auto& state = App::Global();
+    state.SetBootState(App::BootState::Ready);
+    state.SetActiveBackendId(backend_id);
+    state.SetGameProfileSlug(profile_slug);
+}
+
+void LoadScene(const char* ifs_path, unsigned cur, unsigned total) {
+    auto& state = App::Global();
+    App::Status status = state.GetStatus();
+    status.scene_loaded = true;
+    status.current_ifs_path = ifs_path;
+    state.SetStatus(status);
+    state.SetActiveIfs(ifs_path);
+
+    App::State::LiveState live = state.GetLiveState();
+    live.mc_cur = cur;
+    live.mc_total = total;
+    live.have_mc_playhead = true;
+    state.SetLiveState(live);
 }
 
 void SetBrowseResult(std::string path) {

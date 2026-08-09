@@ -114,7 +114,9 @@ clang-cl leg would need a second Catch2 triplet.
 `gui_tests` carries the `ci` label like every other suite, so the existing
 `ctest -LE local_dll` step picks it up with no workflow change. It needs no
 display, no D3D9 device and no game data: it drives the real panels through the
-Dear ImGui Test Engine against a null backend (docs/gui_tests.md). It is
+Dear ImGui Test Engine against a null backend (docs/gui_tests.md). 117 cases,
+about 6 seconds - the bulk of the `ctest -L ci` wall time, and still cheap
+enough that the local gate stays under ten seconds. It is
 deliberately absent from the ASan job's target list, which stays restricted to
 the dependency-light pure-logic suites - `gui_tests` links `r573_app`, and with
 it FFmpeg and D3D9, so adding it there would trade a large rebuild for coverage
