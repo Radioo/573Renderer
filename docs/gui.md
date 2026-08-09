@@ -187,6 +187,21 @@ One tree replaces the old Layers + Sub-layers + Variants panels:
 - Bottom row: add-slot-by-clip-path input (probed by the render thread next frame).
 - Selection model (`Panels::Scene::Selection`, GUI-thread-local): None / Layer / Child with
   path + name; reset on IFS switch.
+- COMMIT SEMANTICS: `InputInt`/`InputText` return true on EVERY keystroke unless given
+  `ImGuiInputTextFlags_EnterReturnsTrue`. Any numeric field whose value ESCAPES the panel -
+  to `App::State`, to `SaveCurrentSettings()`, or to a live override - must therefore stage
+  the value and commit on `ImGui::IsItemDeactivatedAfterEdit()`, not on the widget's return
+  value. Setup fps and render W/H and the inspector trim field do this. Fields that only
+  feed a panel-local static (the whole export modal) are fine committing per keystroke.
+  Two traps: a stepped `InputInt` (step != 0) appends -/+ buttons, so
+  `IsItemDeactivatedAfterEdit()` must be taken after wrapping the call in
+  `BeginGroup`/`EndGroup` or it reports on the "+" button; and any sibling button that sets
+  the same value (the quick-fps row) still has to commit immediately.
+- DISABLED TOOLTIPS: `IsItemHovered()` returns false for an item inside `BeginDisabled`, so
+  a tooltip attached after `EndDisabled` never shows in exactly the state it is usually
+  written to explain. Every tooltip on a gateable control passes
+  `ImGuiHoveredFlags_AllowWhenDisabled`. Both live cases (3D **Animate camera**, export
+  **HW accel**) exist to say WHY the control is greyed out.
 - `IsItem*` GOTCHA: `RenderSceneNode` LATCHES `ImGui::IsItemToggledOpen()` into a local on
   the line after `TreeNodeEx`, before anything else is submitted. `IsItem*` reads
   `g.LastItemData`, which every later `ItemAdd` overwrites - and this row submits more items
@@ -259,6 +274,10 @@ One tree replaces the old Layers + Sub-layers + Variants panels:
   WxH + scale buttons), transparent-bg + HW-accel. Everything else - keyframe interval,
   frame limit, loop count, blend seam, crop, bg color - sits behind one "Advanced"
   CollapsingHeader.
+- Escape closes the modal, guarded on the modal being the focused window and
+  `io.WantTextInput` being false so a field's Escape-to-revert and a combo's
+  Escape-to-dismiss still win. `BeginPopupModal` with `p_open == nullptr` gives no Escape
+  handling of its own, which is why this is explicit.
 - Starting an export closes the modal; progress lives in the status strip (capturing N /
   encoding / done / failed, clickable to reopen) and as the timeline capture tint.
 - The scale buttons build their label AND their `##` id into one `snprintf` buffer that must

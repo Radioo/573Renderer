@@ -63,7 +63,7 @@ void DrawAnimationToggles(const Scene3dHost::Status& st) {
     bool camera = st.animate_camera;
     if (ImGui::Checkbox("Animate camera##s3d", &camera)) Scene3dHost::SetAnimateCamera(camera);
     ImGui::EndDisabled();
-    if (ImGui::IsItemHovered()) {
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
         if (!st.has_authored_camera) {
             ImGui::SetTooltip("This scene has no camera in its .x file.");
         } else if (st.free_camera) {

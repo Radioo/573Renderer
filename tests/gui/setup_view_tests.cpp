@@ -1,6 +1,7 @@
 #include "gui_test_harness.h"
 
 #include "arc_extract.h"
+#include "gui_icons.h"
 #include "customize_extract.h"
 #include "imgui.h"
 #include "imgui_te_context.h"
@@ -261,4 +262,63 @@ TEST_CASE("setup view custom resolution inputs clamp and apply", "[gui][setup]")
     App::Global().GetRenderSize(w, h);
     CHECK(w == 900);
     CHECK(h == 64);
+}
+
+TEST_CASE("setup view render size commits once, on edit completion", "[gui][setup]") {
+    GuiTest::Harness harness;
+    App::Global().SetRenderSize(1280, 720);
+
+    ImGuiTest* test = harness.NewTest("setup_res_single_commit");
+    test->TestFunc = [](ImGuiTestContext* ctx) {
+        ctx->SetRef("##setup");
+        GuiTest::FocusChild(ctx, "setup_card");
+        ctx->ItemClick("##render_w");
+        ctx->KeyCharsReplace("1920");
+        int mid_w = 0;
+        int mid_h = 0;
+        App::Global().GetRenderSize(mid_w, mid_h);
+        IM_CHECK_EQ(mid_w, 1280);
+        ctx->KeyPress(ImGuiKey_Enter);
+    };
+    harness.Run(test);
+
+    int w = 0;
+    int h = 0;
+    App::Global().GetRenderSize(w, h);
+    CHECK(w == 1920);
+}
+
+TEST_CASE("setup view fps commits once, on edit completion", "[gui][setup]") {
+    GuiTest::Harness harness;
+    App::Global().SetRenderFps(120);
+
+    ImGuiTest* test = harness.NewTest("setup_fps_single_commit");
+    test->TestFunc = [](ImGuiTestContext* ctx) {
+        ctx->SetRef("##setup");
+        GuiTest::FocusChild(ctx, "setup_card");
+        ctx->ItemClick("##render_fps");
+        ctx->KeyCharsReplace("144");
+        IM_CHECK_EQ(App::Global().GetRenderFps(), 120);
+        ctx->KeyPress(ImGuiKey_Enter);
+    };
+    harness.Run(test);
+
+    CHECK(App::Global().GetRenderFps() == 144);
+}
+
+TEST_CASE("setup view Export tooltip is reachable while the button is disabled", "[gui][setup]") {
+    GuiTest::Harness harness;
+    GuiTest::EnterReadyView("afp_modern", "sdvx7");
+
+    ImGuiTest* test = harness.NewTest("shell_disabled_tooltip");
+    test->TestFunc = [](ImGuiTestContext* ctx) {
+        ctx->SetRef("##main");
+        GuiTest::FocusChild(ctx, "topbar");
+        ImGuiTestItemInfo const info = ctx->ItemInfo(ICON_EXPORT "  Export...");
+        IM_CHECK((info.ItemFlags & ImGuiItemFlags_Disabled) != 0);
+        ctx->MouseMove(ICON_EXPORT "  Export...");
+        ctx->Yield(3);
+        IM_CHECK(ctx->WindowInfo("//##Tooltip_00").Window != nullptr);
+    };
+    harness.Run(test);
 }

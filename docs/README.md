@@ -25,6 +25,7 @@ documents, which are THE source of truth. Start here to find the right one.
 | [ddr.md](ddr.md) | anything DDR World / AFP 2.13.7: boot, arc loading, draw path, playhead/label codes, the play-work table |
 | [qpro.md](qpro.md) | the IIDX Q-pro avatar extractor: part tables, composites, game-id asset naming |
 | [gui.md](gui.md) | GUI panel architecture and AFP debug-viewer parity features |
+| [interactions/](interactions/README.md) | you need the full inventory of what a user can DO in the app: every widget, tooltip, key, drag, scroll and CLI flag across all 13 surfaces, with test coverage per interaction |
 | [gui_tests.md](gui_tests.md) | the headless Dear ImGui Test Engine suite: null backend, item paths, dialog stubs, how to add a case |
 
 ## Export and formats

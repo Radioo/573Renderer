@@ -180,7 +180,7 @@ void DrawFrameLimitControls() {
         ImGui::TextDisabled("(~%.2fs at %d fps)", secs, g_fps > 0 ? g_fps : 60);
     }
     ImGui::EndDisabled();
-    if (ImGui::IsItemHovered()) {
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
         ImGui::SetTooltip("Number of frames the encoder receives before the export\n"
                           "auto-finalises. Counted post-capture: a value of 60\n"
                           "produces a file with exactly 60 encoded frames.");
@@ -513,7 +513,9 @@ void DrawBackgroundAndHw(MediaSink::Format current_format, bool hw_available) {
     } else {
         ImGui::Checkbox("HW accel##exp_hw", &g_prefer_hw);
     }
-    if (ImGui::IsItemHovered()) DrawHwAccelTooltip(current_format, hw_available, is_h264);
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+        DrawHwAccelTooltip(current_format, hw_available, is_h264);
+    }
 }
 
 void PostStartRequest(App::State& state, MediaSink::Format current_format, bool hw_applies) {
@@ -660,6 +662,10 @@ void RenderModal() {
 
     if (close_for_pick) {
         g_reopen_after_pick = true;
+        ImGui::CloseCurrentPopup();
+    }
+    if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) &&
+        !ImGui::GetIO().WantTextInput && ImGui::IsKeyPressed(ImGuiKey_Escape, false)) {
         ImGui::CloseCurrentPopup();
     }
     ImGui::EndPopup();

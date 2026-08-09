@@ -222,7 +222,8 @@ void DrawContinuousLoopRow(App::State::LiveOverrides& ov, bool& changed) {
 void DrawTrimRow(App::State::LiveOverrides& ov, bool& changed) {
     ImGui::TextDisabled("Trim frames");
     ImGui::SetNextItemWidth(120.0F);
-    if (ImGui::InputInt("##live_trim", &ov.trim_frames, 0, 0)) {
+    ImGui::InputInt("##live_trim", &ov.trim_frames, 0, 0);
+    if (ImGui::IsItemDeactivatedAfterEdit()) {
         changed = true;
     }
     if (ImGui::IsItemHovered()) {

@@ -145,12 +145,18 @@ void DrawGameProfilePicker(App::State& state) {
 }
 
 void DrawRenderFps(App::State& state) {
+    static int staged_fps = 0;
     int fps = state.GetRenderFps();
 
     ImGui::Text("Frame rate:");
     ImGui::SetNextItemWidth(120.0F);
-    bool changed = ImGui::InputInt("##render_fps", &fps, 5, 30, ImGuiInputTextFlags_AutoSelectAll);
-    if (ImGui::IsItemHovered()) {
+    ImGui::BeginGroup();
+    if (ImGui::InputInt("##render_fps", &fps, 5, 30, ImGuiInputTextFlags_AutoSelectAll)) {
+        staged_fps = fps;
+    }
+    ImGui::EndGroup();
+    bool changed = ImGui::IsItemDeactivatedAfterEdit();
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
         ImGui::SetTooltip("Frames per second the preview renders + advances the\n"
                           "animation at. Animation SPEED is unchanged (dt = 1/fps),\n"
                           "so this is purely smoothness vs CPU. 60 matches DDR's\n"
@@ -167,7 +173,7 @@ void DrawRenderFps(App::State& state) {
         char b[24];
         snprintf(b, sizeof(b), "%d##fps_%d", q, q);
         if (ImGui::Button(b, ImVec2(quick_w, 0))) {
-            fps = q;
+            staged_fps = q;
             changed = true;
         }
         ImGui::SameLine();
@@ -175,8 +181,8 @@ void DrawRenderFps(App::State& state) {
     ImGui::NewLine();
 
     if (changed) {
-        fps = std::clamp(fps, 1, 1000);
-        state.SetRenderFps(fps);
+        int const applied = std::clamp(staged_fps, 1, 1000);
+        state.SetRenderFps(applied);
         PersistSetup(state, g_dir_buf);
     }
     ImGui::Spacing();
@@ -257,14 +263,14 @@ void DrawRenderResolution(App::State& state) {
     int h_val = rh;
     const float input_w = 100.0F;
     ImGui::SetNextItemWidth(input_w);
-    bool const w_changed =
-        ImGui::InputInt("##render_w", &w_val, 0, 0, ImGuiInputTextFlags_AutoSelectAll);
+    ImGui::InputInt("##render_w", &w_val, 0, 0, ImGuiInputTextFlags_AutoSelectAll);
+    bool const w_changed = ImGui::IsItemDeactivatedAfterEdit();
     ImGui::SameLine();
     ImGui::TextUnformatted("x");
     ImGui::SameLine();
     ImGui::SetNextItemWidth(input_w);
-    bool const h_changed =
-        ImGui::InputInt("##render_h", &h_val, 0, 0, ImGuiInputTextFlags_AutoSelectAll);
+    ImGui::InputInt("##render_h", &h_val, 0, 0, ImGuiInputTextFlags_AutoSelectAll);
+    bool const h_changed = ImGui::IsItemDeactivatedAfterEdit();
     ImGui::SameLine();
     ImGui::TextDisabled("(width x height, pixels)");
     if (w_changed || h_changed) {

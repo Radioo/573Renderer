@@ -96,7 +96,7 @@ void DrawScanButton(bool busy, const QproExtract::ScanResult& scan) {
         App::Global().PostCommand(AfpCmd::Wrap(AfpCmd::QproStartScan{}));
     }
     ImGui::EndDisabled();
-    if (ImGui::IsItemHovered()) {
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
         ImGui::SetTooltip("Enumerate every qpro part in the loaded game (read directly from "
                           "bm2dx.dll) and group them\n"
                           "by their source IFS's modified date, so you can render ONLY the parts "

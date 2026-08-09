@@ -167,7 +167,9 @@ void DrawTrack(App::State& state, const App::Status& status, const App::State::L
     if (exporting) return;
 
     const float mouse_x = ImGui::GetIO().MousePos.x;
-    int const label_hit = hovered ? LabelHitTest(status, total, p0.x, w, mouse_x) : -1;
+    const bool scrubbing = ImGui::IsMouseDragging(ImGuiMouseButton_Left);
+    int const label_hit =
+        (hovered && !scrubbing) ? LabelHitTest(status, total, p0.x, w, mouse_x) : -1;
     if (label_hit >= 0) {
         const auto& l = status.labels[(size_t)label_hit];
         ImGui::SetTooltip("label %s (frame %d) - click to play from here",

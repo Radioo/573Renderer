@@ -265,3 +265,40 @@ TEST_CASE("timeline label combo is absent without labels", "[gui][timeline]") {
     };
     harness.Run(test);
 }
+
+TEST_CASE("timeline scrub seeks through a label tick instead of stalling", "[gui][timeline]") {
+    GuiTest::Harness harness;
+    ReadyWithPlayhead("bg_scrubtick.ifs", 0, 300);
+    AddLabels();
+
+    ImGuiTest* test = harness.NewTest("tl_scrub_over_tick");
+    test->TestFunc = [](ImGuiTestContext* ctx) {
+        ctx->SetRef("##main");
+        GuiTest::FocusChild(ctx, kDock);
+        ImGuiTestItemInfo const track = ctx->ItemInfo("##tl_track");
+        IM_CHECK_NE(track.ID, 0U);
+        float const y = (track.RectFull.Min.y + track.RectFull.Max.y) * 0.5F;
+        float const x0 = track.RectFull.Min.x;
+        float const w = track.RectFull.Max.x - track.RectFull.Min.x;
+
+        ctx->MouseMove("##tl_track");
+        ctx->MouseMoveToPos(ImVec2(x0 + (w * 0.20F), y));
+        ctx->MouseDown(0);
+        ctx->MouseMoveToPos(ImVec2(x0 + (w * 0.50F), y));
+        ctx->Yield(2);
+        ctx->MouseUp(0);
+    };
+    harness.Run(test);
+
+    int last_frame = -1;
+    int seeks = 0;
+    while (true) {
+        std::optional<App::Command> slot;
+        const auto* seek = TakeAfpCommand<AfpCmd::SeekFrame>(slot);
+        if (seek == nullptr) break;
+        last_frame = seek->frame;
+        seeks++;
+    }
+    CHECK(seeks > 1);
+    CHECK(last_frame > 120);
+}

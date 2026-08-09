@@ -512,3 +512,20 @@ TEST_CASE("export modal reveals the finished file", "[gui][export]") {
 
     CHECK(GuiTest::TakeRevealedPath() == "C:/out/done.avif");
 }
+
+TEST_CASE("export modal closes on Escape", "[gui][export]") {
+    GuiTest::Harness harness;
+    ReadyForExport("bg_escape.ifs");
+
+    ImGuiTest* test = harness.NewTest("export_escape_close");
+    test->TestFunc = [](ImGuiTestContext* ctx) {
+        OpenModal(ctx);
+        IM_CHECK(ctx->WindowInfo("//Export").Window != nullptr);
+        ctx->KeyPress(ImGuiKey_Escape);
+        ctx->Yield(3);
+        IM_CHECK(ctx->WindowInfo("//Export", ImGuiTestOpFlags_NoError).Window == nullptr);
+    };
+    harness.Run(test);
+
+    CHECK_FALSE(App::Global().TakeCommand().has_value());
+}
