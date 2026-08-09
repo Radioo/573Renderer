@@ -33,6 +33,12 @@ void ComboPick(ImGuiTestContext* ctx, const char* combo_path, const char* item_l
 
 void ClickTreeArrow(ImGuiTestContext* ctx, const char* item_path);
 
+void SetDisplaySize(float w, float h);
+
+bool TooltipShown(ImGuiTestContext* ctx);
+
+bool HoverShowsTooltip(ImGuiTestContext* ctx, const char* item_path);
+
 void SetBrowseResult(std::string path);
 
 std::string TakeRevealedPath();

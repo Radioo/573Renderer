@@ -173,6 +173,7 @@ void DrawFrameLimitControls() {
     if (g_limit_frames && g_max_frames <= 0) g_max_frames = 60;
     ImGui::SetNextItemWidth(120);
     ImGui::InputInt("frames##exp_maxf", &g_max_frames, 1, 10);
+    const bool frames_hovered = ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled);
     g_max_frames = std::clamp(g_max_frames, 1, 100000);
     ImGui::SameLine();
     {
@@ -180,7 +181,7 @@ void DrawFrameLimitControls() {
         ImGui::TextDisabled("(~%.2fs at %d fps)", secs, g_fps > 0 ? g_fps : 60);
     }
     ImGui::EndDisabled();
-    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+    if (frames_hovered) {
         ImGui::SetTooltip("Number of frames the encoder receives before the export\n"
                           "auto-finalises. Counted post-capture: a value of 60\n"
                           "produces a file with exactly 60 encoded frames.");

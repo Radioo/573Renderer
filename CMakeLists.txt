@@ -431,6 +431,8 @@ add_executable(gui_tests
     tests/gui/gui_gpu.cpp
     tests/gui/gui_pixels.cpp
     tests/gui/window_tests.cpp
+    tests/gui/tooltip_tests.cpp
+    tests/gui/input_mode_tests.cpp
 )
 target_include_directories(gui_tests PRIVATE tests/gui src/gui)
 target_link_libraries(gui_tests PRIVATE Catch2::Catch2WithMain r573_app r573::warnings)

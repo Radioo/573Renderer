@@ -42,7 +42,7 @@ reader against the source (see README.md for method).
 | 35 | `select-3d-scene-tab` | "3D scene" inspector tab | left-click | - | 3 |
 | 36 | `s3d-freelook-rmb-down` | Hold right mouse button in the render window to enter free look | right-click | - | **none** |
 | 37 | `gc2d-animation-combo-popup-scroll` *(audit)* | Scroll region inside the animation picker combo popup (##gc2danim) | scroll | - | **none** |
-| 38 | `scroll-inspector-pane` | Inspector pane scroll region containing both panels | scroll | - | 10 |
+| 38 | `scroll-inspector-pane` | Inspector pane scroll region containing both panels | scroll | - | 11 |
 | 39 | `gc2d-frame-slider-ctrl-click-entry` | Frame scrubber keyboard value entry | text-entry | - | 1 |
 | 40 | `gc2d-speed-slider-ctrl-click-entry` | "speed" slider keyboard value entry (2D package) | text-entry | - | 1 |
 | 41 | `s3d-move-speed-ctrl-click-entry` | "move speed" keyboard value entry | text-entry | - | 1 |
@@ -487,7 +487,7 @@ reader against the source (see README.md for method).
 - **effect**: Scrolls the ImGui child window "pane_right" that hosts the inspector tab bar and the 3D scene / 2D package panel bodies; no application state changes
 - **source**: `src/gui/gui_panels.cpp:421`
 - **notes**: Neither panel file creates its own BeginChild; both draw directly into the enclosing scrollable pane child.
-- **tests**: `2D package panel stays hidden while no package is live`, `3D scene panel explains how to load a scene while none is live`, `inspector exposes the ddr backend tab set`, `inspector exposes the modern backend tab set` (+6 more)
+- **tests**: `2D package panel stays hidden while no package is live`, `3D scene panel explains how to load a scene while none is live`, `inspector exposes the ddr backend tab set`, `inspector exposes the modern backend tab set` (+7 more)
 
 ### 39. Frame scrubber keyboard value entry
 

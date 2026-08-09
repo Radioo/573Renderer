@@ -3,6 +3,7 @@
 #include "gui_panels.h"
 #include "gui_style.h"
 #include "imgui.h"
+#include "imgui_internal.h"
 #include "imgui_te_context.h"
 #include "imgui_te_engine.h"
 #include "native_dialog.h"
@@ -13,7 +14,9 @@
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
 #include <cstdint>
+#include <cstring>
 #include <string>
 #include <utility>
 
@@ -84,6 +87,7 @@ ImGuiContext* CreateUiContext() {
     io.IniFilename = nullptr;
     io.LogFilename = nullptr;
     io.BackendFlags |= ImGuiBackendFlags_RendererHasTextures;
+    io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
     Gui::LoadFonts();
     Gui::ApplyStyle();
     return ImGui::GetCurrentContext();
@@ -173,6 +177,23 @@ void ClickTreeArrow(ImGuiTestContext* ctx, const char* item_path) {
     ctx->MouseMoveToPos(arrow);
     ctx->MouseClick(0);
     ctx->Yield(2);
+}
+
+void SetDisplaySize(float w, float h) {
+    ImGui::GetIO().DisplaySize = ImVec2(w, h);
+}
+
+bool TooltipShown(ImGuiTestContext* ctx) {
+    ImGuiContext const& g = *ctx->UiContext;
+    return std::ranges::any_of(g.Windows, [](const ImGuiWindow* w) {
+        return w->Active && strncmp(w->Name, "##Tooltip", 9) == 0;
+    });
+}
+
+bool HoverShowsTooltip(ImGuiTestContext* ctx, const char* item_path) {
+    ctx->MouseMove(item_path);
+    ctx->Yield(4);
+    return TooltipShown(ctx);
 }
 
 void EnterReadyView(const char* backend_id, const char* profile_slug) {

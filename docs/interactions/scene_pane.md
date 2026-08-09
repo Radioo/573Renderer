@@ -12,7 +12,7 @@ reader against the source (see README.md for method).
 | 5 | `add-slot-button-keyboard-activate` *(audit)* | Add button activated with the keyboard (Space / Enter) | key | yes | 3 |
 | 6 | `add-slot-input-editing-keys` *(audit)* | New variant slot text box editing keymap, and Enter having no effect | key | - | 3 |
 | 7 | `layer-row-keyboard-toggle` *(audit)* | Layer row activated with the keyboard (Space / Enter) | key | yes | 4 |
-| 8 | `scene-filter-input-editing-keys` *(audit)* | Clip filter text box editing keymap and mouse text selection | key | - | 3 |
+| 8 | `scene-filter-input-editing-keys` *(audit)* | Clip filter text box editing keymap and mouse text selection | key | - | 4 |
 | 9 | `scene-keyboard-nav-focus` *(audit)* | Keyboard nav cursor over the scene pane items | key | - | **none** |
 | 10 | `scene-tree-keyboard-arrow-expand` *(audit)* | Left / Right arrow on a nav-focused tree node (layer row or sublayer node) | key | - | **none** |
 | 11 | `sublayer-node-keyboard-toggle` *(audit)* | Sublayer tree node activated with the keyboard (Space / Enter) | key | - | **none** |
@@ -23,12 +23,12 @@ reader against the source (see README.md for method).
 | 16 | `sublayer-node-expand` | Sublayer tree node expand/collapse arrow | left-click | - | **none** |
 | 17 | `sublayer-node-select` | Sublayer tree node (click on the label) | left-click | - | **none** |
 | 18 | `unresolved-slot-selectable` | Unresolved / unmatched variant slot row | left-click | - | **none** |
-| 19 | `scene-scroll-child` | Scene tree scroll region | scroll | - | 10 |
+| 19 | `scene-scroll-child` | Scene tree scroll region | scroll | - | 12 |
 | 20 | `scene-empty-no-ifs-gate` | Empty-state message when no IFS is selected | state-change | - | n/a |
 | 21 | `scene-empty-no-layers-gate` | Empty-state message when afplist.xml lists no layers | state-change | - | n/a |
 | 22 | `scene-selection-reset-on-ifs-change` | Implicit selection reset when the user picks a different IFS elsewhere | state-change | - | n/a |
 | 23 | `add-slot-input` | New variant slot path text box (hint "add slot by clip path, e.g. coin") | text-entry | - | 3 |
-| 24 | `scene-filter-input` | Clip filter text box (hint "find clip...") | text-entry | - | 3 |
+| 24 | `scene-filter-input` | Clip filter text box (hint "find clip...") | text-entry | - | 4 |
 
 ## Detail
 
@@ -125,7 +125,7 @@ reader against the source (see README.md for method).
 - **effect**: The InputTextWithHint at line 261 carries no flags, so the full ImGui text-edit keymap is live: Left/Right/Home/End and Ctrl+Left/Right caret motion, Shift+motion selection, Ctrl+A select-all, Ctrl+C / Ctrl+X / Ctrl+V clipboard, Ctrl+Z / Ctrl+Y undo-redo, Backspace/Delete (with Ctrl for word delete), click-drag selection and double-click word selection. Every edit takes effect on the same frame because lower_filter is recomputed from filter_buf on line 262 each frame. Escape reverts the buffer to its value at activation and deactivates, which is the fastest way to clear a typed filter (no clear button exists). While the field is active io.WantTextInput is true, which makes Panels::HandleShortcuts return immediately (src/gui/gui_timeline.cpp:193), disabling Space=pause, Left/Right=step and Ctrl+E=export for as long as the filter box has focus.
 - **source**: `src/gui/gui_scene_panel.cpp:261`
 - **notes**: The inventory's scene-filter-input entry covers only 'typing'; the implicit editing keymap, the Escape revert, and the global-shortcut suppression are all unrecorded.
-- **tests**: `scene pane filter narrows the layer list`, `scene pane prompts for an IFS while none is active`, `scene pane reports an IFS with no listed layers`
+- **tests**: `scene pane filter narrows the layer list`, `scene pane prompts for an IFS while none is active`, `scene pane reports an IFS with no listed layers`, `scene pane rows explain themselves on hover`
 
 ### 9. Keyboard nav cursor over the scene pane items
 
@@ -258,7 +258,7 @@ reader against the source (see README.md for method).
 - **effect**: ImGui::BeginChild("scene_scroll", ImVec2(0, -38.0F), 0) creates a scrollable child holding every layer row and its expanded sublayer tree; mouse wheel / scrollbar drag scrolls it. Purely view-level, no state change.
 - **source**: `src/gui/gui_scene_panel.cpp:267`
 - **notes**: Height reserves 38px at the bottom for the add-slot row, which stays outside the scroll region.
-- **tests**: `properties tab Play posts SwitchAnimation for an idle layer`, `properties tab Replay posts SwitchAnimation for the playing layer`, `scene pane child tree expansion is recorded`, `scene pane child visibility checkbox records a sublayer override` (+6 more)
+- **tests**: `properties tab Play posts SwitchAnimation for an idle layer`, `properties tab Replay posts SwitchAnimation for the playing layer`, `scene pane child tree expansion is recorded`, `scene pane child visibility checkbox records a sublayer override` (+8 more)
 - **audit correction**: Effect implies general scrolling; the child is submitted with flags = 0, so only vertical scrolling exists. -> ImGui::BeginChild("scene_scroll", ImVec2(0, -38.0F), 0) with no ImGuiWindowFlags_HorizontalScrollbar: mouse wheel and vertical scrollbar drag scroll it, and keyboard nav auto-scrolls to the focused item, but deeply indented sublayer rows are clipped at the right edge with no way to scroll horizontally (Shift+wheel does nothing). Purely view-level, no state change.
 
 ### 20. Empty-state message when no IFS is selected
@@ -311,5 +311,5 @@ reader against the source (see README.md for method).
 - **effect**: Types into the static filter_buf[128]. The text is lowercased into lower_filter and used to filter rows: RenderLayerRow returns early for layers whose lowercased name does not contain the filter unless the playing layer's mc_tree subtree matches (SubtreeMatches); RenderSceneNode returns early for nodes whose subtree does not match. A non-empty filter also adds ImGuiTreeNodeFlags_DefaultOpen to every sublayer node. No App::Command is posted and no state setter runs.
 - **source**: `src/gui/gui_scene_panel.cpp:261`
 - **notes**: Full-width (SetNextItemWidth(-FLT_MIN)). Filter state is a function-static buffer, so it persists across IFS switches even though Scene::Reset() clears the selection.
-- **tests**: `scene pane filter narrows the layer list`, `scene pane prompts for an IFS while none is active`, `scene pane reports an IFS with no listed layers`
+- **tests**: `scene pane filter narrows the layer list`, `scene pane prompts for an IFS while none is active`, `scene pane reports an IFS with no listed layers`, `scene pane rows explain themselves on hover`
 

@@ -5,12 +5,12 @@ reader against the source (see README.md for method).
 
 | # | id | control | input | tooltip | tests |
 |---|---|---|---|---|---|
-| 1 | `cli-headless` | --headless command line flag | cli-arg | - | n/a |
-| 2 | `cli-no-gui` | --no-gui command line flag | cli-arg | - | n/a |
-| 3 | `device-creation-fallback` | Launching the app on a machine without a usable D3D9 HAL device | cli-arg | - | n/a |
-| 4 | `gui-init-failure-no-window` | Launching the app when window creation or device creation fails | cli-arg | - | n/a |
-| 5 | `gui-thread-start-idempotent` | Starting the GUI a second time | cli-arg | - | n/a |
-| 6 | `launch-shows-control-window` *(audit)* | Launching the app with the GUI enabled (default: no --no-gui / --headless) | cli-arg | - | n/a |
+| 1 | `cli-headless` | --headless command line flag | cli-arg | - | 1 |
+| 2 | `cli-no-gui` | --no-gui command line flag | cli-arg | - | 3 |
+| 3 | `device-creation-fallback` | Launching the app on a machine without a usable D3D9 HAL device | cli-arg | - | **none** |
+| 4 | `gui-init-failure-no-window` | Launching the app when window creation or device creation fails | cli-arg | - | **none** |
+| 5 | `gui-thread-start-idempotent` | Starting the GUI a second time | cli-arg | - | **none** |
+| 6 | `launch-shows-control-window` *(audit)* | Launching the app with the GUI enabled (default: no --no-gui / --headless) | cli-arg | - | 3 |
 | 7 | `dpi-unaware-scaling` *(audit)* | Running the control window on a high-DPI display, or dragging it to a monitor with a different scale factor | drag | - | **none** |
 | 8 | `imgui-layout-not-persisted` | Dragging / resizing ImGui sub-windows and headers inside the control window | drag | - | **none** |
 | 9 | `move-window-titlebar` | Title bar drag to move the window | drag | - | **none** |
@@ -51,6 +51,7 @@ reader against the source (see README.md for method).
 - **precondition**: always
 - **effect**: Same gate as --no-gui in StartGuiIfWanted: the GUI thread is never started, so this surface does not exist for the run.
 - **source**: `src/main.cpp:355`
+- **tests**: `cli: Parse handles flags and string options`
 
 ### 2. --no-gui command line flag
 
@@ -60,6 +61,7 @@ reader against the source (see README.md for method).
 - **effect**: StartGuiIfWanted returns false before calling GuiThread::Start, so no window, no WndProc, no ImGui context is ever created and Gui::GetHwnd() stays nullptr for the whole run.
 - **source**: `src/main.cpp:355`
 - **notes**: Flag parsing itself lives in the CLI surface; recorded here because it is the visibility gate for this entire surface.
+- **tests**: `cli: Parse handles flags and string options`, `cli: ParseToolCommand keeps the historical priority order and value rule`, `cli: ParseToolCommand qpro-json output defaults unless a non-flag follows`
 
 ### 3. Launching the app on a machine without a usable D3D9 HAL device
 
@@ -69,6 +71,7 @@ reader against the source (see README.md for method).
 - **effect**: CreateDevice tries D3DCREATE_HARDWARE_VERTEXPROCESSING, then D3DCREATE_SOFTWARE_VERTEXPROCESSING; if both fail it releases IDirect3D9 and calls WarpD3D9::CreateForWindow(w.warp, hwnd, clientW, clientH). On success it sets warp_backed = true, device = warp.device, fills pp with X8R8G8B8 and EnableAutoDepthStencil = FALSE, and logs the WARP 9on12 fallback. If WARP also fails it logs "D3D9 HAL and WARP both unavailable" and Init tears down the window, so no GUI appears at all.
 - **source**: `src/gui/gui_window.cpp:94`
 - **notes**: User-visible outcome: either a WARP-backed control window or no control window.
+- **tests**: none
 - **audit correction**: The `input` field is "cli-arg", but no command line argument is involved - the trigger is the machine's GPU/driver state at launch (both D3D9 HAL CreateDevice calls failing at gui_window.cpp:94-99). The same mis-typed input appears on gui-init-failure-no-window (window/device creation failure is not a CLI arg either) and on gui-thread-start-idempotent (a duplicate Start() call is not a CLI arg). -> input should be a launch/environment kind (e.g. "launch"), not "cli-arg". Only cli-no-gui and cli-headless legitimately carry input = "cli-arg".
 
 ### 4. Launching the app when window creation or device creation fails
@@ -79,6 +82,7 @@ reader against the source (see README.md for method).
 - **effect**: Gui::Init returns false after DestroyWindow + UnregisterClassW; ThreadMain logs "Gui::Init failed - GUI thread exiting", sets g_running = false and fulfils the promise with false; GuiThread::Start joins the thread and returns false; main logs "GUI thread launch failed - continuing without it" and the renderer runs with have_gui == false.
 - **source**: `src/gui/gui_thread.cpp:23`
 - **notes**: StartGuiIfWanted at src/main.cpp:354-358.
+- **tests**: none
 
 ### 5. Starting the GUI a second time
 
@@ -88,6 +92,7 @@ reader against the source (see README.md for method).
 - **disabled when**: g_running is already true - the call returns true immediately without spawning a thread
 - **effect**: g_running.exchange(true) returns the previous value; when it was already true Start returns true at once, so no second window, no second std::thread and no second promise are created.
 - **source**: `src/gui/gui_thread.cpp:51`
+- **tests**: none
 - **audit correction**: The entry states the g_running.exchange(true) guard makes a second GuiThread::Start() a harmless no-op. That only holds while the first GUI thread is still alive. On the window-close path ThreadMain sets g_running = false at gui_thread.cpp:45 and returns, and nobody joins g_thread, so g_thread stays joinable. A subsequent Start() then passes the exchange gate (g_running is false) and reaches `g_thread = std::thread(&ThreadMain, hinst, std::move(init_promise));` at gui_thread.cpp:56 - a move-assignment onto a still-joinable std::thread, which by the standard calls std::terminate() and kills the process. -> The guard makes a second Start() a no-op ONLY while the GUI thread is still running (g_running == true). After the user closed the control window (g_running reset to false at gui_thread.cpp:45 with no join), a second Start() would std::terminate at gui_thread.cpp:56. Currently latent because Start is only called once, from StartGuiIfWanted (src/main.cpp:356); the path via Stop() is safe because Stop() joins (gui_thread.cpp:66), leaving g_thread non-joinable.
 
 ### 6. Launching the app with the GUI enabled (default: no --no-gui / --headless)
@@ -99,6 +104,7 @@ reader against the source (see README.md for method).
 - **effect**: CreateWindowExW makes a WS_OVERLAPPEDWINDOW titled "573Renderer - Control" at a hardcoded x=80, y=60, 1360x820, then ShowWindow(w.hwnd, SW_SHOW) + UpdateWindow(w.hwnd) make it visible. Window position and size are never saved or restored: nothing in src/ calls GetWindowPlacement/SetWindowPlacement and no setting stores geometry (grep for window_x/window_pos/GetWindowPlacement/SetWindowPlacement over src/ returns nothing), so every run reopens at exactly 80,60 / 1360x820 no matter where the user last moved or sized the window.
 - **source**: `src/gui/gui_window.cpp:147`
 - **notes**: Window creation at gui_window.cpp:133-134. The inventory has the two negative gates (cli-no-gui, cli-headless) and the failure paths but no record for the default positive case. Complements imgui-layout-not-persisted, which only covers the ImGui-side layout (io.IniFilename = nullptr at gui_window.cpp:154); the Win32 geometry is a separate, also-unpersisted thing.
+- **tests**: `cli: Parse handles flags and string options`, `cli: ParseToolCommand keeps the historical priority order and value rule`, `cli: ParseToolCommand qpro-json output defaults unless a non-flag follows`
 
 ### 7. Running the control window on a high-DPI display, or dragging it to a monitor with a different scale factor
 

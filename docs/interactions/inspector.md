@@ -8,7 +8,7 @@ reader against the source (see README.md for method).
 | 1 | `properties-slot-visible-checkbox` | "Slot visible" checkbox | checkbox | - | 2 |
 | 2 | `render-filter-checkbox` | "Filter (F7)" checkbox | checkbox | yes | 2 |
 | 3 | `render-loop-master-checkbox` | "Loop master animation" checkbox | checkbox | yes | 3 |
-| 4 | `render-show-mc-names-checkbox` | "Show MC names (F3)" checkbox | checkbox | yes | 1 |
+| 4 | `render-show-mc-names-checkbox` | "Show MC names (F3)" checkbox | checkbox | yes | 2 |
 | 5 | `properties-slot-bitmap-combo-open` | Variant-slot bitmap combo (preview shows "(default)" or the overridden bitmap name) | combo-select | yes | 2 |
 | 6 | `render-master-scale-slider-drag` | "Master scale" slider (0.25x - 4.00x, format "%.2fx") | drag | - | 1 |
 | 7 | `properties-slot-bitmap-tooltip` *(audit)* | Hover tooltip on the variant-slot bitmap widget (combo or text field) | hover | yes | 2 |
@@ -18,7 +18,7 @@ reader against the source (see README.md for method).
 | 11 | `render-loop-master-tooltip` | Hover tooltip on "Loop master animation" | hover | yes | 3 |
 | 12 | `render-master-scale-tooltip` | Hover tooltip on the master-scale row | hover | yes | 1 |
 | 13 | `render-root-loop-tooltip` | Hover tooltip on the "Loop root" segmented control | hover | yes | 1 |
-| 14 | `render-show-mc-names-tooltip` | Hover tooltip on "Show MC names (F3)" | hover | yes | 1 |
+| 14 | `render-show-mc-names-tooltip` | Hover tooltip on "Show MC names (F3)" | hover | yes | 2 |
 | 15 | `render-trim-frames-tooltip` | Hover tooltip on "Trim frames" | hover | yes | 1 |
 | 16 | `properties-slot-bitmap-combo-keyboard-nav` *(audit)* | Bitmap combo popup keyboard navigation (arrows / Enter / Escape) | key | - | **none** |
 | 17 | `render-master-scale-slider-ctrl-click` | "Master scale" slider keyboard entry | key | - | 1 |
@@ -83,7 +83,7 @@ reader against the source (see README.md for method).
 - **effect**: Toggles ov.show_mc_names and sets changed=true; ApplyLiveOverridesDelta at line 341 enables child enumeration (afp_mc_enumerate_children, ord 0x079). Turning it on also reveals the ##mc_name_type segmented row below it and, when the type is "column", the MC names list in the Live tab (line 437).
 - **source**: `src/gui/gui_inspector.cpp:292`
 - **tooltip**: yes
-- **tests**: `render tab MC-names checkbox reveals the name-type segmented`
+- **tests**: `inspector render tab controls all explain themselves`, `render tab MC-names checkbox reveals the name-type segmented`
 
 ### 5. Variant-slot bitmap combo (preview shows "(default)" or the overridden bitmap name)
 
@@ -198,7 +198,7 @@ reader against the source (see README.md for method).
 - **effect**: ImGui::SetTooltip - explains it enumerates the master's named child clips (afp_mc_enumerate_children ord 0x079), that "at clip pos" draws names over the preview while "column" lists them in the Live tab (matching the debug viewer F3/F6), and that it also feeds the child positions shown in the Scene tree.
 - **source**: `src/gui/gui_inspector.cpp:295`
 - **tooltip**: yes
-- **tests**: `render tab MC-names checkbox reveals the name-type segmented`
+- **tests**: `inspector render tab controls all explain themselves`, `render tab MC-names checkbox reveals the name-type segmented`
 
 ### 15. Hover tooltip on "Trim frames"
 

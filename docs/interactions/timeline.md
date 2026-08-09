@@ -6,13 +6,13 @@ reader against the source (see README.md for method).
 | # | id | control | input | tooltip | tests |
 |---|---|---|---|---|---|
 | 1 | `label-combo-open` | "go to label..." combo box (preview shows the active label when set) | combo-select | yes | 1 |
-| 2 | `track-drag-scrub` | Timeline track drag-scrub | drag | yes | 4 |
+| 2 | `track-drag-scrub` | Timeline track drag-scrub | drag | yes | 5 |
 | 3 | `export-disabled-notice` | "(seek / pause disabled during export)" notice | hover | - | **none** |
 | 4 | `frame-counter-readout` | "cur / total" frame counter and "loop N" wrap counter (mono font) | hover | - | **none** |
 | 5 | `label-combo-tooltip` | Tooltip on the label combo | hover | yes | 1 |
 | 6 | `no-scene-placeholder` | "Load an IFS to control playback." placeholder text | hover | - | **none** |
-| 7 | `track-drag-tooltip` | Tooltip on the timeline track body | hover | yes | 4 |
-| 8 | `track-label-tick-tooltip` | Label tick mark on the track (hit-tested region inside the custom-drawn track) | hover | yes | 4 |
+| 7 | `track-drag-tooltip` | Tooltip on the timeline track body | hover | yes | 5 |
+| 8 | `track-label-tick-tooltip` | Label tick mark on the track (hit-tested region inside the custom-drawn track) | hover | yes | 5 |
 | 9 | `transport-jump-back-100-tooltip` | Tooltip on the jump-back-100 button | hover | yes | **none** |
 | 10 | `transport-jump-fwd-100-tooltip` | Tooltip on the jump-forward-100 button | hover | yes | **none** |
 | 11 | `transport-play-pause-tooltip` | Tooltip on the Play/Pause button | hover | yes | **none** |
@@ -29,9 +29,9 @@ reader against the source (see README.md for method).
 | 22 | `shortcut-shift-right-jump-fwd` | Shift+Right arrow chord (step forward 100 frames) | key | - | **none** |
 | 23 | `shortcut-space-play-pause` | Space keyboard shortcut (toggle play/pause) | key | - | **none** |
 | 24 | `label-combo-item-select` | Label row inside the combo: "<name>   (frame N)" | left-click | - | **none** |
-| 25 | `track-click-seek` | Timeline track (custom-drawn InvisibleButton scrub bar) | left-click | yes | 4 |
-| 26 | `track-inert-when-total-zero` *(audit)* | Timeline track (##tl_track) in the mc_total == 0 state - hit target exists but is fully inert | left-click | - | 4 |
-| 27 | `track-label-tick-click` | Label tick mark on the track (click target) | left-click | yes | 4 |
+| 25 | `track-click-seek` | Timeline track (custom-drawn InvisibleButton scrub bar) | left-click | yes | 5 |
+| 26 | `track-inert-when-total-zero` *(audit)* | Timeline track (##tl_track) in the mc_total == 0 state - hit target exists but is fully inert | left-click | - | 5 |
+| 27 | `track-label-tick-click` | Label tick mark on the track (click target) | left-click | yes | 5 |
 | 28 | `transport-jump-back-100` | Jump back 100 frames button (ICON_JUMP_BACK glyph) | left-click | yes | **none** |
 | 29 | `transport-jump-fwd-100` | Jump forward 100 frames button (ICON_JUMP_FWD glyph) | left-click | yes | **none** |
 | 30 | `transport-play-pause` | Play / Pause toggle button (glyph swaps between ICON_PLAY and ICON_PAUSE) | left-click | yes | **none** |
@@ -39,7 +39,7 @@ reader against the source (see README.md for method).
 | 32 | `transport-step-fwd-1` | Step forward 1 frame button (ICON_STEP_FWD glyph) | left-click | yes | **none** |
 | 33 | `transport-step-with-no-master-clock` *(audit)* | Transport step/jump buttons and Left/Right shortcuts while live.mc_total == 0 | left-click | yes | **none** |
 | 34 | `label-combo-popup-scroll` | Label combo popup list (scrollable when there are many labels) | scroll | - | **none** |
-| 35 | `timeline-dock-child-region` | Timeline dock container (fixed-height child window) | scroll | - | **none** |
+| 35 | `timeline-dock-child-region` | Timeline dock container (fixed-height child window) | scroll | - | 3 |
 | 36 | `shortcut-suppression-while-typing` | Text-input focus suppression of all timeline shortcuts | text-entry | - | **none** |
 
 ## Detail
@@ -68,7 +68,7 @@ reader against the source (see README.md for method).
 - **source**: `src/gui/gui_timeline.cpp:186`
 - **tooltip**: yes
 - **notes**: Same code path as the click entry (IsItemActive), listed separately because it is a distinct gesture with continuous effect.
-- **tests**: `timeline label tick on the track jumps to that label`, `timeline shows a hint and no transport before a scene loads`, `timeline track drag seeks and pauses`, `timeline track ignores clicks while no master length is known`
+- **tests**: `timeline label tick on the track jumps to that label`, `timeline scrub seeks through a label tick instead of stalling`, `timeline shows a hint and no transport before a scene loads`, `timeline track drag seeks and pauses` (+1 more)
 - **audit correction**: The effect is wrong about continuity. It states 'Every frame the item is active, the frame under the mouse x is recomputed and PostSeekPaused fires again', but the label-tick branch preempts the seek. LabelHitTest runs whenever `hovered` is true (line 170), and IsItemHovered() stays true for the item that is itself active, so while dragging with the button held, any time the cursor passes within 5px of a label tick the `if (label_hit >= 0)` branch at line 171 executes SetTooltip and then `return;` at line 178 - which is BEFORE the `if (active)` seek block at line 184. The scrub therefore freezes at its last position for as long as the cursor sits in the +/-5px band around any tick, and the label tooltip pops up mid-drag. -> Effect: while ##tl_track is held (ImGui::IsItemActive(), line 144), each frame recomputes frame = lround(((io.MousePos.x - p0.x) / w) * (total - 1)) and calls PostSeekPaused, which clamps to [0, total-1], posts AfpCmd::Wrap(AfpCmd::SeekFrame{frame}) and sets o.paused = true (lines 184-188). EXCEPTION: the seek is skipped on any frame where the cursor is hovering the track AND is within 5px of a label tick, because the label-hit branch at lines 171-179 returns early (and instead shows the 'label ... click to play from here' tooltip). Dragging across a dense label region therefore stutters/stalls rather than scrubbing smoothly. Once the cursor leaves the item rect entirely, `hovered` becomes false, LabelHitTest is skipped (line 170) and continuous scrubbing resumes with the raw, clamped mouse x.
 
 ### 3. "(seek / pause disabled during export)" notice
@@ -131,7 +131,7 @@ reader against the source (see README.md for method).
 - **source**: `src/gui/gui_timeline.cpp:181`
 - **tooltip**: yes
 - **notes**: Mutually exclusive with the label-tick tooltip.
-- **tests**: `timeline label tick on the track jumps to that label`, `timeline shows a hint and no transport before a scene loads`, `timeline track drag seeks and pauses`, `timeline track ignores clicks while no master length is known`
+- **tests**: `timeline label tick on the track jumps to that label`, `timeline scrub seeks through a label tick instead of stalling`, `timeline shows a hint and no transport before a scene loads`, `timeline track drag seeks and pauses` (+1 more)
 
 ### 8. Label tick mark on the track (hit-tested region inside the custom-drawn track)
 
@@ -144,7 +144,7 @@ reader against the source (see README.md for method).
 - **source**: `src/gui/gui_timeline.cpp:173`
 - **tooltip**: yes
 - **notes**: ONE entry covering all ticks, which are drawn in a loop over status.labels (DrawTrackMarkers, line 129) at x = x0 + w*frame/total.
-- **tests**: `timeline label tick on the track jumps to that label`, `timeline shows a hint and no transport before a scene loads`, `timeline track drag seeks and pauses`, `timeline track ignores clicks while no master length is known`
+- **tests**: `timeline label tick on the track jumps to that label`, `timeline scrub seeks through a label tick instead of stalling`, `timeline shows a hint and no transport before a scene loads`, `timeline track drag seeks and pauses` (+1 more)
 
 ### 9. Tooltip on the jump-back-100 button
 
@@ -355,7 +355,7 @@ reader against the source (see README.md for method).
 - **source**: `src/gui/gui_timeline.cpp:184`
 - **tooltip**: yes
 - **notes**: Track is w = content region width by 22px high; it also renders the progress fill (ImGuiCol_Header), the green export-capture overlay when exporting with frames_captured > 0, the label ticks and the playhead bar.
-- **tests**: `timeline label tick on the track jumps to that label`, `timeline shows a hint and no transport before a scene loads`, `timeline track drag seeks and pauses`, `timeline track ignores clicks while no master length is known`
+- **tests**: `timeline label tick on the track jumps to that label`, `timeline scrub seeks through a label tick instead of stalling`, `timeline shows a hint and no transport before a scene loads`, `timeline track drag seeks and pauses` (+1 more)
 
 ### 26. Timeline track (##tl_track) in the mc_total == 0 state - hit target exists but is fully inert
 
@@ -367,7 +367,7 @@ reader against the source (see README.md for method).
 - **effect**: ImGui::InvisibleButton("##tl_track", ...) is still submitted at line 142, so the full-width 22px strip still swallows hover and left-press and still becomes IsItemActive. DrawTrack then hits `if (total == 0) return;` at line 150 right after painting the empty ScrollbarBg rect and Border, so NO progress fill, NO export overlay, NO label ticks, NO playhead, NO tooltip (neither the drag-to-seek one at line 181 nor the label-tick one at line 173) and NO PostSeekPaused ever run. Clicking and dragging the track does nothing at all and gives no feedback.
 - **source**: `src/gui/gui_timeline.cpp:142 and src/gui/gui_timeline.cpp:150`
 - **notes**: The inventory carries `live.mc_total > 0` as a precondition on four track entries but never records the complementary state, in which a visible, clickable, tooltip-less dead control is presented to the user. This is the gate demanded by the early-return sweep.
-- **tests**: `timeline label tick on the track jumps to that label`, `timeline shows a hint and no transport before a scene loads`, `timeline track drag seeks and pauses`, `timeline track ignores clicks while no master length is known`
+- **tests**: `timeline label tick on the track jumps to that label`, `timeline scrub seeks through a label tick instead of stalling`, `timeline shows a hint and no transport before a scene loads`, `timeline track drag seeks and pauses` (+1 more)
 
 ### 27. Label tick mark on the track (click target)
 
@@ -380,7 +380,7 @@ reader against the source (see README.md for method).
 - **source**: `src/gui/gui_timeline.cpp:175`
 - **tooltip**: yes
 - **notes**: ONE entry for all ticks (loop over status.labels). Clicking a tick jumps to the label rather than to the raw pixel frame.
-- **tests**: `timeline label tick on the track jumps to that label`, `timeline shows a hint and no transport before a scene loads`, `timeline track drag seeks and pauses`, `timeline track ignores clicks while no master length is known`
+- **tests**: `timeline label tick on the track jumps to that label`, `timeline scrub seeks through a label tick instead of stalling`, `timeline shows a hint and no transport before a scene loads`, `timeline track drag seeks and pauses` (+1 more)
 
 ### 28. Jump back 100 frames button (ICON_JUMP_BACK glyph)
 
@@ -480,7 +480,7 @@ reader against the source (see README.md for method).
 - **effect**: Creates a bordered child window of height Gui::kTimelineH with ImGuiCol_ChildBg pushed to PopupBg; ImGuiWindowFlags_NoScrollbar is set so no scrollbar is drawn. Mouse-wheel over it is captured by the child; because all content (one transport row + one 22px track) fits the fixed height, there is no scrollable overflow in practice.
 - **source**: `src/gui/gui_timeline.cpp:217`
 - **notes**: Listed because it is the only BeginChild on this surface. NoScrollbar + fixed kTimelineH height means it is scroll-capable in principle only.
-- **tests**: none
+- **tests**: `keyboard nav activates a transport button`, `timeline track and label combo explain themselves`, `timeline transport buttons all explain themselves`
 - **audit correction**: The effect reasons from the wrong flag and states an unverified conclusion. ImGuiWindowFlags_NoScrollbar only hides the scrollbar; it does NOT disable mouse-wheel scrolling (that is ImGuiWindowFlags_NoScrollWithMouse, which line 217 does not set). The claim 'there is no scrollable overflow in practice' is true only by a 0px margin: with Gui::kTimelineH = 76 (src/gui/gui_layout_constants.h:15), WindowPadding.y = 10 and FramePadding.y = 5 (src/gui/gui_style.cpp:169-172) and the 16px base font (src/gui/gui_style.cpp:138), the inner region is 76 - 2*1 border - 2*10 padding = 54px while the content is FrameHeight 26 + ItemSpacing.y 6 + track height 22 = 54px exactly. -> Effect: creates a bordered child of height Gui::kTimelineH (76px) with ImGuiCol_ChildBg pushed to PopupBg. ImGuiWindowFlags_NoScrollbar hides the scrollbar but leaves wheel scrolling enabled (ImGuiWindowFlags_NoScrollWithMouse is not set), so if the content ever exceeds the 54px inner region the dock scrolls silently with no visible scrollbar. At the current style (16px font, FramePadding.y 5, ItemSpacing.y 6, track h 22) the content is exactly 54px, i.e. zero slack: any font-size, FramePadding, ItemSpacing or DPI-scale increase makes the wheel scroll the transport row out of view.
 
 ### 36. Text-input focus suppression of all timeline shortcuts

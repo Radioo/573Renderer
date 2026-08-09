@@ -5,8 +5,8 @@ reader against the source (see README.md for method).
 
 | # | id | control | input | tooltip | tests |
 |---|---|---|---|---|---|
-| 1 | `load-scene-arms-camera` | Load a 3D scene directory (arms the free-look surface and resets the camera) | cli-arg | - | n/a |
-| 2 | `unload-scene-disarms-camera` | Unload the current 3D scene (disarms the free-look surface) | cli-arg | - | n/a |
+| 1 | `load-scene-arms-camera` | Load a 3D scene directory (arms the free-look surface and resets the camera) | cli-arg | - | **none** |
+| 2 | `unload-scene-disarms-camera` | Unload the current 3D scene (disarms the free-look surface) | cli-arg | - | **none** |
 | 3 | `gui-move-speed-drag` *(audit)* | "move speed" DragFloat (drag left/right to change camera translation speed) | drag | - | **none** |
 | 4 | `lmb-crop-drag-steals-look-capture` *(audit)* | Left-click / drag a crop rectangle in the render window while the right button is held for free-look | drag | - | **none** |
 | 5 | `mouse-look-drag` | Move the mouse while the right button is held (free-look drag) | drag | - | **none** |
@@ -46,6 +46,7 @@ reader against the source (see README.md for method).
 - **effect**: PlaceCameraFromBounds computes the scene bounding-box centre and radius and calls Scene3d::PlaceFreeCamera, which positions cam at (center.x, center.y + dist*0.25, center.z - dist) with dist = radius*2.2 (or 5.0 if radius is 0), sets yaw = 0, pitch = 0.12, and sets cam.speed = radius (or 2.0 if radius is 0). g_camera.active is then set to (scene.camera_model < 0), and Scene3d::SetInputEnabled(true) arms the whole free-look surface.
 - **source**: `src/scene3d/camera.cpp:97`
 - **notes**: This is the enabling gate for every other entry on this surface. Note the derived cam.speed: movement rate scales with the loaded model's size, so the same key held on a small model moves slowly and on a large model moves fast.
+- **tests**: none
 - **audit correction**: input is "cli-arg", but this is not primarily a command-line action - a scene is loaded by picking a folder in the Browse list (src/backend/scene3d_backend.cpp:103 and src/backend/afp_family_backend.cpp:421 both call Scene3dHost::Load from the GUI-driven backend request path). The cited source (src/scene3d/camera.cpp:97) is the placement helper, not the control site. -> input: "click" (Browse list folder marked [3D scene]; a CLI path is a secondary route). source: src/scene3d/scene3d_host.cpp:60 (PlaceCameraFromBounds + g_camera.active = g_scene.camera_model < 0 at :61 + SetInputEnabled(true) at :69), with camera.cpp:97-105 cited as the placement math.
 
 ### 2. Unload the current 3D scene (disarms the free-look surface)
@@ -57,6 +58,7 @@ reader against the source (see README.md for method).
 - **effect**: Scene3d::SetInputEnabled(false) sets g_enabled = false and calls EndLook(), which - if a look was in progress - releases mouse capture and restores the cursor with ShowCursor(TRUE). All subsequent HandleLookMessage calls return false and PollCameraInput yields no movement flags.
 - **source**: `src/scene3d/scene3d_input.cpp:38`
 - **notes**: The cleanup path that guarantees a hidden/captured cursor is always restored when the surface goes away.
+- **tests**: none
 - **audit correction**: input is "cli-arg", but unload is triggered by the GUI/backend request path (src/backend/scene3d_backend.cpp:83/105/115 and src/backend/afp_family_backend.cpp:425), i.e. selecting a different folder or a non-3D asset, not by a command-line argument. -> input: "click" (selecting another entry in the Browse list, or the backend switching away from the scene3d path); source stays src/scene3d/scene3d_input.cpp:38 with the trigger at src/scene3d/scene3d_host.cpp:76-78.
 
 ### 3. "move speed" DragFloat (drag left/right to change camera translation speed)

@@ -1,11 +1,25 @@
 # Untested interactions
 
-**223** interactions have no `gui_tests` case that names their item path.
-Grouped by surface, ordered by how many are missing.
+**236** of **526** interactions have no test that names their
+item path or CLI flag. Grouped by surface, ordered by how many are missing.
 
-Matching is by imgui path, so entries whose input is a keyboard shortcut, a drag on a
-custom-drawn region, or a hover are systematically listed here even where a test does
-drive them another way - check the surface doc before assuming a gap is real.
+## Read this before trusting the number
+
+Coverage is matched by imgui item path (or, for the CLI, by flag string). That makes it
+a LOWER BOUND on what is tested and an UPPER BOUND on what is missing:
+
+- An interaction driven without naming its path is not credited. The keyboard-shortcut
+  tests, the timeline track drag, the splitter drag and the crop-pick flow all drive
+  real interactions through mouse coordinates or key chords.
+- The matcher cannot tell a click from a hover. A tooltip entry sharing a path with a
+  button shows as covered once either is tested, and vice versa - so hover coverage is
+  both over- and under-counted here. The authoritative list of asserted tooltips is
+  `tests/gui/tooltip_tests.cpp`.
+- Several entries document the ABSENCE of behaviour ("dragging a tab does not reorder",
+  "clicking the loading overlay passes through"). Those are invariants, not actions.
+
+Use this list to find candidates, then read the surface doc before concluding a gap is
+real.
 
 ## Shared widgets and gating (35)
 
@@ -49,9 +63,43 @@ Breakdown: left-click 19, drag 5, hover 4, key 4, scroll 2, double-click 1
 | `main-view-body-child-scroll` | Main view body host child ("main_view") that renders the selected MainTab panel | scroll | `src/gui/gui_panels.cpp:449` |
 | `overlay-scroll-blocked` | Scrolling over the loading overlay | scroll | `src/gui/gui_loading_overlay.cpp:118` |
 
-## Timeline dock (28)
+## 3D scene camera (27)
 
-Breakdown: key 10, hover 8, left-click 7, scroll 2, text-entry 1
+Breakdown: key 13, drag 4, right-click 4, cli-arg 2, left-click 2, hover 1, scroll 1
+
+| id | control | input | source |
+|---|---|---|---|
+| `load-scene-arms-camera` | Load a 3D scene directory (arms the free-look surface and resets the camera) | cli-arg | `src/scene3d/camera.cpp:97` |
+| `unload-scene-disarms-camera` | Unload the current 3D scene (disarms the free-look surface) | cli-arg | `src/scene3d/scene3d_input.cpp:38` |
+| `gui-move-speed-drag` | "move speed" DragFloat (drag left/right to change camera translation speed) | drag | `src/gui/gui_scene3d_panel.cpp:127` |
+| `lmb-crop-drag-steals-look-capture` | Left-click / drag a crop rectangle in the render window while the right button is held for free-look | drag | `src/window.cpp:100-110` |
+| `mouse-look-drag` | Move the mouse while the right button is held (free-look drag) | drag | `src/scene3d/scene3d_input.cpp:65` |
+| `pitch-clamp` | Drag the mouse vertically past the vertical look limit | drag | `src/scene3d/camera.cpp:23` |
+| `gui-freecam-checkbox-hover` | Hover the "Free camera" checkbox | hover | `src/gui/gui_scene3d_panel.cpp:114` |
+| `esc-close-during-look` | Press Escape while the render window has focus (including mid free-look) | key | `src/window.cpp:130` |
+| `gui-move-speed-ctrl-click` | Ctrl+click (or double-click) the "move speed" drag to type an exact value | key | `src/gui/gui_scene3d_panel.cpp:127` |
+| `key-a-left` | Hold A (strafe left) | key | `src/scene3d/scene3d_input.cpp:89` |
+| `key-alt-slow` | Hold Alt (slow / precision movement modifier) | key | `src/scene3d/scene3d_input.cpp:94` |
+| `key-ctrl-down` | Hold Ctrl (descend / move down along world Y) | key | `src/scene3d/scene3d_input.cpp:92` |
+| `key-d-right` | Hold D (strafe right) | key | `src/scene3d/scene3d_input.cpp:90` |
+| `key-e-up` | Hold E (rise / move up along world Y) | key | `src/scene3d/scene3d_input.cpp:91` |
+| `key-q-down` | Hold Q (descend / move down along world Y) | key | `src/scene3d/scene3d_input.cpp:92` |
+| `key-s-back` | Hold S (move backward) | key | `src/scene3d/scene3d_input.cpp:88` |
+| `key-shift-fast` | Hold Shift (fast movement modifier) | key | `src/scene3d/scene3d_input.cpp:93` |
+| `key-space-up` | Hold Space (rise / move up along world Y) | key | `src/scene3d/scene3d_input.cpp:91` |
+| `key-w-forward` | Hold W (move forward) | key | `src/scene3d/scene3d_input.cpp:87` |
+| `multi-key-diagonal` | Hold two or more movement keys at once (e.g. W+D, or W+Space) | key | `src/scene3d/camera.cpp:64` |
+| `gui-freecam-checkbox` | "Free camera" checkbox in the 3D scene inspector tab | left-click | `src/gui/gui_scene3d_panel.cpp:113` |
+| `gui-reset-view-button` | "Reset view" button in the 3D scene inspector tab | left-click | `src/gui/gui_scene3d_panel.cpp:123` |
+| `look-armed-but-inert-freecam-off` | Hold right mouse button in the render window while "Free camera" is OFF | right-click | `src/scene3d/scene3d_host.cpp:93` |
+| `rmb-during-crop-pick-mode` | Right-click in the render window while crop pick mode is active | right-click | `src/window.cpp:112` |
+| `rmb-press-begin-look` | Right mouse button press anywhere in the render window client area | right-click | `src/scene3d/scene3d_input.cpp:53` |
+| `rmb-release-end-look` | Right mouse button release | right-click | `src/scene3d/scene3d_input.cpp:56` |
+| `mouse-wheel-unbound` | Mouse wheel over the render window | scroll | `src/gui/gui_scene3d_panel.cpp:134` |
+
+## Timeline dock (27)
+
+Breakdown: key 10, hover 8, left-click 7, scroll 1, text-entry 1
 
 | id | control | input | source |
 |---|---|---|---|
@@ -81,44 +129,11 @@ Breakdown: key 10, hover 8, left-click 7, scroll 2, text-entry 1
 | `transport-step-fwd-1` | Step forward 1 frame button (ICON_STEP_FWD glyph) | left-click | `src/gui/gui_timeline.cpp:93` |
 | `transport-step-with-no-master-clock` | Transport step/jump buttons and Left/Right shortcuts while live.mc_total == 0 | left-click | `src/gui/gui_timeline.cpp:36-41` |
 | `label-combo-popup-scroll` | Label combo popup list (scrollable when there are many labels) | scroll | `src/gui/gui_timeline.cpp:55` |
-| `timeline-dock-child-region` | Timeline dock container (fixed-height child window) | scroll | `src/gui/gui_timeline.cpp:217` |
 | `shortcut-suppression-while-typing` | Text-input focus suppression of all timeline shortcuts | text-entry | `src/gui/gui_timeline.cpp:193` |
 
-## 3D scene camera (25)
+## Export modal (24)
 
-Breakdown: key 13, drag 4, right-click 4, left-click 2, hover 1, scroll 1
-
-| id | control | input | source |
-|---|---|---|---|
-| `gui-move-speed-drag` | "move speed" DragFloat (drag left/right to change camera translation speed) | drag | `src/gui/gui_scene3d_panel.cpp:127` |
-| `lmb-crop-drag-steals-look-capture` | Left-click / drag a crop rectangle in the render window while the right button is held for free-look | drag | `src/window.cpp:100-110` |
-| `mouse-look-drag` | Move the mouse while the right button is held (free-look drag) | drag | `src/scene3d/scene3d_input.cpp:65` |
-| `pitch-clamp` | Drag the mouse vertically past the vertical look limit | drag | `src/scene3d/camera.cpp:23` |
-| `gui-freecam-checkbox-hover` | Hover the "Free camera" checkbox | hover | `src/gui/gui_scene3d_panel.cpp:114` |
-| `esc-close-during-look` | Press Escape while the render window has focus (including mid free-look) | key | `src/window.cpp:130` |
-| `gui-move-speed-ctrl-click` | Ctrl+click (or double-click) the "move speed" drag to type an exact value | key | `src/gui/gui_scene3d_panel.cpp:127` |
-| `key-a-left` | Hold A (strafe left) | key | `src/scene3d/scene3d_input.cpp:89` |
-| `key-alt-slow` | Hold Alt (slow / precision movement modifier) | key | `src/scene3d/scene3d_input.cpp:94` |
-| `key-ctrl-down` | Hold Ctrl (descend / move down along world Y) | key | `src/scene3d/scene3d_input.cpp:92` |
-| `key-d-right` | Hold D (strafe right) | key | `src/scene3d/scene3d_input.cpp:90` |
-| `key-e-up` | Hold E (rise / move up along world Y) | key | `src/scene3d/scene3d_input.cpp:91` |
-| `key-q-down` | Hold Q (descend / move down along world Y) | key | `src/scene3d/scene3d_input.cpp:92` |
-| `key-s-back` | Hold S (move backward) | key | `src/scene3d/scene3d_input.cpp:88` |
-| `key-shift-fast` | Hold Shift (fast movement modifier) | key | `src/scene3d/scene3d_input.cpp:93` |
-| `key-space-up` | Hold Space (rise / move up along world Y) | key | `src/scene3d/scene3d_input.cpp:91` |
-| `key-w-forward` | Hold W (move forward) | key | `src/scene3d/scene3d_input.cpp:87` |
-| `multi-key-diagonal` | Hold two or more movement keys at once (e.g. W+D, or W+Space) | key | `src/scene3d/camera.cpp:64` |
-| `gui-freecam-checkbox` | "Free camera" checkbox in the 3D scene inspector tab | left-click | `src/gui/gui_scene3d_panel.cpp:113` |
-| `gui-reset-view-button` | "Reset view" button in the 3D scene inspector tab | left-click | `src/gui/gui_scene3d_panel.cpp:123` |
-| `look-armed-but-inert-freecam-off` | Hold right mouse button in the render window while "Free camera" is OFF | right-click | `src/scene3d/scene3d_host.cpp:93` |
-| `rmb-during-crop-pick-mode` | Right-click in the render window while crop pick mode is active | right-click | `src/window.cpp:112` |
-| `rmb-press-begin-look` | Right mouse button press anywhere in the render window client area | right-click | `src/scene3d/scene3d_input.cpp:53` |
-| `rmb-release-end-look` | Right mouse button release | right-click | `src/scene3d/scene3d_input.cpp:56` |
-| `mouse-wheel-unbound` | Mouse wheel over the render window | scroll | `src/gui/gui_scene3d_panel.cpp:134` |
-
-## Export modal (25)
-
-Breakdown: left-click 13, drag 4, hover 3, key 3, right-click 1, scroll 1
+Breakdown: left-click 12, drag 4, hover 3, key 3, right-click 1, scroll 1
 
 | id | control | input | source |
 |---|---|---|---|
@@ -132,7 +147,6 @@ Breakdown: left-click 13, drag 4, hover 3, key 3, right-click 1, scroll 1
 | `escape-clears-active-item` | Escape key while a widget in the modal is active | key | `src/gui/gui_export_panel.cpp:628` |
 | `modal-escape-close` | Escape key while the Export modal has focus | key | `src/gui/gui_export_panel.cpp:628` |
 | `modal-keyboard-nav` | Tab / Shift+Tab / arrow-key navigation between the modal's widgets | key | `src/gui/gui_export_panel.cpp:628` |
-| `advanced-header` | "Advanced" collapsing header | left-click | `src/gui/gui_export_panel.cpp:648` |
 | `bg-color-swatch` | Background colour swatch (ColorEdit3, NoInputs + NoLabel) | left-click | `src/gui/gui_export_panel.cpp:500` |
 | `blend-frames-step-buttons` | Blend frames -/+ step buttons | left-click | `src/gui/gui_export_panel.cpp:212` |
 | `format-combo-item` | Format list entry inside the open combo | left-click | `src/gui/gui_export_panel.cpp:82` |
@@ -148,31 +162,32 @@ Breakdown: left-click 13, drag 4, hover 3, key 3, right-click 1, scroll 1
 | `bg-color-swatch-context-menu` | Background colour swatch right-click options popup | right-click | `src/gui/gui_export_panel.cpp:500` |
 | `modal-scroll` | Export modal body (scrollable popup content) | scroll | `src/gui/gui_export_panel.cpp:627` |
 
-## Setup view (19)
+## GUI window and thread (20)
 
-Breakdown: combo-select 6, hover 4, left-click 3, scroll 3, drag 1, key 1, text-entry 1
+Breakdown: drag 9, cli-arg 3, left-click 3, key 2, hover 1, right-click 1, scroll 1
 
 | id | control | input | source |
 |---|---|---|---|
-| `game-profile-combo-open` | Game profile combo (open/close the dropdown) | combo-select | `src/gui/gui_setup_view.cpp:121` |
-| `game-profile-select-auto` | 'Auto (...)' entry in the game profile combo | combo-select | `src/gui/gui_setup_view.cpp:122` |
-| `game-profile-select-row` | Profile row in the game profile combo (one per GameProfile::All() entry) | combo-select | `src/gui/gui_setup_view.cpp:128` |
-| `render-preset-combo-open` | Render resolution preset combo (open/close) | combo-select | `src/gui/gui_setup_view.cpp:226` |
-| `render-preset-select-custom` | 'Custom' row in the render preset combo | combo-select | `src/gui/gui_setup_view.cpp:230` |
-| `render-preset-select-row` | Resolution preset row in the render preset combo | combo-select | `src/gui/gui_setup_view.cpp:230` |
-| `setup-window-scrollbar-drag` | '##setup' window vertical scrollbar grab | drag | `src/gui/gui_setup_view.cpp:404` |
-| `error-banner-region` | Last-attempt-failed error banner | hover | `src/gui/gui_setup_view.cpp:62` |
-| `game-profile-combo-tooltip` | Game profile combo hover tooltip | hover | `src/gui/gui_setup_view.cpp:136` |
-| `render-fps-tooltip` | Frame rate field hover tooltip | hover | `src/gui/gui_setup_view.cpp:153` |
-| `render-preset-combo-tooltip` | Render resolution combo hover tooltip | hover | `src/gui/gui_setup_view.cpp:243` |
-| `combo-popup-dismiss` | Combo popup dismissal (both '##game_profile' and '##render_preset') | key | `src/gui/gui_setup_view.cpp:121` |
-| `render-fps-quick-preset` | Quick frame-rate preset button (30 / 60 / 120 / 144) | left-click | `src/gui/gui_setup_view.cpp:169` |
-| `render-fps-step-minus` | InputInt step-down button ('-') on the frame rate field | left-click | `src/gui/gui_setup_view.cpp:152` |
-| `render-fps-step-plus` | InputInt step-up button ('+') on the frame rate field | left-click | `src/gui/gui_setup_view.cpp:152` |
-| `game-profile-popup-scroll` | Game profile combo popup list (scroll) | scroll | `src/gui/gui_setup_view.cpp:121` |
-| `render-preset-popup-scroll` | Render resolution preset combo popup list (scroll) | scroll | `src/gui/gui_setup_view.cpp:226` |
-| `setup-window-scroll` | Setup full-viewport window background (scroll) | scroll | `src/gui/gui_setup_view.cpp:404` |
-| `render-fps-input` | Frame rate InputInt text field | text-entry | `src/gui/gui_setup_view.cpp:152` |
+| `device-creation-fallback` | Launching the app on a machine without a usable D3D9 HAL device | cli-arg | `src/gui/gui_window.cpp:94` |
+| `gui-init-failure-no-window` | Launching the app when window creation or device creation fails | cli-arg | `src/gui/gui_thread.cpp:23` |
+| `gui-thread-start-idempotent` | Starting the GUI a second time | cli-arg | `src/gui/gui_thread.cpp:51` |
+| `dpi-unaware-scaling` | Running the control window on a high-DPI display, or dragging it to a monitor with a different scale factor | drag | `src/gui/gui_window.cpp:44` |
+| `imgui-layout-not-persisted` | Dragging / resizing ImGui sub-windows and headers inside the control window | drag | `src/gui/gui_window.cpp:154` |
+| `move-window-titlebar` | Title bar drag to move the window | drag | `src/gui/gui_window.cpp:76` |
+| `render-reentrancy-guard` | Resizing or repainting the window while a frame is already being drawn | drag | `src/gui/gui_window.cpp:221` |
+| `resize-drag-border` | Window edge / corner resize grip | drag | `src/gui/gui_window.cpp:47` |
+| `resize-min-size-clamp` | Attempt to shrink the window below the minimum size | drag | `src/gui/gui_window.cpp:59` |
+| `resize-while-device-lost` | Resizing the window while the D3D9 device is lost | drag | `src/gui/gui_window.cpp:227` |
+| `titlebar-drag-blocks-gui-thread-exit` | Holding the title bar or a resize border (Win32 modal move/size loop) | drag | `src/gui/gui_thread.cpp:34` |
+| `warp-resize-changes-present-params` | Resizing the control window while running on the WARP fallback device | drag | `src/gui/gui_window.cpp:208` |
+| `mouse-cursor-shape` | Hovering the control window | hover | `src/gui/gui_window.cpp:130` |
+| `alt-f10-system-menu-suppressed` | Alt key or F10 tap (keyboard system-menu activation) | key | `src/gui/gui_window.cpp:67` |
+| `keyboard-nav-enabled` | Tab / arrow keys / Space / Enter keyboard navigation between widgets | key | `src/gui/gui_window.cpp:153` |
+| `control-window-not-reopenable` | Trying to get the control window back after closing it | left-click | `src/gui/gui_window.cpp:70` |
+| `modal-folder-dialog-parenting` | Opening a native "browse for folder" dialog from any panel | left-click | `src/gui/gui_window.cpp:28` |
+| `per-frame-panel-build` | Any widget activation inside the control window | left-click | `src/gui/gui_window.cpp:250` |
+| `system-menu-titlebar-rightclick` | Right-click the title bar / click the window icon to open the system menu (Restore, Move, Size, Minimize, Maximize, Close) | right-click | `src/gui/gui_window.cpp:76` |
+| `mouse-wheel-scroll` | Mouse wheel over any scrollable ImGui child region in the control window | scroll | `src/gui/gui_window.cpp:45` |
 
 ## Render window (17)
 
@@ -198,29 +213,29 @@ Breakdown: left-click 6, drag 4, key 3, right-click 2, double-click 1, hover 1
 | `crop-pick-other-mouse-buttons` | Right-click / middle-click / mouse wheel inside the client area while crop pick mode is active | right-click | `src/window.cpp:112` |
 | `rbutton-look-aborts-crop-drag` | Right mouse button press/release inside the client area while a crop drag is in progress | right-click | `src/window.cpp:112` |
 
-## GUI window and thread (17)
+## Setup view (17)
 
-Breakdown: drag 9, left-click 3, key 2, hover 1, right-click 1, scroll 1
+Breakdown: combo-select 6, hover 3, left-click 3, scroll 3, drag 1, key 1
 
 | id | control | input | source |
 |---|---|---|---|
-| `dpi-unaware-scaling` | Running the control window on a high-DPI display, or dragging it to a monitor with a different scale factor | drag | `src/gui/gui_window.cpp:44` |
-| `imgui-layout-not-persisted` | Dragging / resizing ImGui sub-windows and headers inside the control window | drag | `src/gui/gui_window.cpp:154` |
-| `move-window-titlebar` | Title bar drag to move the window | drag | `src/gui/gui_window.cpp:76` |
-| `render-reentrancy-guard` | Resizing or repainting the window while a frame is already being drawn | drag | `src/gui/gui_window.cpp:221` |
-| `resize-drag-border` | Window edge / corner resize grip | drag | `src/gui/gui_window.cpp:47` |
-| `resize-min-size-clamp` | Attempt to shrink the window below the minimum size | drag | `src/gui/gui_window.cpp:59` |
-| `resize-while-device-lost` | Resizing the window while the D3D9 device is lost | drag | `src/gui/gui_window.cpp:227` |
-| `titlebar-drag-blocks-gui-thread-exit` | Holding the title bar or a resize border (Win32 modal move/size loop) | drag | `src/gui/gui_thread.cpp:34` |
-| `warp-resize-changes-present-params` | Resizing the control window while running on the WARP fallback device | drag | `src/gui/gui_window.cpp:208` |
-| `mouse-cursor-shape` | Hovering the control window | hover | `src/gui/gui_window.cpp:130` |
-| `alt-f10-system-menu-suppressed` | Alt key or F10 tap (keyboard system-menu activation) | key | `src/gui/gui_window.cpp:67` |
-| `keyboard-nav-enabled` | Tab / arrow keys / Space / Enter keyboard navigation between widgets | key | `src/gui/gui_window.cpp:153` |
-| `control-window-not-reopenable` | Trying to get the control window back after closing it | left-click | `src/gui/gui_window.cpp:70` |
-| `modal-folder-dialog-parenting` | Opening a native "browse for folder" dialog from any panel | left-click | `src/gui/gui_window.cpp:28` |
-| `per-frame-panel-build` | Any widget activation inside the control window | left-click | `src/gui/gui_window.cpp:250` |
-| `system-menu-titlebar-rightclick` | Right-click the title bar / click the window icon to open the system menu (Restore, Move, Size, Minimize, Maximize, Close) | right-click | `src/gui/gui_window.cpp:76` |
-| `mouse-wheel-scroll` | Mouse wheel over any scrollable ImGui child region in the control window | scroll | `src/gui/gui_window.cpp:45` |
+| `game-profile-combo-open` | Game profile combo (open/close the dropdown) | combo-select | `src/gui/gui_setup_view.cpp:121` |
+| `game-profile-select-auto` | 'Auto (...)' entry in the game profile combo | combo-select | `src/gui/gui_setup_view.cpp:122` |
+| `game-profile-select-row` | Profile row in the game profile combo (one per GameProfile::All() entry) | combo-select | `src/gui/gui_setup_view.cpp:128` |
+| `render-preset-combo-open` | Render resolution preset combo (open/close) | combo-select | `src/gui/gui_setup_view.cpp:226` |
+| `render-preset-select-custom` | 'Custom' row in the render preset combo | combo-select | `src/gui/gui_setup_view.cpp:230` |
+| `render-preset-select-row` | Resolution preset row in the render preset combo | combo-select | `src/gui/gui_setup_view.cpp:230` |
+| `setup-window-scrollbar-drag` | '##setup' window vertical scrollbar grab | drag | `src/gui/gui_setup_view.cpp:404` |
+| `error-banner-region` | Last-attempt-failed error banner | hover | `src/gui/gui_setup_view.cpp:62` |
+| `game-profile-combo-tooltip` | Game profile combo hover tooltip | hover | `src/gui/gui_setup_view.cpp:136` |
+| `render-preset-combo-tooltip` | Render resolution combo hover tooltip | hover | `src/gui/gui_setup_view.cpp:243` |
+| `combo-popup-dismiss` | Combo popup dismissal (both '##game_profile' and '##render_preset') | key | `src/gui/gui_setup_view.cpp:121` |
+| `render-fps-quick-preset` | Quick frame-rate preset button (30 / 60 / 120 / 144) | left-click | `src/gui/gui_setup_view.cpp:169` |
+| `render-fps-step-minus` | InputInt step-down button ('-') on the frame rate field | left-click | `src/gui/gui_setup_view.cpp:152` |
+| `render-fps-step-plus` | InputInt step-up button ('+') on the frame rate field | left-click | `src/gui/gui_setup_view.cpp:152` |
+| `game-profile-popup-scroll` | Game profile combo popup list (scroll) | scroll | `src/gui/gui_setup_view.cpp:121` |
+| `render-preset-popup-scroll` | Render resolution preset combo popup list (scroll) | scroll | `src/gui/gui_setup_view.cpp:226` |
+| `setup-window-scroll` | Setup full-viewport window background (scroll) | scroll | `src/gui/gui_setup_view.cpp:404` |
 
 ## Ready-view shell (16)
 
@@ -265,6 +280,25 @@ Breakdown: key 7, left-click 3, drag 1, hover 1, right-click 1, scroll 1
 | `s3d-models-collapsing-header` | "Models" collapsing header | left-click | `src/gui/gui_scene3d_panel.cpp:82` |
 | `s3d-freelook-rmb-down` | Hold right mouse button in the render window to enter free look | right-click | `src/scene3d/scene3d_input.cpp:53` |
 | `gc2d-animation-combo-popup-scroll` | Scroll region inside the animation picker combo popup (##gc2danim) | scroll | `src/gui/gui_gc2d_panel.cpp:22` |
+
+## Command line (12)
+
+Breakdown: cli-arg 12
+
+| id | control | input | source |
+|---|---|---|---|
+| `duplicate-scalar-flag-last-wins` | any scalar flag repeated in one command line | cli-arg | `src/cli/cli.cpp:637-652 (loop), :565 (bool assign), :575 (string assign), :586/:595/:615 (int assigns)` |
+| `help-short` | -h | cli-arg | `src/cli/cli.cpp:639` |
+| `help-slash` | /? | cli-arg | `src/cli/cli.cpp:639` |
+| `missing-value` | any value-taking flag typed as the last argv token | cli-arg | `src/cli/cli.cpp:185` |
+| `no-arguments-at-all` | launching with an empty command line | cli-arg | `src/cli/cli.cpp:637 (loop starts at c.i = 1), :653; src/main.cpp:413-419` |
+| `no-tool-command` | launching with no tool subcommand at all | cli-arg | `src/tool_commands.cpp:116` |
+| `qpro-oneshot-precedence` | passing more than one qpro one-shot flag at once | cli-arg | `src/main.cpp:147-181 (RunQproOneShot), :183-194 (RunQproCliMode), :331-337 (RunQproCliAndExit), :429 (gate)` |
+| `tool-scene3d-test` | --scene3d-test <in> [out.png] [frames] | cli-arg | `src/cli/tool_command.cpp:65` |
+| `tool-scene3d-test-frames` | --scene3d-test positional 3: frame count | cli-arg | `src/cli/tool_command.cpp:58` |
+| `tool-scene3d-test-out` | --scene3d-test positional 2: output PNG path | cli-arg | `src/cli/tool_command.cpp:57` |
+| `unknown-argument` | any unrecognised token | cli-arg | `src/cli/cli.cpp:649` |
+| `value-flag-consumes-following-flag` | any value-taking flag whose next argv token is itself a flag | cli-arg | `src/cli/cli.cpp:185-192 (NextArg), consumed by src/cli/cli.cpp:575, :585, :593, :602 and every Handle* special` |
 
 ## Inspector (11)
 

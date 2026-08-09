@@ -44,13 +44,32 @@ including the render window and the 3D scene camera, not just the GUI panels.
 
 ## Test coverage
 
-- **163** interactions are exercised by the `gui_tests` suite.
-- **223** are not. See [coverage_gaps.md](coverage_gaps.md).
-- 140 are not addressable by a GUI item path (CLI flags, raw window messages, state transitions) and are excluded from that ratio.
+| | |
+|---|---|
+| interactions inventoried | 526 |
+| matched to a test by path or flag | 261 |
+| not matched | 236 |
+| GUI test cases | 162 (596 assertions) |
+| CLI test cases | 29 (162 assertions) |
 
-Coverage is matched by imgui item path, so it is a lower bound: a test that drives a
-control without naming its path (a keyboard shortcut, a drag on a custom-drawn track)
-is not credited automatically.
+What is deliberately, verifiably complete:
+
+- **Every one of the 74 CLI flags** the parser accepts is referenced by a test in
+  `tests/cli/cli_tests.cpp`.
+- **Every tooltip that a test can reach** is asserted to actually appear
+  (`tests/gui/tooltip_tests.cpp`), including on DISABLED controls, which is where two
+  unreachable-tooltip bugs were found.
+- **Keyboard navigation** is exercised (`tests/gui/input_mode_tests.cpp`): focus movement,
+  nav activation of a button, and nav activation of a transport control. The harness now
+  sets `ImGuiConfigFlags_NavEnableKeyboard` to match `Gui::Init`; before that the tests ran
+  a subtly different application from the shipped one.
+- **Scrolling** is exercised for the browse tree, the scene tree and the export modal, the
+  last of which also asserts the documented height cap keeps the Start/Close footer
+  reachable on a short window.
+
+See [coverage_gaps.md](coverage_gaps.md) for what is still unmatched, and read its preamble
+before treating the count as a to-do list - the matcher cannot see interactions driven by
+coordinates or key chords, and it cannot distinguish a click from a hover.
 
 ## How this was built
 

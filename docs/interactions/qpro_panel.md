@@ -26,13 +26,13 @@ reader against the source (see README.md for method).
 | 19 | `main-tab-renderer-select` *(audit)* | "Renderer" main tab button (leaves the qpro panel) | left-click | - | 2 |
 | 20 | `output-fps-minus` | Output fps decrement step button | left-click | - | **none** |
 | 21 | `output-fps-plus` | Output fps increment step button | left-click | - | **none** |
-| 22 | `qpro-tab-select` | "qpro" main tab | left-click | - | 2 |
+| 22 | `qpro-tab-select` | "qpro" main tab | left-click | - | 3 |
 | 23 | `scan-button` | Scan parts from bm2dx.dll | left-click | yes | 1 |
 | 24 | `select-all-parts` | All (select every scanned part) | left-click | - | 3 |
 | 25 | `select-no-parts` | None (deselect every scanned part) | left-click | - | 2 |
 | 26 | `issues-list-scroll` | Skipped/failed issues list scroll region | scroll | - | **none** |
 | 27 | `parts-list-scroll` | Scanned parts list scroll region | scroll | - | 2 |
-| 28 | `qpro-body-scroll` *(audit)* | qpro tab body scroll region ("main_view" child window) | scroll | - | 2 |
+| 28 | `qpro-body-scroll` *(audit)* | qpro tab body scroll region ("main_view" child window) | scroll | - | 3 |
 | 29 | `output-fps-text` | Output fps (numeric text field) | text-entry | yes | 2 |
 
 ## Detail
@@ -283,7 +283,7 @@ reader against the source (see README.md for method).
 - **effect**: Selects the qpro MainTab panel, causing Panels::RenderQproTabBody() to be the drawn body for the main tab area
 - **source**: `src/gui/panel_registry.cpp:37`
 - **notes**: Gate for every other entry on this surface. The tab item itself is created by the generic tab-bar loop from PanelDesc.tab_label; registry entry id is "qpro_view".
-- **tests**: `top bar hides the view switch when only one main panel is active`, `top bar view switch appears for iidx33 and swaps the main panel`
+- **tests**: `qpro controls explain themselves on hover`, `top bar hides the view switch when only one main panel is active`, `top bar view switch appears for iidx33 and swaps the main panel`
 - **audit correction**: Wrong control type, wrong source line and wrong imgui path, plus an incomplete precondition. src/gui/panel_registry.cpp:37 is the .tab_label field of a constexpr PanelDesc table entry, not an interactive control, and there is NO tab bar for main tabs - panel_registry.cpp contains no ImGui calls at all (the only BeginTabBar/BeginTabItem in the GUI is the inspector's, src/gui/gui_inspector.cpp:444-446, which does not carry MainTab panels). The note "the tab item itself is created by the generic tab-bar loop" is therefore wrong. The precondition also omits the app-level boot gate. -> The control is a plain ImGui::Button labelled with PanelDesc::tab_label, emitted by the loop in RenderTopBar: `if (ImGui::Button(tabs[i]->tab_label)) g_main_view = (int)i;` at src/gui/gui_panels.cpp:251, inside ImGui::BeginChild("topbar", ...) at gui_panels.cpp:234. source = src/gui/gui_panels.cpp:251; imgui_path = "##main/topbar/qpro"; input remains left-click. Effect: sets the file-static int g_main_view (declared src/gui/gui_panels.cpp:207) to this panel's index; RenderReadyView then clamps it and calls tabs[view]->draw() (= Panels::RenderQproTabBody) inside ImGui::BeginChild("main_view", ...) at gui_panels.cpp:449-451. Full precondition: App::Global().GetBootState() == App::BootState::Ready, otherwise Build() draws Panels::Setup::RenderView() and no top bar exists at all (src/gui/gui_panels.cpp:468-471); AND ActiveBackendId() == "afp_modern" (kPanelSets match, panel_registry.cpp:104-118); AND GetGameProfileSlug() == "iidx33" (QproTabVisible, panel_registry.cpp:18-20); AND tabs.size() > 1 (gui_panels.cpp:243), which holds here because kModernPanels contributes Renderer + qpro to the MainTab slot. Also note the button is styled active/inactive via ImGuiCol_HeaderActive vs ImGuiCol_FrameBg (gui_panels.cpp:247-250) but is never disabled.
 
 ### 23. Scan parts from bm2dx.dll
@@ -354,7 +354,7 @@ reader against the source (see README.md for method).
 - **effect**: Scrolls the child window that wraps the ENTIRE qpro panel body (ImGui::BeginChild("main_view", ImVec2(0, content_h), 0) - no NoScrollbar flag, so a vertical scrollbar appears whenever the body exceeds content_h). The qpro body is intro text + options + category row + a fixed 300px parts child + extract button + status/issues, which overflows a normal window height, so the extract button, the progress bar and the issues list are only reachable after scrolling this outer region. Mouse wheel over the panel background, or dragging its scrollbar, moves it.
 - **source**: `src/gui/gui_panels.cpp:449`
 - **notes**: Distinct from the two inner children already inventoried (qpro_parts at gui_qpro_panel.cpp:175 and qpro_issues at gui_qpro_panel.cpp:40). Wheel over qpro_parts scrolls that inner child first and only chains to main_view at its scroll limit, so an automated driver must target the outer region explicitly. content_h = GetContentRegionAvail().y - kStatusStripH - ItemSpacing.y (gui_panels.cpp:447-448).
-- **tests**: `qpro group checkbox clears just that date group`, `splitter drag moves the boundary between the left and centre panes`
+- **tests**: `qpro controls explain themselves on hover`, `qpro group checkbox clears just that date group`, `splitter drag moves the boundary between the left and centre panes`
 
 ### 29. Output fps (numeric text field)
 

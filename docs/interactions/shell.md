@@ -25,13 +25,13 @@ reader against the source (see README.md for method).
 | 18 | `status-export-tag-button` | Export status tag SmallButton in the status strip (dynamic label: "capturing N" / "capturing N [NVENC]", "encoding N frames...", "export done", "export failed") | left-click | yes | **none** |
 | 19 | `status-open-folder-button` | "Open folder" SmallButton next to the export status tag | left-click | yes | 3 |
 | 20 | `topbar-export-button` | "Export..." button (export glyph + label) at the right of the top bar | left-click | yes | **none** |
-| 21 | `ifs-tree-scroll` | Scrollable IFS tree region | scroll | - | 6 |
-| 22 | `main-view-body-scroll` | Main view body container (the region that hosts whichever MainTab panel is selected) | scroll | - | 2 |
-| 23 | `pane-center-scroll` | Centre pane container (scene pane) | scroll | - | 6 |
+| 21 | `ifs-tree-scroll` | Scrollable IFS tree region | scroll | - | 7 |
+| 22 | `main-view-body-scroll` | Main view body container (the region that hosts whichever MainTab panel is selected) | scroll | - | 3 |
+| 23 | `pane-center-scroll` | Centre pane container (scene pane) | scroll | - | 7 |
 | 24 | `pane-left-scroll` | Left pane container (Browse pane) | scroll | - | 3 |
-| 25 | `pane-right-scroll` | Right pane container (inspector pane) | scroll | - | 10 |
-| 26 | `status-strip-region` | Status strip container at the bottom of the window | scroll | - | 2 |
-| 27 | `topbar-region` | Top bar container strip | scroll | - | 4 |
+| 25 | `pane-right-scroll` | Right pane container (inspector pane) | scroll | - | 11 |
+| 26 | `status-strip-region` | Status strip container at the bottom of the window | scroll | - | 4 |
+| 27 | `topbar-region` | Top bar container strip | scroll | - | 9 |
 | 28 | `ifs-picker-scanning-state` | Browse pane while the IFS scan is running | state-change | - | n/a |
 | 29 | `ifs-filter-input` | IFS path filter text box with hint "filter by path..." | text-entry | - | 3 |
 | 30 | `ifs-filter-input-editing-keymap` *(audit)* | IFS path filter text box - full ImGui text-editing keymap and mouse text selection | text-entry | - | 3 |
@@ -288,7 +288,7 @@ reader against the source (see README.md for method).
 - **effect**: Scrolls the BeginChild("ifs_scroll") region. Created with ImGuiWindowFlags_HorizontalScrollbar (line 195), so both a vertical wheel scroll and a horizontal scrollbar drag / shift-wheel are possible when deeply nested paths overflow the pane width.
 - **source**: `src/gui/gui_panels.cpp:195`
 - **notes**: Also draggable scrollbars (vertical auto, horizontal explicit).
-- **tests**: `browse pane carries the from_arc flag through LoadContent`, `browse pane directory node collapses on click`, `browse pane does not reload the already-active IFS`, `browse pane filter hides non-matching entries` (+2 more)
+- **tests**: `browse pane carries the from_arc flag through LoadContent`, `browse pane directory node collapses on click`, `browse pane does not reload the already-active IFS`, `browse pane filter hides non-matching entries` (+3 more)
 
 ### 22. Main view body container (the region that hosts whichever MainTab panel is selected)
 
@@ -299,7 +299,7 @@ reader against the source (see README.md for method).
 - **effect**: Scrolls BeginChild("main_view", ImVec2(0, content_h)) whose height is the window's remaining height minus Gui::kStatusStripH and one ItemSpacing (lines 447-448). Default flags, so the wheel and a scrollbar work if the selected panel's content overflows.
 - **source**: `src/gui/gui_panels.cpp:449`
 - **notes**: Selected panel index comes from std::clamp(g_main_view, 0, tabs.size()-1) at line 446.
-- **tests**: `qpro group checkbox clears just that date group`, `splitter drag moves the boundary between the left and centre panes`
+- **tests**: `qpro controls explain themselves on hover`, `qpro group checkbox clears just that date group`, `splitter drag moves the boundary between the left and centre panes`
 
 ### 23. Centre pane container (scene pane)
 
@@ -310,7 +310,7 @@ reader against the source (see README.md for method).
 - **effect**: Scrolls BeginChild("pane_center", ImVec2(center_w, row_h)) which hosts Panels::RenderScenePane(). Default flags, so wheel/scrollbar work when the scene pane content overflows.
 - **source**: `src/gui/gui_panels.cpp:409`
 - **notes**: The contents of RenderScenePane are drawn from another file and are outside this surface.
-- **tests**: `scene pane Add ignores an empty slot name`, `scene pane Add refuses a duplicate slot path`, `scene pane Add registers a variant slot`, `scene pane filter narrows the layer list` (+2 more)
+- **tests**: `scene pane Add ignores an empty slot name`, `scene pane Add refuses a duplicate slot path`, `scene pane Add registers a variant slot`, `scene pane filter narrows the layer list` (+3 more)
 
 ### 24. Left pane container (Browse pane)
 
@@ -333,7 +333,7 @@ reader against the source (see README.md for method).
 - **effect**: Scrolls BeginChild("pane_right", ImVec2(right_w, row_h)) which hosts Panels::RenderInspectorPane(). Default flags, so wheel/scrollbar work when the inspector tabs overflow.
 - **source**: `src/gui/gui_panels.cpp:421`
 - **notes**: The contents of RenderInspectorPane are drawn from another file and are outside this surface.
-- **tests**: `2D package panel stays hidden while no package is live`, `3D scene panel explains how to load a scene while none is live`, `inspector exposes the ddr backend tab set`, `inspector exposes the modern backend tab set` (+6 more)
+- **tests**: `2D package panel stays hidden while no package is live`, `3D scene panel explains how to load a scene while none is live`, `inspector exposes the ddr backend tab set`, `inspector exposes the modern backend tab set` (+7 more)
 
 ### 26. Status strip container at the bottom of the window
 
@@ -344,7 +344,7 @@ reader against the source (see README.md for method).
 - **effect**: BeginChild("status_strip", ImVec2(0, Gui::kStatusStripH), 0, ImGuiWindowFlags_NoScrollbar) - fixed height, no scrollbar. Non-interactive readouts inside it: game profile name (line 350), render size WxH from state.GetRenderSize (lines 352-356), and the right-aligned "afp x.y.z" version shown only when state.GetLiveState().have_file_info is true (lines 369-376). None of those three has a tooltip or click handler.
 - **source**: `src/gui/gui_panels.cpp:343`
 - **notes**: Recorded to document the non-interactive elements and the have_file_info visibility gate on the afp-version readout.
-- **tests**: `status strip export tag reopens the export modal`, `status strip hides the reveal button unless an export finished`
+- **tests**: `status strip export tag and reveal button explain themselves`, `status strip export tag reopens the export modal`, `status strip hides the reveal button unless an export finished`, `status strip render error explains itself on hover`
 
 ### 27. Top bar container strip
 
@@ -355,7 +355,7 @@ reader against the source (see README.md for method).
 - **effect**: BeginChild("topbar", ImVec2(0, Gui::kTopBarH), border=1, ImGuiWindowFlags_NoScrollbar) - fixed height with no scrollbar, so a wheel over it produces no visible scrolling; only the buttons inside it (tab buttons, Export) react to input. The title text, the loaded-IFS path (PrettifyPath-truncated to 72 chars, lines 259-263) and the fps readout (lines 266-281) are non-interactive text with no tooltip.
 - **source**: `src/gui/gui_panels.cpp:234`
 - **notes**: Recorded so the inventory is exhaustive about what in the top bar is NOT interactive: the "573Renderer" wordmark, the truncated IFS path, and the fps text have no hover tooltip and no click handler.
-- **tests**: `top bar Export is disabled until a scene is loaded`, `top bar Export opens the export modal once a scene is loaded`, `top bar hides the view switch when only one main panel is active`, `top bar view switch appears for iidx33 and swaps the main panel`
+- **tests**: `export modal controls all explain themselves`, `export modal stays inside a short window and keeps its footer`, `qpro controls explain themselves on hover`, `setup view Export tooltip is reachable while the button is disabled` (+5 more)
 
 ### 28. Browse pane while the IFS scan is running
 

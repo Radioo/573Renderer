@@ -239,3 +239,51 @@ TEST_CASE("3D scene model list toggles visibility and blend mode", "[gui][hosts]
 
     Scene3dHost::Unload();
 }
+
+TEST_CASE("3D scene panel controls explain themselves on hover", "[gui][hosts][live]") {
+    GuiTest::WarpGpu const gpu;
+    if (!gpu.ok()) SKIP("D3D9On12/WARP unavailable: " << WarpD3D9::LastError());
+    GuiTest::TempAssetDir const assets("scene3d_tips");
+    GuiTest::WriteMock3dScene(assets.path(), true);
+
+    GuiTest::Harness harness;
+    GuiTest::EnterReadyView("afp_ddr", "ddrworld");
+    REQUIRE(Scene3dHost::Load(assets.path()));
+
+    ImGuiTest* test = harness.NewTest("scene3d_tooltips");
+    test->TestFunc = [](ImGuiTestContext* ctx) {
+        OpenHostTab(ctx, "##inspector_tabs/3D scene");
+        const char* const paths[] = {
+            "##inspector_tabs/3D scene/##s3dtime", "##inspector_tabs/3D scene/Animate models##s3d",
+            "##inspector_tabs/3D scene/Animate camera##s3d",
+            "##inspector_tabs/3D scene/Free camera##s3d", "##inspector_tabs/3D scene/$$0/##blend"};
+        for (const char* p : paths) {
+            bool const shown = GuiTest::HoverShowsTooltip(ctx, p);
+            if (!shown) ctx->LogError("no tooltip for '%s'", p);
+            IM_CHECK_SILENT(shown);
+        }
+    };
+    harness.Run(test);
+
+    Scene3dHost::Unload();
+}
+
+TEST_CASE("2D package frame slider explains itself on hover", "[gui][hosts][live]") {
+    GuiTest::WarpGpu const gpu;
+    if (!gpu.ok()) SKIP("D3D9On12/WARP unavailable: " << WarpD3D9::LastError());
+    GuiTest::TempAssetDir const assets("gc2d_tips");
+    GuiTest::WriteMock2dPackage(assets.path());
+
+    GuiTest::Harness harness;
+    GuiTest::EnterReadyView("scene3d", "iidx17");
+    REQUIRE(Gc2dHost::Load(assets.path()));
+
+    ImGuiTest* test = harness.NewTest("gc2d_tooltip");
+    test->TestFunc = [](ImGuiTestContext* ctx) {
+        OpenHostTab(ctx, "##inspector_tabs/2D package");
+        IM_CHECK(GuiTest::HoverShowsTooltip(ctx, "##inspector_tabs/2D package/##gc2dframe"));
+    };
+    harness.Run(test);
+
+    Gc2dHost::Unload();
+}

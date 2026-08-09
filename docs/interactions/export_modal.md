@@ -5,12 +5,12 @@ reader against the source (see README.md for method).
 
 | # | id | control | input | tooltip | tests |
 |---|---|---|---|---|---|
-| 1 | `blend-loop-checkbox` | "Blend loop seam" checkbox | checkbox | yes | 2 |
+| 1 | `blend-loop-checkbox` | "Blend loop seam" checkbox | checkbox | yes | 3 |
 | 2 | `hw-accel-checkbox` | "HW accel" checkbox (live) | checkbox | yes | 1 |
 | 3 | `hw-accel-checkbox-disabled` | "HW accel" checkbox (placeholder, always-unchecked) | checkbox | yes | 1 |
-| 4 | `limit-frames-checkbox` | "Limit frames" checkbox | checkbox | yes | 1 |
+| 4 | `limit-frames-checkbox` | "Limit frames" checkbox | checkbox | yes | 2 |
 | 5 | `transparent-bg-checkbox` | "Transparent bg" checkbox | checkbox | yes | 2 |
-| 6 | `format-combo-open` | Output format combo box | combo-select | yes | 6 |
+| 6 | `format-combo-open` | Output format combo box | combo-select | yes | 7 |
 | 7 | `res-preset-combo-open` | Output resolution preset combo | combo-select | yes | 3 |
 | 8 | `bg-color-picker` | Colour picker popup opened from the background swatch | drag | - | **none** |
 | 9 | `bg-color-swatch-dragdrop` *(audit)* | Background colour swatch as drag-and-drop source / target | drag | - | **none** |
@@ -18,9 +18,9 @@ reader against the source (see README.md for method).
 | 11 | `modal-titlebar-drag` | Export modal title bar | drag | - | **none** |
 | 12 | `bg-color-swatch-hover-tooltip` *(audit)* | Background colour swatch built-in hover tooltip | hover | yes | **none** |
 | 13 | `blend-frames-tooltip` | Hover tooltip on "Blend frames" | hover | yes | 2 |
-| 14 | `blend-loop-tooltip` | Hover tooltip on "Blend loop seam" | hover | yes | 2 |
+| 14 | `blend-loop-tooltip` | Hover tooltip on "Blend loop seam" | hover | yes | 3 |
 | 15 | `crop-pick-tooltip` | Hover tooltip on the Pick region / Picking button | hover | yes | 1 |
-| 16 | `format-combo-tooltip` | Hover tooltip on the format combo | hover | yes | 6 |
+| 16 | `format-combo-tooltip` | Hover tooltip on the format combo | hover | yes | 7 |
 | 17 | `fps-tooltip` | Hover tooltip on the fps input | hover | yes | 1 |
 | 18 | `hw-tooltip-av1-nvenc` | Hover tooltip on HW accel: AV1 via NVENC | hover | yes | 1 |
 | 19 | `hw-tooltip-h264-no-nvenc` | Hover tooltip on HW accel: H.264 with no NVENC | hover | yes | 1 |
@@ -30,7 +30,7 @@ reader against the source (see README.md for method).
 | 23 | `hw-tooltip-vp9` | Hover tooltip on HW accel: WebM VP9 | hover | yes | 1 |
 | 24 | `hw-tooltip-webp` | Hover tooltip on HW accel: WebP | hover | yes | 1 |
 | 25 | `keyframe-tooltip` | Hover tooltip on the keyframe interval input | hover | yes | 1 |
-| 26 | `limit-frames-tooltip` | Hover tooltip on "Limit frames" | hover | yes | 1 |
+| 26 | `limit-frames-tooltip` | Hover tooltip on "Limit frames" | hover | yes | 2 |
 | 27 | `loop-count-tooltip` | Hover tooltip on the loop count input | hover | yes | 1 |
 | 28 | `max-frames-tooltip` | Hover tooltip on the duration-preview text next to the frames input | hover | yes | **none** |
 | 29 | `open-folder-tooltip` | Hover tooltip on "Open folder" | hover | yes | 3 |
@@ -44,11 +44,11 @@ reader against the source (see README.md for method).
 | 37 | `modal-keyboard-nav` | Tab / Shift+Tab / arrow-key navigation between the modal's widgets | key | - | **none** |
 | 38 | `numeric-input-text-keymap` *(audit)* | Text-editing keymap inside every InputInt on this surface | key | - | 1 |
 | 39 | `stem-input-text-keymap` *(audit)* | Filename stem field text-editing keymap and mouse selection | key | yes | 3 |
-| 40 | `advanced-header` | "Advanced" collapsing header | left-click | - | **none** |
+| 40 | `advanced-header` | "Advanced" collapsing header | left-click | - | 2 |
 | 41 | `bg-color-swatch` | Background colour swatch (ColorEdit3, NoInputs + NoLabel) | left-click | - | **none** |
 | 42 | `blend-frames-step-buttons` | Blend frames -/+ step buttons | left-click | - | **none** |
 | 43 | `cancel-export-button` | "Cancel" button | left-click | - | 1 |
-| 44 | `close-modal-button` | "Close" button | left-click | - | 3 |
+| 44 | `close-modal-button` | "Close" button | left-click | - | 4 |
 | 45 | `crop-clear-button` | "Clear" crop button | left-click | - | 1 |
 | 46 | `crop-pick-button` | "Pick region" button | left-click | yes | 1 |
 | 47 | `crop-picking-cancel-button` | "Picking..." button (armed state) | left-click | yes | 1 |
@@ -63,7 +63,7 @@ reader against the source (see README.md for method).
 | 56 | `res-preset-fixed` | Fixed resolution entry in the resolution combo | left-click | - | **none** |
 | 57 | `res-preset-native` | "Native (WxH)" entry in the resolution combo | left-click | - | **none** |
 | 58 | `scale-button` | Scale-current multiplier button ("x0.5 (WxH)" / "x0.25 (WxH)" / "x0.1 (WxH)") | left-click | yes | **none** |
-| 59 | `start-export-button` | "Start export" button | left-click | - | 15 |
+| 59 | `start-export-button` | "Start export" button | left-click | - | 16 |
 | 60 | `bg-color-swatch-context-menu` *(audit)* | Background colour swatch right-click options popup | right-click | - | **none** |
 | 61 | `modal-scroll` | Export modal body (scrollable popup content) | scroll | - | **none** |
 | 62 | `quality-slider-drag` | quality SliderInt | slider | yes | 1 |
@@ -92,7 +92,7 @@ reader against the source (see README.md for method).
 - **source**: `src/gui/gui_export_panel.cpp:201`
 - **tooltip**: yes
 - **notes**: Gate for blend-frames-input.
-- **tests**: `export modal blend frame count hides while the seam is off`, `export modal loop count and blend seam reach the request`
+- **tests**: `export modal blend frame count hides while the seam is off`, `export modal controls all explain themselves`, `export modal loop count and blend seam reach the request`
 
 ### 2. "HW accel" checkbox (live)
 
@@ -130,7 +130,7 @@ reader against the source (see README.md for method).
 - **effect**: Toggles g_limit_frames. Turning it on while g_max_frames <= 0 seeds g_max_frames = 60. Controls r.max_frames = g_limit_frames ? g_max_frames : 0 in the StartExport request, and enables/disables the frames input beside it.
 - **source**: `src/gui/gui_export_panel.cpp:160`
 - **tooltip**: yes
-- **tests**: `export modal frame limit is applied only while enabled`
+- **tests**: `export modal controls all explain themselves`, `export modal frame limit is applied only while enabled`
 
 ### 5. "Transparent bg" checkbox
 
@@ -156,7 +156,7 @@ reader against the source (see README.md for method).
 - **source**: `src/gui/gui_export_panel.cpp:78`
 - **tooltip**: yes
 - **notes**: Full-width (-FLT_MIN).
-- **tests**: `export modal PNG sequence writes a directory path`, `export modal disables hardware encode for software-only formats`, `export modal filename and format drive the output path`, `export modal fps and quality reach the request` (+2 more)
+- **tests**: `export modal PNG sequence writes a directory path`, `export modal controls all explain themselves`, `export modal disables hardware encode for software-only formats`, `export modal filename and format drive the output path` (+3 more)
 
 ### 7. Output resolution preset combo
 
@@ -253,7 +253,7 @@ reader against the source (see README.md for method).
 - **effect**: ImGui::SetTooltip explaining the synthesized crossfade for backgrounds that do not loop cleanly, and warning that the real game does not do this.
 - **source**: `src/gui/gui_export_panel.cpp:203`
 - **tooltip**: yes
-- **tests**: `export modal blend frame count hides while the seam is off`, `export modal loop count and blend seam reach the request`
+- **tests**: `export modal blend frame count hides while the seam is off`, `export modal controls all explain themselves`, `export modal loop count and blend seam reach the request`
 
 ### 15. Hover tooltip on the Pick region / Picking button
 
@@ -278,7 +278,7 @@ reader against the source (see README.md for method).
 - **effect**: ImGui::SetTooltip describing each format's codec/container, alpha support, hardware-encode availability and browser playback tradeoffs, and noting the quality slider is ignored for PNG sequence.
 - **source**: `src/gui/gui_export_panel.cpp:88`
 - **tooltip**: yes
-- **tests**: `export modal PNG sequence writes a directory path`, `export modal disables hardware encode for software-only formats`, `export modal filename and format drive the output path`, `export modal fps and quality reach the request` (+2 more)
+- **tests**: `export modal PNG sequence writes a directory path`, `export modal controls all explain themselves`, `export modal disables hardware encode for software-only formats`, `export modal filename and format drive the output path` (+3 more)
 
 ### 17. Hover tooltip on the fps input
 
@@ -402,7 +402,7 @@ reader against the source (see README.md for method).
 - **effect**: ImGui::SetTooltip explaining that ON stops the export after a fixed captured-frame count (default 60) while OFF runs to the master animation's natural end-of-timeline, plus use cases.
 - **source**: `src/gui/gui_export_panel.cpp:162`
 - **tooltip**: yes
-- **tests**: `export modal frame limit is applied only while enabled`
+- **tests**: `export modal controls all explain themselves`, `export modal frame limit is applied only while enabled`
 
 ### 27. Hover tooltip on the loop count input
 
@@ -571,7 +571,7 @@ reader against the source (see README.md for method).
 - **effect**: Expands/collapses the Advanced section. While collapsed, DrawKeyframeIntervalControl, DrawFrameLimitControls, DrawLoopControls and DrawCrop are not drawn at all, so none of their widgets exist and close_for_pick stays false.
 - **source**: `src/gui/gui_export_panel.cpp:648`
 - **notes**: Gate for every Advanced-section entry below. Collapsing also shrinks the auto-resized popup.
-- **tests**: none
+- **tests**: `export modal controls all explain themselves`, `export modal stays inside a short window and keeps its footer`
 
 ### 41. Background colour swatch (ColorEdit3, NoInputs + NoLabel)
 
@@ -618,7 +618,7 @@ reader against the source (see README.md for method).
 - **effect**: ImGui::CloseCurrentPopup(). Does not cancel a running export and posts no command.
 - **source**: `src/gui/gui_export_panel.cpp:570`
 - **notes**: Size 90x0, SameLine after Start/Cancel. The status text or progress bar follows on the same line.
-- **tests**: `ctrl plus E opens the export modal`, `export modal Close dismisses without posting a command`, `export modal Pick region arms crop mode, closes, then reopens`
+- **tests**: `ctrl plus E opens the export modal`, `export modal Close dismisses without posting a command`, `export modal Pick region arms crop mode, closes, then reopens`, `export modal controls all explain themselves`
 
 ### 45. "Clear" crop button
 
@@ -801,7 +801,7 @@ reader against the source (see README.md for method).
 - **effect**: Builds an App::ExportRequest from every control on this surface - output_path = MediaSink::MakeOutputPath(g_stem_buf, current_format), fps, quality, keyframe_interval, max_frames (0 unless Limit frames), loop_count, blend_loop, blend_frames, bg_transparent, bg_r/g/b, width/height, crop_x/y/w/h from state.GetCropRect(), format index, prefer_hardware = g_prefer_hw && hw_applies - then posts App::Cmd::StartExport{req} via state.PostCommand and calls ImGui::CloseCurrentPopup().
 - **source**: `src/gui/gui_export_panel.cpp:556`
 - **notes**: Size 120x0. hw_applies is recomputed here independently of DrawBackgroundAndHw (lines 557-560).
-- **tests**: `export modal PNG sequence writes a directory path`, `export modal background toggle and colour reach the request`, `export modal crop inputs reach the request`, `export modal custom resolution inputs clamp` (+11 more)
+- **tests**: `export modal PNG sequence writes a directory path`, `export modal background toggle and colour reach the request`, `export modal crop inputs reach the request`, `export modal custom resolution inputs clamp` (+12 more)
 
 ### 60. Background colour swatch right-click options popup
 
