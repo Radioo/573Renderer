@@ -318,7 +318,8 @@ void DrawResetOverridesRow(App::State& state) {
 
 void RenderRenderTabModern() {
     auto& state = App::Global();
-    auto ov = state.GetLiveOverrides();
+    const auto before = state.GetLiveOverrides();
+    auto ov = before;
     bool changed = false;
 
     DrawLoopMasterRow();
@@ -337,19 +338,20 @@ void RenderRenderTabModern() {
     ImGui::Spacing();
     DrawFilterMcNameRows(ov, changed);
 
-    if (changed) state.SetLiveOverrides(ov);
+    if (changed) state.ApplyLiveOverridesDelta(before, ov);
     ImGui::Spacing();
     DrawResetOverridesRow(state);
 }
 
 void RenderRenderTabDdr() {
     auto& state = App::Global();
-    auto ov = state.GetLiveOverrides();
+    const auto before = state.GetLiveOverrides();
+    auto ov = before;
     bool changed = false;
 
     DrawBackgroundRow(ov, changed);
 
-    if (changed) state.SetLiveOverrides(ov);
+    if (changed) state.ApplyLiveOverridesDelta(before, ov);
     DrawResetOverridesRow(state);
 }
 

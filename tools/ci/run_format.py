@@ -44,10 +44,14 @@ def main():
     fix = "--fix" in sys.argv
     files = tracked_sources()
     mode = ["-i"] if fix else ["--dry-run", "--Werror"]
-    result = subprocess.run([FORMAT, *mode, *files], cwd=ROOT, check=False)
-    if result.returncode == 0:
+    batch_size = 100
+    rc = 0
+    for i in range(0, len(files), batch_size):
+        result = subprocess.run([FORMAT, *mode, *files[i:i + batch_size]], cwd=ROOT, check=False)
+        rc = rc or result.returncode
+    if rc == 0:
         print(f"format gate OK: {len(files)} files ({'fixed' if fix else 'checked'})")
-    return result.returncode
+    return rc
 
 
 if __name__ == "__main__":

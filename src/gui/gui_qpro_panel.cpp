@@ -1,15 +1,15 @@
-#include "qpro_scan.h"
+#include "qpro/qpro_scan.h"
 #include <algorithm>
 #include <cstdint>
 #include <utility>
-#include "qpro_dll.h"
+#include "qpro/qpro_dll.h"
 
 #include "gui_panels_internal.h"
 #include "gui_window.h"
 #include "../backend/afp_commands.h"
 #include "../state/app_state.h"
 #include "../native_dialog.h"
-#include "../qpro_extract.h"
+#include "qpro/qpro_extract.h"
 #include "imgui.h"
 
 #include <cfloat>

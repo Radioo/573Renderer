@@ -651,11 +651,18 @@ reset (shader null, SRCBLEND=SRCALPHA) right after the draw.
       0x10 argb8888/rgba8888 (4 bpp straight copy)
       0x18/0x19/0x1A/0x1B dxt2/dxt3/dxt4/dxt5 (block compressed; routed
            to the Dxt decoder with the destination pitch)
-      0x1E la88 (treated as 1 bpp splat)
-      0x1F rgb565 id, but the upload path decodes it as 4x4-bit ARGB
-           nibbles scaled by 17 (2 bpp)
-      0x20 argb8888/xrgb8888 (4 bpp; IIDX's everything-format)
+      0x1E treated as 1 bpp splat (table says al88 = 2 bpp; unexercised,
+           see docs/formats.md)
+      0x1F argb4444 - 4x4-bit nibbles scaled by 17 (2 bpp)
+      0x20 argb8888rev (4 bpp; IIDX's everything-format)
       default: 4 bpp copy
+
+  These ids were checked against the afp-utils name table read straight
+  out of the DLL; the full table, the re-find recipe and the two remaining
+  unverified ids are in docs/formats.md. The DXT range is no longer
+  spelled out here - `FormatBpp` defers to `Dxt::IsDxtFormat` so the two
+  places cannot disagree (they used to: 0x17..0x1B vs 0x18..0x1B, and both
+  were off by one against the engine).
 
 - TexDestroy(tex_id): honoured even for persistent slots - AFPU's own
   teardown for persistent packages (common.ifs etc.) at full shutdown calls

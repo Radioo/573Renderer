@@ -1,13 +1,13 @@
 #include "formats/bgra_crop.h"
+#include "engine_session.h"
 #include <utility>
 #include "media/media_format.h"
 #include <d3d9.h>
-#include "qpro_internal.h"
-#include "qpro_walk.h"
-#include "qpro_extract.h"
+#include "qpro/qpro_internal.h"
+#include "qpro/qpro_walk.h"
+#include "qpro/qpro_extract.h"
 #include "boot.h"
 #include "afp_boot.h"
-#include "app_globals.h"
 #include "mc_control.h"
 #include "render_backend.h"
 #include "support/log.h"
@@ -49,122 +49,84 @@ int SwapHandPieces(const TexList& mainTl, int main_base, const TexList& compTl, 
 
 namespace {
 
-void MountHandItemClipLogged(uint32_t pkg, uint32_t sid, const char* layer) {
-    auto get_afp_info = g_afpu.afpu_afp_get_info_in_package;
-    if ((get_afp_info == nullptr) || (g_afp.afp_mc_attach_stream == nullptr) ||
-        (g_afp.afp_mc_get_id_by_path == nullptr) || (g_afp.afp_mc_get_relative_id == nullptr)) {
-        LOG("QproHandC", "mount '%s': missing afp fn(s)", layer);
-        return;
-    }
-    int mc = g_afp.afp_mc_get_id_by_path(sid, layer);
-    int n = 0;
-    for (int count = 0; mc >= 0 && count < 64; mc = g_afp.afp_mc_get_relative_id(mc, 6), ++count) {
-        uint64_t info[8] = {};
-        int const gi = get_afp_info(info, pkg, layer);
-        auto data_id = (uint32_t)info[3];
-        int64_t ar = -999;
-        if (gi >= 0) ar = g_afp.afp_mc_attach_stream(mc, data_id);
-        LOG("QproHandC", "  '%s' mc=0x%x get_info=%d info[2]=0x%llx data_id=0x%x attach=%lld",
-            layer, mc, gi, (unsigned long long)info[2], data_id, (long long)ar);
-        if (gi < 0) continue;
-        if (g_afp.afp_mc_get != nullptr) g_afp.afp_mc_get(mc, 0x101E, 1);
-        ++n;
-    }
-    LOG("QproHandC", "mounted item clip '%s' onto %d layer mc(s)", layer, n);
+constexpr const char* kBothHands[] = {"qp_hand_l_neutral", "qp_hand_r_neutral"};
+
+void MountHandItemClipLogged(EngineSession& es, uint32_t pkg, uint32_t sid, const char* layer) {
+    AttachClipStream(es, pkg, sid, layer, layer, "QproHandC");
 }
 
-void HideNonHandLayersAll(uint32_t sid) {
-    static const char* kNonHand[] = {
-        "qpro_bg",           "qp_cat_1",       "qp_cat_2",        "qp_cat_3",
-        "qp_head_b_neutral", "qp_hair_b",      "qp_face_neutral", "qp_hair_f",
-        "qp_head_f_neutral", "qp_body_f",      "qp_body_b",       "qp_arm_r_upper",
-        "qp_arm_r_lower",    "qp_arm_l_upper", "qp_arm_l_lower",  "qp_leg_r_upper",
-        "qp_leg_r_lower",    "qp_leg_l_upper", "qp_leg_l_lower",
-    };
-    for (const char* h : kNonHand)
-        McControl::SetClipVisible(g_afp, sid, h, false);
+void HideNonHandLayersAll(EngineSession& es, uint32_t sid) {
+    HideAllLayersExcept(es, sid, kBothHands);
 }
 
-void RenderHandProbeFrames(std::vector<uint8_t>& px, int& w, int& h) {
+void RenderHandProbeFrames(EngineSession& es, D3D9State& d3d, std::vector<uint8_t>& px, int& w,
+                           int& h) {
     for (int i = 0; i < 3; ++i)
-        RenderFrame(px, w, h, true);
+        RenderFrame(es, d3d, px, w, h, true);
     AfpD3D9::SetQproDrawProbe(true);
     for (int i = 0; i < 10; ++i)
-        RenderFrame(px, w, h, true);
+        RenderFrame(es, d3d, px, w, h, true);
     AfpD3D9::SetQproDrawProbe(false);
-    RenderFrame(px, w, h, false);
+    RenderFrame(es, d3d, px, w, h, false);
 }
 
 }
 
-void HandComposite(const std::string& game_dir, const std::string& hand_ifs) {
+void HandComposite(EngineSession& es, D3D9State& d3d, const std::string& game_dir,
+                   const std::string& hand_ifs) {
     std::string const main2 = IfsPath(game_dir, "qp_main2.ifs");
     std::string const hand = IfsPath(game_dir, hand_ifs);
-    if (g_avs.avs_fs_umount != nullptr) {
-        g_avs.avs_fs_umount("/afp/packages");
-        g_avs.avs_fs_umount("/data");
-    }
+    AfpManager::UmountPackagesAndData(es.avs);
     int const main_base = AfpD3D9::NextSlot();
     if (!MountAndLoadIfs(main2)) {
         LOG("QproHandC", "mount qp_main2 FAILED");
         return;
     }
     TexList mainTl;
-    ParseTexturelist(mainTl, "/afp/packages");
+    ParseTexturelist(es, mainTl, "/afp/packages");
 
     int const comp_base = AfpD3D9::NextSlot();
-    uint32_t const pkg = AfpManager::LoadCompanion(g_engine, hand, Stem(hand_ifs));
+    uint32_t const pkg = AfpManager::LoadCompanion(es, hand, Stem(hand_ifs));
     LOG("QproHandC", "LoadCompanion(%s) pkg=0x%x", hand_ifs.c_str(), pkg);
     TexList compTl;
-    ParseTexturelist(compTl, "/afp_companion_0");
+    ParseTexturelist(es, compTl, "/afp_companion_0");
 
     int const swapped = SwapHandPieces(mainTl, main_base, compTl, comp_base);
     LOG("QproHandC", "texture-swapped %d/%d hand pieces", swapped,
         (int)(sizeof(kHandSwap) / sizeof(kHandSwap[0])));
 
-    if (!AfpManager::SwitchAnimation(g_engine, "qp_motion", true))
+    if (!AfpManager::SwitchAnimation(es, "qp_motion", true))
         LOG("QproHandC", "SwitchAnimation(qp_motion) FAILED");
     uint32_t const sid = AfpManager::StreamId();
 
-    MountHandItemClipLogged(pkg, sid, "qp_hand_l_neutral");
-    MountHandItemClipLogged(pkg, sid, "qp_hand_r_neutral");
-    AfpManager::SeekFrame(g_afp, 0);
-    HideNonHandLayersAll(sid);
+    MountHandItemClipLogged(es, pkg, sid, "qp_hand_l_neutral");
+    MountHandItemClipLogged(es, pkg, sid, "qp_hand_r_neutral");
+    AfpManager::SeekFrame(es.afp, 0);
+    HideNonHandLayersAll(es, sid);
 
     std::vector<uint8_t> px;
     int w = 0;
     int h = 0;
-    RenderHandProbeFrames(px, w, h);
+    RenderHandProbeFrames(es, d3d, px, w, h);
 
     LOG("QproHandC", "rendered %dx%d", w, h);
     if (w > 0 && h > 0)
         WritePngBGRA((fs::path("screenshots") / "qphandcomposite.png").string(), px.data(), w, h);
 
-    if (pkg != 0U) AfpManager::UnloadCompanion(g_engine, pkg);
+    if (pkg != 0U) AfpManager::UnloadCompanion(es, pkg);
 }
 
 constexpr int kSharedX = 36, kSharedY = 18, kSharedW = 448, kSharedH = 376;
 
 namespace {
 
-void MountHandItemClip(uint32_t pkg, uint32_t sid, const char* layer) {
-    auto get_afp_info = g_afpu.afpu_afp_get_info_in_package;
-    if ((get_afp_info == nullptr) || (g_afp.afp_mc_attach_stream == nullptr) ||
-        (g_afp.afp_mc_get_id_by_path == nullptr) || (g_afp.afp_mc_get_relative_id == nullptr)) {
-        return;
-    }
-    int mc = g_afp.afp_mc_get_id_by_path(sid, layer);
-    for (int c = 0; mc >= 0 && c < 64; mc = g_afp.afp_mc_get_relative_id(mc, 6), ++c) {
-        uint64_t info[8] = {};
-        int const gi = get_afp_info(info, pkg, layer);
-        if (gi >= 0) g_afp.afp_mc_attach_stream(mc, (uint32_t)info[3]);
-        if (gi >= 0 && (g_afp.afp_mc_get != nullptr)) g_afp.afp_mc_get(mc, 0x101E, 1);
-    }
+void MountHandItemClip(EngineSession& es, uint32_t pkg, uint32_t sid, const char* layer) {
+    AttachClipStream(es, pkg, sid, layer, layer);
 }
 
-void HideNonHandLayers(uint32_t sid, char side) {
-    HideNonHandLayersAll(sid);
-    McControl::SetClipVisible(g_afp, sid, side == 'L' ? "qp_hand_r_neutral" : "qp_hand_l_neutral",
+void HideNonHandLayers(EngineSession& es, uint32_t sid, char side) {
+    HideNonHandLayersAll(es, sid);
+    McControl::SetClipVisible(es.afp, sid, side == 'L' ? "qp_hand_r_neutral" : "qp_hand_l_neutral",
                               false);
 }
 
@@ -177,25 +139,26 @@ void ApplyHandHueScope(char side, const TexList& comp_tl, int comp_base) {
     }
 }
 
-int ProbeHandTotal(int part_mc) {
+int ProbeClipTotal(EngineSession& es, int part_mc) {
     int total = 1;
-    if (part_mc >= 0 && (g_afp.afp_mc_set != nullptr)) {
+    if (part_mc >= 0 && (es.afp.afp_mc_set != nullptr)) {
         int t = 0;
-        if (g_afp.afp_mc_set(part_mc, 0x1011, &t) >= 0 && t > 1) total = (t > 600) ? 600 : t;
+        if (es.afp.afp_mc_set(part_mc, 0x1011, &t) >= 0 && t > 1) total = (t > 600) ? 600 : t;
     }
     return total;
 }
 
-void CaptureHandFrames(int part_mc, int total, ClipFrames& cf) {
+void CaptureHandFrames(EngineSession& es, D3D9State& d3d, int part_mc, int total, ClipFrames& cf) {
     std::vector<uint8_t> px;
     int w = 0;
     int h = 0;
     for (int K = 0; K < total; ++K) {
-        if (part_mc >= 0 && (g_afp.afp_mc_control_frame != nullptr)) {
-            if (g_afp.afp_stream_control != nullptr) g_afp.afp_stream_control(6, (uint32_t)part_mc);
-            g_afp.afp_mc_control_frame(part_mc, 0xF08, K);
+        if (part_mc >= 0 && (es.afp.afp_mc_control_frame != nullptr)) {
+            if (es.afp.afp_stream_control != nullptr)
+                es.afp.afp_stream_control(6, (uint32_t)part_mc);
+            es.afp.afp_mc_control_frame(part_mc, 0xF08, K);
         }
-        RenderFrame(px, w, h, false);
+        RenderFrame(es, d3d, px, w, h, false);
         if (w <= 0 || h <= 0) break;
         int cx = kSharedX;
         int cy = kSharedY;
@@ -213,66 +176,57 @@ int WriteHandOutputs(const std::string& out_path, const ClipFrames& cf, int tota
     int n = 0;
     if (total > 1) {
         n = EncodeClipFrames(out_path, cf, "handcomp");
-    } else if (!cf.frames.empty() && !cf.frames[0].empty()) {
-        if (WriteStillAvif(out_path, cf.frames[0].data(), cf.cw, cf.ch, kQproAvifQuality)) n = 1;
-        if (g_clip_dump_raw) {
-            std::string png = out_path;
-            if (png.size() > 5 && png.ends_with(".avif")) png.replace(png.size() - 5, 5, ".png");
-            WritePngBGRA(png, cf.frames[0].data(), cf.cw, cf.ch);
-        }
+    } else {
+        n = WriteStillFrameWithDump(out_path, cf);
     }
     return n;
 }
 
 }
 
-int RenderHandComposite(const std::string& game_dir, const std::string& hand_ifs, char side,
-                        const std::string& out_path) {
+int RenderHandComposite(EngineSession& es, D3D9State& d3d, const std::string& game_dir,
+                        const std::string& hand_ifs, char side, const std::string& out_path) {
     std::string const main2 = IfsPath(game_dir, "qp_main2.ifs");
     std::string const hand = IfsPath(game_dir, hand_ifs);
-    if (g_avs.avs_fs_umount != nullptr) {
-        g_avs.avs_fs_umount("/afp/packages");
-        g_avs.avs_fs_umount("/data");
-    }
+    AfpManager::UmountPackagesAndData(es.avs);
     int const main_base = AfpD3D9::NextSlot();
     if (!MountAndLoadIfs(main2)) {
         LOG("HandComp", "mount qp_main2 FAILED");
         return 0;
     }
     TexList mainTl;
-    ParseTexturelist(mainTl, "/afp/packages");
+    ParseTexturelist(es, mainTl, "/afp/packages");
     int const comp_base = AfpD3D9::NextSlot();
-    uint32_t const pkg = AfpManager::LoadCompanion(g_engine, hand, Stem(hand_ifs));
+    uint32_t const pkg = AfpManager::LoadCompanion(es, hand, Stem(hand_ifs));
     TexList compTl;
-    ParseTexturelist(compTl, "/afp_companion_0");
+    ParseTexturelist(es, compTl, "/afp_companion_0");
     SwapHandPieces(mainTl, main_base, compTl, comp_base);
-    if (!AfpManager::SwitchAnimation(g_engine, "qp_motion", true))
+    if (!AfpManager::SwitchAnimation(es, "qp_motion", true))
         LOG("HandComp", "SwitchAnimation(qp_motion) FAILED");
     uint32_t const sid = AfpManager::StreamId();
-    MountHandItemClip(pkg, sid, "qp_hand_l_neutral");
-    MountHandItemClip(pkg, sid, "qp_hand_r_neutral");
-    AfpManager::SeekFrame(g_afp, 0);
-    HideNonHandLayers(sid, side);
+    MountHandItemClip(es, pkg, sid, "qp_hand_l_neutral");
+    MountHandItemClip(es, pkg, sid, "qp_hand_r_neutral");
+    AfpManager::SeekFrame(es.afp, 0);
+    HideNonHandLayers(es, sid, side);
     ApplyHandHueScope(side, compTl, comp_base);
 
     const char* layer = (side == 'L') ? "qp_hand_l_neutral" : "qp_hand_r_neutral";
     std::vector<uint8_t> px;
     int w = 0;
     int h = 0;
-    for (int i = 0; i < 6; ++i)
-        RenderFrame(px, w, h, true);
-    AfpManager::SeekFrame(g_afp, 0);
+    WarmUpFrames(es, d3d, px, w, h);
+    AfpManager::SeekFrame(es.afp, 0);
     int const part_mc =
-        (g_afp.afp_mc_get_id_by_path != nullptr) ? g_afp.afp_mc_get_id_by_path(sid, layer) : -1;
-    int const total = ProbeHandTotal(part_mc);
+        (es.afp.afp_mc_get_id_by_path != nullptr) ? es.afp.afp_mc_get_id_by_path(sid, layer) : -1;
+    int const total = ProbeClipTotal(es, part_mc);
     ClipFrames cf;
     cf.cw = kSharedW;
     cf.ch = kSharedH;
     cf.fps = 30;
     cf.frames.assign((size_t)total, {});
-    CaptureHandFrames(part_mc, total, cf);
+    CaptureHandFrames(es, d3d, part_mc, total, cf);
     int const n = WriteHandOutputs(out_path, cf, total);
-    if (pkg != 0U) AfpManager::UnloadCompanion(g_engine, pkg);
+    if (pkg != 0U) AfpManager::UnloadCompanion(es, pkg);
     LOG("HandComp", "%s side=%c -> %d frame(s), part_total=%d (%s)", hand_ifs.c_str(), side, n,
         total, out_path.c_str());
     return n;
@@ -320,24 +274,21 @@ struct ItemCompCtx {
     TexList main_tl;
 };
 
-ItemCompCtx SetupItemCompositeSlots(bool own, const std::string& main2,
+ItemCompCtx SetupItemCompositeSlots(EngineSession& es, bool own, const std::string& main2,
                                     const CompositeShare& share) {
     ItemCompCtx ctx;
     if (own) {
-        if (g_avs.avs_fs_umount != nullptr) {
-            g_avs.avs_fs_umount("/afp/packages");
-            g_avs.avs_fs_umount("/data");
-        }
+        AfpManager::UmountPackagesAndData(es.avs);
         ctx.main_base = AfpD3D9::NextSlot();
         if (!MountAndLoadIfs(main2)) {
             LOG("PartComp", "mount qp_main2 FAILED");
             return ctx;
         }
-        ParseTexturelist(ctx.main_tl, "/afp/packages");
+        ParseTexturelist(es, ctx.main_tl, "/afp/packages");
         ctx.comp_base = AfpD3D9::NextSlot();
     } else {
         ctx.main_base = share.main_base;
-        ParseTexturelist(ctx.main_tl, "/afp/packages");
+        ParseTexturelist(es, ctx.main_tl, "/afp/packages");
         ctx.comp_base = share.comp_base;
         AfpD3D9::SetNextSlot(ctx.comp_base);
     }
@@ -345,22 +296,17 @@ ItemCompCtx SetupItemCompositeSlots(bool own, const std::string& main2,
     return ctx;
 }
 
-void MountItemClip(uint32_t pkg, uint32_t sid, const TexList& comp_tl, const TexList& main_tl,
-                   int comp_base, int main_base, const LayerJob& j) {
-    auto get_afp_info = g_afpu.afpu_afp_get_info_in_package;
-    if ((get_afp_info == nullptr) || (g_afp.afp_mc_get_id_by_path == nullptr)) return;
-    uint64_t info[8] = {};
-    int gi = (j.item_clip != nullptr) ? get_afp_info(info, pkg, j.item_clip) : -1;
-    if (gi < 0 && (j.item_clip != nullptr) && std::strcmp(j.item_clip, j.layer) != 0)
-        gi = get_afp_info(info, pkg, j.layer);
-    if (gi >= 0 && (g_afp.afp_mc_attach_stream != nullptr) &&
-        (g_afp.afp_mc_get_relative_id != nullptr)) {
-        int mc = g_afp.afp_mc_get_id_by_path(sid, j.layer);
-        for (int c = 0; mc >= 0 && c < 64; mc = g_afp.afp_mc_get_relative_id(mc, 6), ++c) {
-            g_afp.afp_mc_attach_stream(mc, (uint32_t)info[3]);
-            if (g_afp.afp_mc_get != nullptr) g_afp.afp_mc_get(mc, 0x101E, 1);
-        }
-    } else if (j.atlas != nullptr) {
+void MountItemClip(EngineSession& es, uint32_t pkg, uint32_t sid, const TexList& comp_tl,
+                   const TexList& main_tl, int comp_base, int main_base, const LayerJob& j) {
+    if ((es.afpu.afpu_afp_get_info_in_package == nullptr) ||
+        (es.afp.afp_mc_get_id_by_path == nullptr)) {
+        return;
+    }
+    const ClipAttach at = AttachClipStream(es, pkg, sid, j.layer, j.item_clip);
+    if (at.have_stream) {
+        return;
+    }
+    if (j.atlas != nullptr) {
         std::vector<uint8_t> px;
         int pw = 0;
         int ph = 0;
@@ -378,29 +324,20 @@ void MountItemClip(uint32_t pkg, uint32_t sid, const TexList& comp_tl, const Tex
     }
 }
 
-int ProbeItemTotal(int part_mc) {
-    int total = 1;
-    if (part_mc >= 0 && (g_afp.afp_mc_set != nullptr)) {
-        int t = 0;
-        if (g_afp.afp_mc_set(part_mc, 0x1011, &t) >= 0 && t > 1) total = (t > 600) ? 600 : t;
-    }
-    return total;
-}
-
-int ResolveEmitCount(int part_mc, bool animated, int total) {
+int ResolveEmitCount(EngineSession& es, D3D9State& d3d, int part_mc, bool animated, int total) {
     int emit = animated ? total : 1;
-    if (animated && total > 2 && part_mc >= 0 && (g_afp.afp_mc_control_frame != nullptr) &&
-        (g_afp.afp_mc_set != nullptr)) {
-        if (g_afp.afp_stream_control != nullptr) g_afp.afp_stream_control(6, (uint32_t)part_mc);
-        g_afp.afp_mc_control_frame(part_mc, 0xF08, total - 1);
+    if (animated && total > 2 && part_mc >= 0 && (es.afp.afp_mc_control_frame != nullptr) &&
+        (es.afp.afp_mc_set != nullptr)) {
+        if (es.afp.afp_stream_control != nullptr) es.afp.afp_stream_control(6, (uint32_t)part_mc);
+        es.afp.afp_mc_control_frame(part_mc, 0xF08, total - 1);
         std::vector<uint8_t> tp;
         int tw = 0;
         int th = 0;
         for (int i = 0; i < 3; ++i)
-            RenderFrame(tp, tw, th, true);
+            RenderFrame(es, d3d, tp, tw, th, true);
         int c = -1;
-        if (g_afp.afp_stream_control != nullptr) g_afp.afp_stream_control(6, (uint32_t)part_mc);
-        g_afp.afp_mc_set(part_mc, 0x1010, &c);
+        if (es.afp.afp_stream_control != nullptr) es.afp.afp_stream_control(6, (uint32_t)part_mc);
+        es.afp.afp_mc_set(part_mc, 0x1010, &c);
         if (c >= 0 && c < total - 1) emit = total - 1;
     }
     return emit;
@@ -428,13 +365,15 @@ struct JobEnv {
     int* h = nullptr;
 };
 
-void CaptureJobFrames(const JobEnv& env, int part_mc, int emit, ClipFrames& cf) {
+void CaptureJobFrames(EngineSession& es, D3D9State& d3d, const JobEnv& env, int part_mc, int emit,
+                      ClipFrames& cf) {
     for (int K = 0; K < emit; ++K) {
-        if (part_mc >= 0 && (g_afp.afp_mc_control_frame != nullptr)) {
-            if (g_afp.afp_stream_control != nullptr) g_afp.afp_stream_control(6, (uint32_t)part_mc);
-            g_afp.afp_mc_control_frame(part_mc, 0xF08, K);
+        if (part_mc >= 0 && (es.afp.afp_mc_control_frame != nullptr)) {
+            if (es.afp.afp_stream_control != nullptr)
+                es.afp.afp_stream_control(6, (uint32_t)part_mc);
+            es.afp.afp_mc_control_frame(part_mc, 0xF08, K);
         }
-        RenderFrame(*env.px, *env.w, *env.h, false);
+        RenderFrame(es, d3d, *env.px, *env.w, *env.h, false);
         if (*env.w <= 0 || *env.h <= 0) break;
         cf.cw = *env.w;
         cf.ch = *env.h;
@@ -448,13 +387,8 @@ int WriteJobOutputs(const LayerJob& j, const ClipFrames& cf, int emit) {
     int n = 0;
     if (emit > 1) {
         if (WriteAnimatedTriple(j.out_path, cf, "partcomp")) n = 1;
-    } else if (!cf.frames.empty() && !cf.frames[0].empty()) {
-        if (WriteStillAvif(j.out_path, cf.frames[0].data(), cf.cw, cf.ch, kQproAvifQuality)) n = 1;
-        if (g_clip_dump_raw) {
-            std::string png = j.out_path;
-            if (png.size() > 5 && png.ends_with(".avif")) png.replace(png.size() - 5, 5, ".png");
-            WritePngBGRA(png, cf.frames[0].data(), cf.cw, cf.ch);
-        }
+    } else {
+        n = WriteStillFrameWithDump(j.out_path, cf);
     }
     if (n == 0) {
         int const pw = (cf.cw > 0) ? cf.cw : 520;
@@ -465,12 +399,12 @@ int WriteJobOutputs(const LayerJob& j, const ClipFrames& cf, int emit) {
     return n;
 }
 
-int RenderLayerJob(const JobEnv& env, const LayerJob& j) {
-    int const part_mc = (g_afp.afp_mc_get_id_by_path != nullptr)
-                            ? g_afp.afp_mc_get_id_by_path(env.sid, j.layer)
+int RenderLayerJob(EngineSession& es, D3D9State& d3d, const JobEnv& env, const LayerJob& j) {
+    int const part_mc = (es.afp.afp_mc_get_id_by_path != nullptr)
+                            ? es.afp.afp_mc_get_id_by_path(env.sid, j.layer)
                             : -1;
-    int const total = ProbeItemTotal(part_mc);
-    int const vcmds = (part_mc >= 0) ? ClipVisualCmdsAfterFrame0(g_afp, (uint32_t)part_mc) : -1;
+    int const total = ProbeClipTotal(es, part_mc);
+    int const vcmds = (part_mc >= 0) ? ClipVisualCmdsAfterFrame0(es.afp, (uint32_t)part_mc) : -1;
     bool const animated = (vcmds != 0);
     if (g_clip_dump_raw && part_mc >= 0) {
         LOG("PartAnim", "%s layer=%s visual-cmds@f>0=%d animated=%d total=%d",
@@ -479,18 +413,18 @@ int RenderLayerJob(const JobEnv& env, const LayerJob& j) {
     if (animated && (env.video_out != nullptr))
         env.video_out->insert(fs::path(j.out_path).stem().string());
     if (env.detect_only) return 0;
-    int const emit = ResolveEmitCount(part_mc, animated, total);
-    AfpManager::SeekFrame(g_afp, 0);
+    int const emit = ResolveEmitCount(es, d3d, part_mc, animated, total);
+    AfpManager::SeekFrame(es.afp, 0);
     for (const char* a : kAllAvatarLayers)
-        McControl::SetClipVisible(g_afp, env.sid, a, std::strcmp(a, j.layer) == 0);
+        McControl::SetClipVisible(es.afp, env.sid, a, std::strcmp(a, j.layer) == 0);
     ApplyJobHueScope(j, *env.comp_tl, env.comp_base);
-    AfpManager::SeekFrame(g_afp, 0);
+    AfpManager::SeekFrame(es.afp, 0);
     ClipFrames cf;
     cf.cw = *env.w;
     cf.ch = *env.h;
     cf.fps = env.fps;
     cf.frames.assign((size_t)emit, {});
-    CaptureJobFrames(env, part_mc, emit, cf);
+    CaptureJobFrames(es, d3d, env, part_mc, emit, cf);
     int const n = WriteJobOutputs(j, cf, emit);
     LOG("PartComp", "%s layer=%s -> %d file(s), %d/%d frames @ %d fps (%s)", env.item_ifs->c_str(),
         j.layer, n, emit, total, env.fps, j.out_path.c_str());
@@ -499,31 +433,31 @@ int RenderLayerJob(const JobEnv& env, const LayerJob& j) {
 
 }
 
-int RenderItemComposite(const std::string& game_dir, const std::string& item_ifs,
-                        const std::vector<LayerJob>& jobs, const CompositeShare& share, int fps,
-                        bool detect_only, std::set<std::string>* video_out) {
+int RenderItemComposite(EngineSession& es, D3D9State& d3d, const std::string& game_dir,
+                        const std::string& item_ifs, const std::vector<LayerJob>& jobs,
+                        const CompositeShare& share, int fps, bool detect_only,
+                        std::set<std::string>* video_out) {
     if (jobs.empty()) return 0;
     std::string const main2 = IfsPath(game_dir, "qp_main2.ifs");
     std::string const item = IfsPath(game_dir, item_ifs);
     const bool own = (share.sid == 0);
-    const ItemCompCtx ctx = SetupItemCompositeSlots(own, main2, share);
+    const ItemCompCtx ctx = SetupItemCompositeSlots(es, own, main2, share);
     if (!ctx.ok) return 0;
-    uint32_t const pkg = AfpManager::LoadCompanion(g_engine, item, Stem(item_ifs));
+    uint32_t const pkg = AfpManager::LoadCompanion(es, item, Stem(item_ifs));
     TexList compTl;
     std::string cmp_root = AfpManager::LastCompanionMountPoint();
     size_t const bar = cmp_root.find('|');
     if (bar != std::string::npos) cmp_root.resize(bar);
-    ParseTexturelist(compTl, cmp_root.c_str());
-    if (!AfpManager::SwitchAnimation(g_engine, "qp_motion", true))
+    ParseTexturelist(es, compTl, cmp_root.c_str());
+    if (!AfpManager::SwitchAnimation(es, "qp_motion", true))
         LOG("PartComp", "SwitchAnimation(qp_motion) FAILED");
     uint32_t const sid = AfpManager::StreamId();
     for (const auto& j : jobs)
-        MountItemClip(pkg, sid, compTl, ctx.main_tl, ctx.comp_base, ctx.main_base, j);
+        MountItemClip(es, pkg, sid, compTl, ctx.main_tl, ctx.comp_base, ctx.main_base, j);
     std::vector<uint8_t> px;
     int w = 0;
     int h = 0;
-    for (int i = 0; i < 6; ++i)
-        RenderFrame(px, w, h, true);
+    WarmUpFrames(es, d3d, px, w, h);
     JobEnv env;
     env.item_ifs = &item_ifs;
     env.sid = sid;
@@ -537,9 +471,9 @@ int RenderItemComposite(const std::string& game_dir, const std::string& item_ifs
     env.h = &h;
     int written = 0;
     for (const auto& j : jobs)
-        if (RenderLayerJob(env, j) > 0) ++written;
-    AfpManager::DestroyCurrentStream(g_afp);
-    if (pkg != 0U) AfpManager::UnloadCompanion(g_engine, pkg);
+        if (RenderLayerJob(es, d3d, env, j) > 0) ++written;
+    AfpManager::DestroyCurrentStream(es.afp);
+    if (pkg != 0U) AfpManager::UnloadCompanion(es, pkg);
     if (!own) {
         int const cur = AfpD3D9::NextSlot();
         for (int s = ctx.comp_base; s < cur; ++s)
@@ -549,14 +483,15 @@ int RenderItemComposite(const std::string& game_dir, const std::string& item_ifs
     return written;
 }
 
-int RenderPartComposite(const std::string& game_dir, const std::string& item_ifs, const char* layer,
-                        const char* hue_eff, const std::string& out_path) {
+int RenderPartComposite(EngineSession& es, D3D9State& d3d, const std::string& game_dir,
+                        const std::string& item_ifs, const char* layer, const char* hue_eff,
+                        const std::string& out_path) {
     std::vector<LayerJob> const jobs = {{.layer = layer,
                                          .item_clip = layer,
                                          .atlas = nullptr,
                                          .hue_eff = hue_eff,
                                          .out_path = out_path}};
-    return RenderItemComposite(game_dir, item_ifs, jobs);
+    return RenderItemComposite(es, d3d, game_dir, item_ifs, jobs);
 }
 
 namespace {
@@ -656,12 +591,10 @@ void ApplyClipHueScope(const TexList& tl, const std::string& clip, int slot0) {
 
 }
 
-void ClipOne(const std::string& game_dir, const std::string& ifs, const std::string& clip) {
+void ClipOne(EngineSession& es, D3D9State& d3d, const std::string& game_dir, const std::string& ifs,
+             const std::string& clip) {
     std::string const path = IfsPath(game_dir, ifs);
-    if (g_avs.avs_fs_umount != nullptr) {
-        g_avs.avs_fs_umount("/afp/packages");
-        g_avs.avs_fs_umount("/data");
-    }
+    AfpManager::UmountPackagesAndData(es.avs);
     int const slot0 = AfpD3D9::NextSlot();
     if (!MountAndLoadIfs(path)) {
         LOG("QproClip", "mount FAILED");
@@ -669,20 +602,20 @@ void ClipOne(const std::string& game_dir, const std::string& ifs, const std::str
     }
 
     TexList tl;
-    ParseTexturelist(tl);
+    ParseTexturelist(es, tl);
 
     ApplyClipHueScope(tl, clip, slot0);
 
-    bool const sw = AfpManager::SwitchAnimation(g_engine, clip, true);
+    bool const sw = AfpManager::SwitchAnimation(es, clip, true);
     uint32_t cur = 0;
     uint32_t total = 0;
     uint32_t lc = 0;
-    bool const got = sw && AfpManager::ReadMcPlayhead(g_afp, &cur, &total, &lc);
+    bool const got = sw && AfpManager::ReadMcPlayhead(es.afp, &cur, &total, &lc);
     LOG("QproClip", "%s clip '%s': sw=%d total=%u (%zu bitmaps)", ifs.c_str(), clip.c_str(),
         (int)sw, got ? total : 0, tl.images.size());
 
     bool eok = false;
-    auto kids = AfpManager::EnumerateChildClips(g_afp, true, &eok);
+    auto kids = AfpManager::EnumerateChildClips(es.afp, true, &eok);
     LOG("QproClip", "child sub-mcs (enum_ok=%d): %zu", (int)eok, kids.size());
     for (const auto& c : kids) {
         LOG("QproClip", "  child '%s' pos=(%.1f,%.1f) playhead cur=%d total=%d", c.name.c_str(),
@@ -690,11 +623,11 @@ void ClipOne(const std::string& game_dir, const std::string& ifs, const std::str
     }
 
     uint32_t const csid = AfpManager::StreamId();
-    int const rootmc = AfpManager::GetRootMcId(g_afp);
+    int const rootmc = AfpManager::GetRootMcId(es.afp);
     g_clip_dump_raw = true;
-    int const rootv = ClipVisualCmdsAfterFrame0(g_afp, (uint32_t)rootmc);
+    int const rootv = ClipVisualCmdsAfterFrame0(es.afp, (uint32_t)rootmc);
     g_clip_dump_raw = false;
-    bool const anim = ClipIsAnimated(g_afp, csid, (uint32_t)rootmc, kids);
+    bool const anim = ClipIsAnimated(es.afp, csid, (uint32_t)rootmc, kids);
     LOG("AnimData", "%s '%s': root visual-cmds@f>0=%d ANIMATED=%d (total=%u kids=%zu)", ifs.c_str(),
         clip.c_str(), rootv, (int)anim, total, kids.size());
 
@@ -702,17 +635,18 @@ void ClipOne(const std::string& game_dir, const std::string& ifs, const std::str
     g_clip_dump_raw = true;
     int const n =
         (sw && got && total > 1)
-            ? RenderClipAvif((fs::path("screenshots") / "qpclip_test.avif").string(), 60, "clip")
+            ? RenderClipAvif(es, d3d, (fs::path("screenshots") / "qpclip_test.avif").string(), 60,
+                             "clip")
             : 0;
     g_clip_dump_raw = false;
     AfpD3D9::SetQproDrawProbe(false);
     AfpD3D9::ResetHsvScopeRect();
     LOG("QproClip", "RenderClipAvif wrote %d frames", n);
 
-    AfpManager::UnloadPackages(g_engine);
+    AfpManager::UnloadPackages(es);
 }
 
-void DumpIfs(const std::string& ifs_path) {
+void DumpIfs(EngineSession& es, const std::string& ifs_path) {
     int const base = AfpD3D9::NextSlot();
     AfpD3D9::SetNextSlot(base);
     int const slot0 = AfpD3D9::NextSlot();
@@ -722,7 +656,7 @@ void DumpIfs(const std::string& ifs_path) {
         return;
     }
     TexList tl;
-    if (!ParseTexturelist(tl)) {
+    if (!ParseTexturelist(es, tl)) {
         LOG("QproDump", "texturelist parse FAILED");
     } else {
         LOG("QproDump", "%zu bitmaps across %d atlas(es):", tl.images.size(), tl.atlas_count);
@@ -759,7 +693,7 @@ void DumpIfs(const std::string& ifs_path) {
             }
         }
     }
-    AfpManager::UnloadPackages(g_engine);
+    AfpManager::UnloadPackages(es);
     AfpD3D9::SetNextSlot(base);
 }
 

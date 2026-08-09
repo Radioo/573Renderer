@@ -1,15 +1,15 @@
 #include <cstdio>
+#include "engine_session.h"
 #include "formats/bgra_crop.h"
 #include <utility>
 #include "media/media_format.h"
 #include <functional>
 #include "state/app_state.h"
-#include "qpro_walk.h"
+#include "qpro/qpro_walk.h"
 
-#include "qpro_internal.h"
-#include "qpro_dll.h"
+#include "qpro/qpro_internal.h"
+#include "qpro/qpro_dll.h"
 #include "afp_boot.h"
-#include "app_globals.h"
 #include "render_backend.h"
 #include "media_sink.h"
 #include "support/log.h"
@@ -152,13 +152,13 @@ void UnionContentBBox(const std::vector<uint8_t>& bgra, int w, int h, int& x0, i
     }
 }
 
-int SwitchToAnimatedClip(const std::vector<const char*>& clips) {
+int SwitchToAnimatedClip(EngineSession& es, const std::vector<const char*>& clips) {
     for (const char* clip : clips) {
-        if (AfpManager::SwitchAnimation(g_engine, clip, true)) {
+        if (AfpManager::SwitchAnimation(es, clip, true)) {
             uint32_t cur = 0;
             uint32_t total = 0;
             uint32_t lc = 0;
-            if (AfpManager::ReadMcPlayhead(g_afp, &cur, &total, &lc) && total >= 1)
+            if (AfpManager::ReadMcPlayhead(es.afp, &cur, &total, &lc) && total >= 1)
                 return (int)total;
         }
     }
@@ -179,19 +179,19 @@ struct ClipCapture {
     int guard = 0;
 };
 
-ClipCapture CollectClipFrames(int nframes, const char* label) {
+ClipCapture CollectClipFrames(EngineSession& es, D3D9State& d3d, int nframes, const char* label) {
     ClipCapture cap;
     const int gmax = (nframes * 8) + 480;
     std::vector<uint8_t> px;
     cap.buf.assign((size_t)nframes, {});
-    AfpManager::SeekFrame(g_afp, 0);
+    AfpManager::SeekFrame(es.afp, 0);
     while (cap.got < nframes && cap.guard < gmax) {
         ++cap.guard;
-        RenderFrame(px, cap.w, cap.h, true);
+        RenderFrame(es, d3d, px, cap.w, cap.h, true);
         uint32_t cur = 0;
         uint32_t t = 0;
         uint32_t lc = 0;
-        AfpManager::ReadMcPlayhead(g_afp, &cur, &t, &lc);
+        AfpManager::ReadMcPlayhead(es.afp, &cur, &t, &lc);
         if ((int)cur >= 0 && std::cmp_less(cur, nframes) && cap.buf[cur].empty()) {
             UnionContentBBox(px, cap.w, cap.h, cap.bx0, cap.by0, cap.bx1, cap.by1);
             cap.buf[cur] = px;
@@ -269,16 +269,16 @@ void CropClipFrames(ClipCapture& cap, ClipFrames& out, int nframes) {
 
 }
 
-bool CaptureClipFrames(ClipFrames& out, int fps, const char* label, int fcx, int fcy, int fcw,
-                       int fch) {
+bool CaptureClipFrames(EngineSession& es, D3D9State& d3d, ClipFrames& out, int fps,
+                       const char* label, int fcx, int fcy, int fcw, int fch) {
     out = ClipFrames{};
     uint32_t c0 = 0;
     uint32_t total = 0;
     uint32_t l0 = 0;
-    if (!AfpManager::ReadMcPlayhead(g_afp, &c0, &total, &l0) || total <= 1) return false;
+    if (!AfpManager::ReadMcPlayhead(es.afp, &c0, &total, &l0) || total <= 1) return false;
     int const nframes = (int)total;
 
-    ClipCapture cap = CollectClipFrames(nframes, label);
+    ClipCapture cap = CollectClipFrames(es, d3d, nframes, label);
 
     int cw = 0;
     int ch = 0;
@@ -353,10 +353,10 @@ int EncodeClipFrames(const std::string& out_path, const ClipFrames& cf, const ch
     return 0;
 }
 
-int RenderClipAvif(const std::string& out_path, int fps, const char* label, int fcx, int fcy,
-                   int fcw, int fch) {
+int RenderClipAvif(EngineSession& es, D3D9State& d3d, const std::string& out_path, int fps,
+                   const char* label, int fcx, int fcy, int fcw, int fch) {
     ClipFrames cf;
-    if (!CaptureClipFrames(cf, fps, label, fcx, fcy, fcw, fch)) return 0;
+    if (!CaptureClipFrames(es, d3d, cf, fps, label, fcx, fcy, fcw, fch)) return 0;
     return EncodeClipFrames(out_path, cf, "clipraw");
 }
 
@@ -424,8 +424,9 @@ struct HandShiftGuard {
 
 }
 
-bool CaptureLayerViaWalk(const TexList& tl, int slot0, QproDll::Category cat, const Layer& ly,
-                         bool composed, ClipFrames& out, bool& is_animated) {
+bool CaptureLayerViaWalk(EngineSession& es, D3D9State& d3d, const TexList& tl, int slot0,
+                         QproDll::Category cat, const Layer& ly, bool composed, ClipFrames& out,
+                         bool& is_animated) {
     out = ClipFrames{};
     is_animated = false;
 
@@ -448,7 +449,7 @@ bool CaptureLayerViaWalk(const TexList& tl, int slot0, QproDll::Category cat, co
         }
     }
 
-    if (SwitchToAnimatedClip(ly.clip_candidates) > 1) {
+    if (SwitchToAnimatedClip(es, ly.clip_candidates) > 1) {
         AfpD3D9::ResetHsvScopeRect();
         if (g_hue_scope_enabled && cat == QproDll::Category::Hand && (base != nullptr) &&
             CountWithPrefix(tl, base) > 1) {
@@ -457,8 +458,9 @@ bool CaptureLayerViaWalk(const TexList& tl, int slot0, QproDll::Category cat, co
                 ScopeHueToImage2(FindImage(tl, "qp_hand_l2"), slot0);
         }
         const char* label = QproDll::Prefix(cat);
-        bool const ok = capture_on_canvas ? CaptureClipFrames(out, 60, label, fcx, fcy, fcw, fch)
-                                          : CaptureClipFrames(out, 60, label, 0, 0, 0, 0);
+        bool const ok = capture_on_canvas
+                            ? CaptureClipFrames(es, d3d, out, 60, label, fcx, fcy, fcw, fch)
+                            : CaptureClipFrames(es, d3d, out, 60, label, 0, 0, 0, 0);
         AfpD3D9::ResetHsvScopeRect();
         if (ok) {
             if (!capture_on_canvas) NormalizeClipToCanvas(out, fcw, fch, hard_crop);
@@ -495,9 +497,7 @@ bool EmitClipFrames(const ClipFrames& cf, bool anim, const std::string& path,
             }
         }
         if (last >= 0) {
-            std::string png = path;
-            if (png.size() > 5 && png.ends_with(".avif")) png.replace(png.size() - 5, 5, ".png");
-            WritePngBGRA(png, cf.frames[last].data(), cf.cw, cf.ch);
+            WritePngBGRA(AvifPathToPng(path), cf.frames[last].data(), cf.cw, cf.ch);
         }
     }
     if (anim) return EncodeClipFrames(path, cf, dump_label) > 1;
@@ -505,11 +505,12 @@ bool EmitClipFrames(const ClipFrames& cf, bool anim, const std::string& path,
     return WriteStillAvif(path, cf.frames[0].data(), cf.cw, cf.ch, kQproAvifQuality);
 }
 
-int RenderLayerViaWalk(const TexList& tl, int slot0, QproDll::Category cat, const Layer& ly,
-                       bool composed, const std::string& out_path) {
+int RenderLayerViaWalk(EngineSession& es, D3D9State& d3d, const TexList& tl, int slot0,
+                       QproDll::Category cat, const Layer& ly, bool composed,
+                       const std::string& out_path) {
     ClipFrames cf;
     bool anim = false;
-    if (!CaptureLayerViaWalk(tl, slot0, cat, ly, composed, cf, anim)) return 0;
+    if (!CaptureLayerViaWalk(es, d3d, tl, slot0, cat, ly, composed, cf, anim)) return 0;
     std::string const dump = std::string("clipraw") + ly.suffix;
     return EmitClipFrames(cf, anim, out_path, dump.c_str()) ? 1 : 0;
 }
@@ -526,7 +527,8 @@ bool IsComposedPlaceholder(const TexList& tl, int slot0, QproDll::Category cat) 
     return true;
 }
 
-int RenderPairViaWalk(const TexList& tl, int slot0, QproDll::Category cat, bool composed,
+int RenderPairViaWalk(EngineSession& es, D3D9State& d3d, const TexList& tl, int slot0,
+                      QproDll::Category cat, bool composed,
                       const std::function<std::string(const char*)>& out_for) {
     const std::vector<Layer>& layers = LayersFor(cat);
     const Layer* lb = nullptr;
@@ -542,11 +544,13 @@ int RenderPairViaWalk(const TexList& tl, int slot0, QproDll::Category cat, bool 
 
     ClipFrames front;
     bool f_anim = false;
-    bool const have_front = CaptureLayerViaWalk(tl, slot0, cat, *lf, composed, front, f_anim);
+    bool const have_front =
+        CaptureLayerViaWalk(es, d3d, tl, slot0, cat, *lf, composed, front, f_anim);
 
     ClipFrames back;
     bool b_anim = false;
-    bool const have_back = CaptureLayerViaWalk(tl, slot0, cat, *lb, composed, back, b_anim);
+    bool const have_back =
+        CaptureLayerViaWalk(es, d3d, tl, slot0, cat, *lb, composed, back, b_anim);
 
     int written = 0;
     if (have_back && EmitClipFrames(back, b_anim, out_for("_b"), "clipraw_b")) ++written;

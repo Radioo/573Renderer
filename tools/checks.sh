@@ -29,8 +29,11 @@ fi
 
 uv run --project tools/ci python tools/ci/check_file_length.py
 uv run --project tools/ci python tools/ci/check_no_comments.py
+uv run --project tools/ci python tools/ci/check_banned_chars.py
+uv run --project tools/ci python tools/ci/check_machine_paths.py
 uv run --project tools/ci python tools/ci/check_gui_isolation.py
 uv run --project tools/ci python tools/ci/run_format.py
+uv run --project tools/ci --group dev ruff check tools/
 uv run --project tools/ci python tools/ci/run_tidy.py
 
 echo "ALL CHECKS PASSED"

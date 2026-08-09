@@ -28,16 +28,31 @@ unmigrated is allowed to get worse:
   retired `no_comments_scope.json` allowlist was the ratchet used to reach
   this point (it grew per migrated file through P8; removed at P9 when the
   gate flipped to catch-all-minus-exempt).
-- The machine-path gate has no baseline: it runs over every tracked file
-  from day one, since any hit is a violation regardless of migration state.
+- The machine-path gate (`check_machine_paths.py`) has no baseline: it runs
+  over every tracked file from day one, since any hit is a violation
+  regardless of migration state. It flags absolute drive-letter paths
+  (`X:\...` / `X:/...`) in any tracked file; `tests/*` is exempt because
+  test fixtures legitimately use arbitrary path strings (the
+  `Settings::SameGameDir` case-folding cases and the CLI parse cases), and
+  the shared `no_comments_exempt.json` globs apply too. Machine-local path
+  config belongs in gitignored files (`tools/render_regress/game_dirs.json`,
+  with the tracked `game_dirs.example.json` as the template).
+- The banned-characters gate (`check_banned_chars.py`) bans em/en dashes,
+  smart quotes, and non-breaking spaces (plus their HTML entities) in every
+  tracked file - the owner's no-dash rule made mechanical. The banned set is
+  built from `chr()` code points so the gate file itself stays clean.
 - The strict MSVC warning set (`r573::warnings`, /W4 + curated /w14xxx) is
-  linked into EVERY target as of P9, including the `renderer` monolith
-  executable that held the un-migrated sources. Reaching that meant driving
-  the monolith warning-clean: dead statics / unused params / dead locals
-  removed, and every `getenv`/`fopen`/`sscanf`/`strncpy` (C4996 "unsafe
-  function") routed through a safe path. There is no `/WX`, so a new warning
-  does not fail the build by itself - but the codebase is at zero warnings,
-  and clang-tidy (whole-tree scope at P9) fails on regressions.
+  linked into EVERY compiled target, including the `renderer` monolith
+  executable that held the un-migrated sources and every test executable
+  (the five newest test targets were missed for a while; a CMake assertion
+  at the bottom of CMakeLists.txt now fails the configure if any
+  EXECUTABLE/STATIC_LIBRARY target omits `r573::warnings`). Reaching that
+  meant driving the monolith warning-clean: dead statics / unused params /
+  dead locals removed, and every `getenv`/`fopen`/`sscanf`/`strncpy`
+  (C4996 "unsafe function") routed through a safe path. Warnings ARE
+  errors: `CMAKE_COMPILE_WARNING_AS_ERROR=ON` lives in the base preset
+  (CMakePresets.json), so every TU compiles with `-WX` in dev and ci alike,
+  and clang-tidy (whole-tree scope at P9) fails on regressions too.
 
 ## Gate details
 
@@ -58,13 +73,16 @@ ALL file types, not just C++ (owner decision). `// NOLINT` and
 suppressions must be structural (per-directory `.clang-tidy` overrides or
 check subtraction in config), never per-line.
 
-Comment detection is lexer-based, never regex-over-lines for C++: libclang
-(`clang.cindex`) tokenizes exactly like the compiler, so `//` inside string
-literals (URLs, Windows paths) cannot false-positive. Python uses the stdlib
-`tokenize` module. YAML/CMake/gitignore use a quote-aware `#` scan, batch
-files match `rem`/`::` statements, JSON matches `//`-style lines (real JSON
-cannot carry comments; the checker exists so JSONC never sneaks in).
-Markdown under `docs/` is exempt by nature - prose is the point.
+Comment detection for C++ is a single token-alternation regex
+(`CPP_TOKEN_RE`) that consumes raw strings, ordinary strings, and char
+literals BEFORE it can ever see `//` or `/* */`, so `//` inside string
+literals (URLs, Windows paths) cannot false-positive - same effect as a
+lexer without the libclang dependency the gate originally carried (the
+switch is recorded in docs/ci.md). Python uses the stdlib `tokenize`
+module. YAML/CMake/gitignore use a quote-aware `#` scan, batch files match
+`rem`/`::` statements, JSON matches `//`-style lines (real JSON cannot
+carry comments; the checker exists so JSONC never sneaks in). Markdown
+under `docs/` is exempt by nature - prose is the point.
 
 ### GUI isolation (`check_gui_isolation.py`)
 
@@ -229,7 +247,34 @@ entry.
 It runs in cl driver mode - no clang-cl configure is needed - in the build
 workflow (a configured build dir must exist), after the Test step. Header
 findings surface through the TUs that include them via
-`HeaderFilterRegex`.
+`HeaderFilterRegex`, which names the module dirs explicitly:
+`formats|media|cli|settings|state|loop|render`. Two deliberate exclusions:
+
+- `src/support` headers are OUT even though the module has its own config.
+  Header diagnostics are attributed under the INCLUDING TU's config, and
+  support's FFI patterns (the `DLL_LOAD_AS` stringize macro, the
+  GetProcAddress `reinterpret_cast` in dll_loader.h) are sanctioned by
+  `src/support/.clang-tidy` only for TUs inside that dir - any other
+  includer would report them as findings it cannot fix. The support TUs
+  themselves are still tidied under full strictness minus the four
+  documented FFI subtractions.
+- Flat `src/*.h`, `src/gui`, `src/backend`, `src/scene3d`, `src/gc2d`
+  headers are OUT: they are the transitional layer; their headers join the
+  filter as they migrate into module dirs, same as their TUs.
+
+When `loop` and `render` joined the filter, the sweep surfaced 2 real
+header findings (blend_map.h missing designated initializers,
+frame_pacer.h enum base type) - fixed, not suppressed.
+
+`run_tidy.py` caches per-file results in `.tidycache/`: a file's cache key
+hashes the pinned tool version, the compile command, the source, every
+header the ninja dep graph says the TU includes, AND the ENTIRE `.clang-tidy`
+config chain (every tracked `.clang-tidy` file, root and per-directory).
+The chain hash matters: per-directory configs are not compiler dependencies,
+so before it existed an edit to `src/.clang-tidy` invalidated nothing and
+every affected file returned a stale cache hit - a suppression could go
+green in CI without ever being analysed. The CI cache key in
+build-renderer.yml mirrors the same glob set for the same reason.
 
 Version notes, all hit in practice during the first migration:
 

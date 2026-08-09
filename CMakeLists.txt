@@ -10,6 +10,14 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 add_compile_definitions(NOMINMAX)
 
+option(R573_ASAN "Build with AddressSanitizer" OFF)
+if(R573_ASAN AND MSVC)
+    add_compile_options(/fsanitize=address)
+    add_compile_definitions(_DISABLE_STRING_ANNOTATION _DISABLE_VECTOR_ANNOTATION
+                            _DISABLE_OPTIONAL_ANNOTATION)
+    add_link_options(/INCREMENTAL:NO)
+endif()
+
 if(CMAKE_SIZEOF_VOID_P EQUAL 8)
     set(R573_ARCH_SUFFIX "")
 elseif(CMAKE_SIZEOF_VOID_P EQUAL 4)
@@ -64,13 +72,25 @@ add_library(r573_formats STATIC
     src/formats/frame_process.cpp
 )
 target_include_directories(r573_formats PUBLIC src)
-target_link_libraries(r573_formats PRIVATE r573::warnings)
+target_link_libraries(r573_formats PUBLIC tl::expected PRIVATE r573::warnings)
 
 add_library(r573_media_format STATIC
     src/media/media_format.cpp
 )
 target_include_directories(r573_media_format PUBLIC src)
 target_link_libraries(r573_media_format PRIVATE r573::warnings)
+
+add_library(r573_media STATIC
+    src/media_sink.cpp
+    src/video_encoder.cpp
+    src/video_encoder_codecs.cpp
+)
+target_include_directories(r573_media PUBLIC src)
+target_include_directories(r573_media SYSTEM PUBLIC ${FFMPEG_INCLUDE_DIRS})
+target_link_libraries(r573_media
+    PUBLIC r573_media_format ${FFMPEG_LIBRARIES} bcrypt.lib ws2_32.lib secur32.lib mfuuid.lib
+           strmiids.lib windowscodecs.lib ole32.lib
+    PRIVATE r573_support r573::warnings)
 
 add_library(r573_cli STATIC
     src/cli/cli.cpp
@@ -114,6 +134,7 @@ add_library(r573_render STATIC
     src/render/command_trace.cpp
     src/render/command_list.cpp
     src/render/command_diff.cpp
+    src/render/prim_layout.cpp
 )
 target_include_directories(r573_render PUBLIC src)
 target_link_libraries(r573_render PRIVATE r573::warnings)
@@ -175,23 +196,25 @@ add_executable(renderer WIN32
     src/avs_xml.cpp
     src/native_dialog.cpp
     src/export.cpp
-    src/video_encoder.cpp
-    src/video_encoder_codecs.cpp
-    src/media_sink.cpp
     src/game_profile.cpp
     src/arc_extract.cpp
     src/customize_extract.cpp
-    src/qpro_dll.cpp
-    src/qpro_scan.cpp
-    src/qpro_extract.cpp
-    src/qpro_walk.cpp
-    src/qpro_composite.cpp
-    src/qpro_back.cpp
-    src/qpro_composite_debug.cpp
+    src/qpro/qpro_dll.cpp
+    src/qpro/qpro_scan.cpp
+    src/qpro/qpro_extract.cpp
+    src/qpro/qpro_detail.cpp
+    src/qpro/qpro_body.cpp
+    src/qpro/qpro_debug.cpp
+    src/qpro/qpro_walk.cpp
+    src/qpro/qpro_composite.cpp
+    src/qpro/qpro_back.cpp
+    src/qpro/qpro_composite_debug.cpp
     src/support/crash_report.cpp
-    src/render/prim_layout.cpp
     src/afp_ddr_geo.cpp
     src/afp_ddr_render.cpp
+    src/afp_ddr_textures.cpp
+    src/afp_ddr_draw.cpp
+    src/afp_ddr_vtable.cpp
     src/afp_ddr_render_shape.cpp
     src/afp_ddr_boot.cpp
     src/afp_ddr_txp2.cpp
@@ -214,7 +237,7 @@ target_link_libraries(renderer PRIVATE
     r573::warnings
     r573_support
     r573_formats
-    r573_media_format
+    r573_media
     r573_cli
     r573_settings
     r573_state
@@ -256,9 +279,21 @@ add_executable(formats_tests
     tests/formats/dxt_decode_tests.cpp
     tests/formats/bgra_crop_tests.cpp
     tests/formats/hsl_adjust_tests.cpp
+    tests/formats/gcanim_tests.cpp
 )
 target_link_libraries(formats_tests PRIVATE Catch2::Catch2WithMain r573_formats r573_support r573::warnings)
 catch_discover_tests(formats_tests DISCOVERY_MODE POST_BUILD PROPERTIES LABELS ci)
+
+add_executable(game_tests
+    tests/game/game_profile_tests.cpp
+    tests/game/mc_control_tests.cpp
+    src/game_profile.cpp
+    src/game_revision.cpp
+    src/mc_control.cpp
+)
+target_include_directories(game_tests PRIVATE src)
+target_link_libraries(game_tests PRIVATE Catch2::Catch2WithMain r573_support r573::warnings)
+catch_discover_tests(game_tests DISCOVERY_MODE POST_BUILD PROPERTIES LABELS ci)
 
 add_executable(cli_tests
     tests/cli/cli_tests.cpp
@@ -311,6 +346,7 @@ add_executable(render_tests
     tests/render/command_trace_tests.cpp
     tests/render/command_list_tests.cpp
     tests/render/command_diff_tests.cpp
+    tests/render/prim_layout_tests.cpp
 )
 target_link_libraries(render_tests PRIVATE Catch2::Catch2WithMain r573_render r573::warnings)
 catch_discover_tests(render_tests DISCOVERY_MODE POST_BUILD PROPERTIES LABELS ci)
@@ -325,7 +361,7 @@ target_include_directories(command_stream_tests PRIVATE src)
 target_compile_definitions(command_stream_tests
     PRIVATE R573_GOLDEN_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/render/goldens")
 target_link_libraries(command_stream_tests PRIVATE Catch2::Catch2WithMain r573_render
-                                                   r573_support)
+                                                   r573_support r573::warnings)
 catch_discover_tests(command_stream_tests DISCOVERY_MODE POST_BUILD PROPERTIES LABELS ci)
 
 add_executable(pixel_golden_tests
@@ -339,7 +375,7 @@ target_include_directories(pixel_golden_tests PRIVATE src)
 target_compile_definitions(pixel_golden_tests
     PRIVATE R573_LOCAL_BASELINE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/local_baselines")
 target_link_libraries(pixel_golden_tests PRIVATE Catch2::Catch2WithMain r573_render r573_support
-                                                 d3d9)
+                                                 d3d9 r573::warnings)
 catch_discover_tests(pixel_golden_tests DISCOVERY_MODE POST_BUILD PROPERTIES LABELS ci)
 
 add_executable(local_dll_tests
@@ -348,38 +384,41 @@ add_executable(local_dll_tests
     src/avs_xml.cpp
     src/game_profile.cpp
     src/ifs_inspect.cpp
-    src/qpro_dll.cpp
+    src/qpro/qpro_dll.cpp
 )
 target_include_directories(local_dll_tests PRIVATE src)
-target_link_libraries(local_dll_tests PRIVATE Catch2::Catch2WithMain r573_support r573_state)
+target_link_libraries(local_dll_tests PRIVATE Catch2::Catch2WithMain r573_support r573_state
+                                              r573::warnings)
 catch_discover_tests(local_dll_tests DISCOVERY_MODE POST_BUILD PROPERTIES LABELS local_dll)
 
 add_executable(export_capture_tests
     tests/export/export_capture_tests.cpp
     src/export.cpp
-    src/media_sink.cpp
-    src/video_encoder.cpp
-    src/video_encoder_codecs.cpp
 )
 target_include_directories(export_capture_tests PRIVATE src)
 target_include_directories(export_capture_tests SYSTEM PRIVATE ${FFMPEG_INCLUDE_DIRS})
-target_link_libraries(export_capture_tests PRIVATE Catch2::Catch2WithMain r573_media_format
-                                                   r573_state r573_loop r573_formats r573_support
-                                                   ${FFMPEG_LIBRARIES} bcrypt.lib ws2_32.lib
-                                                   secur32.lib mfuuid.lib strmiids.lib
-                                                   windowscodecs.lib ole32.lib)
+target_link_libraries(export_capture_tests PRIVATE Catch2::Catch2WithMain r573_media r573_state
+                                                   r573_loop r573_formats r573_support
+                                                   r573::warnings)
 catch_discover_tests(export_capture_tests DISCOVERY_MODE POST_BUILD PROPERTIES LABELS ci)
 
 add_executable(media_encode_tests
     tests/media/media_encode_tests.cpp
-    src/media_sink.cpp
-    src/video_encoder.cpp
-    src/video_encoder_codecs.cpp
 )
 target_include_directories(media_encode_tests PRIVATE src)
 target_include_directories(media_encode_tests SYSTEM PRIVATE ${FFMPEG_INCLUDE_DIRS})
-target_link_libraries(media_encode_tests PRIVATE Catch2::Catch2WithMain r573_media_format
-                                                 r573_support ${FFMPEG_LIBRARIES} bcrypt.lib
-                                                 ws2_32.lib secur32.lib mfuuid.lib strmiids.lib
-                                                 windowscodecs.lib ole32.lib)
+target_link_libraries(media_encode_tests PRIVATE Catch2::Catch2WithMain r573_media r573_support
+                                                 r573::warnings)
 catch_discover_tests(media_encode_tests DISCOVERY_MODE POST_BUILD PROPERTIES LABELS ci)
+
+get_directory_property(R573_ALL_TARGETS BUILDSYSTEM_TARGETS)
+foreach(r573_target IN LISTS R573_ALL_TARGETS)
+    get_target_property(r573_target_type ${r573_target} TYPE)
+    if(r573_target_type STREQUAL "EXECUTABLE" OR r573_target_type STREQUAL "STATIC_LIBRARY")
+        get_target_property(r573_target_libs ${r573_target} LINK_LIBRARIES)
+        if(NOT r573_target_libs MATCHES "r573(::|_)warnings")
+            message(FATAL_ERROR
+                "target '${r573_target}' does not link r573::warnings - every compiled target must")
+        endif()
+    endif()
+endforeach()

@@ -4,7 +4,9 @@
 #include "../support/log.h"
 
 #include <atomic>
+#include <future>
 #include <thread>
+#include <utility>
 
 namespace GuiThread {
 
@@ -16,13 +18,15 @@ std::atomic<bool> g_running{false};
 }
 
 namespace {
-void ThreadMain(HINSTANCE hinst) {
+void ThreadMain(HINSTANCE hinst, std::promise<bool> init_result) {
     Gui::Window w{};
     if (!Gui::Init(w, hinst)) {
         LOG("GuiThread", "Gui::Init failed - GUI thread exiting");
         g_running = false;
+        init_result.set_value(false);
         return;
     }
+    init_result.set_value(true);
 
     LOG("GuiThread", "GUI thread started (HWND=%p, TID=%lu)", w.hwnd, GetCurrentThreadId());
 
@@ -47,7 +51,13 @@ bool Start(HINSTANCE hinst) {
     if (g_running.exchange(true)) {
         return true;
     }
-    g_thread = std::thread(&ThreadMain, hinst);
+    std::promise<bool> init_promise;
+    std::future<bool> init_ok = init_promise.get_future();
+    g_thread = std::thread(&ThreadMain, hinst, std::move(init_promise));
+    if (!init_ok.get()) {
+        if (g_thread.joinable()) g_thread.join();
+        return false;
+    }
     return true;
 }
 

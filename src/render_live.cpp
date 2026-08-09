@@ -46,9 +46,7 @@ bool HandleSeekRequest(int seek_to_frame, AfpFuncs& afp) {
         return true;
     }
     Runtime::Active().SeekFrame(afp, seek_to_frame);
-    auto ov = App::Global().GetLiveOverrides();
-    ov.paused = true;
-    App::Global().SetLiveOverrides(ov);
+    App::Global().MutateLiveOverrides([](App::State::LiveOverrides& ov) { ov.paused = true; });
     Runtime::Active().SetPaused(afp, true);
     NotifySeek();
     return true;
@@ -59,10 +57,9 @@ bool HandlePauseRequest(bool paused_value, AfpFuncs& afp) {
         LOG("Live", "ignoring pause toggle - export is capturing");
         return true;
     }
-    auto ov = App::Global().GetLiveOverrides();
-    ov.paused = paused_value;
-    App::Global().SetLiveOverrides(ov);
-    Runtime::Active().SetPaused(afp, ov.paused);
+    App::Global().MutateLiveOverrides(
+        [paused_value](App::State::LiveOverrides& ov) { ov.paused = paused_value; });
+    Runtime::Active().SetPaused(afp, paused_value);
     return true;
 }
 

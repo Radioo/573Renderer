@@ -1,6 +1,6 @@
-#include "qpro_scan.h"
+#include "qpro/qpro_scan.h"
 
-#include "qpro_dll.h"
+#include "qpro/qpro_dll.h"
 #include "support/log.h"
 
 #include <chrono>

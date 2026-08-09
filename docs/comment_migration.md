@@ -58,14 +58,14 @@ were audited from scratch during P9 rather than incrementally.
 | src/ifs_inspect.cpp | docs/boot_and_render_loop.md sec 4.3b (manifest parse, 3-tier variant discovery) + docs/d3d9_backend.md (texturelist NEAREST/x=540) |
 | src/arc_extract.cpp | docs/ddr.md (.arc format, two-pass extraction) + docs/formats.md - the source comments were mostly progress narration |
 | src/customize_extract.cpp | docs/ddr.md (category mapping, lossless PNG minify chunk policy) |
-| src/qpro_dll.cpp | docs/qpro.md (PE part-array parse, Elpis head1/2 numeric-suffix classify) |
-| src/qpro_scan.cpp | docs/qpro.md (part scan, IFS modified-date group key) |
-| src/qpro_walk.cpp | docs/qpro.md (clip-walk pipeline, design-canvas crop, afp_fps, straight-alpha, hue-scope, occlusion pairing) |
-| src/qpro_internal.h | docs/qpro.md (shared helpers, avatar-layer list, animated-part trio) |
-| src/qpro_extract.cpp | docs/qpro.md (Run/*One orchestration, hue-scope region1/2, mask_type probe, LayerJob category map, freeze-play, qpro_videos.json trio, native-fps probe) |
-| src/qpro_composite.cpp | docs/qpro.md (mount-once/MOUNTED mode, freeze-play statue, shared-canvas crop bounds, clip-attach vs texture-swap, animated-vs-static, the bm2dx afp_mc_attach_stream item-clip mount) |
-| src/qpro_back.cpp | docs/qpro.md (native-fps standalone probe, dt=(1/fps)(native/60) scaling, one-shot-vs-looper afp-state loop, effect-bg matrix-stack-strand diag) |
-| src/qpro_composite_debug.cpp | docs/qpro.md (HandComposite/HeadComposite diagnostics) |
+| src/qpro/qpro_dll.cpp | docs/qpro.md (PE part-array parse, Elpis head1/2 numeric-suffix classify) |
+| src/qpro/qpro_scan.cpp | docs/qpro.md (part scan, IFS modified-date group key) |
+| src/qpro/qpro_walk.cpp | docs/qpro.md (clip-walk pipeline, design-canvas crop, afp_fps, straight-alpha, hue-scope, occlusion pairing) |
+| src/qpro/qpro_internal.h | docs/qpro.md (shared helpers, avatar-layer list, animated-part trio) |
+| src/qpro/qpro_extract.cpp, src/qpro/qpro_detail.cpp, src/qpro/qpro_body.cpp, src/qpro/qpro_debug.cpp | docs/qpro.md (Run/*One orchestration, hue-scope region1/2, mask_type probe, LayerJob category map, freeze-play, qpro_videos.json trio, native-fps probe; the TU split table is at the top of that doc) |
+| src/qpro/qpro_composite.cpp | docs/qpro.md (mount-once/MOUNTED mode, freeze-play statue, shared-canvas crop bounds, clip-attach vs texture-swap, animated-vs-static, the bm2dx afp_mc_attach_stream item-clip mount) |
+| src/qpro/qpro_back.cpp | docs/qpro.md (native-fps standalone probe, dt=(1/fps)(native/60) scaling, one-shot-vs-looper afp-state loop, effect-bg matrix-stack-strand diag) |
+| src/qpro/qpro_composite_debug.cpp | docs/qpro.md (HandComposite/HeadComposite diagnostics) |
 | src/export.cpp | docs/export_pipeline.md (session machine, clear-transparent, DDR/label seek, Root Force/Hold, continuous-loop dance, static-frame detect, blend loop) |
 | src/export_internal.h | docs/export_pipeline.md (Session fields, static-frames, DDR content-loop bg_0001@3607, root-hold) |
 | src/export_ddr.cpp | docs/loop.md + docs/export_pipeline.md (DdrLoopDetector bridge) |

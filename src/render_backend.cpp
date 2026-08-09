@@ -1,5 +1,6 @@
 #include "render_backend.h"
 #include "support/log.h"
+#include "support/module_handle.h"
 #include "gpu_context.h"
 #include <cstdint>
 #include <cstdio>
@@ -229,11 +230,14 @@ bool D3D9State::SaveBackBufferToFile(const char* path) const {
             "d3dx9_33.dll", "d3dx9_32.dll", "d3dx9_31.dll", "d3dx9_30.dll", "d3dx9_29.dll",
             "d3dx9_28.dll", "d3dx9_27.dll", "d3dx9_26.dll", "d3dx9_25.dll", "d3dx9_24.dll",
         };
+        static Support::ModuleHandle s_d3dx_mod;
         for (const char* n : dlls) {
-            HMODULE m = LoadLibraryA(n);
-            if (m != nullptr) {
-                pSave = (D3DXSaveSurfaceToFileAFn)GetProcAddress(m, "D3DXSaveSurfaceToFileA");
-                if (pSave != nullptr) break;
+            Support::ModuleHandle m = Support::LoadModule(n);
+            if (m == nullptr) continue;
+            pSave = (D3DXSaveSurfaceToFileAFn)GetProcAddress(m.get(), "D3DXSaveSurfaceToFileA");
+            if (pSave != nullptr) {
+                s_d3dx_mod = std::move(m);
+                break;
             }
         }
         if (pSave == nullptr)
@@ -431,11 +435,14 @@ bool D3D9State::SaveOffscreenRGBAToPNG(const char* path) const {
             "d3dx9_33.dll", "d3dx9_32.dll", "d3dx9_31.dll", "d3dx9_30.dll", "d3dx9_29.dll",
             "d3dx9_28.dll", "d3dx9_27.dll", "d3dx9_26.dll", "d3dx9_25.dll", "d3dx9_24.dll",
         };
+        static Support::ModuleHandle s_d3dx_mod;
         for (const char* n : dlls) {
-            HMODULE m = LoadLibraryA(n);
-            if (m != nullptr) {
-                pSave = (D3DXSaveSurfaceToFileAFn)GetProcAddress(m, "D3DXSaveSurfaceToFileA");
-                if (pSave != nullptr) break;
+            Support::ModuleHandle m = Support::LoadModule(n);
+            if (m == nullptr) continue;
+            pSave = (D3DXSaveSurfaceToFileAFn)GetProcAddress(m.get(), "D3DXSaveSurfaceToFileA");
+            if (pSave != nullptr) {
+                s_d3dx_mod = std::move(m);
+                break;
             }
         }
         if (pSave == nullptr) {

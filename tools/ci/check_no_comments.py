@@ -47,8 +47,12 @@ def python_comments(path):
                 yield tok.start[0], tok.string
 
 
+def text_lines(path):
+    return enumerate(path.read_text(encoding="utf-8", errors="replace").splitlines(), start=1)
+
+
 def hash_comments(path):
-    for lineno, line in enumerate(path.read_text(encoding="utf-8", errors="replace").splitlines(), start=1):
+    for lineno, line in text_lines(path):
         quote = None
         for i, ch in enumerate(line):
             if quote:
@@ -62,16 +66,17 @@ def hash_comments(path):
 
 
 def batch_comments(path):
-    for lineno, line in enumerate(path.read_text(encoding="utf-8", errors="replace").splitlines(), start=1):
+    for lineno, line in text_lines(path):
         stripped = line.strip()
-        if stripped.lower().startswith("rem ") or stripped.lower() == "rem" or stripped.startswith("::"):
+        low = stripped.lower()
+        if low.startswith("rem ") or low == "rem" or stripped.startswith("::"):
             yield lineno, stripped
 
 
 def slash_comments(path):
-    for lineno, line in enumerate(path.read_text(encoding="utf-8", errors="replace").splitlines(), start=1):
+    for lineno, line in text_lines(path):
         stripped = line.strip()
-        if stripped.startswith("//") or stripped.startswith("/*"):
+        if stripped.startswith(("//", "/*")):
             yield lineno, stripped
 
 

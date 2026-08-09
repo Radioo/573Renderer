@@ -527,8 +527,15 @@ Default (IIDX 33) map:
 
 ## Profile fields
 
-- `name` - human label (e.g. "IIDX 33 (Sparkle Shower)"); `slug` -
-  settings.ini token; `dir_substring` - case-insensitive auto-detect hint.
+- `name` - human label, and ONLY that: it is read in exactly one place, the
+  Setup screen's profile dropdown. It states the VERSION RANGE the profile
+  supports rather than one codename (e.g. "IIDX 21-24", "IIDX 27+"), because
+  a profile covers every version that shares its ordinals/offsets, not just
+  the one it was RE'd against. Renaming it is cosmetic - the dropdown stores
+  the SLUG, so a saved selection survives a relabel or a reorder.
+- `slug` - settings.ini token, `--profile` argument, and the key the
+  AfpProfiles config table and the qpro gating use. Stable: do not rename.
+- `dir_substring` - case-insensitive auto-detect hint.
 - `avs_dll` / `afp_dll` / `afpu_dll` - DLL filenames the game ships. IIDX and
   SDVX use the avs2-core.dll / afp-core.dll / afp-utils.dll trio; DDR World
   ships lib*-win64 names. DllLoader auto-detects each DLL's obfuscated export
@@ -677,15 +684,37 @@ afp_boot.cpp; false = skip.
   to) - it relies solely on afpu_render_init's internal rebind. True = match the game: skip both, but keep the slot 12/13
   (screen-size / near-far) re-patch.
 
-## The six shipped profiles
+## Registry order (load-bearing)
 
-### IIDX 33 (Sparkle Shower) - slug `iidx33`, dir hint "iidx"
+`kProfiles` is listed OLDEST-FIRST within the IIDX family (iidx09, iidx11,
+iidx13, iidx17, iidx18, iidx19, iidx20, iidx24, iidx26, iidx33), then the
+other games. That order is not cosmetic:
+
+- `AutoDetect` returns the FIRST profile whose `dir_substring` appears in the
+  path. So when one hint is a SUBSTRING of another, the more specific one
+  must be listed first, or it can never be reached. The live instance is
+  iidx33's broad `"iidx"` versus iidx11's `"iidxred"`; listing newest-first
+  would make every IIDX dump auto-detect as IIDX 27+.
+- Oldest-first satisfies that automatically, because the broad `"iidx"` hint
+  belongs to the newest profile - the ordering that reads most naturally in
+  the dropdown is also the correct one.
+- `tests/game/game_profile_tests.cpp` machine-checks both halves: one case
+  asserts no earlier hint is a substring of a later one (so any future
+  shadowing fails CI, not just the iidx pair), another pins the IIDX order.
+
+Nothing persists a profile INDEX - the Setup dropdown maps its selection
+through `slug` in both directions - so the list can be reordered freely as
+long as the shadowing rule holds.
+
+## The shipped profiles
+
+### IIDX 27+ (RE'd on Sparkle Shower) - slug `iidx33`, dir hint "iidx"
 
 Reference target. Default ordinals, 1920x1080, kIidx33Offsets, all gates
 default-true - its boot sequence is the renderer's reference; nothing to
 override.
 
-### IIDX 26 (Rootage) - slug `iidx26`, dir hint "rootage"
+### IIDX 25-26 (RE'd on Rootage) - slug `iidx26`, dir hint "rootage"
 
 DLLs: avs2-core 2.17.0 / afp-core 2.14.11 / afp-utils 1.2.12 (2018-era, vs
 IIDX 33's avs2 2.17.4 / afp-core 2.14.18 / afp-utils 1.2.19). Same
@@ -693,8 +722,8 @@ XCd229cc / XE592acd / XCgsqzn export schemes and the SAME export counts
 (126 / 123 / 392). The identity row sits BEFORE iidx33 in the registry ON
 PURPOSE: AutoDetect returns the first dir_substring match, and every IIDX
 dir matches iidx33's broad "iidx" hint - "rootage" must win first or the
-Rootage dir boots with IIDX 33 offsets (the original load-crash this
-profile fixes). 1280x720 (Rootage-era cabinets are 720p; FHD IIDX arrived
+Rootage dir boots with IIDX 27+ offsets (the original load-crash this
+profile fixes). That is an instance of the general registry rule below. 1280x720 (Rootage-era cabinets are 720p; FHD IIDX arrived
 with the Lightning Model era), kIidx26Offsets.
 
 Ordinal maps: verified IDENTICAL to IIDX 33 for every export the renderer

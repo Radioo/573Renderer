@@ -22,22 +22,29 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
         with:
-          python-version: '3.12'
-
-      - name: Install pinned lint tooling
-        run: pip install clang-format==19.1.7 libclang==18.1.1
+          enable-cache: true
+          cache-dependency-glob: tools/ci/uv.lock
 
       - name: File length gate
-        run: python tools/ci/check_file_length.py
+        run: uv run --project tools/ci python tools/ci/check_file_length.py
 
       - name: No-comments gate
-        run: python tools/ci/check_no_comments.py
+        run: uv run --project tools/ci python tools/ci/check_no_comments.py
+
+      - name: Banned-characters gate
+        run: uv run --project tools/ci python tools/ci/check_banned_chars.py
+
+      - name: Machine-path gate
+        run: uv run --project tools/ci python tools/ci/check_machine_paths.py
 
       - name: GUI-isolation gate
-        run: python tools/ci/check_gui_isolation.py
+        run: uv run --project tools/ci python tools/ci/check_gui_isolation.py
 
       - name: Format gate
-        run: python tools/ci/run_format.py
+        run: uv run --project tools/ci python tools/ci/run_format.py
+
+      - name: Ruff (tools lint)
+        run: uv run --project tools/ci --group dev ruff check tools/

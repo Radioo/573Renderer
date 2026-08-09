@@ -1,7 +1,16 @@
 # DDR World (AFP 2.13.7) subsystem
 
 Knowledge captured from `src/afp_ddr.h`, `src/afp_ddr_boot.cpp`, `src/afp_ddr_render.h`,
-`src/afp_ddr_render.cpp`, `src/afp_ddr_test.*`, `src/arc_extract.*`, `src/customize_extract.*`.
+the DDR render backend TUs, `src/afp_ddr_test.*`, `src/arc_extract.*`,
+`src/customize_extract.*`. The render backend is split into four TUs sharing
+state through `src/afp_ddr_render_internal.h`: `afp_ddr_render.cpp`
+(frame/state callbacks: init/finish frame, mask/scissor, blend, HSL filter,
+matrices, near/far, bitmap info), `afp_ddr_textures.cpp` (texture slot
+lifecycle + TexCreate/TexDestroy/TexUpload + per-format decode + atlas
+dumps), `afp_ddr_draw.cpp` (Cb_DrawPrimitive/Legacy vertex building and
+DrawShapeTriangles, plus the DDR_* draw-gate diagnostics), and
+`afp_ddr_vtable.cpp` (the render-params/afpu-config slot tables, Init, and
+the small public accessors).
 The .arc container, AVS-LZ77 codec and DXT block decode are documented in
 `docs/formats.md` - not repeated here.
 
@@ -280,11 +289,22 @@ afpu-heap reader functions (which read malloc@+32, realloc@+40, free@+48):
 
 The upload callback signature + format codes mirror the game's own afpu upload callback:
 
-- fmt 14 = 24-bit, byte order B,G,R (3 bytes/px)
-- fmt 16 / 32 = 32-bit B,G,R,A
-- fmt 31 = 16-bit RGB565
-- fmt 22 = DXT1/BC1 (8 bytes per 4x4 block)
-- fmt 26 = DXT5/BC3 (16 bytes per 4x4 block)
+- fmt 14 (0x0E) = 24-bit, byte order B,G,R (3 bytes/px)
+- fmt 16 / 32 (0x10 / 0x20) = 32-bit B,G,R,A
+- fmt 31 (0x1F) = decoded here as 16-bit RGB565 - DISPUTED, see below
+- fmt 22 (0x16) = DXT1/BC1 (8 bytes per 4x4 block)
+- fmt 26 (0x1A) = DXT5/BC3 (16 bytes per 4x4 block)
+
+These ids are the SAME space the modern afp-utils name table uses (the
+full table is in docs/formats.md): 0x0E rgb888, 0x10 rgba8888, 0x16 dxt1,
+0x1A dxt5 all line up exactly, which is the evidence that the two engine
+generations share one texture-format enum rather than each having its own.
+
+The exception is fmt 31: the table calls 0x1F `argb4444`, and the modern
+decoder reads it as 4-bit nibbles accordingly, while this DDR path reads
+it as RGB565. No asset in the regression net exercises it on the DDR side,
+so it has not been changed - it is recorded as unverified in
+docs/formats.md rather than "fixed" blind.
 
 The game locks the destination sub-rect [x, y, x+w, y+h] and copies rows. The renderer creates
 all textures as A8R8G8B8 (D3D9Ex rejects D3DPOOL_MANAGED - use DYNAMIC + DEFAULT so

@@ -14,11 +14,11 @@
 #include "app_globals.h"
 #include "boot.h"
 #include "render_loop.h"
-#include "qpro_dll.h"
+#include "qpro/qpro_dll.h"
 #include "cli/tool_command.h"
 #include "tool_commands.h"
 #include "anim_inspect.h"
-#include "qpro_extract.h"
+#include "qpro/qpro_extract.h"
 #include <atomic>
 #include <cstdlib>
 #include <string>
@@ -146,34 +146,34 @@ bool WantsQproCliMode(const Cli::Options& cli) {
 
 bool RunQproOneShot(const Cli::Options& cli, const std::string& gdir) {
     if (!cli.qpro_back_composite.empty()) {
-        QproExtract::BackComposite(gdir, cli.qpro_back_composite);
+        QproExtract::BackComposite(g_engine, g_gpu.d3d, gdir, cli.qpro_back_composite);
     } else if (!cli.qpro_hand_composite.empty()) {
-        QproExtract::HandComposite(gdir, cli.qpro_hand_composite);
+        QproExtract::HandComposite(g_engine, g_gpu.d3d, gdir, cli.qpro_hand_composite);
     } else if (!cli.qpro_head_composite.empty()) {
-        QproExtract::HeadComposite(gdir, cli.qpro_head_composite);
+        QproExtract::HeadComposite(g_engine, g_gpu.d3d, gdir, cli.qpro_head_composite);
     } else if (!cli.qpro_clip_one.empty()) {
         std::string const arg = cli.qpro_clip_one;
         size_t const colon = arg.rfind(':');
         std::string const ifs = colon != std::string::npos ? arg.substr(0, colon) : arg;
         std::string const clip = colon != std::string::npos ? arg.substr(colon + 1) : "";
-        QproExtract::ClipOne(gdir, ifs, clip);
+        QproExtract::ClipOne(g_engine, g_gpu.d3d, gdir, ifs, clip);
     } else if (!cli.qpro_back_one.empty()) {
-        QproExtract::BackOne(gdir, cli.qpro_back_one);
+        QproExtract::BackOne(g_engine, g_gpu.d3d, gdir, cli.qpro_back_one);
     } else if (!cli.qpro_head_one.empty()) {
-        QproExtract::HeadOne(gdir, cli.qpro_head_one);
+        QproExtract::HeadOne(g_engine, g_gpu.d3d, gdir, cli.qpro_head_one);
     } else if (!cli.qpro_hand_one.empty()) {
-        QproExtract::HandOne(gdir, cli.qpro_hand_one);
+        QproExtract::HandOne(g_engine, g_gpu.d3d, gdir, cli.qpro_hand_one);
     } else if (!cli.qpro_hair_one.empty()) {
-        QproExtract::HairOne(gdir, cli.qpro_hair_one);
+        QproExtract::HairOne(g_engine, g_gpu.d3d, gdir, cli.qpro_hair_one);
     } else if (!cli.qpro_face_one.empty()) {
-        QproExtract::FaceOne(gdir, cli.qpro_face_one);
+        QproExtract::FaceOne(g_engine, g_gpu.d3d, gdir, cli.qpro_face_one);
     } else if (!cli.qpro_body_one.empty()) {
-        QproExtract::BodyOne(gdir, cli.qpro_body_one);
+        QproExtract::BodyOne(g_engine, g_gpu.d3d, gdir, cli.qpro_body_one);
     } else if (!cli.qpro_dump_ifs.empty()) {
         std::string ip = cli.qpro_dump_ifs;
         if (!std::filesystem::path(ip).is_absolute())
             ip = (std::filesystem::path(gdir) / "data" / "graphic" / ip).string();
-        QproExtract::DumpIfs(ip);
+        QproExtract::DumpIfs(g_engine, ip);
     } else {
         return false;
     }
@@ -189,7 +189,7 @@ void RunQproCliMode(const Cli::Options& cli, const std::string& gdir) {
     if (cli.qpro_fps > 0) o.fps = cli.qpro_fps;
     if (!cli.qpro_parts.empty()) ParseQproPartsCsv(cli.qpro_parts, o);
     if (!cli.qpro_only.empty()) ParseQproOnlyCsv(cli.qpro_only, gdir, o);
-    QproExtract::Result const r = QproExtract::Run(o);
+    QproExtract::Result const r = QproExtract::Run(g_engine, g_gpu.d3d, o);
     if (!r.error.empty()) LOG("Qpro", "ERROR: %s", r.error.c_str());
 }
 
@@ -305,8 +305,9 @@ bool WaitForFirstBoot(HINSTANCE hInstance, const Cli::Options& cli, bool have_gu
                 exit_rc = 1;
                 return false;
             }
-        } else if (cli.headless) {
-            LOG("Main", "--headless without --game-dir: nothing to do, exiting.");
+        } else if (cli.headless || !have_gui) {
+            LOG("Main", cli.headless ? "--headless without --game-dir: nothing to do, exiting."
+                                     : "no GUI and no --game-dir: nothing to boot, exiting.");
             Log::Shutdown();
             if (have_gui) GuiThread::Stop();
             exit_rc = 1;
@@ -376,8 +377,12 @@ void MountStartupContent(App::State& state, const Cli::Options& cli) {
     std::string const startup_ifs = ResolveStartupIfs(state, cli.startup_ifs, startup_from_arc);
     bool const afp_ready = Backend::Active()->ContentReady();
     if (!startup_ifs.empty() && afp_ready) {
-        MountAndLoadIfs(startup_ifs, startup_from_arc);
-        ApplyCliOverrides(cli);
+        if (MountAndLoadIfs(startup_ifs, startup_from_arc)) {
+            ApplyCliOverrides(cli);
+        } else {
+            LOG("Main", "startup IFS mount failed for '%s' - CLI overrides skipped",
+                startup_ifs.c_str());
+        }
     }
 }
 

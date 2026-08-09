@@ -54,6 +54,4 @@ private:
 
 bool HardwareAvailable(Format f = Format::AVIF);
 
-const char* DefaultExtension(Format f);
-
 }

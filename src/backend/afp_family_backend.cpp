@@ -4,6 +4,7 @@
 
 #include "afp_boot.h"
 #include "app_globals.h"
+#include "gpu_context.h"
 #include "avs_boot.h"
 #include "avs_funcs.h"
 #include "backend/afp_profiles.h"
@@ -12,8 +13,8 @@
 #include "formats/ddr_arc.h"
 #include "game_profile.h"
 #include "game_runtime.h"
-#include "qpro_extract.h"
-#include "qpro_scan.h"
+#include "qpro/qpro_extract.h"
+#include "qpro/qpro_scan.h"
 #include "render_live.h"
 #include "backend/afp_commands.h"
 #include "state/app_state.h"
@@ -144,9 +145,9 @@ bool HasExt(const std::string& ext, const char* want3) {
 }
 
 void AppendArcIfsEntry(const std::filesystem::path& p, std::vector<App::State::IfsEntry>& out) {
-    DdrArc::Toc toc;
-    if (!DdrArc::ReadToc(p.string(), toc) || !toc.HasIfs()) return;
-    for (const auto& en : toc.entries) {
+    const auto toc = DdrArc::ReadToc(p.string());
+    if (!toc || !toc->HasIfs()) return;
+    for (const auto& en : toc->entries) {
         const std::string& nm = en.name;
         if (nm.size() <= 4 || !nm.ends_with(".ifs")) continue;
         App::State::IfsEntry e;
@@ -267,8 +268,8 @@ void AppendSceneDirs(const std::string& game_dir, std::vector<App::State::IfsEnt
 }
 
 void ScanThreadBody(const std::string& game_dir, bool scan_arcs, bool scan_txp2) noexcept {
+    auto& st = App::Global();
     try {
-        auto& st = App::Global();
         auto ifs_list = ScanGameDir(
             game_dir,
             [&st](size_t scanned, size_t found, const std::string& cur_dir) {
@@ -286,11 +287,11 @@ void ScanThreadBody(const std::string& game_dir, bool scan_arcs, bool scan_txp2)
         AppendSceneDirs(game_dir, ifs_list);
         LOG("Boot", "Found %zu IFS files under %s", ifs_list.size(), game_dir.c_str());
         st.SetAvailableIfs(std::move(ifs_list));
-        st.SetIfsScanStatus("");
-        st.SetIfsScanning(false);
     } catch (...) {
         LOG("Boot", "IFS scan thread: unexpected exception");
     }
+    st.SetIfsScanStatus("");
+    st.SetIfsScanning(false);
 }
 
 std::string WriteTempIfs(const std::string& inner_name, const std::vector<uint8_t>& bytes) {
@@ -322,7 +323,7 @@ void HandleQproExtract(const AfpCmd::QproStartExtract& cmd) {
     o.parts = cmd.parts;
     o.part_sel = cmd.part_sel;
     QproExtract::SetHueScopeEnabled(cmd.hue_scope);
-    QproExtract::Run(o);
+    QproExtract::Run(g_engine, g_gpu.d3d, o);
 }
 
 void HandleGotoLabel(const AfpCmd::GotoLabel& cmd) {
@@ -427,20 +428,21 @@ bool AfpFamilyBackend::LoadContent(const std::string& path, bool from_arc) {
     if (from_arc) {
         state.UpdateLoadStage("Decompressing .arc");
         std::string inner_name;
-        std::vector<uint8_t> const ifs_bytes = DdrArc::ExtractFirstIfs(path, inner_name);
-        if (ifs_bytes.empty()) {
-            LOG("Init", "arc has no .ifs / decompress failed: %s", path.c_str());
+        const auto ifs_bytes = DdrArc::ExtractFirstIfs(path, inner_name);
+        if (!ifs_bytes || ifs_bytes->empty()) {
+            LOG("Init", "arc extract failed: %s",
+                !ifs_bytes ? ifs_bytes.error().c_str() : "empty .ifs entry");
             state.EndLoad();
             return false;
         }
-        mount_path = WriteTempIfs(inner_name, ifs_bytes);
+        mount_path = WriteTempIfs(inner_name, *ifs_bytes);
         if (mount_path.empty()) {
             LOG("Init", "failed to stage temp .ifs from %s", path.c_str());
             state.EndLoad();
             return false;
         }
         LOG("Init", "arc %s -> %s (%zu-byte inner .ifs)", path.c_str(), mount_path.c_str(),
-            ifs_bytes.size());
+            ifs_bytes->size());
     }
 
     return Runtime::Active().LoadScene(mount_path, path);

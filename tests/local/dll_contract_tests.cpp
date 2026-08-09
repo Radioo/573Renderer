@@ -6,7 +6,7 @@
 #include "avs_xml.h"
 #include "game_profile.h"
 #include "ifs_inspect.h"
-#include "qpro_dll.h"
+#include "qpro/qpro_dll.h"
 #include "support/dll_loader.h"
 #include "support/env.h"
 

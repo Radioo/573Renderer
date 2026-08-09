@@ -1,13 +1,13 @@
 #include "tool_commands.h"
 
 #include "cli/tool_command.h"
-#include "qpro_scan.h"
+#include "qpro/qpro_scan.h"
 #include "support/log.h"
 #include "afp_ddr_test.h"
 #include "scene3d/scene3d_test.h"
 #include "arc_extract.h"
 #include "customize_extract.h"
-#include "qpro_dll.h"
+#include "qpro/qpro_dll.h"
 
 #include <fstream>
 #include <ios>

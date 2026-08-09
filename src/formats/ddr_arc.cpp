@@ -1,5 +1,7 @@
 #include "formats/ddr_arc.h"
 
+#include "support/expected.h"
+
 #include <algorithm>
 #include <array>
 #include <cstddef>
@@ -154,18 +156,19 @@ bool ParseToc(std::span<const uint8_t> data, Toc& out) {
     return true;
 }
 
-bool ReadToc(const std::string& path, Toc& out) {
+Support::Expected<Toc, std::string> ReadToc(const std::string& path) {
     const FilePtr f = OpenBinary(path);
-    if (f == nullptr) return false;
+    if (f == nullptr) return Support::Unexpected("cannot open: " + path);
 
     std::array<uint8_t, kHeaderSize> hdr{};
-    if (!ReadExact(f.get(), hdr)) return false;
-    if (ReadU32LE(hdr, 0) != kMagic) return false;
+    if (!ReadExact(f.get(), hdr)) return Support::Unexpected("truncated header: " + path);
+    if (ReadU32LE(hdr, 0) != kMagic) return Support::Unexpected("bad magic: " + path);
     const uint32_t count = ReadU32LE(hdr, 8);
-    if (count == 0 || count > kMaxEntries) return false;
+    if (count == 0 || count > kMaxEntries)
+        return Support::Unexpected("entry count out of range: " + path);
 
     std::vector<uint8_t> table(static_cast<std::size_t>(count) * kEntrySize);
-    if (!ReadExact(f.get(), table)) return false;
+    if (!ReadExact(f.get(), table)) return Support::Unexpected("truncated entry table: " + path);
 
     uint32_t min_data = 0;
     for (uint32_t i = 0; i < count; i++) {
@@ -177,14 +180,15 @@ bool ReadToc(const std::string& path, Toc& out) {
     const uint32_t names_end = (min_data != 0) ? min_data : table_end;
 
     std::vector<uint8_t> head(names_end);
-    if (!SeekTo(f.get(), 0)) return false;
+    if (!SeekTo(f.get(), 0)) return Support::Unexpected("seek failed: " + path);
     const std::size_t got = std::fread(head.data(), 1, head.size(), f.get());
     head.resize(got);
 
+    Toc out;
     out.version = ReadU32LE(hdr, 4);
     out.comp_flag = ReadU32LE(hdr, 12);
     ParseEntries(table, head, count, out);
-    return true;
+    return out;
 }
 
 std::vector<uint8_t> DecompressEntry(std::span<const uint8_t> file, const Entry& entry) {
@@ -195,26 +199,28 @@ std::vector<uint8_t> DecompressEntry(std::span<const uint8_t> file, const Entry&
     return Lz77Decompress(raw, entry.decomp_size);
 }
 
-std::vector<uint8_t> ExtractFirstIfs(const std::string& path, std::string& out_name) {
-    Toc toc;
-    if (!ReadToc(path, toc)) return {};
+Support::Expected<std::vector<uint8_t>, std::string> ExtractFirstIfs(const std::string& path,
+                                                                     std::string& out_name) {
+    auto toc = ReadToc(path);
+    if (!toc) return Support::Unexpected(std::move(toc).error());
 
     const Entry* hit = nullptr;
-    for (const Entry& e : toc.entries) {
+    for (const Entry& e : toc->entries) {
         if (EndsWithCI(e.name, ".ifs")) {
             hit = &e;
             break;
         }
     }
-    if (hit == nullptr) return {};
+    if (hit == nullptr) return Support::Unexpected("no .ifs entry in " + path);
     out_name = hit->name;
 
     const FilePtr f = OpenBinary(path);
-    if (f == nullptr) return {};
+    if (f == nullptr) return Support::Unexpected("cannot reopen: " + path);
     const std::size_t need = hit->stored() ? hit->decomp_size : hit->comp_len;
     std::vector<uint8_t> raw(need);
-    if (!SeekTo(f.get(), hit->data_offset)) return {};
-    if (!ReadExact(f.get(), raw)) return {};
+    if (!SeekTo(f.get(), hit->data_offset))
+        return Support::Unexpected("seek to entry failed: " + path);
+    if (!ReadExact(f.get(), raw)) return Support::Unexpected("truncated entry data: " + path);
 
     if (hit->stored()) return raw;
     return Lz77Decompress(raw, hit->decomp_size);

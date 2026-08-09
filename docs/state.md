@@ -90,9 +90,15 @@ AFP commands (`AfpCmd::Any`):
   paths), only user-touched paths appear, everything else keeps its
   authored `_visible`. THREAD RULE: render thread reads via
   `GetSublayerOverrides` (copy under lock), GUI writes via
-  `SetSublayerOverride` (upsert under lock). Never iterate the vector
-  through `MutConfig` from the render thread - MutConfig releases the lock
-  on return, so the GUI's emplace_back can reallocate under the iteration.
+  `SetSublayerOverride` (upsert under lock). `configs_` is a `std::deque`
+  precisely so that the `IfsConfig&` handed out by `MutConfig` (and the
+  pointer from `FindConfig`) stays valid when the other thread's
+  emplace_back grows the container - a vector reallocation would dangle
+  every escaped reference, which was a real cross-thread use-after-free.
+  Stable element addresses do NOT license cross-thread field access:
+  MutConfig releases the lock on return, so never iterate an inner vector
+  (e.g. `sublayer_overrides`) through `MutConfig` from the render thread
+  while the GUI may upsert it - use the copying accessors.
 
 ## Status / label playback
 

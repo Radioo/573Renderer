@@ -73,6 +73,42 @@ structured to pay that only when the dependency set actually changes.
   `actions/upload-artifact` would otherwise silently upload an empty
   directory.
 
+## clang-tidy legs
+
+The x64 matrix leg runs the whole-tree tidy gate on every trigger; the x86
+leg runs it only on pushes (matrix key `tidy: always | push`). x86 gets its
+own `.tidycache` cache (key includes the arch) and points `run_tidy.py` at
+`build32/` via the `TIDY_BUILD_DIR` env override. The x86 leg exists
+because 32-bit compilation has genuinely different diagnostics (pointer
+truncation, `corecrt_malloc.h` attribution - docs/x86_build.md records an
+x86-only `.clang-tidy` fix found by hand before this leg existed); running
+it on push-only keeps PR latency down.
+
+## ASan job
+
+A third job (`asan`) configures the `asan` preset (`R573_ASAN=ON`, which
+adds `/fsanitize=address` + `/INCREMENTAL:NO` on top of RelWithDebInfo into
+`build-asan/`) and builds + runs ONLY the eight dependency-light test
+suites: formats, loop, render, state, settings, cli, support, media_format.
+These exercise the binary-input decoders (DXT/LZSS/Blowfish/AES/TXP2/
+sysidx/gcz/inz/xfile) where a heap overflow would hide, and none of them
+link FFmpeg or D3D9, so the job shares the vcpkg binary cache but never
+pays an ffmpeg rebuild. The suites are invoked as bare Catch2 exes rather
+than through ctest labels: Catch's POST_BUILD discovery flattens a
+multi-label list (`LABELS "ci;pure"` arrives as two property tokens), so a
+second label cannot be attached reliably. The `/MT` static CRT makes MSVC
+ASan link the static `clang_rt.asan` - no runtime DLL deployment problem.
+The ASan config also defines `_DISABLE_STRING_ANNOTATION` /
+`_DISABLE_VECTOR_ANNOTATION` / `_DISABLE_OPTIONAL_ANNOTATION`: vcpkg's
+Catch2 is built WITHOUT ASan, and the MSVC STL hard-fails the link
+(LNK2038 `annotate_string` mismatch) when instrumented and
+non-instrumented objects disagree on container annotations. Disabling
+annotations keeps full heap-overflow/UAF checking and only gives up
+container-overflow precision inside STL containers; the alternative (an
+instrumented triplet) would rebuild every dependency including ffmpeg.
+UBSan is deliberately absent: MSVC has no `/fsanitize=undefined`, and a
+clang-cl leg would need a second Catch2 triplet.
+
 ## Local-only tiers
 
 Tests that need the proprietary game DLLs or real game data can never run
@@ -85,9 +121,10 @@ DLL-dependent tiers run manually on the owner machine.
 gate and is the required exit criterion for any refactor slice: it runs
 build.bat (dev preset), `ctest -L ci` (locating ctest.exe next to the
 cmake.exe recorded in build/CMakeCache.txt, since the VS-bundled toolchain
-is not on the Git Bash PATH), then the five gate scripts
-(check_file_length, check_no_comments, check_gui_isolation, run_format,
-run_tidy), and prints `ALL CHECKS PASSED` only if every step succeeded.
+is not on the Git Bash PATH), then the seven gate scripts
+(check_file_length, check_no_comments, check_banned_chars,
+check_machine_paths, check_gui_isolation, run_format, run_tidy), and prints
+`ALL CHECKS PASSED` only if every step succeeded.
 run_tidy needs the pip-pinned clang-tidy (see docs/tidy_migration.md) and
 the build dir's compile_commands.json, which the build step guarantees.
 

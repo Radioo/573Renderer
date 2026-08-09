@@ -1,6 +1,6 @@
 #pragma once
 
-#include "qpro_dll.h"
+#include "qpro/qpro_dll.h"
 
 #include <cstdint>
 #include <string>

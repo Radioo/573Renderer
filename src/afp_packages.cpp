@@ -328,6 +328,12 @@ void AfpManager::DestroySceneStreams(AfpFuncs& afp) {
     LOG("AFP", "  returned %d", n);
 }
 
+void AfpManager::UmountPackagesAndData(AvsFuncs& avs) {
+    if (avs.avs_fs_umount == nullptr) return;
+    avs.avs_fs_umount("/afp/packages");
+    avs.avs_fs_umount("/data");
+}
+
 void AfpManager::UnloadPackages(EngineSession& es) {
     AfpFuncs& afp = es.afp;
     AfpuFuncs const& afpu = es.afpu;

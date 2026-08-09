@@ -1,13 +1,18 @@
 #pragma once
 
 #include <cstdint>
+#include <span>
 #include <string>
 #include <vector>
 
 #include "formats/bgra_crop.h"
 #include "media_sink.h"
+#include "qpro/qpro_dll.h"
+#include "qpro/qpro_extract.h"
 
 struct AfpFuncs;
+struct EngineSession;
+struct D3D9State;
 
 namespace QproExtract {
 namespace detail {
@@ -26,7 +31,7 @@ struct TexList {
     int atlas_count = 0;
 };
 
-bool ParseTexturelist(TexList& out, const char* root = "/afp/packages");
+bool ParseTexturelist(EngineSession& es, TexList& out, const char* root = "/afp/packages");
 const AtlasImage* FindImage(const TexList& tl, const char* name);
 bool ScopeHueToImage(const AtlasImage* im, int slot0);
 bool ScopeHueToImage2(const AtlasImage* im, int slot0);
@@ -34,12 +39,19 @@ std::string IfsPath(const std::string& game_dir, const std::string& ifs);
 std::string Stem(const std::string& ifs);
 bool ReadPiece(const TexList& tl, int slot0, const char* name, std::vector<uint8_t>& out, int& w,
                int& h);
-bool RenderFrame(std::vector<uint8_t>& out, int& w, int& h, bool advance);
+bool RenderFrame(EngineSession& es, D3D9State& d3d, std::vector<uint8_t>& out, int& w, int& h,
+                 bool advance);
+void WarmUpFrames(EngineSession& es, D3D9State& d3d, std::vector<uint8_t>& out, int& w, int& h,
+                  int frames = 6);
+std::vector<LayerJob> CompositeJobs(QproDll::Category cat, const std::string& prefix);
+int QproLimit();
 int CountWithPrefix(const TexList& tl, const char* prefix);
-int RenderClipAvif(const std::string& out_path, int fps, const char* label, int fcx = 0,
-                   int fcy = 0, int fcw = 0, int fch = 0);
+int RenderClipAvif(EngineSession& es, D3D9State& d3d, const std::string& out_path, int fps,
+                   const char* label, int fcx = 0, int fcy = 0, int fcw = 0, int fch = 0);
 bool WritePngBGRA(const std::string& path, const uint8_t* bgra, int w, int h);
 bool WriteStillAvif(const std::string& path, const uint8_t* bgra, int w, int h, int quality);
+std::string AvifPathToPng(const std::string& avif_path);
+int WriteStillFrameWithDump(const std::string& out_path, const ClipFrames& cf);
 
 constexpr int kQproAvifQuality = 40;
 constexpr bool kQproAvifPreferHardware = true;
@@ -59,7 +71,23 @@ inline const char* const kAllAvatarLayers[] = {
     "qp_hand_r_neutral",
 };
 
+struct ClipAttach {
+    int head_mc = -1;
+    int attached = 0;
+    bool have_stream = false;
+    uint32_t data_id = 0;
+};
+
+ClipAttach AttachClipStream(EngineSession& es, uint32_t pkg, uint32_t sid, const char* layer,
+                            const char* clip_name, const char* log_tag = nullptr);
+
+void HideAllLayersExcept(EngineSession& es, uint32_t sid, std::span<const char* const> keep);
+
 int ClipVisualCmdsAfterFrame0(const AfpFuncs& afp, uint32_t mc_id);
+
+void RunBodyPass(EngineSession& es, D3D9State& d3d, const QproDll::Parts& parts,
+                 const std::string& game_dir, const std::string& out_dir, Result& res,
+                 const PartSelection& part_sel);
 
 bool WriteAnimatedTriple(const std::string& base_avif, const detail::ClipFrames& cf,
                          const char* prefix);

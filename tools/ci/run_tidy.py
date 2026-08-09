@@ -9,7 +9,7 @@ import subprocess
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
-BUILD = ROOT / "build"
+BUILD = ROOT / (os.environ.get("TIDY_BUILD_DIR") or "build")
 PINNED_VERSION = "21.1.6"
 
 
@@ -123,6 +123,19 @@ class ContentHashes:
         return self._cache[key]
 
 
+def config_chain_hash():
+    out = subprocess.check_output(
+        ["git", "-C", str(ROOT), "ls-files", "--cached", "--others", "--exclude-standard",
+         "--", ".clang-tidy", "*/.clang-tidy"], text=True)
+    h = hashlib.sha256()
+    for line in sorted(line for line in out.splitlines() if line):
+        p = ROOT / line
+        if p.is_file():
+            h.update(line.encode())
+            h.update(p.read_bytes())
+    return h.hexdigest()
+
+
 def file_key(target, deps, config_hash, hashes):
     if deps is None or target["obj"] is None:
         return None
@@ -193,7 +206,7 @@ def main():
             print("tidy cache: ninja dep graph unavailable - running without cache")
             cache_dir = None
 
-    config_hash = hashlib.sha256((ROOT / ".clang-tidy").read_bytes()).hexdigest()
+    config_hash = config_chain_hash()
     hashes = ContentHashes()
     keys = {t["rel"]: file_key(t, deps, config_hash, hashes) for t in targets}
 

@@ -38,18 +38,18 @@ bool ReadbackAndSubmit(Export::Session& sess, D3D9State& d3d) {
 }
 
 void ForceContinuousLoopOverride(Export::Session& sess, int new_mode) {
-    auto lo = App::Global().GetLiveOverrides();
-    sess.saved_continuous_loop = lo.continuous_loop_mode;
+    App::Global().MutateLiveOverrides([&sess, new_mode](App::State::LiveOverrides& lo) {
+        sess.saved_continuous_loop = lo.continuous_loop_mode;
+        lo.continuous_loop_mode = new_mode;
+    });
     sess.forced_continuous_loop = true;
-    lo.continuous_loop_mode = new_mode;
-    App::Global().SetLiveOverrides(lo);
 }
 
 void RestoreContinuousLoop(Export::Session& sess) {
     if (!sess.forced_continuous_loop) return;
-    auto lo = App::Global().GetLiveOverrides();
-    lo.continuous_loop_mode = sess.saved_continuous_loop;
-    App::Global().SetLiveOverrides(lo);
+    App::Global().MutateLiveOverrides([&sess](App::State::LiveOverrides& lo) {
+        lo.continuous_loop_mode = sess.saved_continuous_loop;
+    });
     sess.forced_continuous_loop = false;
 }
 

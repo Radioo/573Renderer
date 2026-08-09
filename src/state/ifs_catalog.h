@@ -2,6 +2,7 @@
 
 #include <atomic>
 #include <cstdint>
+#include <deque>
 #include <mutex>
 #include <string>
 #include <utility>
@@ -59,7 +60,7 @@ public:
 
 private:
     mutable std::mutex mu_;
-    std::vector<IfsConfig> configs_;
+    std::deque<IfsConfig> configs_;
     std::vector<std::string> sublayer_expanded_;
     std::vector<IfsEntry> available_ifs_;
     std::atomic<bool> scanning_{false};

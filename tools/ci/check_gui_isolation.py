@@ -5,11 +5,13 @@ import sys
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 GUI_PREFIXES = ("src/gui/",)
-SOURCE_SUFFIXES = (".cpp", ".h")
+SOURCE_SUFFIXES = (".cpp", ".h", ".hpp", ".inl")
 PATTERNS = [
     re.compile(rb"\bImGui::"),
-    re.compile(rb"\bImGuiIO\b"),
-    re.compile(rb"#\s*include\s*[<\"]imgui"),
+    re.compile(rb"\bImGui(IO|Col|Context|Style|WindowFlags)\b"),
+    re.compile(rb"\bIm(Vec2|Vec4|DrawList|Font|TextureID)\b"),
+    re.compile(rb"#\s*include\s*[<\"][^<\"]*imgui"),
+    re.compile(rb"using\s+namespace\s+ImGui"),
 ]
 
 
@@ -19,7 +21,7 @@ def tracked_sources():
         text=True)
     return [
         line for line in out.splitlines()
-        if line.startswith("src/") and line.endswith(SOURCE_SUFFIXES)
+        if line.startswith(("src/", "tests/")) and line.endswith(SOURCE_SUFFIXES)
     ]
 
 

@@ -6,7 +6,7 @@ namespace Loop {
 
 class FramePacer {
 public:
-    enum class Wait { Proceed, Sleep, Spin };
+    enum class Wait : uint8_t { Proceed, Sleep, Spin };
 
     struct Plan {
         Wait action = Wait::Proceed;

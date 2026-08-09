@@ -1,4 +1,5 @@
 #include "media_sink.h"
+#include "support/com_ptr.h"
 #include "support/log.h"
 #include "media/media_format.h"
 #include "video_encoder.h"
@@ -21,7 +22,7 @@ namespace {
 struct PngSeq {
     std::wstring dir_w;
     bool we_inited_com = false;
-    IWICImagingFactory* factory = nullptr;
+    ComPtr<IWICImagingFactory> factory;
 
     bool Open(const std::string& dir) {
         dir_w.assign(dir.begin(), dir.end());
@@ -38,10 +39,7 @@ struct PngSeq {
     }
 
     void Close() {
-        if (factory != nullptr) {
-            factory->Release();
-            factory = nullptr;
-        }
+        factory.Reset();
         if (we_inited_com) {
             CoUninitialize();
             we_inited_com = false;
@@ -55,19 +53,9 @@ struct PngSeq {
     }
 
     struct WicPngTarget {
-        IWICStream* stream = nullptr;
-        IWICBitmapEncoder* encoder = nullptr;
-        IWICBitmapFrameEncode* frame = nullptr;
-        WicPngTarget() = default;
-        WicPngTarget(const WicPngTarget&) = delete;
-        WicPngTarget& operator=(const WicPngTarget&) = delete;
-        WicPngTarget(WicPngTarget&&) = delete;
-        WicPngTarget& operator=(WicPngTarget&&) = delete;
-        ~WicPngTarget() {
-            if (frame != nullptr) frame->Release();
-            if (encoder != nullptr) encoder->Release();
-            if (stream != nullptr) stream->Release();
-        }
+        ComPtr<IWICStream> stream;
+        ComPtr<IWICBitmapEncoder> encoder;
+        ComPtr<IWICBitmapFrameEncode> frame;
     };
 
     bool OpenPngTarget(const std::wstring& path, WicPngTarget& t, std::string& err) const {

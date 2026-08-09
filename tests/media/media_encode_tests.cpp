@@ -3,6 +3,8 @@
 
 #include "media/media_format.h"
 #include "media_sink.h"
+#include "video_encoder.h"
+#include "video_encoder_codecs.h"
 
 extern "C" {
 #include <libavcodec/codec_par.h>
@@ -172,6 +174,30 @@ TEST_CASE("MP4 H264 without hardware reports the documented no-software-encoder 
         return;
     }
     CHECK(r.error.find("H.264") != std::string::npos);
+}
+
+TEST_CASE("QualityToCRF maps user quality onto the codec CRF range with clamping") {
+    CHECK(VideoEncoder::QualityToCRF(0, 4, 40) == 40);
+    CHECK(VideoEncoder::QualityToCRF(100, 4, 40) == 4);
+    CHECK(VideoEncoder::QualityToCRF(50, 4, 40) == 22);
+    CHECK(VideoEncoder::QualityToCRF(-50, 4, 40) == 40);
+    CHECK(VideoEncoder::QualityToCRF(500, 4, 40) == 4);
+    CHECK(VideoEncoder::QualityToCRF(0, 16, 34) == 34);
+    CHECK(VideoEncoder::QualityToCRF(100, 18, 38) == 18);
+}
+
+TEST_CASE("KeyframeGop prefers the explicit interval and floors the fallback") {
+    VideoEncoder::Params p;
+    p.fps = 60;
+    p.keyframe_interval = 0;
+    CHECK(VideoEncoder::KeyframeGop(p, 1) == 60);
+    p.keyframe_interval = 12;
+    CHECK(VideoEncoder::KeyframeGop(p, 1) == 12);
+    p.keyframe_interval = 1;
+    CHECK(VideoEncoder::KeyframeGop(p, 2) == 2);
+    p.keyframe_interval = 0;
+    p.fps = 1;
+    CHECK(VideoEncoder::KeyframeGop(p, 2) == 2);
 }
 
 TEST_CASE("PNG sequence writes numbered frames") {

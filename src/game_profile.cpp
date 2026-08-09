@@ -13,16 +13,7 @@ namespace {
 
 const std::vector<Profile> kProfiles = {
     Profile{
-        .name = "IIDX 26 (Rootage)",
-        .slug = "iidx26",
-        .dir_substring = "rootage",
-        .backend_id = "afp_modern",
-        .game_dll = "bm2dx.dll",
-        .default_render_w = 1280,
-        .default_render_h = 720,
-    },
-    Profile{
-        .name = "IIDX 9 (9th style)",
+        .name = "IIDX 9",
         .slug = "iidx09",
         .dir_substring = "9th style",
         .backend_id = "scene3d",
@@ -31,7 +22,7 @@ const std::vector<Profile> kProfiles = {
         .default_render_h = 480,
     },
     Profile{
-        .name = "IIDX 11 (IIDX RED)",
+        .name = "IIDX 10-11",
         .slug = "iidx11",
         .dir_substring = "iidxred",
         .backend_id = "scene3d",
@@ -40,7 +31,7 @@ const std::vector<Profile> kProfiles = {
         .default_render_h = 480,
     },
     Profile{
-        .name = "IIDX 13 (DistorteD)",
+        .name = "IIDX 12-13",
         .slug = "iidx13",
         .dir_substring = "distorted",
         .backend_id = "scene3d",
@@ -49,7 +40,7 @@ const std::vector<Profile> kProfiles = {
         .default_render_h = 480,
     },
     Profile{
-        .name = "IIDX 17 (SIRIUS)",
+        .name = "IIDX 14-17",
         .slug = "iidx17",
         .dir_substring = "sirius",
         .backend_id = "scene3d",
@@ -58,7 +49,7 @@ const std::vector<Profile> kProfiles = {
         .default_render_h = 480,
     },
     Profile{
-        .name = "IIDX 18 (Resort Anthem)",
+        .name = "IIDX 18",
         .slug = "iidx18",
         .dir_substring = "resort anthem",
         .backend_id = "afp_ddr",
@@ -67,7 +58,7 @@ const std::vector<Profile> kProfiles = {
         .default_render_h = 480,
     },
     Profile{
-        .name = "IIDX 19 (Lincle)",
+        .name = "IIDX 19",
         .slug = "iidx19",
         .dir_substring = "lincle",
         .backend_id = "afp_ddr",
@@ -76,7 +67,7 @@ const std::vector<Profile> kProfiles = {
         .default_render_h = 480,
     },
     Profile{
-        .name = "IIDX 20 (tricoro)",
+        .name = "IIDX 20",
         .slug = "iidx20",
         .dir_substring = "tricoro",
         .backend_id = "afp_ddr",
@@ -85,7 +76,7 @@ const std::vector<Profile> kProfiles = {
         .default_render_h = 720,
     },
     Profile{
-        .name = "IIDX 24 (SINOBUZ)",
+        .name = "IIDX 21-24",
         .slug = "iidx24",
         .dir_substring = "sinobuz",
         .backend_id = "afp_ddr",
@@ -94,7 +85,16 @@ const std::vector<Profile> kProfiles = {
         .default_render_h = 720,
     },
     Profile{
-        .name = "IIDX 33 (Sparkle Shower)",
+        .name = "IIDX 25-26",
+        .slug = "iidx26",
+        .dir_substring = "rootage",
+        .backend_id = "afp_modern",
+        .game_dll = "bm2dx.dll",
+        .default_render_w = 1280,
+        .default_render_h = 720,
+    },
+    Profile{
+        .name = "IIDX 27+",
         .slug = "iidx33",
         .dir_substring = "iidx",
         .backend_id = "afp_modern",

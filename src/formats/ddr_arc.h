@@ -1,5 +1,7 @@
 #pragma once
 
+#include "support/expected.h"
+
 #include <cstddef>
 #include <cstdint>
 #include <span>
@@ -31,11 +33,12 @@ struct Toc {
 
 [[nodiscard]] bool ParseToc(std::span<const uint8_t> data, Toc& out);
 
-[[nodiscard]] bool ReadToc(const std::string& path, Toc& out);
+[[nodiscard]] Support::Expected<Toc, std::string> ReadToc(const std::string& path);
 
 [[nodiscard]] std::vector<uint8_t> DecompressEntry(std::span<const uint8_t> file,
                                                    const Entry& entry);
 
-[[nodiscard]] std::vector<uint8_t> ExtractFirstIfs(const std::string& path, std::string& out_name);
+[[nodiscard]] Support::Expected<std::vector<uint8_t>, std::string>
+ExtractFirstIfs(const std::string& path, std::string& out_name);
 
 }

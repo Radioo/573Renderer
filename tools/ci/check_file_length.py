@@ -3,6 +3,7 @@ import subprocess
 import sys
 
 LIMIT = 1000
+WARN_AT = 900
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 
 
@@ -22,10 +23,15 @@ def main():
     counts = {rel: count_lines(rel) for rel in tracked_files()}
     problems = [f"{rel}: {n} lines exceeds the {LIMIT}-line limit"
                 for rel, n in sorted(counts.items()) if n > LIMIT]
+    warnings = [f"WARN {rel}: {n} lines, within {LIMIT - n} of the {LIMIT}-line limit"
+                for rel, n in sorted(counts.items()) if WARN_AT <= n <= LIMIT]
+    for warning in warnings:
+        print(warning)
     for problem in problems:
         print(problem)
     if not problems:
-        print(f"file-length gate OK: {len(counts)} files, all within the {LIMIT}-line limit")
+        print(f"file-length gate OK: {len(counts)} files, all within the {LIMIT}-line limit"
+              f"{f' ({len(warnings)} in the warning band)' if warnings else ''}")
     return 1 if problems else 0
 
 
