@@ -109,6 +109,28 @@ instrumented triplet) would rebuild every dependency including ffmpeg.
 UBSan is deliberately absent: MSVC has no `/fsanitize=undefined`, and a
 clang-cl leg would need a second Catch2 triplet.
 
+Like the build matrix, this job checks out with `fetch-depth: 0`. That is
+NOT optional and NOT about release notes. `vcpkg-configuration.json` pins a
+default-registry baseline (`256acc64...`) that is DIFFERENT from the commit
+the `vendor/vcpkg` submodule is pinned to (`ea1a7396...`), and resolving the
+manifest makes vcpkg run, inside the submodule, `git show
+<baseline>:versions/baseline.json`. A default checkout clones submodules at
+depth 1, so only the submodule's own HEAD commit is present and the baseline
+commit is not - vcpkg then fails every dependency with
+
+```
+fatal: path 'versions/baseline.json' exists on disk, but not in '256acc64...'
+while loading baseline version for catch2
+```
+
+which reads like a corrupt registry but is purely a missing-history problem.
+The job omitted `fetch-depth: 0` and failed at `cmake --preset asan` before
+compiling anything. Any future job that configures a preset needs the same
+option; a job that only lints (quality-gates) does not, because it never
+resolves the manifest. Setting the baseline equal to the submodule pin would
+also fix it and allow shallow clones, but it re-resolves every dependency
+version, so it is a deliberate upgrade, not a CI fix.
+
 ## GUI tests in the hosted matrix
 
 `gui_tests` carries the `ci` label like every other suite, so the existing

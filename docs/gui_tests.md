@@ -206,6 +206,45 @@ which writes `settings.ini` next to the running executable. For `gui_tests` that
 is `build/settings.ini`, never `bin/settings.ini`, so the developer's real
 settings are untouched.
 
+### 8.1 Waiting on a background job: never spin on `ctx->Yield()`
+
+The `.arc` and customize extractors run on a detached `Support::FolderJob`
+thread. A test that clicks the button and then wants the finished status must
+wait on WALL-CLOCK TIME, outside the ImGui test func:
+
+```cpp
+REQUIRE(WaitForJob([] { return ArcExtract::IsRunning(); }));
+ArcExtract::Status const st = ArcExtract::GetStatus();
+```
+
+`WaitForJob` polls `IsRunning()` with a 1 ms sleep against a 30 s deadline. Both
+halves matter, and the earlier version had neither:
+
+- **A frame count is not a timeout.** The original wait was
+  `for (int i = 0; i < 600 && IsRunning(); i++) ctx->Yield();`. Against a null
+  backend 600 frames is tens of milliseconds, not the seconds the name suggests.
+  It passed on a developer machine and failed on a GitHub runner, where thread
+  start plus a directory scan of an empty temp folder took longer than that. The
+  test then read a status the worker had not published yet and failed on
+  `CHECK_FALSE(st.running)` / `CHECK(st.finished)`, with the extractor's own
+  "done" log line landing AFTER the Catch2 failure output - the tell that the
+  worker was still alive.
+- **Spinning starves the thread you are waiting for.** `ctx->Yield()` renders a
+  frame as fast as the CPU allows; on a two-core runner that competes directly
+  with the worker. The sleep is what lets it finish.
+- Do the wait AFTER `harness.Run(test)` returns, not inside `TestFunc`. The
+  status is a mutex-guarded struct written by the worker, so no ImGui frames are
+  needed for it to progress, and a wait inside `TestFunc` would eat the harness's
+  4000-frame budget for nothing.
+
+The ordering the wait relies on is real: `FolderJob::Start` sets the atomic
+BEFORE spawning the thread (so `IsRunning()` is already true when `Run` returns),
+and the worker calls `Publish(finished)` BEFORE `Finish()` clears the atomic (so
+`IsRunning() == false` guarantees the terminal status is visible). Waiting on the
+atomic and then reading the status is therefore race-free; waiting on
+`st.finished` directly would not be, because a job that never starts never
+publishes.
+
 ## 9. Coverage
 
 139 test cases across twelve files, one file per panel:

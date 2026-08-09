@@ -11,10 +11,12 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <chrono>
 #include <filesystem>
 #include <optional>
 #include <string>
 #include <system_error>
+#include <thread>
 #include <variant>
 
 namespace {
@@ -23,6 +25,15 @@ template <typename T> const T* TakeAs(std::optional<App::Command>& slot) {
     slot = App::Global().TakeCommand();
     if (!slot.has_value()) return nullptr;
     return std::get_if<T>(&*slot);
+}
+
+template <typename IsRunningFn> bool WaitForJob(IsRunningFn is_running) {
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(30);
+    while (is_running()) {
+        if (std::chrono::steady_clock::now() >= deadline) return false;
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    return true;
 }
 
 }
@@ -204,10 +215,10 @@ TEST_CASE("setup view arc extractor runs over the picked folder", "[gui][setup]"
         ctx->SetRef("##setup");
         GuiTest::FocusChild(ctx, "setup_card");
         ctx->ItemClick("Extract .arc files...");
-        for (int i = 0; i < 600 && ArcExtract::IsRunning(); i++)
-            ctx->Yield();
     };
     harness.Run(test);
+
+    REQUIRE(WaitForJob([] { return ArcExtract::IsRunning(); }));
 
     ArcExtract::Status const st = ArcExtract::GetStatus();
     CHECK_FALSE(st.running);
@@ -233,10 +244,10 @@ TEST_CASE("setup view customize extractor runs over the picked folder", "[gui][s
         ctx->SetRef("##setup");
         GuiTest::FocusChild(ctx, "setup_card");
         ctx->ItemClick("Extract customize images...");
-        for (int i = 0; i < 600 && CustomizeExtract::IsRunning(); i++)
-            ctx->Yield();
     };
     harness.Run(test);
+
+    REQUIRE(WaitForJob([] { return CustomizeExtract::IsRunning(); }));
 
     CustomizeExtract::Status const st = CustomizeExtract::GetStatus();
     CHECK_FALSE(st.running);
