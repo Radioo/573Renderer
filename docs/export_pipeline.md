@@ -159,6 +159,21 @@ unset, quality 60 if outside 0..100, loop_count 1 minimum, blend_frames 15
 default. All loop/blend/content-detector bookkeeping is reset explicitly
 because g_sess is reused across sessions.
 
+`StartSession` calls the backend's `BeginCapture` LAST, and **returns without
+publishing Capturing if the driver refused** (a driver that cannot bound the
+capture calls `FailSession`, which clears `sess.active`). Publishing Capturing
+over a failed session is what used to leave the modal stuck on "capturing 0"
+with the real reason already scrolled past in the log. With no backend at all
+the session fails the same way instead of dereferencing a null driver.
+
+The output filename comes from `MediaSink::DeriveExportStem(active, playing)`:
+the LAST path component of whatever is loaded, minus its extension, plus `_` and
+the playing animation. Directories are stripped because the scene browser
+publishes a full path for 2D packages and 3D scenes while the modern runtime
+publishes a bare file name - the exported file is named after the content
+either way (`0313_00.mp4`, not `F.mp4` or a whole path). The default format is
+`MediaSink::kDefaultFormat` (MP4 H.264).
+
 The SELECTED frame label (the one the user last clicked in the Labels list)
 is snapshotted ONCE at StartSession for both backends, so a label toggled
 mid-capture cannot retroactively change a running export. When a label is
@@ -726,7 +741,7 @@ adding the mechanism changed nothing for them.
 When both loop flags are off the modal replaces the whole loop block with one
 disabled line explaining why, rather than showing dead controls.
 
-## Screen presets
+## Screen presets and 2D packages
 
 `Scene3dCaptureDriver` exports whatever preset is live. It rewinds the preset
 (`PresetHost::Restart`) so a capture always starts at frame 0, then captures a
@@ -736,13 +751,18 @@ loop, a 640-frame sprite scroll, per-sprite animation lengths) under a screen
 timer that changes the model's speed partway through, so the composite has no
 single repeat boundary.
 
-The length is `max_frames` when "Limit frames" is on, otherwise
-`PresetHost::NaturalFrames()`: the preset's countdown length when it has one
-(IIDX 10 music select = 1800 frames = one full 30 s screen, including the
-end-of-timer speed-up), else the lead model's animation loop in frames
-(`max_time / anim_speed`). A preset with neither fails the export immediately
-with a message telling the user to set a frame limit, rather than capturing
-forever.
+The same driver also serves the 2D package browser, which has a timeline of its
+own: the selected animation's length. It rewinds with `Gc2dHost::SetFrame(0)` and
+captures one full loop. Only a browser with NOTHING loaded is refused.
+
+`Export::PlannedFrames(max_frames, preset_frames, package_frames)` picks the
+length in that order of precedence: an explicit "Limit frames" always wins, then
+the preset's `NaturalFrames()` (its countdown length when it has one - IIDX 10
+music select = 1800 frames = one full 30 s screen including the end-of-timer
+speed-up - else the lead model's animation loop, `max_time / anim_speed`), then
+the loaded package's animation length. Zero on all three fails the export
+immediately with a message telling the user to set a frame limit, rather than
+capturing forever.
 
 Frames come from `ReadPresentBGRA`, so a stretched preview exports stretched.
 Because the export tick runs before `EndFrame`, that call resolves

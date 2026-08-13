@@ -34,7 +34,7 @@ bool g_limit_frames = false;
 int g_loop_count = 1;
 bool g_blend_loop = false;
 int g_blend_frames = 15;
-int g_format_idx = 0;
+int g_format_idx = MediaSink::ToIndex(MediaSink::kDefaultFormat);
 bool g_prefer_hw = true;
 
 int g_out_w = 0;

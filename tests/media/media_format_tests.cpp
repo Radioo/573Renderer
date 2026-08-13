@@ -19,6 +19,11 @@ TEST_CASE("every format round-trips token and index") {
     }
 }
 
+TEST_CASE("the default export format is MP4") {
+    CHECK(MediaSink::kDefaultFormat == Format::MP4_H264);
+    CHECK(MediaSink::FormatExtension(MediaSink::kDefaultFormat) == std::string(".mp4"));
+}
+
 TEST_CASE("FromIndex clamps out-of-range to AVIF") {
     CHECK(MediaSink::FromIndex(-1) == Format::AVIF);
     CHECK(MediaSink::FromIndex(MediaSink::kFormatCount) == Format::AVIF);
@@ -97,4 +102,14 @@ TEST_CASE("DeriveExportStem strips the extension and appends the animation") {
     CHECK(MediaSink::DeriveExportStem("noext", "anim") == "noext_anim");
     CHECK(MediaSink::DeriveExportStem("", "anim") == "export");
     CHECK(MediaSink::DeriveExportStem("", "") == "export");
+}
+
+TEST_CASE("DeriveExportStem keeps only the file name, never the directories") {
+    CHECK(MediaSink::DeriveExportStem(R"(F:\game\data\graph\sys\0313)", "00") == "0313_00");
+    CHECK(MediaSink::DeriveExportStem(R"(F:\game\data\graph\sys\0313)", "") == "0313");
+    CHECK(MediaSink::DeriveExportStem("/mnt/game/data/select_bg_vi.ifs", "bg_common") ==
+          "select_bg_vi_bg_common");
+    CHECK(MediaSink::DeriveExportStem(R"(F:\IIDX 10\data\texture\music)", "music_bg") ==
+          "music_music_bg");
+    CHECK(MediaSink::DeriveExportStem(R"(F:\game\sys\)", "00") == "sys_00");
 }

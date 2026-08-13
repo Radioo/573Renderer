@@ -14,6 +14,8 @@ void HandleCancelRequest(D3D9State& d3d);
 
 bool IsCapturing();
 
+[[nodiscard]] int PlannedFrames(int max_frames, int preset_frames, int package_frames);
+
 Capabilities ActiveCapabilities();
 
 int TargetFps();

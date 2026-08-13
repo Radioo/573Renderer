@@ -178,7 +178,12 @@ void StartSession(Session& sess, const App::ExportRequest& req, D3D9State& d3d) 
     }
     if (sess.label_active && !sess.label_name.empty()) ApplyLabelSuffixToOutput(sess);
 
+    if (Backend::Active() == nullptr) {
+        FailSession(sess, "No backend is running, so nothing can be captured.");
+        return;
+    }
     Backend::Active()->ExportDriver().BeginCapture(sess);
+    if (!sess.active) return;
 
     LogSessionStart(sess);
     Publish(sess, App::ExportPhase::Capturing);
@@ -388,6 +393,12 @@ Capabilities ActiveCapabilities() {
 int TargetFps() {
     const Session& sess = ActiveSession();
     return sess.fps > 0 ? sess.fps : 60;
+}
+
+int PlannedFrames(int max_frames, int preset_frames, int package_frames) {
+    if (max_frames > 0) return max_frames;
+    if (preset_frames > 0) return preset_frames;
+    return (package_frames > 0) ? package_frames : 0;
 }
 
 void HandleStartRequest(const App::ExportRequest& req, D3D9State& d3d) {

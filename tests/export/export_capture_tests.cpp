@@ -2,11 +2,16 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "backend/backend.h"
+#include "export.h"
+#include "export_capture.h"
+#include "render_backend.h"
 #include "export_internal.h"
 #include "media/media_format.h"
 #include "state/app_state.h"
+#include "state/commands.h"
 #include "state/telemetry.h"
 
+#include <any>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
@@ -14,10 +19,77 @@
 #include <system_error>
 #include <vector>
 
+namespace {
+
+class RefusingDriver final : public Export::ICaptureDriver {
+public:
+    void BeginCapture(Export::Session& sess) override {
+        begins++;
+        Export::FailSession(sess, "nothing loaded to bound the export on");
+    }
+    void TickCapture(Export::Session& sess, D3D9State& d3d) override {
+        (void)sess;
+        (void)d3d;
+        ticks++;
+    }
+    void EndCapture(Export::Session& sess) override { (void)sess; }
+
+    int begins = 0;
+    int ticks = 0;
+};
+
+class StubBackend final : public Backend::IBackend {
+public:
+    [[nodiscard]] const char* Id() const override { return "stub"; }
+    bool Boot(const Backend::BootEnv& env) override {
+        (void)env;
+        return true;
+    }
+    void Shutdown() override {}
+    [[nodiscard]] bool ContentReady() const override { return true; }
+    void StartContentScan() override {}
+    bool LoadContent(const std::string& path, bool from_arc) override {
+        (void)path;
+        (void)from_arc;
+        return true;
+    }
+    void UnloadContent() override {}
+    void AdvanceFrame(float dt, int frame_count, bool exporting) override {
+        (void)dt;
+        (void)frame_count;
+        (void)exporting;
+    }
+    void RenderScene(float dt, int frame_count) override {
+        (void)dt;
+        (void)frame_count;
+    }
+    void FillAutopilotInputs(Loop::AutopilotInputs& in) override { (void)in; }
+    void BindSubmonitor() override {}
+    bool HandleCommand(const std::any& payload) override {
+        (void)payload;
+        return false;
+    }
+    Export::ICaptureDriver& ExportDriver() override { return driver; }
+
+    RefusingDriver driver;
+};
+
+StubBackend& TheStubBackend() {
+    static StubBackend backend;
+    return backend;
+}
+
+bool& StubBackendEnabled() {
+    static bool enabled = false;
+    return enabled;
+}
+
+}
+
 namespace Backend {
 
 IBackend* Active() {
-    return nullptr;
+    return StubBackendEnabled() ? &TheStubBackend() : nullptr;
 }
 
 }
@@ -124,4 +196,42 @@ TEST_CASE("crop path submits the cropped region straight to the sink") {
     CHECK(ex.phase == App::ExportPhase::Done);
     CHECK_FALSE(sess.active);
     CHECK(CountPngs(dir / "crop") == 3);
+}
+
+TEST_CASE("a driver that refuses to start leaves the export failed, not capturing") {
+    StubBackend& backend = TheStubBackend();
+    backend.driver.begins = 0;
+    backend.driver.ticks = 0;
+    StubBackendEnabled() = true;
+
+    Export::Session& sess = Export::ActiveSession();
+    sess = {};
+    D3D9State d3d;
+    App::ExportRequest req;
+    req.output_path = (OutDir("refused") / "out").string();
+    req.format = MediaSink::ToIndex(MediaSink::Format::PNG_Sequence);
+    req.fps = 60;
+
+    Export::HandleStartRequest(req, d3d);
+
+    CHECK(backend.driver.begins == 1);
+    CHECK_FALSE(sess.active);
+    CHECK_FALSE(Export::IsCapturing());
+
+    const App::ExportState ex = App::Global().GetExport();
+    CHECK(ex.phase == App::ExportPhase::Failed);
+    CHECK(ex.error == "nothing loaded to bound the export on");
+
+    Export::OnMainLoopTick(d3d);
+    CHECK(backend.driver.ticks == 0);
+    StubBackendEnabled() = false;
+}
+
+TEST_CASE("the planned length prefers the frame limit, then the preset, then the package") {
+    CHECK(Export::PlannedFrames(240, 1800, 20) == 240);
+    CHECK(Export::PlannedFrames(240, 0, 0) == 240);
+    CHECK(Export::PlannedFrames(0, 1800, 20) == 1800);
+    CHECK(Export::PlannedFrames(0, 0, 20) == 20);
+    CHECK(Export::PlannedFrames(0, 0, 0) == 0);
+    CHECK(Export::PlannedFrames(-5, -5, -5) == 0);
 }

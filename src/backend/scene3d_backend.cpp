@@ -2,6 +2,7 @@
 
 #include "backend/backend.h"
 #include "cli/cli.h"
+#include "export.h"
 #include "export_capture.h"
 #include "export_internal.h"
 #include "game_revision.h"
@@ -34,21 +35,30 @@ class Scene3dCaptureDriver final : public Export::ICaptureDriver {
 public:
     void BeginCapture(Export::Session& sess) override {
         planned_frames_ = 0;
-        if (!PresetHost::Active()) {
-            Export::FailSession(sess, "Load a screen preset first - the scene browser has no "
-                                      "timeline the exporter can bound on.");
+        int preset_frames = 0;
+        int package_frames = 0;
+        if (PresetHost::Active()) {
+            PresetHost::Restart();
+            preset_frames = PresetHost::NaturalFrames();
+        } else if (Gc2dHost::Active()) {
+            Gc2dHost::SetFrame(0);
+            package_frames = Gc2dHost::GetStatus().length;
+        } else {
+            Export::FailSession(sess, "Load a screen preset or a 2D package first - the scene "
+                                      "browser has no timeline the exporter can bound on.");
             return;
         }
-        PresetHost::Restart();
-        const int natural = PresetHost::NaturalFrames();
-        planned_frames_ = (sess.max_frames > 0) ? sess.max_frames : natural;
+
+        planned_frames_ = Export::PlannedFrames(sess.max_frames, preset_frames, package_frames);
         if (planned_frames_ <= 0) {
-            Export::FailSession(sess, "This preset has no countdown and no looping model "
-                                      "animation - turn on 'Limit frames' to set a length.");
+            Export::FailSession(sess, "This screen has no countdown and no looping animation - "
+                                      "turn on 'Limit frames' to set a length.");
             return;
         }
-        LOG("Export", "preset export: %d frames (%s)", planned_frames_,
-            (sess.max_frames > 0) ? "frame limit" : "one full screen timeline");
+        LOG("Export", "scene export: %d frames (%s)", planned_frames_,
+            (sess.max_frames > 0) ? "frame limit"
+            : (preset_frames > 0) ? "one full screen timeline"
+                                  : "one full animation loop");
     }
 
     void TickCapture(Export::Session& sess, D3D9State& d3d) override {
@@ -71,10 +81,11 @@ public:
     void EndCapture(Export::Session& sess) override { (void)sess; }
 
     [[nodiscard]] Export::Capabilities Caps() const override {
-        return Export::Capabilities{.loop_count = false,
-                                    .blend_seam = false,
-                                    .transparent_bg = false,
-                                    .natural_end = "one full run of the screen's own timeline"};
+        return Export::Capabilities{
+            .loop_count = false,
+            .blend_seam = false,
+            .transparent_bg = false,
+            .natural_end = "one full run of the screen's timeline, or of the animation's loop"};
     }
 
 private:
@@ -169,9 +180,16 @@ public:
         (void)frame_count;
         (void)exporting;
         const bool live = Scene3dHost::Active() || Gc2dHost::Active();
+        std::string playing;
+        if (PresetHost::Active()) {
+            playing = PresetHost::GetStatus().id;
+        } else if (Gc2dHost::Active()) {
+            playing = Gc2dHost::GetStatus().animation;
+        }
         App::Status st = App::Global().GetStatus();
-        if (st.scene_loaded != live) {
+        if (st.scene_loaded != live || st.playing_animation != playing) {
             st.scene_loaded = live;
+            st.playing_animation = playing;
             App::Global().SetStatus(st);
         }
     }

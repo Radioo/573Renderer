@@ -544,3 +544,24 @@ TEST_CASE("export modal keeps every loop option for content that has a loop", "[
     };
     harness.Run(test);
 }
+
+TEST_CASE("export modal names a 2D package by file and animation, not by path", "[gui][export]") {
+    GuiTest::Harness harness;
+    ReadyForExport(R"(F:\game\data\graph\sys\0313)");
+    App::Status status = App::Global().GetStatus();
+    status.playing_animation = "00";
+    App::Global().SetStatus(status);
+
+    ImGuiTest* test = harness.NewTest("export_stem_package");
+    test->TestFunc = [](ImGuiTestContext* ctx) {
+        OpenModal(ctx);
+        GuiTest::ComboPick(ctx, "##exp_fmt", "AVIF (image, alpha)");
+        ctx->ItemClick("Start export");
+    };
+    harness.Run(test);
+
+    std::optional<App::Command> slot;
+    const auto* start = TakeStart(slot);
+    REQUIRE(start != nullptr);
+    CHECK(start->req.output_path == "0313_00.avif");
+}
