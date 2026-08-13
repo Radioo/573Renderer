@@ -25,7 +25,7 @@ namespace Scene3d {
 
 namespace {
 
-constexpr int kTileSize = 256;
+constexpr Inz::AtlasGrid kAtlasGrid = {.tile_width = 256, .tile_height = 256, .tiles_per_row = 1};
 constexpr size_t kMaxChunkVerts = 65000;
 
 std::vector<uint8_t> ReadFile(const std::filesystem::path& p) {
@@ -43,34 +43,58 @@ bool Inflate(const std::filesystem::path& p, std::vector<uint8_t>& out, std::str
     return Lzss::Decompress(raw, out, err);
 }
 
+void ScatterSlice(const Gcz::Tile& src, int atlas_x, int atlas_y, std::vector<Tile>& tiles) {
+    std::vector<uint8_t> bgra;
+    Gcz::ExpandToBgra(src, bgra);
+    for (int row = 0; row < src.height; row++) {
+        const int ay = atlas_y + row;
+        const auto tile_row = (size_t)(ay / kAtlasGrid.tile_height);
+        const int in_y = ay % kAtlasGrid.tile_height;
+        for (int col = 0; col < src.width; col++) {
+            const int ax = atlas_x + col;
+            const size_t index =
+                (tile_row * kAtlasGrid.tiles_per_row) + (size_t)(ax / kAtlasGrid.tile_width);
+            if (index >= tiles.size()) continue;
+            const size_t dst =
+                (((size_t)in_y * kAtlasGrid.tile_width) + (size_t)(ax % kAtlasGrid.tile_width)) * 4;
+            const size_t from = ((((size_t)row * (size_t)src.width) + (size_t)col)) * 4;
+            std::copy_n(bgra.begin() + (ptrdiff_t)from, 4,
+                        tiles[index].bgra.begin() + (ptrdiff_t)dst);
+        }
+    }
+}
+
 bool LoadTiles(const std::filesystem::path& dir, Scene& out, std::string& err) {
-    out.tiles.clear();
-    out.tiles.reserve(out.manifest.slices.size());
-    for (const auto& slice : out.manifest.slices) {
+    out.tiles.assign(out.manifest.slices.size(), Tile{});
+    for (auto& tile : out.tiles) {
+        tile.width = kAtlasGrid.tile_width;
+        tile.height = kAtlasGrid.tile_height;
+        tile.bgra.assign((size_t)kAtlasGrid.tile_width * kAtlasGrid.tile_height * 4, 0);
+    }
+    for (size_t i = 0; i < out.manifest.slices.size(); i++) {
+        const auto& slice = out.manifest.slices[i];
         std::vector<uint8_t> raw;
         if (!Inflate(dir / (slice.name + ".gcz"), raw, err)) return false;
         Gcz::Tile parsed;
         if (!Gcz::Parse(raw, parsed, err)) return false;
-        Tile tile;
-        tile.name = slice.name;
-        tile.width = parsed.width;
-        tile.height = parsed.height;
-        Gcz::ExpandToBgra(parsed, tile.bgra);
-        out.tiles.push_back(std::move(tile));
+        out.tiles[i].name = slice.name;
+        ScatterSlice(parsed, kAtlasGrid.tile_width * (int)(i % kAtlasGrid.tiles_per_row),
+                     kAtlasGrid.tile_height * (int)(i / kAtlasGrid.tiles_per_row), out.tiles);
     }
     return true;
 }
 
-int TileForTexture(const Scene& scene, const std::string& texture) {
-    const Inz::Pattern* p = Inz::FindPattern(scene.manifest, texture);
-    if (p == nullptr) return -1;
-    const int index = p->y / kTileSize;
-    if (index < 0 || (size_t)index >= scene.tiles.size()) return -1;
-    return index;
+Inz::Region RegionForMaterial(const Scene& scene, const XFile::Mesh& mesh, uint32_t material) {
+    if (material >= mesh.materials.size()) return {};
+    const std::string& tex = mesh.materials[material].texture;
+    if (tex.empty()) return {};
+    Inz::Region region = Inz::ResolveRegion(scene.manifest, tex, kAtlasGrid);
+    if (region.tile < 0 || (size_t)region.tile >= scene.tiles.size()) return {};
+    return region;
 }
 
-void AppendTriangle(const XFile::Mesh& mesh, size_t tri, DrawChunk& chunk,
-                    std::map<uint32_t, uint16_t>& remap) {
+void AppendTriangle(const XFile::Mesh& mesh, size_t tri, const Inz::Region& region,
+                    DrawChunk& chunk, std::map<uint32_t, uint16_t>& remap) {
     for (size_t k = 0; k < 3; k++) {
         const uint32_t src = mesh.indices[(tri * 3) + k];
         auto it = remap.find(src);
@@ -81,11 +105,11 @@ void AppendTriangle(const XFile::Mesh& mesh, size_t tri, DrawChunk& chunk,
             chunk.vertices.push_back(p.y);
             chunk.vertices.push_back(p.z);
             if (src < mesh.uvs.size()) {
-                chunk.vertices.push_back(mesh.uvs[src].u);
-                chunk.vertices.push_back(mesh.uvs[src].v);
+                chunk.vertices.push_back(region.u_bias + (mesh.uvs[src].u * region.u_scale));
+                chunk.vertices.push_back(region.v_bias + (mesh.uvs[src].v * region.v_scale));
             } else {
-                chunk.vertices.push_back(0.0F);
-                chunk.vertices.push_back(0.0F);
+                chunk.vertices.push_back(region.u_bias);
+                chunk.vertices.push_back(region.v_bias);
             }
             it = remap.emplace(src, slot).first;
         }
@@ -93,30 +117,27 @@ void AppendTriangle(const XFile::Mesh& mesh, size_t tri, DrawChunk& chunk,
     }
 }
 
-int TileForTriangle(const Scene& scene, const XFile::Mesh& mesh, size_t tri) {
-    const uint32_t mat = (tri < mesh.face_material.size()) ? mesh.face_material[tri] : 0;
-    if (mat >= mesh.materials.size()) return -1;
-    const std::string& tex = mesh.materials[mat].texture;
-    return tex.empty() ? -1 : TileForTexture(scene, tex);
-}
-
 void BuildMeshChunks(const Scene& scene, const XFile::Mesh& mesh, int frame_index,
                      std::vector<DrawChunk>& out) {
-    std::map<int, DrawChunk> by_tile;
-    std::map<int, std::map<uint32_t, uint16_t>> remaps;
+    std::map<uint32_t, DrawChunk> by_material;
+    std::map<uint32_t, std::map<uint32_t, uint16_t>> remaps;
+    std::map<uint32_t, Inz::Region> regions;
     const size_t tris = mesh.indices.size() / 3;
     for (size_t t = 0; t < tris; t++) {
-        const int tile = TileForTriangle(scene, mesh, t);
-        DrawChunk& chunk = by_tile[tile];
+        const uint32_t mat = (t < mesh.face_material.size()) ? mesh.face_material[t] : 0;
+        auto region = regions.find(mat);
+        if (region == regions.end())
+            region = regions.emplace(mat, RegionForMaterial(scene, mesh, mat)).first;
+        DrawChunk& chunk = by_material[mat];
         if (chunk.vertices.empty()) {
             chunk.frame = frame_index;
-            chunk.tile = tile;
+            chunk.tile = region->second.tile;
         }
         if (chunk.vertices.size() / kVertexFloats >= kMaxChunkVerts) continue;
-        AppendTriangle(mesh, t, chunk, remaps[tile]);
+        AppendTriangle(mesh, t, region->second, chunk, remaps[mat]);
     }
-    for (auto& [tile, chunk] : by_tile) {
-        (void)tile;
+    for (auto& [mat, chunk] : by_material) {
+        (void)mat;
         if (!chunk.indices.empty()) out.push_back(std::move(chunk));
     }
 }

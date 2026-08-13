@@ -18,6 +18,8 @@
 
 namespace {
 
+constexpr Inz::AtlasGrid kGrid = {.tile_width = 256, .tile_height = 256, .tiles_per_row = 1};
+
 std::filesystem::path SceneDir() {
     const std::optional<std::string> root = Support::EnvVar("R573_IIDX18_DIR");
     if (!root || root->empty()) return {};
@@ -89,7 +91,7 @@ TEST_CASE("mode_bg scene decodes from the real IIDX 18 data", "[real]") {
                 for (const auto& mat : m.materials) {
                     if (mat.texture.empty()) continue;
                     textured++;
-                    REQUIRE(Inz::FindPattern(manifest, mat.texture) != nullptr);
+                    REQUIRE(Inz::ResolveRegion(manifest, mat.texture, kGrid).tile >= 0);
                 }
             }
         }

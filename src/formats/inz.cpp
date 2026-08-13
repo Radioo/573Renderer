@@ -34,6 +34,16 @@ std::string BaseName(const std::string& path) {
     return slash == std::string::npos ? path : path.substr(slash + 1);
 }
 
+std::string StripDottedSuffix(const std::string& name) {
+    if (name.size() > 4 && name[name.size() - 4] == '.') return name.substr(0, name.size() - 4);
+    return name;
+}
+
+std::string StripBmpSuffix(const std::string& name) {
+    if (name.size() > 4 && name.ends_with(".bmp")) return name.substr(0, name.size() - 4);
+    return name;
+}
+
 void ParseSlice(const std::string& line, Manifest& out) {
     const size_t comma = line.find_last_of(',');
     ImageSlice slice;
@@ -50,7 +60,7 @@ void ParsePattern(const std::string& line, Manifest& out) {
     const size_t eq = line.find('=');
     if (eq == std::string::npos) return;
     Pattern p;
-    p.name = BaseName(Trim(line.substr(0, eq)));
+    p.name = StripDottedSuffix(BaseName(Trim(line.substr(0, eq))));
     const std::string rect = Trim(line.substr(eq + 1));
     std::array<int, 4> vals = {0, 0, 0, 0};
     size_t at = 0;
@@ -66,6 +76,14 @@ void ParsePattern(const std::string& line, Manifest& out) {
     p.w = vals[2];
     p.h = vals[3];
     if (!p.name.empty() && p.w > 0 && p.h > 0) out.patterns.push_back(std::move(p));
+}
+
+const Pattern* FindPattern(const Manifest& manifest, const std::string& texture_name) {
+    const std::string want = StripBmpSuffix(BaseName(texture_name));
+    for (const auto& p : manifest.patterns) {
+        if (p.name == want) return &p;
+    }
+    return nullptr;
 }
 
 }
@@ -102,12 +120,18 @@ bool Parse(const std::string& text, Manifest& out, std::string& err) {
     return true;
 }
 
-const Pattern* FindPattern(const Manifest& manifest, const std::string& texture_name) {
-    const std::string want = BaseName(texture_name);
-    for (const auto& p : manifest.patterns) {
-        if (p.name == want) return &p;
-    }
-    return nullptr;
+Region ResolveRegion(const Manifest& manifest, const std::string& texture_name,
+                     const AtlasGrid& grid) {
+    Region region;
+    if (grid.tile_width <= 0 || grid.tile_height <= 0 || grid.tiles_per_row <= 0) return region;
+    const Pattern* p = FindPattern(manifest, texture_name);
+    if (p == nullptr) return region;
+    region.tile = (p->x / grid.tile_width) + (grid.tiles_per_row * (p->y / grid.tile_height));
+    region.u_scale = (float)p->w / (float)grid.tile_width;
+    region.v_scale = (float)p->h / (float)grid.tile_height;
+    region.u_bias = (float)(p->x % grid.tile_width) / (float)grid.tile_width;
+    region.v_bias = (float)(p->y % grid.tile_height) / (float)grid.tile_height;
+    return region;
 }
 
 }

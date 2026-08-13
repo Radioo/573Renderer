@@ -214,3 +214,45 @@ transcoder invents the separators the binary form omits (it emits `value;` after
 every integer and float, which the reader treats as whitespace since every list
 carries its own length), drops GUIDs, and formats floats with a
 shortest-round-trip conversion so model coordinates survive the trip.
+
+## `.inz` scene manifest and the texture atlas (`inz.h`)
+
+`Inz::Parse` reads the LZSS-inflated `.inz` text that ships beside the `.xz`
+models of an IIDX 10-18 model scene. `[image_file]` lists the `.gcz` slices in
+order; `[pattern_list]` maps an authoring `.bmp` path to a rect `x,y,w,h`.
+
+Those rects are coordinates in a VIRTUAL ATLAS, not in the `.gcz` that carries
+them, and the atlas is a fixed grid of **256x256** tiles, one tile per row.
+That grid is not in any file - the game hardcodes it when it constructs the
+manifest object - so `Scene3d` owns the `Inz::AtlasGrid` constant and `Inz` only
+does the arithmetic. Slice `i` becomes the whole tile at grid cell
+`(i % tiles_per_row, i / tiles_per_row)`; a `.gcz` smaller than the tile
+occupies its top-left corner and the rest of the tile stays transparent black.
+
+`Inz::ResolveRegion` turns a material's `TextureFilename` into the tile index
+plus the scale/bias that maps the mesh's own `0..1` UVs onto the pattern's
+sub-rect of that tile:
+
+```
+tile   = (x / tile_w) + tiles_per_row * (y / tile_h)
+u' = (x % tile_w) / tile_w + u * (w / tile_w)
+v' = (y % tile_h) / tile_h + v * (h / tile_h)
+```
+
+`Scene3d` bakes that transform into the chunk vertices at load time, which is
+what the game does too (it rewrites the cloned mesh's vertex buffer once, then
+draws each material subset with the whole tile bound). Chunks are therefore
+grouped per MATERIAL, not per tile: two materials can share a tile and still
+need different UV transforms.
+
+Names are matched with the extension removed on both sides: the manifest drops a
+trailing dotted 4-character suffix, the material drops a trailing `.bmp`.
+
+Why it matters: when every pattern is exactly one full tile the transform is the
+identity, which is why all three IIDX 18 scenes rendered correctly without it.
+IIDX 10 packs several small swatches into one tile (`music`'s single 24x8
+`0.gcz` holds three 8x8 flat colours) in four of its six scenes, and IIDX 17's
+`boss_st` has one such material. Without the transform those materials sample
+the whole tile - the "bright cyan panels" symptom. RE evidence, the full
+per-scene survey, and how to re-find the code in a new build:
+`IIDX/model_scene_texture_atlas.md` in the notes repo.
