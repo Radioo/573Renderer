@@ -33,4 +33,6 @@ XFile::Matrix FreeCameraView(const FreeCamera& cam);
 
 void PlaceFreeCamera(FreeCamera& cam, const float center[3], float radius);
 
+XFile::Matrix LookAtView(const float eye[3], const float at[3], const float up[3]);
+
 }

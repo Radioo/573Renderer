@@ -707,3 +707,52 @@ Small Win32 wrapper kept here so its rationale is not lost:
   from UTF-16 happens exactly at the API boundary. IFileOpenDialog returns
   wide paths in CoTaskMemAlloc buffers, converted and freed immediately.
   Returns empty string on cancel or error.
+
+
+## Per-content capabilities (`Export::Capabilities`)
+
+Not every option in the export modal means something for every kind of content,
+so `ICaptureDriver::Caps()` reports what applies and the modal renders itself
+from that. The default is everything on, which is what the AFP drivers use, so
+adding the mechanism changed nothing for them.
+
+| flag | off means |
+|---|---|
+| `loop_count` | no loop boundary to count, hide the loop-count input |
+| `blend_seam` | no wrap to crossfade, hide the blend controls |
+| `transparent_bg` | the content composites its own opaque background; the checkbox is disabled and forced off |
+| `natural_end` | text naming what an unlimited export stops on; it is substituted into the "Limit frames" tooltip |
+
+When both loop flags are off the modal replaces the whole loop block with one
+disabled line explaining why, rather than showing dead controls.
+
+## Screen presets
+
+`Scene3dCaptureDriver` exports whatever preset is live. It rewinds the preset
+(`PresetHost::Restart`) so a capture always starts at frame 0, then captures a
+fixed number of frames and finalises - there is no loop detector because a preset
+has none to detect: it composites layers with different periods (a 240-tick model
+loop, a 640-frame sprite scroll, per-sprite animation lengths) under a screen
+timer that changes the model's speed partway through, so the composite has no
+single repeat boundary.
+
+The length is `max_frames` when "Limit frames" is on, otherwise
+`PresetHost::NaturalFrames()`: the preset's countdown length when it has one
+(IIDX 10 music select = 1800 frames = one full 30 s screen, including the
+end-of-timer speed-up), else the lead model's animation loop in frames
+(`max_time / anim_speed`). A preset with neither fails the export immediately
+with a message telling the user to set a frame limit, rather than capturing
+forever.
+
+Frames come from `ReadPresentBGRA`, so a stretched preview exports stretched.
+Because the export tick runs before `EndFrame`, that call resolves
+`offscreen -> present_rt` itself instead of reading last frame's copy.
+
+Headless equivalent, useful for batch renders and for testing this path:
+
+```bash
+573Renderer.exe --preset-export <game-dir> <preset-id> out.mp4 [frames]
+```
+
+Passing 0 frames uses the natural length. The container is picked from the
+output extension.

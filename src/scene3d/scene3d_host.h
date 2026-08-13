@@ -1,7 +1,9 @@
 #pragma once
 
 #include "scene3d/camera.h"
+#include "scene3d/scene3d_render.h"
 
+#include <array>
 #include <string>
 #include <vector>
 
@@ -11,6 +13,28 @@ struct ModelInfo {
     std::string name;
     int blend_mode = 0;
     bool visible = true;
+    float time = 0.0F;
+};
+
+struct ModelSetup {
+    std::string model;
+    int blend_mode = 0;
+    float alpha = 1.0F;
+    float anim_speed = 1.0F;
+    std::array<float, 3> position = {0.0F, 0.0F, 0.0F};
+    std::array<float, 3> rotation = {0.0F, 0.0F, 0.0F};
+    std::array<float, 3> scale = {1.0F, 1.0F, 1.0F};
+};
+
+struct Setup {
+    float ticks_per_second = 60.0F;
+    std::vector<ModelSetup> models;
+    std::vector<Scene3d::Light> lights;
+    Scene3d::Projection projection;
+    Scene3d::RenderStyle style = Scene3d::RenderStyle::TextureOnly;
+    std::array<float, 3> eye = {0.0F, 0.0F, -1.0F};
+    std::array<float, 3> at = {0.0F, 0.0F, 0.0F};
+    std::array<float, 3> up = {0.0F, 1.0F, 0.0F};
 };
 
 struct Status {
@@ -29,6 +53,17 @@ struct Status {
 };
 
 bool Load(const std::string& dir);
+
+bool LoadWithSetup(const std::string& dir, const Setup& setup);
+
+void SetModelSpeed(const std::string& model, float speed);
+
+void SetModelAlpha(const std::string& model, float alpha);
+
+void SetModelBlendByName(const std::string& model, int mode);
+
+void SetModelTransform(const std::string& model, const std::array<float, 3>& position,
+                       const std::array<float, 3>& rotation);
 
 void Unload();
 

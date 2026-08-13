@@ -1,5 +1,7 @@
 #include "gui_export_panel.h"
 #include "../native_dialog.h"
+#include "../export.h"
+#include "../export_capture.h"
 #include "../state/app_state.h"
 #include "../state/commands.h"
 #include "../video_encoder.h"
@@ -156,17 +158,17 @@ void DrawKeyframeIntervalControl(MediaSink::Format current_format) {
     }
 }
 
-void DrawFrameLimitControls() {
+void DrawFrameLimitControls(const ::Export::Capabilities& caps) {
     ImGui::Checkbox("Limit frames##exp_limit", &g_limit_frames);
     if (ImGui::IsItemHovered()) {
         ImGui::SetTooltip("When ON, stop the export after a fixed number of captured\n"
                           "frames (defaults to 60 = 1 second at 60 fps). When OFF\n"
-                          "(default), the export runs until the master animation's\n"
-                          "natural end-of-timeline.\n\n"
+                          "(default), the export runs until %s.\n\n"
                           "Use cases: clamp a long title to a short preview, capture\n"
-                          "a fixed-duration looped clip without waiting for AFP's\n"
+                          "a fixed-duration looped clip without waiting for the\n"
                           "end-of-timeline detector, or get a deterministic file\n"
-                          "size for tests.");
+                          "size for tests.",
+                          caps.natural_end);
     }
     ImGui::SameLine();
     ImGui::BeginDisabled(!g_limit_frames);
@@ -188,7 +190,18 @@ void DrawFrameLimitControls() {
     }
 }
 
-void DrawLoopControls() {
+void DrawLoopControls(const ::Export::Capabilities& caps) {
+    if (!caps.loop_count && !caps.blend_seam) {
+        ImGui::TextDisabled("Loop options do not apply to this content.");
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("A screen preset is composited from layers with different\n"
+                              "periods and a screen timer that changes speed, so it has no\n"
+                              "single loop boundary to count or crossfade. The export runs\n"
+                              "%s;\nuse 'Limit frames' for any other length.",
+                              caps.natural_end);
+        }
+        return;
+    }
     ImGui::SetNextItemWidth(120);
     if (ImGui::InputInt("Continuous loop count##exp_loops", &g_loop_count, 1, 5))
         g_loop_count = std::clamp(g_loop_count, 1, 1000);
@@ -491,9 +504,18 @@ void DrawHwAccelTooltip(MediaSink::Format current_format, bool hw_available, boo
     }
 }
 
-void DrawBackgroundAndHw(MediaSink::Format current_format, bool hw_available) {
+void DrawBackgroundAndHw(MediaSink::Format current_format, bool hw_available,
+                         const ::Export::Capabilities& caps) {
+    if (!caps.transparent_bg) g_bg_transparent = false;
+    ImGui::BeginDisabled(!caps.transparent_bg);
     ImGui::Checkbox("Transparent bg", &g_bg_transparent);
-    if (ImGui::IsItemHovered()) {
+    ImGui::EndDisabled();
+    if (!caps.transparent_bg) {
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+            ImGui::SetTooltip("This content composites an opaque background of its own,\n"
+                              "so there is no alpha to keep.");
+        }
+    } else if (ImGui::IsItemHovered()) {
         ImGui::SetTooltip("Enable to export a real alpha channel (AVIF\n"
                           "plays with transparency). Disable to composite\n"
                           "a solid colour under the animation - useful\n"
@@ -649,14 +671,15 @@ void RenderModal() {
     DrawFilenameAndFormat();
     DrawFpsQualitySliders();
     DrawOutputResolution(state);
-    DrawBackgroundAndHw(current_format, hw_available);
+    const ::Export::Capabilities caps = ::Export::ActiveCapabilities();
+    DrawBackgroundAndHw(current_format, hw_available, caps);
 
     ImGui::Spacing();
     bool close_for_pick = false;
     if (ImGui::CollapsingHeader("Advanced")) {
         DrawKeyframeIntervalControl(current_format);
-        DrawFrameLimitControls();
-        DrawLoopControls();
+        DrawFrameLimitControls(caps);
+        DrawLoopControls(caps);
         close_for_pick = DrawCrop(state);
     }
     if (busy) ImGui::EndDisabled();

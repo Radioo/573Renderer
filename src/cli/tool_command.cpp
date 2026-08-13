@@ -59,10 +59,26 @@ ToolCommand ParseScene3dTest(std::span<const std::string> args, std::size_t i) {
     return c;
 }
 
+ToolCommand ParsePresetJob(std::span<const std::string> args, std::size_t i, ToolKind kind) {
+    ToolCommand c;
+    c.kind = kind;
+    c.in_path = args[i + 1];
+    c.arc_path = (i + 2 < args.size() && args[i + 2][0] != '-') ? args[i + 2] : "";
+    c.out_path = (i + 3 < args.size() && args[i + 3][0] != '-') ? args[i + 3] : "preset_out.png";
+    c.frames = 1;
+    if (i + 4 < args.size() && args[i + 4][0] != '-') c.frames = ParseIntAtoiLike(args[i + 4]);
+    if (i + 5 < args.size() && args[i + 5][0] != '-') c.option = ParseIntAtoiLike(args[i + 5]);
+    return c;
+}
+
 }
 
 ToolCommand ParseToolCommand(std::span<const std::string> args) {
-    std::size_t i = FindFlagWithValue(args, "--scene3d-test");
+    std::size_t i = FindFlagWithValue(args, "--preset-export");
+    if (i < args.size()) return ParsePresetJob(args, i, ToolKind::PresetExport);
+    i = FindFlagWithValue(args, "--preset-test");
+    if (i < args.size()) return ParsePresetJob(args, i, ToolKind::PresetTest);
+    i = FindFlagWithValue(args, "--scene3d-test");
     if (i < args.size()) return ParseScene3dTest(args, i);
     i = FindFlagWithValue(args, "--ddr-test");
     if (i < args.size()) return ParseDdrTest(args, i);

@@ -1,4 +1,5 @@
 #include "state/live_controls.h"
+#include "render/stretch.h"
 
 #include <algorithm>
 #include <functional>
@@ -10,6 +11,26 @@ void LiveControls::GetRenderSize(int& w, int& h) const {
     const std::scoped_lock lk(mu_);
     w = render_w_;
     h = render_h_;
+}
+
+bool LiveControls::GetStretchWide() const {
+    const std::scoped_lock lk(mu_);
+    return stretch_wide_;
+}
+
+void LiveControls::SetStretchWide(bool on) {
+    const std::scoped_lock lk(mu_);
+    stretch_wide_ = on;
+}
+
+Stretch::Filter LiveControls::GetStretchFilter() const {
+    const std::scoped_lock lk(mu_);
+    return stretch_filter_;
+}
+
+void LiveControls::SetStretchFilter(Stretch::Filter filter) {
+    const std::scoped_lock lk(mu_);
+    stretch_filter_ = filter;
 }
 
 void LiveControls::SetRenderSize(int w, int h) {

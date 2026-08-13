@@ -255,3 +255,37 @@ TEST_CASE("Position and scale tracks compose with the parent transform") {
     CHECK(out[0].w == Catch::Approx(64.0F));
     CHECK(out[0].h == Catch::Approx(8.0F));
 }
+
+TEST_CASE("ResolveFrame loops, holds or hides past the end") {
+    const GcAnim::Timing loop = {.playback = GcAnim::Playback::Loop};
+    const GcAnim::Timing hold = {.playback = GcAnim::Playback::HoldLast};
+    const GcAnim::Timing hide = {.playback = GcAnim::Playback::HideAfterEnd};
+
+    CHECK(GcAnim::ResolveFrame(30, 120, loop) == 30);
+    CHECK(GcAnim::ResolveFrame(30, 120, hold) == 30);
+    CHECK(GcAnim::ResolveFrame(30, 120, hide) == 30);
+
+    CHECK(GcAnim::ResolveFrame(120, 120, loop) == 0);
+    CHECK(GcAnim::ResolveFrame(120, 120, hold) == 119);
+    CHECK(GcAnim::ResolveFrame(120, 120, hide) == -1);
+
+    CHECK(GcAnim::ResolveFrame(605, 120, loop) == 5);
+    CHECK(GcAnim::ResolveFrame(605, 120, hold) == 119);
+}
+
+TEST_CASE("ResolveFrame wraps a loop range back to its start") {
+    const GcAnim::Timing prompt = {
+        .playback = GcAnim::Playback::HoldLast, .loop_start = 80, .loop_end = 200};
+
+    CHECK(GcAnim::ResolveFrame(0, 200, prompt) == 0);
+    CHECK(GcAnim::ResolveFrame(199, 200, prompt) == 199);
+    CHECK(GcAnim::ResolveFrame(200, 200, prompt) == 80);
+    CHECK(GcAnim::ResolveFrame(320, 200, prompt) == 80);
+    CHECK(GcAnim::ResolveFrame(325, 200, prompt) == 85);
+}
+
+TEST_CASE("ResolveFrame leaves an unknown length alone") {
+    const GcAnim::Timing loop = {.playback = GcAnim::Playback::Loop};
+    CHECK(GcAnim::ResolveFrame(42, 0, loop) == 42);
+    CHECK(GcAnim::ResolveFrame(-1, 120, loop) == -1);
+}

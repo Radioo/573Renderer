@@ -58,6 +58,12 @@ public:
     void GetRenderSize(int& w, int& h) const;
     void SetRenderSize(int w, int h);
 
+    [[nodiscard]] bool GetStretchWide() const;
+    void SetStretchWide(bool on);
+
+    [[nodiscard]] Stretch::Filter GetStretchFilter() const;
+    void SetStretchFilter(Stretch::Filter filter);
+
     [[nodiscard]] int GetRenderFps() const;
     void SetRenderFps(int fps);
 

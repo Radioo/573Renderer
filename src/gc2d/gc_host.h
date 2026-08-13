@@ -1,5 +1,7 @@
 #pragma once
 
+#include "formats/gcanim.h"
+
 #include <string>
 #include <vector>
 
@@ -31,7 +33,27 @@ Status GetStatus();
 
 std::vector<std::string> ListAnimations();
 
-void SelectAnimation(const std::string& name);
+struct SpritePlacement {
+    std::string name;
+    bool animated = false;
+    int priority = 0;
+    float x = 0.0F;
+    float y = 0.0F;
+    float alpha = 1.0F;
+    GcAnim::Blend blend = GcAnim::Blend::Normal;
+    GcAnim::Timing timing = {};
+    std::vector<std::string> skip_parts;
+    float scroll_x = 0.0F;
+    float scroll_wrap = 0.0F;
+};
+
+bool SelectAnimation(const std::string& name);
+
+void SetSprites(std::vector<SpritePlacement> sprites);
+
+void AdvanceSprites(float dt);
+
+void DrawSprites(int min_priority, int max_priority);
 
 void SetPaused(bool on);
 

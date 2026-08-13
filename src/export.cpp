@@ -380,6 +380,11 @@ void OnMainLoopTick(D3D9State& d3d) {
 bool IsCapturing() {
     return ActiveSession().active;
 }
+
+Capabilities ActiveCapabilities() {
+    if (Backend::Active() == nullptr) return {};
+    return Backend::Active()->ExportDriver().Caps();
+}
 int TargetFps() {
     const Session& sess = ActiveSession();
     return sess.fps > 0 ? sess.fps : 60;

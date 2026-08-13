@@ -941,3 +941,118 @@ Gate set == GITADORA DELTA's exactly; per-gate provenance:
 - `skip_explicit_afp_set_afp_data = true` - the game never even imports
   afp-core 0x000; like gdxg it relies solely on afpu_render_init's internal
   rebind-path call.
+
+## Scene presets (`src/preset/`) and build fingerprints (`src/game_fingerprint.h`)
+
+A game profile says which backend and resolution a game needs. A **scene preset**
+goes one level further: it is the recipe for reproducing ONE game screen exactly
+as the game draws it, for one identified build.
+
+`GameFingerprint::Identify` walks the game directory (three levels deep) looking
+for each known build's key file, and matches on size plus CRC32. An exact match
+gives the build id; a size-only match is reported as a patched copy and still
+resolves, because hooks and patch tools rewrite bytes in the executable. This is
+independent of the folder name, which the directory-substring detection in
+`game_profile.cpp` relies on and which users rename freely.
+
+`Preset::Scene` carries what the data files cannot: which model of which scene
+directory is visible, its blend mode, tint alpha, animation speed and transform,
+the fixed camera and projection, the directional lights, the shading style, an
+optional 2D sprite layer, and an optional frame countdown. `PresetHost::Load`
+resolves the relative paths against the game root, drives `Scene3dHost` through
+`LoadWithSetup` and `Gc2dHost` for the 2D layer, and `PresetHost::Advance` ticks
+the countdown once per rendered frame.
+
+Two shading styles exist because the fixed-function setup is per engine build:
+
+- `TextureOnly` is the asset browser's own choice - unlit, `COLOROP =
+  SELECTARG1(TEXTURE)`, cull none. It is what the scene viewer has always done
+  and it is NOT a claim about any game's state.
+- `LitMaterial` is IIDX 10's actual D3D8 state block, decoded from the binary:
+  `LIGHTING` on with `AMBIENT` 0, `COLOROP = MODULATE(TEXTURE, DIFFUSE)`, a
+  `D3DMATERIAL9` per material subset, cull CCW, `ZFUNC LESSEQUAL`, `MINFILTER`
+  point. Full table and the per-screen values:
+  `IIDX/tenth_style_music_select.md` in the notes repo.
+
+Run one headless:
+
+```bash
+573Renderer.exe --preset-test <iidx10-install-dir> iidx10-music-select out.png 900
+```
+
+The build is identified from the directory, the preset id selects the screen
+(omit it for the build's first preset), and the frame count drives the countdown
+so the last-ten-seconds speed-up can be captured.
+
+Each animated sprite layer carries a `GcAnim::Timing`: the game's playback mode
+(loop, hold the last frame, or hide once the timeline ends) plus an optional
+`[loop_start, loop_end)` range for the screens that rewind a playhead themselves.
+`GcAnim::ResolveFrame` maps the layer's raw counter through it, so a one-shot
+that the game freezes stays frozen instead of snapping back to its first frame.
+The values are per screen and come out of the binary, never a guess: see the
+"Playback modes" section of `IIDX/tenth_style_music_select.md`.
+
+A preset may omit the 3D layer entirely, in which case `PresetHost` skips the 3D
+host and only the sprite layers and the countdown run. No IIDX 10 screen needs
+that yet: the game's model slots are global state that survives a screen change,
+so a screen whose own code never mentions a model can still be showing one it
+inherited. Which model a screen shows is a property of the PATH INTO it, and the
+preset has to carry the state the previous screen left behind - see
+`IIDX/tenth_style_card_in.md`. Registered IIDX 10 screens:
+
+| id | content | natural length |
+|---|---|---|
+| `iidx10-music-select` | `music_bg` 3D (opaque, rotated) + 6 sprite layers | 1800 frames |
+| `iidx10-music-select-samurai` | `samurai` 3D, unrotated + the same 6 layers | 1800 frames |
+| `iidx10-card-in` | `music_bg` 3D (blend 3, alpha 0.5) + 7 sprite layers | 3600 frames |
+| `iidx10-login` | `music_bg` 3D (alpha 0.8) + `LOGIN` | model timeline |
+| `iidx10-mode-select` | `cube_x` 3D, spinning, placed per selected mode + 3 sprite layers | 1200 frames |
+| `iidx10-dan-select` | `cube_x` 3D, orbiting + 2 sprite layers | 1200 frames |
+| `iidx10-expert-select` | `ex01` 3D, entry ramp + end ramp + 2 sprite layers | 1800 frames |
+| `iidx10-new-player` | `tran_box` 3D, orbiting + 3 sprite layers | 1200 frames |
+| `iidx10-game-over` | `music_bg` 3D fading out + `GAMEOVER` | 180 frames |
+
+The play screen also renders `music_bg`, for songs that have no movie, but it
+draws it with blend mode 4 - reverse subtract, destination minus source - so
+the model only darkens whatever the play HUD puts behind it. On its own it is
+black by construction, so there is no preset for it.
+
+That list is the complete set of IIDX 10 screens that render a model: it comes
+from every `SetVisible(slot, non-zero)` call in the binary, which is the only way
+a model becomes visible. The derivation is in `IIDX/tenth_style_3d_screens.md`.
+
+Per-frame behaviours the game recomputes are carried as data rather than baked
+into a screenshot-matching constant. `Preset::ModelMotion` holds the orbit +
+fly-in the class-course and new-player screens apply to their slot transform, plus
+a per-axis `spin_per_frame` with an optional decaying `spin_kick` - that is how
+mode select's cube keeps turning and how it lurches when the selection changes.
+`Preset::Intro` is a speed ramp over the first N frames (expert select spins its
+model backwards for 22 frames before settling). All of them are transcriptions of
+the game's own formulas.
+
+### Preset options
+
+A preset can expose `Preset::Option`s: a named list of choices the viewer can
+switch between, each supplying a model position. They exist because the game
+itself moves the model in response to the player - mode select places its cube
+somewhere different for every entry in the mode menu - so a single fixed
+placement would only ever be one sixth of that screen. `PresetHost::SetOption`
+runs the game's own transition when the choice changes (mode select lerps over 25
+frames and kicks the spin in the direction of the turntable move), the GUI draws
+one combo per option in the Screens tab, and the CLI takes the choice index as
+the last argument:
+
+```bash
+573Renderer.exe --preset-test <iidx10-install-dir> iidx10-mode-select out.png 120 3
+```
+
+Layers can also mark `ui_parts`: names of cells or nested child animations INSIDE
+an animation that belong to the screen's chrome rather than its background. The
+"Show UI layers" toggle hides them, which is how mode select's backdrop renders
+without the `MODE SELECT` title, the marquee and the `INFORMATION` bar that share
+its one `MODE_BG_LOOP` animation.
+
+In the GUI the same presets appear as a **Screens** tab in the inspector,
+which is visible whenever the loaded directory fingerprints to a build that has
+presets. It lists the build's screens, loads one on click, and exposes the
+countdown as a slider so the end-of-timer ramp can be scrubbed.

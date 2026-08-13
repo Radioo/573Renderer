@@ -29,8 +29,8 @@ bool ReadbackAndSubmit(Export::Session& sess, D3D9State& d3d) {
     static std::vector<uint8_t> bgra_buf;
     int w = 0;
     int h = 0;
-    if (!d3d.ReadOffscreenBGRA(bgra_buf, w, h)) {
-        Export::FailSession(sess, "D3D9 offscreen readback failed");
+    if (!d3d.ReadPresentBGRA(bgra_buf, w, h)) {
+        Export::FailSession(sess, "D3D9 presented-frame readback failed");
         return false;
     }
     Export::SubmitOneFrame(sess, bgra_buf.data(), w, h);
@@ -312,8 +312,8 @@ void AfpDdrCaptureDriver::TickCapture(Export::Session& sess, D3D9State& d3d) {
         static std::vector<uint8_t> bgra_buf;
         int w = 0;
         int h = 0;
-        if (!d3d.ReadOffscreenBGRA(bgra_buf, w, h)) {
-            Export::FailSession(sess, "D3D9 offscreen readback failed");
+        if (!d3d.ReadPresentBGRA(bgra_buf, w, h)) {
+            Export::FailSession(sess, "D3D9 presented-frame readback failed");
             return;
         }
         HandleDdrLoopFrame(sess, bgra_buf, w, h);

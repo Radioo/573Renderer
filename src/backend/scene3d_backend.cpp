@@ -3,14 +3,17 @@
 #include "backend/backend.h"
 #include "cli/cli.h"
 #include "export_capture.h"
+#include "export_internal.h"
 #include "game_revision.h"
 #include "gc2d/gc_host.h"
 #include "gc2d/gc_package.h"
 #include "loop/cli_autopilot.h"
+#include "preset/preset_host.h"
 #include "render_backend.h"
 #include "scene3d/scene3d.h"
 #include "scene3d/scene3d_host.h"
 #include "state/app_state.h"
+#include "state/telemetry.h"
 #include "support/log.h"
 
 #include <any>
@@ -20,6 +23,7 @@
 #include <system_error>
 #include <thread>
 #include <utility>
+#include <cstdint>
 #include <vector>
 
 namespace Backend {
@@ -28,12 +32,53 @@ namespace {
 
 class Scene3dCaptureDriver final : public Export::ICaptureDriver {
 public:
-    void BeginCapture(Export::Session& sess) override { (void)sess; }
-    void TickCapture(Export::Session& sess, D3D9State& d3d) override {
-        (void)sess;
-        (void)d3d;
+    void BeginCapture(Export::Session& sess) override {
+        planned_frames_ = 0;
+        if (!PresetHost::Active()) {
+            Export::FailSession(sess, "Load a screen preset first - the scene browser has no "
+                                      "timeline the exporter can bound on.");
+            return;
+        }
+        PresetHost::Restart();
+        const int natural = PresetHost::NaturalFrames();
+        planned_frames_ = (sess.max_frames > 0) ? sess.max_frames : natural;
+        if (planned_frames_ <= 0) {
+            Export::FailSession(sess, "This preset has no countdown and no looping model "
+                                      "animation - turn on 'Limit frames' to set a length.");
+            return;
+        }
+        LOG("Export", "preset export: %d frames (%s)", planned_frames_,
+            (sess.max_frames > 0) ? "frame limit" : "one full screen timeline");
     }
+
+    void TickCapture(Export::Session& sess, D3D9State& d3d) override {
+        static std::vector<uint8_t> bgra;
+        int w = 0;
+        int h = 0;
+        if (!d3d.ReadPresentBGRA(bgra, w, h)) {
+            Export::FailSession(sess, "D3D9 presented-frame readback failed");
+            return;
+        }
+        Export::SubmitOneFrame(sess, bgra.data(), w, h);
+        if (!sess.active) return;
+        if (sess.frames_captured >= planned_frames_) {
+            Export::FinishAndEncode(sess);
+            return;
+        }
+        Export::PublishCapturing(sess);
+    }
+
     void EndCapture(Export::Session& sess) override { (void)sess; }
+
+    [[nodiscard]] Export::Capabilities Caps() const override {
+        return Export::Capabilities{.loop_count = false,
+                                    .blend_seam = false,
+                                    .transparent_bg = false,
+                                    .natural_end = "one full run of the screen's own timeline"};
+    }
+
+private:
+    int planned_frames_ = 0;
 };
 
 void ScanScenes(const std::string& game_dir) noexcept {
@@ -80,6 +125,7 @@ public:
     }
 
     void Shutdown() override {
+        PresetHost::Unload();
         Scene3dHost::Unload();
         Gc2dHost::Unload();
     }
@@ -96,6 +142,7 @@ public:
     bool LoadContent(const std::string& path, bool from_arc) override {
         (void)from_arc;
         auto& state = App::Global();
+        PresetHost::Unload();
         state.BeginLoad(path);
         bool ok = false;
         if (Scene3d::IsSceneDir(path)) {
@@ -112,6 +159,7 @@ public:
     }
 
     void UnloadContent() override {
+        PresetHost::Unload();
         Scene3dHost::Unload();
         Gc2dHost::Unload();
     }
@@ -120,10 +168,20 @@ public:
         (void)dt;
         (void)frame_count;
         (void)exporting;
+        const bool live = Scene3dHost::Active() || Gc2dHost::Active();
+        App::Status st = App::Global().GetStatus();
+        if (st.scene_loaded != live) {
+            st.scene_loaded = live;
+            App::Global().SetStatus(st);
+        }
     }
 
     void RenderScene(float dt, int frame_count) override {
         (void)frame_count;
+        if (PresetHost::Active()) {
+            PresetHost::RenderFrame(dt);
+            return;
+        }
         Scene3dHost::RenderFrame(dt);
         Gc2dHost::RenderFrame(dt);
     }

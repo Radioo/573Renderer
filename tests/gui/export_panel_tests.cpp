@@ -529,3 +529,18 @@ TEST_CASE("export modal closes on Escape", "[gui][export]") {
 
     CHECK_FALSE(App::Global().TakeCommand().has_value());
 }
+
+TEST_CASE("export modal keeps every loop option for content that has a loop", "[gui][export]") {
+    GuiTest::Harness harness;
+    ReadyForExport("bg_caps.ifs");
+
+    ImGuiTest* test = harness.NewTest("export_caps_default");
+    test->TestFunc = [](ImGuiTestContext* ctx) {
+        OpenModal(ctx);
+        IM_CHECK(ctx->ItemExists("Transparent bg"));
+        OpenAdvanced(ctx);
+        IM_CHECK(ctx->ItemExists("Continuous loop count##exp_loops"));
+        IM_CHECK(ctx->ItemExists("Blend loop seam##exp_blend"));
+    };
+    harness.Run(test);
+}

@@ -130,6 +130,7 @@ target_link_libraries(r573_loop PRIVATE r573::warnings)
 add_library(r573_render STATIC
     src/render/blend_map.cpp
     src/render/vertex_math.cpp
+    src/render/stretch.cpp
     src/render/hsv_filter.cpp
     src/render/command_trace.cpp
     src/render/command_list.cpp
@@ -178,6 +179,7 @@ add_library(r573_app STATIC
     src/gui/gui_panels.cpp
     src/gui/gui_scene3d_panel.cpp
     src/gui/gui_gc2d_panel.cpp
+    src/gui/gui_preset_panel.cpp
     src/gui/panel_registry.cpp
     src/gui/gui_style.cpp
     src/gui/gui_widgets.cpp
@@ -219,6 +221,10 @@ add_library(r573_app STATIC
     src/afp_ddr_boot.cpp
     src/afp_ddr_txp2.cpp
     src/afp_ddr_test.cpp
+    src/game_fingerprint.cpp
+    src/preset/scene_presets.cpp
+    src/preset/preset_host.cpp
+    src/preset/preset_test.cpp
     src/scene3d/anim.cpp
     src/scene3d/camera.cpp
     src/scene3d/scene3d_host.cpp
@@ -290,8 +296,11 @@ catch_discover_tests(formats_tests DISCOVERY_MODE POST_BUILD PROPERTIES LABELS c
 add_executable(game_tests
     tests/game/game_profile_tests.cpp
     tests/game/mc_control_tests.cpp
+    tests/game/scene_preset_tests.cpp
     src/game_profile.cpp
     src/game_revision.cpp
+    src/game_fingerprint.cpp
+    src/preset/scene_presets.cpp
     src/mc_control.cpp
 )
 target_include_directories(game_tests PRIVATE src)
@@ -350,6 +359,7 @@ add_executable(render_tests
     tests/render/command_list_tests.cpp
     tests/render/command_diff_tests.cpp
     tests/render/prim_layout_tests.cpp
+    tests/render/stretch_tests.cpp
 )
 target_link_libraries(render_tests PRIVATE Catch2::Catch2WithMain r573_render r573::warnings)
 catch_discover_tests(render_tests DISCOVERY_MODE POST_BUILD PROPERTIES LABELS ci)
@@ -383,15 +393,18 @@ catch_discover_tests(pixel_golden_tests DISCOVERY_MODE POST_BUILD PROPERTIES LAB
 
 add_executable(local_dll_tests
     tests/local/dll_contract_tests.cpp
+    tests/local/iidx10_screen_data_tests.cpp
     src/avs_boot.cpp
     src/avs_xml.cpp
     src/game_profile.cpp
     src/ifs_inspect.cpp
     src/qpro/qpro_dll.cpp
+    src/gc2d/gc_package.cpp
+    src/preset/scene_presets.cpp
 )
 target_include_directories(local_dll_tests PRIVATE src)
 target_link_libraries(local_dll_tests PRIVATE Catch2::Catch2WithMain r573_support r573_state
-                                              r573::warnings)
+                                              r573_formats r573::warnings)
 catch_discover_tests(local_dll_tests DISCOVERY_MODE POST_BUILD PROPERTIES LABELS local_dll)
 
 add_executable(export_capture_tests
@@ -426,6 +439,7 @@ add_executable(gui_tests
     tests/gui/timeline_tests.cpp
     tests/gui/qpro_panel_tests.cpp
     tests/gui/host_panel_tests.cpp
+    tests/gui/preset_panel_tests.cpp
     tests/gui/host_live_tests.cpp
     tests/gui/gui_mock_assets.cpp
     tests/gui/gui_gpu.cpp

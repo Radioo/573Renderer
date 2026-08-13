@@ -54,8 +54,10 @@ int Run(const std::string& scene_dir, const std::string& out_png, int frames) {
     for (int i = 0; i < frames; i++) {
         AppWindow::PumpMessages();
         const float time = (frames > 1) ? span * ((float)i / (float)(frames - 1)) : 0.0F;
+        for (auto& model : scene.models)
+            model.time = time;
         g_d3d.BeginFrame();
-        renderer.Draw(scene, time, time, kWidth, kHeight, nullptr);
+        renderer.Draw(scene, time, kWidth, kHeight, nullptr);
         g_d3d.EndFrame();
         if (i == frames - 1) {
             LOG("Scene3d-T", "frame %d: t=%.1f ticks, %d draw calls", i, time,

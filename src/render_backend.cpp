@@ -1,4 +1,5 @@
 #include "render_backend.h"
+#include "render/stretch.h"
 #include "support/log.h"
 #include "support/module_handle.h"
 #include "gpu_context.h"
@@ -14,6 +15,34 @@
 #include <cstddef>
 
 namespace {
+
+D3DTEXTUREFILTERTYPE D3DFilterFor(Stretch::Filter filter) {
+    switch (filter) {
+    case Stretch::Filter::Nearest:
+        return D3DTEXF_POINT;
+    case Stretch::Filter::Gaussian:
+        return D3DTEXF_GAUSSIANQUAD;
+    case Stretch::Filter::Pyramidal:
+        return D3DTEXF_PYRAMIDALQUAD;
+    case Stretch::Filter::Linear:
+    default:
+        return D3DTEXF_LINEAR;
+    }
+}
+
+DWORD StretchCapBit(Stretch::Filter filter) {
+    switch (filter) {
+    case Stretch::Filter::Nearest:
+        return D3DPTFILTERCAPS_MINFPOINT;
+    case Stretch::Filter::Gaussian:
+        return D3DPTFILTERCAPS_MINFGAUSSIANQUAD;
+    case Stretch::Filter::Pyramidal:
+        return D3DPTFILTERCAPS_MINFPYRAMIDALQUAD;
+    case Stretch::Filter::Linear:
+    default:
+        return D3DPTFILTERCAPS_MINFLINEAR;
+    }
+}
 
 bool CreateDeviceForWindow(D3D9State& st) {
     IDirect3D9Ex* d3dex = nullptr;
@@ -34,8 +63,8 @@ bool CreateDeviceForWindow(D3D9State& st) {
     pp.Windowed = TRUE;
     pp.SwapEffect = D3DSWAPEFFECT_DISCARD;
     pp.BackBufferFormat = D3DFMT_X8R8G8B8;
-    pp.BackBufferWidth = st.width;
-    pp.BackBufferHeight = st.height;
+    pp.BackBufferWidth = (st.present_width > 0) ? st.present_width : st.width;
+    pp.BackBufferHeight = (st.present_height > 0) ? st.present_height : st.height;
     pp.PresentationInterval = D3DPRESENT_INTERVAL_IMMEDIATE;
     pp.hDeviceWindow = st.hwnd;
     pp.EnableAutoDepthStencil = FALSE;
@@ -95,6 +124,18 @@ bool CreateRenderTargets(D3D9State& st) {
         return false;
     }
 
+    if (st.present_width > 0 && st.present_height > 0 &&
+        (st.present_width != st.width || st.present_height != st.height)) {
+        hr = st.device->CreateRenderTarget(st.present_width, st.present_height, D3DFMT_A8R8G8B8,
+                                           D3DMULTISAMPLE_NONE, 0, TRUE, &st.present_rt, nullptr);
+        if (FAILED(hr)) {
+            LOG("D3D9", "CreateRenderTarget(present) failed (hr=0x%08lx)", hr);
+            return false;
+        }
+        LOG("D3D9", "Present RT %dx%d (stretched from %dx%d)", st.present_width, st.present_height,
+            st.width, st.height);
+    }
+
     LOG("D3D9", "Offscreen RT (%p) + DS (%p) + st.backbuffer (%p) ready", st.offscreen_rt,
         st.depth_stencil, st.backbuffer);
     return true;
@@ -131,6 +172,10 @@ void D3D9State::Shutdown() {
     if (offscreen_rt != nullptr) {
         offscreen_rt->Release();
         offscreen_rt = nullptr;
+    }
+    if (present_rt != nullptr) {
+        present_rt->Release();
+        present_rt = nullptr;
     }
     if (backbuffer != nullptr) {
         backbuffer->Release();
@@ -187,8 +232,15 @@ void D3D9State::EndFrame() const {
     if (backbuffer != nullptr) device->SetRenderTarget(0, backbuffer);
 
     if ((offscreen_rt != nullptr) && (backbuffer != nullptr)) {
-        HRESULT const hr =
-            device->StretchRect(offscreen_rt, nullptr, backbuffer, nullptr, D3DTEXF_LINEAR);
+        const D3DTEXTUREFILTERTYPE filter = D3DFilterFor(stretch_filter);
+        HRESULT hr = 0;
+        if (present_rt != nullptr) {
+            hr = device->StretchRect(offscreen_rt, nullptr, present_rt, nullptr, filter);
+            if (SUCCEEDED(hr))
+                hr = device->StretchRect(present_rt, nullptr, backbuffer, nullptr, D3DTEXF_POINT);
+        } else {
+            hr = device->StretchRect(offscreen_rt, nullptr, backbuffer, nullptr, filter);
+        }
         if (FAILED(hr)) {
             static int log_count = 0;
             if (log_count++ < 3)
@@ -255,11 +307,20 @@ bool D3D9State::SaveBackBufferToFile(const char* path) const {
     return true;
 }
 
-bool D3D9State::ReadOffscreenBGRA(std::vector<uint8_t>& out, int& out_w, int& out_h) const {
-    if ((device == nullptr) || (offscreen_rt == nullptr)) return false;
+bool D3D9State::StretchFilterSupported(Stretch::Filter filter) const {
+    if (filter == Stretch::Filter::Nearest || filter == Stretch::Filter::Linear) return true;
+    if (device == nullptr) return false;
+    D3DCAPS9 caps{};
+    if (FAILED(device->GetDeviceCaps(&caps))) return false;
+    return (caps.StretchRectFilterCaps & StretchCapBit(filter)) != 0;
+}
+
+bool D3D9State::ReadSurfaceBGRA(IDirect3DSurface9* source, std::vector<uint8_t>& out, int& out_w,
+                                int& out_h) const {
+    if ((device == nullptr) || (source == nullptr)) return false;
 
     D3DSURFACE_DESC desc{};
-    if (FAILED(offscreen_rt->GetDesc(&desc))) return false;
+    if (FAILED(source->GetDesc(&desc))) return false;
 
     if ((g_readback_sysmem == nullptr) || std::cmp_not_equal(g_readback_w, desc.Width) ||
         std::cmp_not_equal(g_readback_h, desc.Height)) {
@@ -280,7 +341,7 @@ bool D3D9State::ReadOffscreenBGRA(std::vector<uint8_t>& out, int& out_w, int& ou
         g_readback_h = (int)desc.Height;
     }
 
-    HRESULT hr = device->GetRenderTargetData(offscreen_rt, g_readback_sysmem);
+    HRESULT hr = device->GetRenderTargetData(source, g_readback_sysmem);
     if (FAILED(hr)) {
         LOG("D3D9", "ReadOffscreenBGRA: GetRenderTargetData failed hr=0x%08lx", (unsigned long)hr);
         return false;
@@ -307,6 +368,22 @@ bool D3D9State::ReadOffscreenBGRA(std::vector<uint8_t>& out, int& out_w, int& ou
     out_w = w;
     out_h = h;
     return true;
+}
+
+bool D3D9State::ReadOffscreenBGRA(std::vector<uint8_t>& out, int& out_w, int& out_h) const {
+    return ReadSurfaceBGRA(offscreen_rt, out, out_w, out_h);
+}
+
+bool D3D9State::ReadPresentBGRA(std::vector<uint8_t>& out, int& out_w, int& out_h) const {
+    if (present_rt == nullptr) return ReadSurfaceBGRA(offscreen_rt, out, out_w, out_h);
+    if ((device == nullptr) || (offscreen_rt == nullptr)) return false;
+    const HRESULT hr = device->StretchRect(offscreen_rt, nullptr, present_rt, nullptr,
+                                           D3DFilterFor(stretch_filter));
+    if (FAILED(hr)) {
+        LOG("D3D9", "ReadPresentBGRA: StretchRect failed hr=0x%08lx", (unsigned long)hr);
+        return false;
+    }
+    return ReadSurfaceBGRA(present_rt, out, out_w, out_h);
 }
 
 void D3D9State::GetOffscreenSize(int& w, int& h) const {

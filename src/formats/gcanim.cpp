@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <cstddef>
+#include <span>
 #include <vector>
 
 namespace GcAnim {
@@ -108,6 +109,24 @@ void EvaluateGroup(const SysIdx::Package& pkg, size_t start_index, int frame, co
 
 }
 
+int ResolveFrame(int time, int length, const Timing& timing) {
+    if (time < 0) return -1;
+    if (timing.loop_end > timing.loop_start && time >= timing.loop_end) {
+        const int span = timing.loop_end - timing.loop_start;
+        time = timing.loop_start + ((time - timing.loop_start) % span);
+    }
+    if (length <= 0 || time < length) return time;
+    switch (timing.playback) {
+    case Playback::Loop:
+        return time % length;
+    case Playback::HoldLast:
+        return length - 1;
+    case Playback::HideAfterEnd:
+        break;
+    }
+    return -1;
+}
+
 int SampleTrack(const std::vector<SysIdx::Key>& keys, int t, int fallback_a, int& out_b) {
     if (keys.empty()) {
         out_b = fallback_a;
@@ -133,10 +152,21 @@ int SampleTrack(const std::vector<SysIdx::Key>& keys, int t, int fallback_a, int
 }
 
 void Evaluate(const SysIdx::Package& pkg, size_t start_index, int frame, float ox, float oy,
-              std::vector<DrawNode>& out) {
+              std::vector<DrawNode>& out, const SkipSet& skip) {
     out.clear();
     if (start_index >= pkg.records.size()) return;
-    EvaluateGroup(pkg, start_index, frame, Transform{.ox = ox, .oy = oy}, 0, out);
+    const Transform root{.ox = ox, .oy = oy};
+    for (size_t i = start_index; i < pkg.records.size(); i++) {
+        const SysIdx::Record& rec = pkg.records[i];
+        if (rec.type < 0) break;
+        if (rec.type == SysIdx::kRecNested &&
+            std::ranges::find(skip.children, (size_t)rec.id) != skip.children.end())
+            continue;
+        if (rec.type == SysIdx::kRecDrawCell &&
+            std::ranges::find(skip.cells, (int)rec.id) != skip.cells.end())
+            continue;
+        EvaluateRecord(pkg, rec, frame, root, 0, out);
+    }
     std::ranges::reverse(out);
 }
 

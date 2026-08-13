@@ -20,7 +20,7 @@ namespace Scene3dHost {
 
 namespace {
 
-constexpr float kTicksPerSecond = 600.0F;
+constexpr float kViewerTicksPerSecond = 600.0F;
 
 Scene3d::Scene g_scene;
 Scene3d::Renderer g_renderer;
@@ -33,6 +33,17 @@ bool g_animate_models = true;
 bool g_animate_camera = true;
 float g_model_hold = 0.0F;
 float g_camera_hold = 0.0F;
+float g_tick_rate = kViewerTicksPerSecond;
+
+bool g_fixed_camera = false;
+XFile::Matrix g_fixed_view = XFile::Identity();
+
+Scene3d::Model* FindModel(const std::string& name) {
+    for (auto& m : g_scene.models) {
+        if (m.name == name) return &m;
+    }
+    return nullptr;
+}
 
 void PlaceCameraFromBounds() {
     const std::array<float, 3> center = {(g_scene.bounds_min[0] + g_scene.bounds_max[0]) * 0.5F,
@@ -66,11 +77,70 @@ bool Load(const std::string& dir) {
     g_model_hold = 0.0F;
     g_camera_hold = 0.0F;
     g_active = true;
+    g_fixed_camera = false;
+    g_tick_rate = kViewerTicksPerSecond;
+    g_renderer.SetStyle(Scene3d::RenderStyle::TextureOnly);
+    g_renderer.SetLights({});
+    g_renderer.SetProjection(Scene3d::Projection{});
     Scene3d::SetInputEnabled(true);
     App::Global().SetActiveIfs(dir);
     LOG("Scene3d", "scene '%s' ready (free camera %s)", g_scene.name.c_str(),
         g_camera.active ? "on" : "off");
     return true;
+}
+
+bool LoadWithSetup(const std::string& dir, const Setup& setup) {
+    if (!Load(dir)) return false;
+    for (auto& model : g_scene.models)
+        model.visible = false;
+    for (const auto& want : setup.models) {
+        Scene3d::Model* model = FindModel(want.model);
+        if (model == nullptr) {
+            LOG("Scene3d", "setup names model '%s' which is not in %s", want.model.c_str(),
+                dir.c_str());
+            continue;
+        }
+        model->visible = true;
+        model->blend_mode = want.blend_mode;
+        model->alpha = want.alpha;
+        model->anim_speed = want.anim_speed;
+        model->position = want.position;
+        model->rotation = want.rotation;
+        model->scale = want.scale;
+        model->time = 0.0F;
+    }
+    g_tick_rate = setup.ticks_per_second;
+    g_renderer.SetStyle(setup.style);
+    g_renderer.SetLights(setup.lights);
+    g_renderer.SetProjection(setup.projection);
+    g_fixed_view = Scene3d::LookAtView(setup.eye.data(), setup.at.data(), setup.up.data());
+    g_fixed_camera = true;
+    g_camera.active = false;
+    Scene3d::SetInputEnabled(false);
+    return true;
+}
+
+void SetModelSpeed(const std::string& model, float speed) {
+    Scene3d::Model* m = FindModel(model);
+    if (m != nullptr) m->anim_speed = speed;
+}
+
+void SetModelAlpha(const std::string& model, float alpha) {
+    Scene3d::Model* m = FindModel(model);
+    if (m != nullptr) m->alpha = alpha;
+}
+
+void SetModelTransform(const std::string& model, const std::array<float, 3>& position,
+                       const std::array<float, 3>& rotation) {
+    Scene3d::Model* m = FindModel(model);
+    if (m == nullptr) return;
+    m->position = position;
+    m->rotation = rotation;
+}
+
+void SetModelBlendByName(const std::string& model, int mode) {
+    Scene3d::Model* m = FindModel(model);
+    if (m != nullptr) m->blend_mode = mode;
 }
 
 void Unload() {
@@ -93,8 +163,14 @@ void RenderFrame(float dt) {
     if (g_camera.active) Scene3d::UpdateFreeCamera(g_camera, in, dt);
 
     if (!g_paused) {
-        g_time += dt * kTicksPerSecond * g_speed;
+        g_time += dt * g_tick_rate * g_speed;
         if (g_scene.max_time > 0.0F && g_time > g_scene.max_time) g_time = 0.0F;
+        if (g_animate_models) {
+            for (auto& model : g_scene.models) {
+                model.time += dt * g_tick_rate * g_speed * model.anim_speed;
+                if (g_scene.max_time > 0.0F && model.time > g_scene.max_time) model.time = 0.0F;
+            }
+        }
     }
 
     int w = 0;
@@ -105,10 +181,15 @@ void RenderFrame(float dt) {
         h = g_d3d.height;
     }
 
-    const float model_time = g_animate_models ? g_time : g_model_hold;
     const float camera_time = g_animate_camera ? g_time : g_camera_hold;
     const XFile::Matrix view = Scene3d::FreeCameraView(g_camera);
-    g_renderer.Draw(g_scene, model_time, camera_time, w, h, g_camera.active ? &view : nullptr);
+    const XFile::Matrix* override_view = nullptr;
+    if (g_camera.active) {
+        override_view = &view;
+    } else if (g_fixed_camera) {
+        override_view = &g_fixed_view;
+    }
+    g_renderer.Draw(g_scene, camera_time, w, h, override_view);
 }
 
 Status GetStatus() {
@@ -138,6 +219,8 @@ void SetPaused(bool on) {
 
 void SetTime(float ticks) {
     g_time = std::clamp(ticks, 0.0F, (g_scene.max_time > 0.0F) ? g_scene.max_time : ticks);
+    for (auto& model : g_scene.models)
+        model.time = g_time;
 }
 
 void SetSpeed(float speed) {
@@ -161,8 +244,10 @@ void SetAnimateCamera(bool on) {
 std::vector<ModelInfo> ListModels() {
     std::vector<ModelInfo> out;
     out.reserve(g_scene.models.size());
-    for (const auto& m : g_scene.models)
-        out.push_back({.name = m.name, .blend_mode = m.blend_mode, .visible = m.visible});
+    for (const auto& m : g_scene.models) {
+        out.push_back(
+            {.name = m.name, .blend_mode = m.blend_mode, .visible = m.visible, .time = m.time});
+    }
     return out;
 }
 

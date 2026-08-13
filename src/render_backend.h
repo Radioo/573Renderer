@@ -8,6 +8,7 @@
 #include <string>
 #include <vector>
 
+#include "render/stretch.h"
 #include "render/vertex_math.h"
 
 constexpr uint32_t AFP_FVF = D3DFVF_XYZ | D3DFVF_DIFFUSE | D3DFVF_TEX1;
@@ -18,11 +19,15 @@ struct D3D9State {
     HWND hwnd = nullptr;
     int width = 1280;
     int height = 720;
+    int present_width = 0;
+    int present_height = 0;
+    Stretch::Filter stretch_filter = Stretch::Filter::Linear;
 
     IDirect3DTexture9* afp_texture = nullptr;
 
     IDirect3DSurface9* backbuffer = nullptr;
     IDirect3DSurface9* offscreen_rt = nullptr;
+    IDirect3DSurface9* present_rt = nullptr;
     IDirect3DSurface9* depth_stencil = nullptr;
 
     bool Init(HWND window);
@@ -36,7 +41,14 @@ struct D3D9State {
 
     bool SaveOffscreenRGBAToPNG(const char* path) const;
 
+    bool ReadSurfaceBGRA(IDirect3DSurface9* source, std::vector<uint8_t>& out, int& out_w,
+                         int& out_h) const;
+
     bool ReadOffscreenBGRA(std::vector<uint8_t>& out, int& out_w, int& out_h) const;
+
+    bool ReadPresentBGRA(std::vector<uint8_t>& out, int& out_w, int& out_h) const;
+
+    [[nodiscard]] bool StretchFilterSupported(Stretch::Filter filter) const;
 
     void GetOffscreenSize(int& w, int& h) const;
 

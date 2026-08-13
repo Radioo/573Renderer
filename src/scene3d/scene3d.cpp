@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
@@ -93,17 +94,31 @@ Inz::Region RegionForMaterial(const Scene& scene, const XFile::Mesh& mesh, uint3
     return region;
 }
 
+XFile::Vec3 CornerNormal(const XFile::Mesh& mesh, size_t corner, uint32_t position_index) {
+    if (corner < mesh.normal_indices.size()) {
+        const uint32_t n = mesh.normal_indices[corner];
+        if (n < mesh.normals.size()) return mesh.normals[n];
+    }
+    if (position_index < mesh.normals.size()) return mesh.normals[position_index];
+    return XFile::Vec3{.x = 0.0F, .y = 0.0F, .z = 1.0F};
+}
+
 void AppendTriangle(const XFile::Mesh& mesh, size_t tri, const Inz::Region& region,
                     DrawChunk& chunk, std::map<uint32_t, uint16_t>& remap) {
     for (size_t k = 0; k < 3; k++) {
-        const uint32_t src = mesh.indices[(tri * 3) + k];
+        const size_t corner = (tri * 3) + k;
+        const uint32_t src = mesh.indices[corner];
         auto it = remap.find(src);
         if (it == remap.end()) {
             const auto slot = (uint16_t)(chunk.vertices.size() / kVertexFloats);
             const auto& p = mesh.positions[src];
+            const XFile::Vec3 n = CornerNormal(mesh, corner, src);
             chunk.vertices.push_back(p.x);
             chunk.vertices.push_back(p.y);
             chunk.vertices.push_back(p.z);
+            chunk.vertices.push_back(n.x);
+            chunk.vertices.push_back(n.y);
+            chunk.vertices.push_back(n.z);
             if (src < mesh.uvs.size()) {
                 chunk.vertices.push_back(region.u_bias + (mesh.uvs[src].u * region.u_scale));
                 chunk.vertices.push_back(region.v_bias + (mesh.uvs[src].v * region.v_scale));
@@ -132,6 +147,10 @@ void BuildMeshChunks(const Scene& scene, const XFile::Mesh& mesh, int frame_inde
         if (chunk.vertices.empty()) {
             chunk.frame = frame_index;
             chunk.tile = region->second.tile;
+            if (mat < mesh.materials.size()) {
+                chunk.diffuse = mesh.materials[mat].diffuse;
+                chunk.emissive = mesh.materials[mat].emissive;
+            }
         }
         if (chunk.vertices.size() / kVertexFloats >= kMaxChunkVerts) continue;
         AppendTriangle(mesh, t, region->second, chunk, remaps[mat]);
@@ -243,6 +262,41 @@ bool LoadModels(const std::filesystem::path& dir, Scene& out, std::string& err) 
     return true;
 }
 
+}
+
+XFile::Matrix ModelTransform(const Model& model) {
+    XFile::Matrix m = XFile::Identity();
+    m[0] = model.scale[0];
+    m[5] = model.scale[1];
+    m[10] = model.scale[2];
+    for (size_t axis = 0; axis < 3; axis++) {
+        const float a = model.rotation[axis];
+        if (a == 0.0F) continue;
+        const float c = std::cos(a);
+        const float s = std::sin(a);
+        XFile::Matrix r = XFile::Identity();
+        if (axis == 0) {
+            r[5] = c;
+            r[6] = s;
+            r[9] = -s;
+            r[10] = c;
+        } else if (axis == 1) {
+            r[0] = c;
+            r[2] = -s;
+            r[8] = s;
+            r[10] = c;
+        } else {
+            r[0] = c;
+            r[1] = s;
+            r[4] = -s;
+            r[5] = c;
+        }
+        m = Multiply(m, r);
+    }
+    m[12] += model.position[0];
+    m[13] += model.position[1];
+    m[14] += model.position[2];
+    return m;
 }
 
 bool IsSceneDir(const std::string& dir) {

@@ -8,7 +8,10 @@
 #include "../state/commands.h"
 #include "../arc_extract.h"
 #include "../customize_extract.h"
+#include "../app_globals.h"
 #include "../game_profile.h"
+#include "../render/stretch.h"
+#include "../render_backend.h"
 #include "../native_dialog.h"
 
 #include "imgui.h"
@@ -252,6 +255,52 @@ void DrawRenderPresetCombo(App::State& state, int rw, int rh) {
     }
 }
 
+void DrawStretchWide(App::State& state, int rw, int rh) {
+    if (!Stretch::IsFourThree(rw, rh)) return;
+
+    bool wide = state.GetStretchWide();
+    if (ImGui::Checkbox("Stretch to 16:9", &wide)) {
+        state.SetStretchWide(wide);
+        PersistSetup(state, g_dir_buf);
+    }
+    const Stretch::Size present = Stretch::Present(rw, rh, true);
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("Render stays %dx%d and the picture is stretched horizontally to "
+                          "%dx%d,\nthe way a 4:3 cabinet looks on a 16:9 monitor. The preview "
+                          "window\nand exports both use the stretched size.",
+                          rw, rh, present.w, present.h);
+    }
+    if (!wide) return;
+
+    ImGui::SameLine();
+    ImGui::TextDisabled("-> %dx%d", present.w, present.h);
+
+    const Stretch::Filter current = state.GetStretchFilter();
+    ImGui::SetNextItemWidth(160.0F);
+    if (ImGui::BeginCombo("Scaling##stretch_filter", Stretch::FilterName(current))) {
+        for (const Stretch::Filter filter : Stretch::AllFilters()) {
+            const bool supported = g_d3d.StretchFilterSupported(filter);
+            const bool selected = (filter == current);
+            ImGui::BeginDisabled(!supported);
+            if (ImGui::Selectable(Stretch::FilterName(filter), selected)) {
+                state.SetStretchFilter(filter);
+                PersistSetup(state, g_dir_buf);
+            }
+            ImGui::EndDisabled();
+            if (!supported && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+                ImGui::SetTooltip("This adapter's StretchRect does not support that filter.");
+            if (selected) ImGui::SetItemDefaultFocus();
+        }
+        ImGui::EndCombo();
+    }
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("How the horizontal stretch resamples. Nearest keeps hard pixel "
+                          "edges,\nLinear smooths them. Gaussian and Pyramidal are only "
+                          "offered when\nthe adapter reports support for them.");
+    }
+    ImGui::Spacing();
+}
+
 void DrawRenderResolution(App::State& state) {
     int rw = 0;
     int rh = 0;
@@ -280,6 +329,7 @@ void DrawRenderResolution(App::State& state) {
         PersistSetup(state, g_dir_buf);
     }
     ImGui::Spacing();
+    DrawStretchWide(state, rw, rh);
 }
 
 void DrawArcExtractor() {

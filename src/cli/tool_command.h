@@ -14,6 +14,8 @@ enum class ToolKind : std::uint8_t {
     ExtractQproJson,
     QproScan,
     Scene3dTest,
+    PresetTest,
+    PresetExport,
 };
 
 struct ToolCommand {
@@ -22,6 +24,7 @@ struct ToolCommand {
     std::string arc_path;
     std::string out_path;
     int frames = 120;
+    int option = 0;
 };
 
 [[nodiscard]] ToolCommand ParseToolCommand(std::span<const std::string> args);

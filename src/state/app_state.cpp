@@ -1,4 +1,5 @@
 #include "state/app_state.h"
+#include "render/stretch.h"
 #include "state/commands.h"
 
 #include "settings/settings.h"
@@ -34,6 +35,8 @@ bool SaveCurrentSettings() {
     c.render_fps = app.GetRenderFps();
     c.game_profile = app.GetGameProfileSlug();
     c.master_scale = app.GetMasterScale();
+    c.stretch_16_9 = app.GetStretchWide();
+    c.stretch_filter = (int)app.GetStretchFilter();
     return Settings::SaveAtomic(c);
 }
 
@@ -161,6 +164,22 @@ void State::GetRenderSize(int& w, int& h) const {
 
 void State::SetRenderSize(int w, int h) {
     live_.SetRenderSize(w, h);
+}
+
+bool State::GetStretchWide() const {
+    return live_.GetStretchWide();
+}
+
+void State::SetStretchWide(bool on) {
+    live_.SetStretchWide(on);
+}
+
+Stretch::Filter State::GetStretchFilter() const {
+    return live_.GetStretchFilter();
+}
+
+void State::SetStretchFilter(Stretch::Filter filter) {
+    live_.SetStretchFilter(filter);
 }
 
 int State::GetRenderFps() const {

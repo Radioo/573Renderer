@@ -4,6 +4,7 @@
 #include "gui_panels_internal.h"
 #include "gc2d/gc_host.h"
 #include "gui_gc2d_panel.h"
+#include "gui_preset_panel.h"
 #include "gui_scene3d_panel.h"
 #include "scene3d/scene3d_host.h"
 
@@ -25,6 +26,10 @@ bool Scene3dTabVisible() {
 
 bool Gc2dTabVisible() {
     return Gc2dHost::Active();
+}
+
+bool PresetTabVisible() {
+    return Panels::PresetPanel::HasPresets();
 }
 
 constexpr PanelDesc kModernPanels[] = {
@@ -84,6 +89,11 @@ constexpr PanelDesc kScene3dPanels[] = {
      .slot = PanelSlot::MainTab,
      .draw = &Panels::RenderRendererView,
      .visible = nullptr},
+    {.id = "presets",
+     .tab_label = "Screens",
+     .slot = PanelSlot::InspectorTab,
+     .draw = &Panels::PresetPanel::Render,
+     .visible = &PresetTabVisible},
     {.id = "scene3d",
      .tab_label = "3D scene",
      .slot = PanelSlot::InspectorTab,

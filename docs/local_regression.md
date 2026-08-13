@@ -66,9 +66,14 @@ It carries the ctest label `local_dll`, which the CI workflow excludes
 its R573_*_DIR env var is unset, so the target is safe to build everywhere.
 
 Run: `ctest --test-dir build -L local_dll` with R573_IIDX_DIR (and optionally
-R573_SDVX_DIR / R573_DDR_DIR) set.
+R573_SDVX_DIR / R573_DDR_DIR / R573_IIDX10_DIR) set.
 
 Contracts covered:
+- IIDX 10 screen presets (tests/local/iidx10_screen_data_tests.cpp, R573_IIDX10_DIR):
+  every animation a preset names exists in its package, and the two frame
+  counts the presets bake in - the game-over countdown and the card-in prompt
+  loop ranges - equal the real animations' lengths. The game reads those at
+  runtime, so this is what keeps the static table honest.
 - bm2dx qpro pattern-scan: `QproDll::Read` on the real bm2dx.dll - parses ok,
   >= 447 heads, first head is qp_kihon, every head is a `qp_*.ifs` name.
 - game profile auto-detection on the real installs (slug + legacy_afp).
