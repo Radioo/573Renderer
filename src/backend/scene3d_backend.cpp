@@ -38,9 +38,11 @@ public:
         int preset_frames = 0;
         int package_frames = 0;
         if (PresetHost::Active()) {
+            ResumeForCapture();
             PresetHost::Restart();
             preset_frames = PresetHost::NaturalFrames();
         } else if (Gc2dHost::Active()) {
+            ResumeForCapture();
             Gc2dHost::SetFrame(0);
             package_frames = Gc2dHost::GetStatus().length;
         } else {
@@ -78,7 +80,13 @@ public:
         Export::PublishCapturing(sess);
     }
 
-    void EndCapture(Export::Session& sess) override { (void)sess; }
+    void EndCapture(Export::Session& sess) override {
+        (void)sess;
+        if (!resumed_) return;
+        resumed_ = false;
+        Gc2dHost::SetPaused(gc2d_was_paused_);
+        Scene3dHost::SetPaused(scene_was_paused_);
+    }
 
     [[nodiscard]] Export::Capabilities Caps() const override {
         return Export::Capabilities{
@@ -89,7 +97,20 @@ public:
     }
 
 private:
+    void ResumeForCapture() {
+        gc2d_was_paused_ = Gc2dHost::GetStatus().paused;
+        scene_was_paused_ = Scene3dHost::GetStatus().paused;
+        resumed_ = true;
+        if (!gc2d_was_paused_ && !scene_was_paused_) return;
+        Gc2dHost::SetPaused(false);
+        Scene3dHost::SetPaused(false);
+        LOG("Export", "playback was paused - resuming it for the capture, restoring it after");
+    }
+
     int planned_frames_ = 0;
+    bool resumed_ = false;
+    bool gc2d_was_paused_ = false;
+    bool scene_was_paused_ = false;
 };
 
 void ScanScenes(const std::string& game_dir) noexcept {

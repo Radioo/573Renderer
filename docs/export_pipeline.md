@@ -755,6 +755,12 @@ The same driver also serves the 2D package browser, which has a timeline of its
 own: the selected animation's length. It rewinds with `Gc2dHost::SetFrame(0)` and
 captures one full loop. Only a browser with NOTHING loaded is refused.
 
+`BeginCapture` also RESUMES playback if it was paused, and `EndCapture` puts the
+pause back exactly as the user left it. A paused capture would otherwise record
+the same frame `planned_frames` times - and if the animation opens on a blank
+frame, as IIDX 10's `TITLE` does, every one of them is empty. The AFP drivers
+unpause for the same reason; they just never restore it.
+
 Both hosts DRAW THE CURRENT PLAYHEAD AND ADVANCE AFTERWARDS, which is what makes
 "rewind, then capture N frames" cover frames 0..N-1 exactly once.
 `Gc2dHost::RenderFrame` and `PresetHost::RenderFrame` used to advance first, so a
