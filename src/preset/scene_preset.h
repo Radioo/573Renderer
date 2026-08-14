@@ -53,14 +53,13 @@ struct SpriteLayer {
     std::string_view package_dir;
     std::string_view sprite;
     bool animated = false;
-    bool ui = false;
     float x = 0.0F;
     float y = 0.0F;
     float alpha = 1.0F;
     int blend = 0;
     int priority = 0;
     GcAnim::Timing timing = {};
-    std::span<const std::string_view> ui_parts = {};
+    std::span<const std::string_view> hidden_parts = {};
     float scroll_x = 0.0F;
     float scroll_wrap = 0.0F;
 };
@@ -78,6 +77,7 @@ struct Camera {
     float fov_y = 1.0471976F;
     float near_z = 0.1F;
     float far_z = 500.0F;
+    float aspect = 0.0F;
 };
 
 struct Countdown {

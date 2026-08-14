@@ -59,6 +59,16 @@ ToolCommand ParseScene3dTest(std::span<const std::string> args, std::size_t i) {
     return c;
 }
 
+ToolCommand ParseGc2dSheet(std::span<const std::string> args, std::size_t i) {
+    ToolCommand c;
+    c.kind = ToolKind::Gc2dSheet;
+    c.in_path = args[i + 1];
+    c.out_path = (i + 2 < args.size() && args[i + 2][0] != '-') ? args[i + 2] : "gc2d_sheet";
+    c.frames = 0;
+    if (i + 3 < args.size() && args[i + 3][0] != '-') c.frames = ParseIntAtoiLike(args[i + 3]);
+    return c;
+}
+
 ToolCommand ParsePresetJob(std::span<const std::string> args, std::size_t i, ToolKind kind) {
     ToolCommand c;
     c.kind = kind;
@@ -78,6 +88,8 @@ ToolCommand ParseToolCommand(std::span<const std::string> args) {
     if (i < args.size()) return ParsePresetJob(args, i, ToolKind::PresetExport);
     i = FindFlagWithValue(args, "--preset-test");
     if (i < args.size()) return ParsePresetJob(args, i, ToolKind::PresetTest);
+    i = FindFlagWithValue(args, "--gc2d-sheet");
+    if (i < args.size()) return ParseGc2dSheet(args, i);
     i = FindFlagWithValue(args, "--scene3d-test");
     if (i < args.size()) return ParseScene3dTest(args, i);
     i = FindFlagWithValue(args, "--ddr-test");

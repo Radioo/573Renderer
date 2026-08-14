@@ -14,6 +14,9 @@ struct ModelInfo {
     int blend_mode = 0;
     bool visible = true;
     float time = 0.0F;
+    std::array<float, 3> position = {0.0F, 0.0F, 0.0F};
+    std::array<float, 3> rotation = {0.0F, 0.0F, 0.0F};
+    std::array<float, 3> scale = {1.0F, 1.0F, 1.0F};
 };
 
 struct ModelSetup {

@@ -2,6 +2,7 @@
 #include "gui_mock_assets.h"
 #include "gui_test_harness.h"
 
+#include "formats/gcanim.h"
 #include "gc2d/gc_host.h"
 #include "warp_device.h"
 #include "imgui.h"
@@ -14,6 +15,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -284,6 +286,78 @@ TEST_CASE("2D package frame slider explains itself on hover", "[gui][hosts][live
         IM_CHECK(GuiTest::HoverShowsTooltip(ctx, "##inspector_tabs/2D package/##gc2dframe"));
     };
     harness.Run(test);
+
+    Gc2dHost::Unload();
+}
+
+TEST_CASE("a placed 2D layer reports the frame it draws, not its raw playhead",
+          "[gui][hosts][live]") {
+    GuiTest::WarpGpu const gpu;
+    if (!gpu.ok()) SKIP("D3D9On12/WARP unavailable: " << WarpD3D9::LastError());
+    GuiTest::TempAssetDir const assets("gc2d_playhead");
+    GuiTest::WriteMock2dPackage(assets.path());
+
+    GuiTest::Harness const harness;
+    GuiTest::EnterReadyView("scene3d", "iidx17");
+    REQUIRE(Gc2dHost::Load(assets.path()));
+
+    const auto place = [](GcAnim::Playback playback) {
+        std::vector<Gc2dHost::SpritePlacement> sprites;
+        Gc2dHost::SpritePlacement placement;
+        placement.name = "anim_intro";
+        placement.animated = true;
+        placement.timing.playback = playback;
+        sprites.push_back(std::move(placement));
+        Gc2dHost::SetSprites(std::move(sprites));
+        Gc2dHost::SetSpriteFrame(0, 45);
+        return Gc2dHost::ListSprites();
+    };
+
+    std::vector<Gc2dHost::SpriteStatus> listed = place(GcAnim::Playback::Loop);
+    REQUIRE(listed.size() == 1);
+    CHECK(listed[0].length == 30);
+    CHECK(listed[0].playhead == 45);
+    CHECK(listed[0].frame == 15);
+
+    listed = place(GcAnim::Playback::HoldLast);
+    CHECK(listed[0].playhead == 45);
+    CHECK(listed[0].frame == 29);
+
+    listed = place(GcAnim::Playback::HideAfterEnd);
+    CHECK(listed[0].playhead == 45);
+    CHECK(listed[0].frame == -1);
+
+    Gc2dHost::Unload();
+}
+
+TEST_CASE("a scrolling static cell reports and takes a scroll offset", "[gui][hosts][live]") {
+    GuiTest::WarpGpu const gpu;
+    if (!gpu.ok()) SKIP("D3D9On12/WARP unavailable: " << WarpD3D9::LastError());
+    GuiTest::TempAssetDir const assets("gc2d_scroll");
+    GuiTest::WriteMock2dPackage(assets.path());
+
+    GuiTest::Harness const harness;
+    GuiTest::EnterReadyView("scene3d", "iidx17");
+    REQUIRE(Gc2dHost::Load(assets.path()));
+
+    std::vector<Gc2dHost::SpritePlacement> sprites;
+    Gc2dHost::SpritePlacement placement;
+    placement.name = "cell_left";
+    placement.scroll_x = 1.0F;
+    placement.scroll_wrap = 640.0F;
+    sprites.push_back(std::move(placement));
+    Gc2dHost::SetSprites(std::move(sprites));
+
+    Gc2dHost::SetSpriteFrame(0, 1307);
+    std::vector<Gc2dHost::SpriteStatus> listed = Gc2dHost::ListSprites();
+    REQUIRE(listed.size() == 1);
+    CHECK(listed[0].length == 0);
+    CHECK(listed[0].scroll_wrap == 640);
+    CHECK(listed[0].scroll == 27);
+
+    Gc2dHost::SetSpriteScroll(0, 400);
+    listed = Gc2dHost::ListSprites();
+    CHECK(listed[0].scroll == 400);
 
     Gc2dHost::Unload();
 }

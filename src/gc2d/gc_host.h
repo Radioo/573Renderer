@@ -33,6 +33,10 @@ Status GetStatus();
 
 std::vector<std::string> ListAnimations();
 
+std::vector<std::string> ListCells();
+
+std::vector<std::string> ListParts(const std::string& animation);
+
 struct SpritePlacement {
     std::string name;
     bool animated = false;
@@ -43,13 +47,29 @@ struct SpritePlacement {
     GcAnim::Blend blend = GcAnim::Blend::Normal;
     GcAnim::Timing timing = {};
     std::vector<std::string> skip_parts;
+    float time = 0.0F;
     float scroll_x = 0.0F;
     float scroll_wrap = 0.0F;
 };
 
 bool SelectAnimation(const std::string& name);
 
+struct SpriteStatus {
+    std::string name;
+    int frame = 0;
+    int length = 0;
+    int playhead = 0;
+    int scroll = 0;
+    int scroll_wrap = 0;
+};
+
 void SetSprites(std::vector<SpritePlacement> sprites);
+
+std::vector<SpriteStatus> ListSprites();
+
+void SetSpriteFrame(int index, int frame);
+
+void SetSpriteScroll(int index, int offset);
 
 void AdvanceSprites(float dt);
 

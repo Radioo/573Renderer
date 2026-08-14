@@ -289,3 +289,29 @@ TEST_CASE("ResolveFrame leaves an unknown length alone") {
     CHECK(GcAnim::ResolveFrame(42, 0, loop) == 42);
     CHECK(GcAnim::ResolveFrame(-1, 120, loop) == -1);
 }
+
+TEST_CASE("A hidden part stays hidden inside a nested child") {
+    SysIdx::Package pkg;
+    FillCells(pkg);
+    SysIdx::Record nested;
+    nested.type = SysIdx::kRecNested;
+    nested.id = 2;
+    nested.t_start = 0;
+    nested.t_end = 10;
+    pkg.records.push_back(nested);
+    pkg.records.push_back(EndAnimation());
+    pkg.records.push_back(DrawCell(0, 0, 10));
+    pkg.records.push_back(DrawCell(1, 0, 10));
+    pkg.records.push_back(EndAnimation());
+
+    std::vector<GcAnim::DrawNode> nodes;
+    GcAnim::Evaluate(pkg, 0, 1, 0.0F, 0.0F, nodes);
+    REQUIRE(nodes.size() == 2);
+
+    const std::vector<int> hide = {1};
+    GcAnim::SkipSet skip;
+    skip.cells = hide;
+    GcAnim::Evaluate(pkg, 0, 1, 0.0F, 0.0F, nodes, skip);
+    REQUIRE(nodes.size() == 1);
+    CHECK(nodes[0].cell == 0);
+}

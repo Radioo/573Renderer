@@ -26,6 +26,13 @@ const std::vector<Build> kBuilds = {
         .size = 860160,
         .crc = 0x4EB98F3BU,
     },
+    Build{
+        .id = "iidx11",
+        .name = "IIDX RED (E01 JAA)",
+        .file = "bm2dx.exe",
+        .size = 1032192,
+        .crc = 0x63423A04U,
+    },
 };
 
 std::array<std::uint32_t, 256> MakeCrcTable() {

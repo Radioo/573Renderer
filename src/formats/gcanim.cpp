@@ -37,10 +37,19 @@ Blend SelectBlend(uint16_t flags, int alpha_a, int alpha_b) {
 }
 
 void EvaluateGroup(const SysIdx::Package& pkg, size_t start_index, int frame, const Transform& xf,
-                   int depth, std::vector<DrawNode>& out);
+                   int depth, const SkipSet& skip, std::vector<DrawNode>& out);
+
+bool Hidden(const SysIdx::Record& rec, const SkipSet& skip) {
+    if (rec.type == SysIdx::kRecNested)
+        return std::ranges::find(skip.children, (size_t)rec.id) != skip.children.end();
+    if (rec.type == SysIdx::kRecDrawCell)
+        return std::ranges::find(skip.cells, (int)rec.id) != skip.cells.end();
+    return false;
+}
 
 void EvaluateRecord(const SysIdx::Package& pkg, const SysIdx::Record& rec, int frame,
-                    const Transform& xf, int depth, std::vector<DrawNode>& out) {
+                    const Transform& xf, int depth, const SkipSet& skip,
+                    std::vector<DrawNode>& out) {
     if (frame < rec.t_start || frame >= rec.t_end) return;
 
     int child_frame = rec.t_base + frame - rec.t_start;
@@ -75,7 +84,7 @@ void EvaluateRecord(const SysIdx::Package& pkg, const SysIdx::Record& rec, int f
         if (rec.id >= 0 && (size_t)rec.id < pkg.records.size()) {
             const Transform child{
                 .ox = draw_x, .oy = draw_y, .sx = sx, .sy = sy, .alpha = alpha, .blend = blend};
-            EvaluateGroup(pkg, (size_t)rec.id, child_frame, child, depth + 1, out);
+            EvaluateGroup(pkg, (size_t)rec.id, child_frame, child, depth + 1, skip, out);
         }
         return;
     }
@@ -98,12 +107,13 @@ void EvaluateRecord(const SysIdx::Package& pkg, const SysIdx::Record& rec, int f
 }
 
 void EvaluateGroup(const SysIdx::Package& pkg, size_t start_index, int frame, const Transform& xf,
-                   int depth, std::vector<DrawNode>& out) {
+                   int depth, const SkipSet& skip, std::vector<DrawNode>& out) {
     if (depth > kMaxDepth) return;
     for (size_t i = start_index; i < pkg.records.size(); i++) {
         const SysIdx::Record& rec = pkg.records[i];
         if (rec.type < 0) return;
-        EvaluateRecord(pkg, rec, frame, xf, depth, out);
+        if (Hidden(rec, skip)) continue;
+        EvaluateRecord(pkg, rec, frame, xf, depth, skip, out);
     }
 }
 
@@ -159,13 +169,8 @@ void Evaluate(const SysIdx::Package& pkg, size_t start_index, int frame, float o
     for (size_t i = start_index; i < pkg.records.size(); i++) {
         const SysIdx::Record& rec = pkg.records[i];
         if (rec.type < 0) break;
-        if (rec.type == SysIdx::kRecNested &&
-            std::ranges::find(skip.children, (size_t)rec.id) != skip.children.end())
-            continue;
-        if (rec.type == SysIdx::kRecDrawCell &&
-            std::ranges::find(skip.cells, (int)rec.id) != skip.cells.end())
-            continue;
-        EvaluateRecord(pkg, rec, frame, root, 0, out);
+        if (Hidden(rec, skip)) continue;
+        EvaluateRecord(pkg, rec, frame, root, 0, skip, out);
     }
     std::ranges::reverse(out);
 }

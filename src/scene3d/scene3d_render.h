@@ -28,6 +28,7 @@ struct Projection {
     float fov_y = 1.0471976F;
     float near_z = 0.1F;
     float far_z = 500.0F;
+    float aspect = 0.0F;
 };
 
 class Renderer {

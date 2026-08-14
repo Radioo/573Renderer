@@ -35,6 +35,18 @@ build.bat
 CMake presets + vcpkg (manifest mode, pinned toolchain). Details, including
 the ffmpeg feature set and the x265-alpha overlay port: `docs/build.md`.
 
+## Looking at a 2D package
+
+Render every animation and every named cell of a pre-AFP IIDX package to one
+PNG each, so a layer can be classified by what it draws instead of by its name:
+
+```
+573Renderer.exe --gc2d-sheet "<iidx-red-dir>/data/graph/sys/mselect" screenshots/sheet_red_mselect 30
+```
+
+The third argument is the frame to sample (animations only). This is a required
+step before a layer may go into a scene preset: `docs/preset_layers.md`.
+
 ## Tests and verification
 
 ```

@@ -40,9 +40,19 @@ int CurrentLength() {
 std::vector<SpritePlacement> g_sprites;
 std::vector<GcAnim::DrawNode> g_scratch;
 
+float ScrollOffset(const SpritePlacement& sprite) {
+    if (sprite.scroll_wrap <= 0.0F) return 0.0F;
+    return std::fmod(sprite.time * sprite.scroll_x, sprite.scroll_wrap);
+}
+
 float PlacedX(const SpritePlacement& sprite) {
-    if (sprite.scroll_wrap <= 0.0F) return sprite.x;
-    return sprite.x - std::fmod(g_time * sprite.scroll_x, sprite.scroll_wrap);
+    return sprite.x - ScrollOffset(sprite);
+}
+
+int SpriteLength(const SpritePlacement& sprite) {
+    const auto it = g_pkg.index.animation_names.find(sprite.name);
+    if (it == g_pkg.index.animation_names.end()) return 0;
+    return SysIdx::AnimationLength(g_pkg.index, it->second);
 }
 
 void AppendCell(const SpritePlacement& sprite) {
@@ -82,7 +92,7 @@ void AppendAnimation(const SpritePlacement& sprite) {
     const auto it = g_pkg.index.animation_names.find(sprite.name);
     if (it == g_pkg.index.animation_names.end()) return;
     const int length = SysIdx::AnimationLength(g_pkg.index, it->second);
-    const int frame = GcAnim::ResolveFrame((int)g_time, length, sprite.timing);
+    const int frame = GcAnim::ResolveFrame((int)sprite.time, length, sprite.timing);
     if (frame < 0) return;
     std::vector<size_t> skip_children;
     std::vector<int> skip_cells;
@@ -178,7 +188,38 @@ void RenderFrame(float dt) {
 
 void AdvanceSprites(float dt) {
     if (!g_active || g_paused) return;
-    g_time += dt * kFramesPerSecond * g_speed;
+    const float step = dt * kFramesPerSecond * g_speed;
+    g_time += step;
+    for (auto& sprite : g_sprites)
+        sprite.time += step;
+}
+
+std::vector<SpriteStatus> ListSprites() {
+    std::vector<SpriteStatus> out;
+    out.reserve(g_sprites.size());
+    for (const auto& sprite : g_sprites) {
+        const int length = sprite.animated ? SpriteLength(sprite) : 0;
+        out.push_back(
+            SpriteStatus{.name = sprite.name,
+                         .frame = GcAnim::ResolveFrame((int)sprite.time, length, sprite.timing),
+                         .length = length,
+                         .playhead = (int)sprite.time,
+                         .scroll = (int)ScrollOffset(sprite),
+                         .scroll_wrap = (int)sprite.scroll_wrap});
+    }
+    return out;
+}
+
+void SetSpriteFrame(int index, int frame) {
+    if (index < 0 || (size_t)index >= g_sprites.size()) return;
+    g_sprites[(size_t)index].time = (float)std::max(0, frame);
+}
+
+void SetSpriteScroll(int index, int offset) {
+    if (index < 0 || (size_t)index >= g_sprites.size()) return;
+    SpritePlacement& sprite = g_sprites[(size_t)index];
+    if (sprite.scroll_wrap <= 0.0F || sprite.scroll_x == 0.0F) return;
+    sprite.time = (float)std::max(0, offset) / sprite.scroll_x;
 }
 
 void DrawSprites(int min_priority, int max_priority) {
@@ -208,9 +249,54 @@ std::vector<std::string> ListAnimations() {
     return g_pkg.animation_names;
 }
 
+namespace {
+
+void CollectParts(size_t start, int depth, std::vector<std::string>& out) {
+    if (depth > 8) return;
+    for (size_t i = start; i < g_pkg.index.records.size(); i++) {
+        const SysIdx::Record& rec = g_pkg.index.records[i];
+        if (rec.type < 0) return;
+        if (rec.type == SysIdx::kRecDrawCell) {
+            for (const auto& [name, id] : g_pkg.index.cell_names) {
+                if (std::cmp_equal(id, rec.id)) out.push_back("cell " + name);
+            }
+            continue;
+        }
+        if (rec.type != SysIdx::kRecNested) continue;
+        for (const auto& [name, id] : g_pkg.index.animation_names) {
+            if (std::cmp_equal(id, rec.id)) out.push_back("child " + name);
+        }
+        if (rec.id >= 0) CollectParts((size_t)rec.id, depth + 1, out);
+    }
+}
+
+}
+
+std::vector<std::string> ListParts(const std::string& animation) {
+    std::vector<std::string> out;
+    const auto it = g_pkg.index.animation_names.find(animation);
+    if (it == g_pkg.index.animation_names.end()) return out;
+    CollectParts(it->second, 0, out);
+    std::ranges::sort(out);
+    const auto dup = std::ranges::unique(out);
+    out.erase(dup.begin(), dup.end());
+    return out;
+}
+
+std::vector<std::string> ListCells() {
+    std::vector<std::string> names;
+    names.reserve(g_pkg.index.cell_names.size());
+    for (const auto& [name, id] : g_pkg.index.cell_names)
+        names.push_back(name);
+    std::ranges::sort(names);
+    return names;
+}
+
 void SetSprites(std::vector<SpritePlacement> sprites) {
     g_sprites = std::move(sprites);
     g_time = 0.0F;
+    for (auto& sprite : g_sprites)
+        sprite.time = 0.0F;
     for (const auto& sprite : g_sprites) {
         if (!sprite.animated) {
             if (!g_pkg.index.cell_names.contains(sprite.name)) {

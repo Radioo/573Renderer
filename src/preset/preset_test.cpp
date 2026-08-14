@@ -20,6 +20,8 @@
 #include "window.h"
 
 #include <algorithm>
+#include <array>
+#include <cmath>
 #include <cstddef>
 #include <string>
 #include <vector>
@@ -82,6 +84,59 @@ int Prepare(const std::string& game_dir, const std::string& preset_id) {
     return 0;
 }
 
+struct Pose {
+    std::string name;
+    float time = 0.0F;
+    std::array<float, 3> position = {0.0F, 0.0F, 0.0F};
+    std::array<float, 3> rotation = {0.0F, 0.0F, 0.0F};
+    std::array<float, 3> scale = {1.0F, 1.0F, 1.0F};
+};
+
+std::vector<Pose> CapturePoses() {
+    std::vector<Pose> poses;
+    for (const auto& model : Scene3dHost::ListModels()) {
+        if (!model.visible) continue;
+        poses.push_back(Pose{.name = model.name,
+                             .time = model.time,
+                             .position = model.position,
+                             .rotation = model.rotation,
+                             .scale = model.scale});
+    }
+    return poses;
+}
+
+bool Differs(const std::array<float, 3>& a, const std::array<float, 3>& b) {
+    for (size_t i = 0; i < a.size(); i++) {
+        if (std::abs(a[i] - b[i]) > 1e-5F) return true;
+    }
+    return false;
+}
+
+int ReportMotion(const std::vector<Pose>& first, const std::vector<Pose>& last) {
+    if (first.empty()) {
+        LOG("PresetTest", "no visible 3D model in this preset");
+        return 0;
+    }
+    int moving = 0;
+    for (size_t i = 0; i < first.size() && i < last.size(); i++) {
+        const Pose& a = first[i];
+        const Pose& b = last[i];
+        const bool animates = std::abs(a.time - b.time) > 1e-4F;
+        const bool moves = Differs(a.position, b.position) || Differs(a.rotation, b.rotation) ||
+                           Differs(a.scale, b.scale);
+        if (moves || animates) moving++;
+        LOG("PresetTest", "  model %-10s transform %s, own animation %s", a.name.c_str(),
+            moves ? "moves" : "static (clip driven)", animates ? "advances" : "FROZEN");
+    }
+    if (moving > 0) return 0;
+    LOG("PresetTest",
+        "FAILED: nothing moves. No visible model's transform changes and no model's own "
+        "animation advances over %zu frame(s). Either the screen's per-frame transform update "
+        "was missed, or the model's anim speed is zero. Find the update.",
+        last.size());
+    return 8;
+}
+
 MediaSink::Format FormatFromPath(const std::string& path) {
     const std::size_t dot = path.find_last_of('.');
     if (dot == std::string::npos) return MediaSink::Format::AVIF;
@@ -102,12 +157,15 @@ int Run(const std::string& game_dir, const std::string& preset_id, const std::st
     PresetHost::SetOption(0, option);
 
     frames = (frames > 0) ? frames : 1;
+    std::vector<Pose> first;
     for (int i = 0; i < frames; i++) {
         AppWindow::PumpMessages();
         g_d3d.BeginFrame();
         PresetHost::RenderFrame(kFrameSeconds);
         g_d3d.EndFrame();
+        if (i == 0) first = CapturePoses();
     }
+    const int motion = ReportMotion(first, CapturePoses());
 
     const PresetHost::Status status = PresetHost::GetStatus();
     float model_time = 0.0F;
@@ -121,7 +179,7 @@ int Run(const std::string& game_dir, const std::string& preset_id, const std::st
     g_d3d.SaveBackBufferToFile(out_png.c_str());
     PresetHost::Unload();
     LOG("PresetTest", "done -> %s", out_png.c_str());
-    return 0;
+    return motion;
 }
 
 int RunExport(const std::string& game_dir, const std::string& preset_id,

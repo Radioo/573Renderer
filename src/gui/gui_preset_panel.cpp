@@ -2,10 +2,12 @@
 
 #include "game_fingerprint.h"
 #include "imgui.h"
+#include "gc2d/gc_host.h"
 #include "preset/preset_host.h"
 #include "preset/scene_preset.h"
 #include "state/app_state.h"
 
+#include <algorithm>
 #include <cfloat>
 #include <cstddef>
 #include <string>
@@ -54,6 +56,53 @@ void DrawOptions(const Preset::Scene& scene, const PresetHost::Status& status) {
             }
         }
         ImGui::EndCombo();
+    }
+}
+
+void DrawSpriteFrames() {
+    const std::vector<Gc2dHost::SpriteStatus> sprites = Gc2dHost::ListSprites();
+    if (sprites.empty()) return;
+
+    ImGui::Separator();
+    ImGui::TextDisabled("2D layers");
+    for (std::size_t i = 0; i < sprites.size(); i++) {
+        const Gc2dHost::SpriteStatus& sprite = sprites[i];
+        const std::string tag = std::to_string(i);
+        if (sprite.scroll_wrap > 0) {
+            int scroll = std::clamp(sprite.scroll, 0, sprite.scroll_wrap - 1);
+            const std::string format =
+                sprite.name + ": scrolled %d / " + std::to_string(sprite.scroll_wrap) + " px";
+            ImGui::SetNextItemWidth(-FLT_MIN);
+            if (ImGui::SliderInt(("##presetscroll" + tag).c_str(), &scroll, 0,
+                                 sprite.scroll_wrap - 1, format.c_str())) {
+                Gc2dHost::SetSpriteScroll((int)i, scroll);
+            }
+        }
+        if (sprite.length <= 0) {
+            if (sprite.scroll_wrap <= 0)
+                ImGui::TextDisabled("%s (static cell)", sprite.name.c_str());
+            continue;
+        }
+        if (sprite.frame < 0) {
+            ImGui::TextDisabled("%s (past its end, not drawn)", sprite.name.c_str());
+            continue;
+        }
+        const int last = sprite.length - 1;
+        int frame = std::clamp(sprite.frame, 0, last);
+        std::string format(sprite.name);
+        format += ": frame %d / " + std::to_string(last);
+        if (sprite.playhead >= sprite.length)
+            format += " (playhead " + std::to_string(sprite.playhead) + ")";
+        ImGui::SetNextItemWidth(-FLT_MIN);
+        if (ImGui::SliderInt(("##presetsprite" + tag).c_str(), &frame, 0, last, format.c_str())) {
+            Gc2dHost::SetSpriteFrame((int)i, frame);
+        }
+    }
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("Each 2D layer runs on its own playhead, the way the game gives\n"
+                          "every registered animation its own frame counter. Drag one to\n"
+                          "scrub that layer without touching the others; playback resumes\n"
+                          "from where you leave it.");
     }
 }
 
@@ -115,18 +164,18 @@ void Render() {
     ImGui::Separator();
     if (ImGui::Button("Unload preset")) PresetHost::Unload();
     ImGui::SameLine();
-    bool show_ui = status.show_ui;
-    if (ImGui::Checkbox("Show UI layers", &show_ui)) PresetHost::SetShowUi(show_ui);
+    ImGui::TextDisabled("background layers only");
     if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip(
-            "Layers the screen draws as widgets rather than background. Off gives the clean "
-            "background the game renders behind its UI.");
+        ImGui::SetTooltip("A screen preset reproduces the screen's BACKGROUND so it can be "
+                          "captured on its own. The game's chrome - titles, timers, lists, "
+                          "instructions - is never part of a preset.");
     }
     for (const auto* scene : g_scenes) {
         if (status.id != std::string(scene->id)) continue;
         DrawOptions(*scene, status);
     }
     DrawCountdown(status);
+    DrawSpriteFrames();
 }
 
 }

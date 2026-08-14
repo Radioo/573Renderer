@@ -245,8 +245,13 @@ std::vector<ModelInfo> ListModels() {
     std::vector<ModelInfo> out;
     out.reserve(g_scene.models.size());
     for (const auto& m : g_scene.models) {
-        out.push_back(
-            {.name = m.name, .blend_mode = m.blend_mode, .visible = m.visible, .time = m.time});
+        out.push_back({.name = m.name,
+                       .blend_mode = m.blend_mode,
+                       .visible = m.visible,
+                       .time = m.time,
+                       .position = m.position,
+                       .rotation = m.rotation,
+                       .scale = m.scale});
     }
     return out;
 }

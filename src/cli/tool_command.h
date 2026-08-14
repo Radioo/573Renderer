@@ -14,6 +14,7 @@ enum class ToolKind : std::uint8_t {
     ExtractQproJson,
     QproScan,
     Scene3dTest,
+    Gc2dSheet,
     PresetTest,
     PresetExport,
 };

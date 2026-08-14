@@ -23,14 +23,13 @@ namespace PresetHost {
 namespace {
 
 const Preset::Scene* g_scene = nullptr;
-bool g_show_ui = false;
 std::string g_game_dir;
 std::string g_lead_model;
 int g_countdown = 0;
 int g_frame = 0;
 int g_transition = 0;
 float g_spin_kick = 1.0F;
-std::array<float, 3> g_spin = {0.0F, 0.0F, 0.0F};
+std::vector<std::array<float, 3>> g_spins;
 std::array<float, 3> g_transition_from = {0.0F, 0.0F, 0.0F};
 std::vector<int> g_choices;
 float g_speed = 1.0F;
@@ -63,34 +62,44 @@ std::array<float, 3> ChoicePosition() {
     return out;
 }
 
+bool Moves(const Preset::ModelMotion& motion) {
+    return motion.orbit_radius > 0.0F || motion.spin_kick > 0.0F ||
+           motion.spin_per_frame != std::array<float, 3>{0.0F, 0.0F, 0.0F};
+}
+
 void ApplyMotion() {
-    if (g_lead_model.empty()) return;
-    const Preset::ModelLayer& layer = g_scene->models.front();
-    const Preset::ModelMotion& motion = layer.motion;
-    const bool orbits = motion.orbit_radius > 0.0F;
+    if (g_scene->models.empty()) return;
     const bool chooses = !g_scene->options.empty() && !g_choices.empty();
-    if (!orbits && !chooses && motion.spin_kick <= 0.0F &&
-        motion.spin_per_frame == std::array<float, 3>{0.0F, 0.0F, 0.0F})
-        return;
-
     if (g_transition > 0) g_transition -= 4;
-    if (g_spin_kick > 1.0F) {
-        g_spin_kick = std::max(1.0F, g_spin_kick - motion.spin_kick_decay);
-    } else if (g_spin_kick < -1.0F) {
-        g_spin_kick = std::min(-1.0F, g_spin_kick + motion.spin_kick_decay);
-    }
-    for (size_t i = 0; i < g_spin.size(); i++)
-        g_spin[i] += motion.spin_per_frame[i] * g_spin_kick;
 
-    std::array<float, 3> position = layer.position;
-    if (orbits) {
-        position = OrbitPosition(motion);
-    } else if (chooses) {
-        position = ChoicePosition();
+    for (size_t i = 0; i < g_scene->models.size() && i < g_spins.size(); i++) {
+        const Preset::ModelLayer& layer = g_scene->models[i];
+        const Preset::ModelMotion& motion = layer.motion;
+        const bool lead = (i == 0);
+        if (!Moves(motion) && !(lead && chooses)) continue;
+
+        if (lead) {
+            if (g_spin_kick > 1.0F) {
+                g_spin_kick = std::max(1.0F, g_spin_kick - motion.spin_kick_decay);
+            } else if (g_spin_kick < -1.0F) {
+                g_spin_kick = std::min(-1.0F, g_spin_kick + motion.spin_kick_decay);
+            }
+        }
+        const float kick = lead ? g_spin_kick : 1.0F;
+        std::array<float, 3>& spin = g_spins[i];
+        for (size_t axis = 0; axis < spin.size(); axis++)
+            spin[axis] += motion.spin_per_frame[axis] * kick;
+
+        std::array<float, 3> position = layer.position;
+        if (motion.orbit_radius > 0.0F) {
+            position = OrbitPosition(motion);
+        } else if (lead && chooses) {
+            position = ChoicePosition();
+        }
+        Scene3dHost::SetModelTransform(std::string(layer.model), position,
+                                       {layer.rotation[0] + spin[0], layer.rotation[1] + spin[1],
+                                        layer.rotation[2] + spin[2]});
     }
-    Scene3dHost::SetModelTransform(g_lead_model, position,
-                                   {layer.rotation[0] + g_spin[0], layer.rotation[1] + g_spin[1],
-                                    layer.rotation[2] + g_spin[2]});
 }
 
 void ApplyIntro() {
@@ -126,9 +135,8 @@ void Advance() {
 
 std::vector<std::string> SkipParts(const Preset::SpriteLayer& sprite) {
     std::vector<std::string> names;
-    if (g_show_ui) return names;
-    names.reserve(sprite.ui_parts.size());
-    for (const std::string_view part : sprite.ui_parts)
+    names.reserve(sprite.hidden_parts.size());
+    for (const std::string_view part : sprite.hidden_parts)
         names.emplace_back(part);
     return names;
 }
@@ -136,10 +144,8 @@ std::vector<std::string> SkipParts(const Preset::SpriteLayer& sprite) {
 void PlaceSprites(const Preset::Scene& scene) {
     std::vector<const Preset::SpriteLayer*> ordered;
     ordered.reserve(scene.sprites.size());
-    for (const auto& sprite : scene.sprites) {
-        if (sprite.ui && !g_show_ui) continue;
+    for (const auto& sprite : scene.sprites)
         ordered.push_back(&sprite);
-    }
     std::ranges::stable_sort(ordered,
                              [](const Preset::SpriteLayer* a, const Preset::SpriteLayer* b) {
                                  return a->priority > b->priority;
@@ -166,7 +172,7 @@ void ResetPlayback(const Preset::Scene& scene) {
     g_countdown = scene.countdown.start_frames;
     g_frame = 0;
     g_transition = 0;
-    g_spin = {0.0F, 0.0F, 0.0F};
+    g_spins.assign(scene.models.size(), std::array<float, 3>{0.0F, 0.0F, 0.0F});
     g_spin_kick =
         scene.models.empty() ? 1.0F : std::max(1.0F, scene.models.front().motion.spin_kick);
     g_choices.clear();
@@ -187,6 +193,7 @@ Scene3dHost::Setup BuildSetup(const Preset::Scene& scene, std::string_view scene
     setup.projection.fov_y = scene.camera.fov_y;
     setup.projection.near_z = scene.camera.near_z;
     setup.projection.far_z = scene.camera.far_z;
+    setup.projection.aspect = scene.camera.aspect;
     setup.eye = scene.camera.eye;
     setup.at = scene.camera.at;
     setup.up = scene.camera.up;
@@ -298,20 +305,8 @@ Status GetStatus() {
     s.model_speed = g_speed;
     s.model_alpha = g_alpha;
     s.blend_mode = g_blend;
-    s.show_ui = g_show_ui;
     s.option_choices = g_choices;
     return s;
-}
-
-void SetShowUi(bool on) {
-    if (g_show_ui == on) return;
-    g_show_ui = on;
-    if (g_scene == nullptr) return;
-    const Preset::Scene& scene = *g_scene;
-    const std::string dir = g_game_dir;
-    const int countdown = g_countdown;
-    Load(dir, scene);
-    SetCountdown(countdown);
 }
 
 void SetOption(int option, int choice) {

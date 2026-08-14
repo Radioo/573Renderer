@@ -111,3 +111,18 @@ and only assert on a machine with the dumps. They were previously hidden
 `[.real]` tags, which Catch's test discovery never registers - a manual-only
 path that silently returned green without data; the SKIP form replaced it
 so a data-less run is visibly a skip, not a pass.
+
+## Scene preset sweep
+
+`tools/local/preset_sweep.py` renders every preset of a build, in every option
+state, and fails if any of them shows a model whose transform never changes:
+
+```bash
+python tools/local/preset_sweep.py iidx11 <iidx-red-dir> --frames 120
+```
+
+It writes one PNG per state into `screenshots/` (named `<preset>-state<N>.png`
+when the preset has options) so every state can be reviewed by eye, which is the
+other half of the check the tool cannot make. A non-zero exit means at least one
+preset was built from a screen's INIT and misses the per-frame update that drives
+its models: see `docs/game_profiles.md` and the `game-scene-preset` skill.

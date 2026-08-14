@@ -147,6 +147,7 @@ add_library(r573_app STATIC
     src/backend/scene3d_backend.cpp
     src/gc2d/gc_package.cpp
     src/gc2d/gc_host.cpp
+    src/gc2d/gc_sheet.cpp
     src/gc2d/gc_render.cpp
     src/game_revision.cpp
     src/backend/afp_profiles.cpp
@@ -223,6 +224,8 @@ add_library(r573_app STATIC
     src/afp_ddr_test.cpp
     src/game_fingerprint.cpp
     src/preset/scene_presets.cpp
+    src/preset/scene_presets_iidx10.cpp
+    src/preset/scene_presets_iidx11.cpp
     src/preset/preset_host.cpp
     src/preset/preset_test.cpp
     src/scene3d/anim.cpp
@@ -301,6 +304,8 @@ add_executable(game_tests
     src/game_revision.cpp
     src/game_fingerprint.cpp
     src/preset/scene_presets.cpp
+    src/preset/scene_presets_iidx10.cpp
+    src/preset/scene_presets_iidx11.cpp
     src/mc_control.cpp
 )
 target_include_directories(game_tests PRIVATE src)
@@ -402,6 +407,8 @@ add_executable(local_dll_tests
     src/qpro/qpro_dll.cpp
     src/gc2d/gc_package.cpp
     src/preset/scene_presets.cpp
+    src/preset/scene_presets_iidx10.cpp
+    src/preset/scene_presets_iidx11.cpp
 )
 target_include_directories(local_dll_tests PRIVATE src)
 target_link_libraries(local_dll_tests PRIVATE Catch2::Catch2WithMain r573_support r573_state

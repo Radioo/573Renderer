@@ -982,7 +982,17 @@ Run one headless:
 
 The build is identified from the directory, the preset id selects the screen
 (omit it for the build's first preset), and the frame count drives the countdown
-so the last-ten-seconds speed-up can be captured.
+so the last-ten-seconds speed-up can be captured. A sixth argument picks an
+option choice, which is how each of a screen's states is rendered for review.
+
+**The tool exits 8 when no visible model's transform changed over the capture.**
+Every one of these screens drives its models from a per-frame update, so a preset
+whose models never move was built from the screen's INIT alone and is wrong. The
+exit code exists because six of the nine IIDX RED presets shipped frozen: the
+init transform is a starting pose that the update overwrites on frame 1. It
+reports per model whether the transform moved and whether the model's own
+animation advanced, so a model that is animating in place is not mistaken for one
+the game is actually driving.
 
 Each animated sprite layer carries a `GcAnim::Timing`: the game's playback mode
 (loop, hold the last frame, or hide once the timeline ends) plus an optional
@@ -1051,6 +1061,70 @@ an animation that belong to the screen's chrome rather than its background. The
 "Show UI layers" toggle hides them, which is how mode select's backdrop renders
 without the `MODE SELECT` title, the marquee and the `INFORMATION` bar that share
 its one `MODE_BG_LOOP` animation.
+
+Presets are split per build: `scene_presets_iidx10.cpp` and
+`scene_presets_iidx11.cpp` each expose their table through `scene_registry.h`,
+and `scene_presets.cpp` only aggregates them for `ForBuild`. Registered IIDX RED
+screens (`IIDX/red_3d_screens.md`):
+
+| id | content | natural length |
+|---|---|---|
+| `iidx11-music-select` | 4 of the `red` models, no 2D layer at all | 3600 frames |
+| `iidx11-mode-select` | `core` + `flame`, camera at z -0.25 | 1200 frames |
+| `iidx11-dan-select` | `dan_bg1` + `core` + `flame` over the `BG` hexagons | 1200 frames |
+| `iidx11-expert-select` | `core` + `flame` over `EXPERT_BG` | 2700 frames |
+| `iidx11-new-player` | `gate` over `CARD_BG` | 1200 frames |
+| `iidx11-attract` | the 4 logo models spinning over `TITLE` | 1200 frames |
+| `iidx11-card-in` | `gate` at the handover state over `CARD_BG` | 3600 frames |
+| `iidx11-login` | `gate` at alpha 0.8 + `LOGIN` | 1200 frames |
+| `iidx11-ending` | `core` + `flame` over the `END_BG1` cell | 1200 frames |
+
+RED needs one thing IIDX 10 did not: its music select calls the projection setter
+with an EXPLICIT aspect (850/480) that does not match the 640x480 framebuffer, so
+`Preset::Camera::aspect` (and `Scene3d::Projection::aspect`) override the
+derived-from-render-size default when non-zero.
+
+Two more RED-only differences: it inherits TWO directional lights from the title
+update rather than one, and its attract and ending screens spin several models at
+DIFFERENT rates, so `Preset::ModelMotion` is applied per model layer instead of to
+the lead model only.
+
+A preset carries ONLY background layers. What each screen's chrome is, and how
+that was decided, is `docs/preset_layers.md`; the classification is machine
+checked by `tools/ci/check_preset_layers.py`. RED music select is the extreme
+case: it registers three animations and all three are UI, so its preset has no
+2D layer at all and the background IS the five-model emblem.
+
+Chrome that is BAKED INTO a background animation is removed per part with
+`SpriteLayer::hidden_parts`, which names an animation or a cell and drops it
+anywhere in the record tree, nested children included.
+
+Every placed 2D layer runs on its OWN playhead rather than a shared clock, which
+is what the game does - each registered animation gets its own frame counter. The
+Screens tab lists them and exposes one frame slider per layer, so a single layer
+can be scrubbed without disturbing the others; static cells are listed but have
+no timeline to scrub.
+
+That counter FREE-RUNS past the animation's length, exactly like the game's: the
+playback mode, not the counter, decides what gets drawn (`GcAnim::ResolveFrame`
+wraps it for a looping layer, pins it to the last frame for hold-last, and draws
+nothing for hide-after-end). So `Gc2dHost::SpriteStatus` reports both: `frame` is
+the RESOLVED frame the layer actually draws (-1 when nothing is drawn) and
+`playhead` is the raw counter. The slider is bound to the resolved frame and
+appends the raw counter to its label once the two diverge. Reporting the raw
+counter alone produced readings like `frame 454 / 359` on a 359-frame looping
+background that was really drawing frame 95, with the slider grab pinned to the
+end and any drag snapping the layer somewhere else.
+
+A layer's per-frame motion is not always a timeline. IIDX 10 music select draws
+the `BG_SKY` band as ONE static cell blitted twice at `640 - frame % 640` and
+`-(frame % 640)`, so it slides a pixel per frame and wraps at 640 without having
+any animation records at all. `SpritePlacement::scroll_x` / `scroll_wrap` model
+that, and `SpriteStatus` reports the resulting `scroll` offset alongside its
+`scroll_wrap`, so the panel gives a scrolling layer a SCROLL slider in pixels
+instead of a frame slider it has no timeline for. A layer that both scrolls and
+animates gets both sliders. Only a layer with neither is listed as a static cell
+with no control.
 
 In the GUI the same presets appear as a **Screens** tab in the inspector,
 which is visible whenever the loaded directory fingerprints to a build that has

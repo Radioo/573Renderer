@@ -230,7 +230,9 @@ void Renderer::Draw(const Scene& scene, float camera_time, int width, int height
     ApplyBaseState();
     ApplyLights(lights_);
 
-    const D3DMATRIX proj = Perspective(projection_, (float)width / (float)height);
+    const float aspect =
+        (projection_.aspect > 0.0F) ? projection_.aspect : ((float)width / (float)height);
+    const D3DMATRIX proj = Perspective(projection_, aspect);
     dev_->SetTransform(D3DTS_PROJECTION, &proj);
 
     view_ = (view_override != nullptr) ? *view_override : ViewMatrix(scene, camera_time);

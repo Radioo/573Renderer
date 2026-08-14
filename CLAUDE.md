@@ -13,6 +13,33 @@
 - When fixing a bug with AVS/AFP instrumentation, you MUST provide proof of game pseudocode from RE to ensure the fix is correct. Attach it to docs along with a way how to find that code (remember, no raw offsets because they will change on each game version).
 - Prefer existing libraries and solutions known to work as opposed to writing code that another library can provide, adding new vcpkg dependencies for this is very welcome
 
+# A SCENE PRESET IS A CLEAN BACKGROUND CAPTURE - NEVER A SCREEN REPLICA
+
+Scene presets exist for ONE reason: to capture the cool BACKGROUND ANIMATION a game screen
+draws, on its own. **NO UI ELEMENT MAY EVER BE VISIBLE IN A PRESET.** No titles, no
+INFORMATION bars, no TIME REMAIN, no difficulty rows, no song lists, no player panels, no
+prompts, no frames, no instruction text. There is no "show UI" toggle and there must never be
+one again: a toggle turns shipping chrome into a user problem instead of a bug.
+
+- **Never classify a layer from its NAME or from the disassembly.** KONAMI's `MUSIC_IN` is the
+  entire music-select UI frame; `EXPERT_IN` is the course-select frame. Names lie.
+- **Before ANY 2D layer goes into a preset, render it and LOOK at it:**
+  `573Renderer.exe --gc2d-sheet <package-dir> <out-dir> <frame>` writes one PNG per animation
+  and per named cell. Then write the verdict into `docs/preset_layers.md`. This is enforced by
+  `tools/ci/check_preset_layers.py`: a layer with no row, or a row that says `chrome`, fails
+  the build.
+- **The init is not the truth - find the per-frame update.** A screen's init often sets a model
+  transform that its update overwrites every frame. IIDX RED music select inits the emblem at
+  (-0.58,-0.5,0) and then `sub_41C620` moves it to (-0.1,0,-0.276) on every single frame. Trace
+  the update before writing any transform into a preset.
+- **When a preset render is finished, LOOK at the PNG and ask "is any chrome visible?"** - not
+  "did it crash". Shipping a preset whose render is 90 percent UI, having looked at that exact
+  PNG, is how this rule came to exist.
+- Burned (2026-08-14): `iidx11-music-select` shipped as the whole MUSIC SELECT frame with no
+  background at all, and the same class of miss put chrome in eight other presets. The user had
+  already said this once, about IIDX 10 mode select, and it was fixed for that one screen
+  instead of for the concept.
+
 # Resolutions
 
 When testing or debugging, ALWAYS use a proper render resolution for the game so that the content is not getting cut off.

@@ -4,6 +4,7 @@
 #include "qpro/qpro_scan.h"
 #include "support/log.h"
 #include "afp_ddr_test.h"
+#include "gc2d/gc_sheet.h"
 #include "scene3d/scene3d_test.h"
 #include "preset/preset_test.h"
 #include "arc_extract.h"
@@ -104,6 +105,8 @@ int Run(const Cli::ToolCommand& cmd) {
     switch (cmd.kind) {
     case Cli::ToolKind::Scene3dTest:
         return Scene3dTest::Run(cmd.in_path, cmd.out_path, cmd.frames);
+    case Cli::ToolKind::Gc2dSheet:
+        return Gc2dSheet::Run(cmd.in_path, cmd.out_path, cmd.frames);
     case Cli::ToolKind::PresetTest:
         return PresetTest::Run(cmd.in_path, cmd.arc_path, cmd.out_path, cmd.frames, cmd.option);
     case Cli::ToolKind::PresetExport:

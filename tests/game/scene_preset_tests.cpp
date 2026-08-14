@@ -60,7 +60,7 @@ TEST_CASE("fingerprint finds nothing in an empty directory") {
 namespace {
 
 const Preset::Scene& PresetById(std::string_view id) {
-    for (const auto* scene : Preset::ForBuild("iidx10")) {
+    for (const auto* scene : Preset::ForBuild(id.starts_with("iidx11") ? "iidx11" : "iidx10")) {
         if (scene->id == id) return *scene;
     }
     FAIL("iidx10 has no preset " << id);
@@ -98,23 +98,16 @@ TEST_CASE("the iidx10 music select preset carries the values read out of the bin
     REQUIRE(scene.models[0].anim_speed == 0.25F);
     REQUIRE(scene.models[0].rotation[1] == 49.5179214F);
 
-    REQUIRE(scene.sprites.size() == 6);
+    REQUIRE(scene.sprites.size() == 3);
     REQUIRE(scene.sprites[0].sprite == "MU10_BG");
     REQUIRE(scene.sprites[0].priority == 31);
     REQUIRE(scene.sprites[1].sprite == "BG_SKY");
     REQUIRE(scene.sprites[1].scroll_wrap == 640.0F);
     REQUIRE(scene.sprites[2].sprite == "BG_SKY");
     REQUIRE(scene.sprites[2].x == 0.0F);
-    REQUIRE(scene.sprites[3].sprite == "MU_BG01");
-    REQUIRE(scene.sprites[3].animated);
-    REQUIRE(scene.sprites[4].ui);
-    REQUIRE(scene.sprites[5].ui);
 
-    int behind = 0;
-    for (const auto& sprite : scene.sprites) {
-        if (sprite.priority >= scene.sprite_split_priority) behind++;
-    }
-    REQUIRE(behind == 3);
+    for (const auto& sprite : scene.sprites)
+        REQUIRE(sprite.priority >= scene.sprite_split_priority);
 }
 
 TEST_CASE("the card in preset inherits the music_bg model and has no ramp") {
@@ -130,15 +123,9 @@ TEST_CASE("the card in preset inherits the music_bg model and has no ramp") {
     REQUIRE(scene.countdown.start_frames == 3600);
     REQUIRE(scene.countdown.ramp_below == 0);
 
-    REQUIRE(scene.sprites.size() == 7);
+    REQUIRE(scene.sprites.size() == 1);
     REQUIRE(scene.sprites[0].sprite == "CARD_BG");
     REQUIRE(scene.sprites[0].priority == 31);
-    REQUIRE_FALSE(scene.sprites[0].ui);
-    for (std::size_t i = 1; i < scene.sprites.size(); i++) {
-        REQUIRE(scene.sprites[i].ui);
-        REQUIRE(scene.sprites[i].animated);
-        REQUIRE(scene.sprites[i].priority < scene.sprite_split_priority);
-    }
 }
 
 TEST_CASE("every registered preset names a distinct id and at least one layer") {
@@ -256,17 +243,123 @@ TEST_CASE("the mode select preset exposes the game's per-mode cube placements") 
     REQUIRE(model.motion.spin_kick_decay == 0.5F);
 }
 
-TEST_CASE("the mode select background hides the frame chrome with the UI layers") {
+TEST_CASE("the mode select background hides the chrome baked into the backdrop") {
     const Preset::Scene& scene = PresetById("iidx10-mode-select");
+    REQUIRE(scene.sprites.size() == 1);
     REQUIRE(scene.sprites[0].sprite == "MODE_BG_LOOP");
-    REQUIRE_FALSE(scene.sprites[0].ui);
-    REQUIRE(scene.sprites[0].ui_parts.size() == 11);
-    REQUIRE(scene.sprites[0].ui_parts[0] == "FRAME");
-    REQUIRE(std::ranges::find(scene.sprites[0].ui_parts, "MODE_T") !=
-            scene.sprites[0].ui_parts.end());
-    REQUIRE(std::ranges::find(scene.sprites[0].ui_parts, "INFOWAKU") !=
-            scene.sprites[0].ui_parts.end());
-    for (const auto& sprite : scene.sprites) {
-        if (sprite.ui) REQUIRE(sprite.ui_parts.empty());
+    REQUIRE(scene.sprites[0].hidden_parts.size() == 11);
+    REQUIRE(scene.sprites[0].hidden_parts[0] == "FRAME");
+    REQUIRE(std::ranges::find(scene.sprites[0].hidden_parts, "MODE_T") !=
+            scene.sprites[0].hidden_parts.end());
+    REQUIRE(std::ranges::find(scene.sprites[0].hidden_parts, "INFOWAKU") !=
+            scene.sprites[0].hidden_parts.end());
+}
+
+TEST_CASE("the IIDX RED presets carry the red scene's models and its own lighting") {
+    const std::vector<const Preset::Scene*> red = Preset::ForBuild("iidx11");
+    REQUIRE(red.size() == 9);
+
+    std::vector<std::string> seen;
+    for (const auto* scene : red) {
+        const std::string id(scene->id);
+        INFO("preset " << id);
+        REQUIRE(std::ranges::find(seen, id) == seen.end());
+        seen.push_back(id);
+        REQUIRE_FALSE(scene->models.empty());
+        REQUIRE(scene->lights.size() == 2);
+        REQUIRE(scene->lights[0].direction == std::array<float, 3>{1.0F, 1.0F, 1.0F});
+        REQUIRE(scene->lights[1].direction == std::array<float, 3>{-1.0F, -1.0F, -1.0F});
+        REQUIRE(scene->camera.near_z == 0.0F);
+        REQUIRE(scene->camera.far_z == 1000.0F);
+        for (const auto& model : scene->models)
+            REQUIRE(model.scene_dir == "data/graph/model/red");
     }
+}
+
+TEST_CASE("IIDX RED music select keeps the projection aspect the game sets") {
+    const Preset::Scene& scene = PresetById("iidx11-music-select");
+    REQUIRE(scene.camera.aspect == 1.7708334F);
+    REQUIRE(scene.models.size() == 4);
+    REQUIRE(scene.models[0].model == "core");
+    REQUIRE(scene.models[0].alpha == 0.8F);
+    REQUIRE(scene.models[1].model == "shield");
+    REQUIRE(scene.models[1].alpha == 0.525F);
+    REQUIRE(scene.models[2].model == "flame");
+    REQUIRE(scene.models[2].blend_mode == 0);
+    REQUIRE(scene.models[3].model == "r_side");
+    REQUIRE(scene.models[3].alpha == 0.65F);
+    for (const auto& model : scene.models) {
+        REQUIRE(model.position == std::array<float, 3>{-0.1F, 0.0F, -0.27555565F});
+        REQUIRE(model.anim_speed == 0.75F);
+    }
+    REQUIRE(scene.sprites.empty());
+}
+
+TEST_CASE("every IIDX RED model carries the game's own per-frame motion") {
+    for (const auto* scene : Preset::ForBuild("iidx11")) {
+        INFO("preset " << scene->id);
+        REQUIRE_FALSE(scene->models.empty());
+        bool driven = false;
+        for (const auto& model : scene->models) {
+            REQUIRE(model.anim_speed > 0.0F);
+            if (model.motion.spin_per_frame != std::array<float, 3>{0.0F, 0.0F, 0.0F})
+                driven = true;
+        }
+        const std::string id(scene->id);
+        const bool clip_driven =
+            (id == "iidx11-card-in" || id == "iidx11-login" || id == "iidx11-new-player");
+        REQUIRE(driven == !clip_driven);
+    }
+}
+
+TEST_CASE("IIDX RED mode select uses the camera its update re-issues every frame") {
+    const Preset::Scene& scene = PresetById("iidx11-mode-select");
+    REQUIRE(scene.camera.eye == std::array<float, 3>{-0.15F, 0.14F, -0.06F});
+    REQUIRE(scene.camera.at == std::array<float, 3>{1.12F, -1.31F, 1.28F});
+    REQUIRE(scene.camera.aspect == 1.7708334F);
+    REQUIRE(scene.models.size() == 2);
+    for (const auto& model : scene.models) {
+        REQUIRE(model.blend_mode == 3);
+        REQUIRE(model.rotation[1] == 4.2F);
+        REQUIRE(model.motion.spin_per_frame[1] == -0.008F);
+    }
+}
+
+TEST_CASE("IIDX RED card in inherits the gate state the title sequence hands over") {
+    const Preset::Scene& scene = PresetById("iidx11-card-in");
+    REQUIRE(scene.models.size() == 1);
+    REQUIRE(scene.models[0].model == "gate");
+    REQUIRE(scene.models[0].alpha == 0.5F);
+    REQUIRE(scene.models[0].blend_mode == 3);
+    REQUIRE(scene.models[0].anim_speed == 0.25F);
+    REQUIRE(scene.models[0].rotation[0] == -0.8F);
+    REQUIRE(scene.countdown.start_frames == 3600);
+}
+
+TEST_CASE("IIDX RED attract spins each logo model on its own axis rate") {
+    const Preset::Scene& scene = PresetById("iidx11-attract");
+    REQUIRE(scene.models.size() == 4);
+    REQUIRE(scene.models[3].model == "r_side");
+    REQUIRE(scene.models[3].blend_mode == 0);
+    REQUIRE(scene.models[3].motion.spin_per_frame[1] ==
+            4.0F * scene.models[0].motion.spin_per_frame[1]);
+    for (const auto& model : scene.models)
+        REQUIRE(model.position == std::array<float, 3>{0.105F, 0.0F, 0.0F});
+}
+
+TEST_CASE("IIDX RED login settles to the gate alone") {
+    const Preset::Scene& scene = PresetById("iidx11-login");
+    REQUIRE(scene.models.size() == 1);
+    REQUIRE(scene.models[0].model == "gate");
+    REQUIRE(scene.models[0].alpha == 0.8F);
+    REQUIRE(scene.models[0].anim_speed == 1.0F);
+}
+
+TEST_CASE("IIDX RED ending draws its background as a static cell") {
+    const Preset::Scene& scene = PresetById("iidx11-ending");
+    REQUIRE(scene.sprites.size() == 1);
+    REQUIRE(scene.sprites[0].sprite == "END_BG1");
+    REQUIRE_FALSE(scene.sprites[0].animated);
+    REQUIRE(scene.sprites[0].priority == 31);
+    REQUIRE(scene.camera.eye[2] == 0.249F);
 }
