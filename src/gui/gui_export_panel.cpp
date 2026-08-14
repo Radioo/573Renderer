@@ -15,6 +15,7 @@
 #include <cfloat>
 #include <cstdio>
 #include <cstring>
+#include <array>
 #include <string>
 #include <utility>
 #include <cmath>
@@ -27,22 +28,24 @@ char g_stem_buf[512] = {};
 std::string g_last_ifs;
 std::string g_last_anim;
 
-int g_fps = 60;
-int g_quality = 60;
-int g_keyframe_interval = 0;
-int g_max_frames = 0;
+const App::ExportRequest kDefaults{};
+
+int g_fps = kDefaults.fps;
+int g_quality = kDefaults.quality;
+int g_keyframe_interval = kDefaults.keyframe_interval;
+int g_max_frames = kDefaults.max_frames;
 bool g_limit_frames = false;
-int g_loop_count = 1;
-bool g_blend_loop = false;
-int g_blend_frames = 15;
-int g_format_idx = MediaSink::ToIndex(MediaSink::kDefaultFormat);
-bool g_prefer_hw = true;
+int g_loop_count = kDefaults.loop_count;
+bool g_blend_loop = kDefaults.blend_loop;
+int g_blend_frames = kDefaults.blend_frames;
+int g_format_idx = kDefaults.format;
+bool g_prefer_hw = kDefaults.prefer_hardware;
 
-int g_out_w = 0;
-int g_out_h = 0;
+int g_out_w = kDefaults.width;
+int g_out_h = kDefaults.height;
 
-bool g_bg_transparent = true;
-float g_bg_rgb[3] = {0.13F, 0.14F, 0.17F};
+bool g_bg_transparent = kDefaults.bg_transparent;
+std::array<float, 3> g_bg_rgb = {kDefaults.bg_r, kDefaults.bg_g, kDefaults.bg_b};
 
 void MaybeRegenerateStem(App::State& state) {
     std::string active = state.ActiveIfs();
@@ -527,11 +530,16 @@ void DrawBackgroundAndHw(MediaSink::Format current_format, bool hw_available,
                           "animated AVIF transparency well.");
     }
     ImGui::SameLine();
-    if (g_bg_transparent) ImGui::BeginDisabled();
+    const bool bg_colour_inert = g_bg_transparent || !caps.transparent_bg;
+    if (bg_colour_inert) ImGui::BeginDisabled();
     ImGui::SetNextItemWidth(160);
-    ImGui::ColorEdit3("##exp_bg_color", g_bg_rgb,
+    ImGui::ColorEdit3("##exp_bg_color", g_bg_rgb.data(),
                       ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
-    if (g_bg_transparent) ImGui::EndDisabled();
+    if (bg_colour_inert) ImGui::EndDisabled();
+    if (!caps.transparent_bg && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+        ImGui::SetTooltip("This screen is opaque, so it exports exactly what the\n"
+                          "preview shows and no background shows through.");
+    }
 
     const bool is_h264 = (current_format == MediaSink::Format::MP4_H264);
     const bool format_can_use_hw = (current_format == MediaSink::Format::AVIF ||

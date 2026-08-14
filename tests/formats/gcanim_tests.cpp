@@ -72,7 +72,7 @@ TEST_CASE("Evaluate emits a draw node inside the frame window only") {
     CHECK(out[0].w == Catch::Approx(32.0F));
     CHECK(out[0].h == Catch::Approx(16.0F));
     CHECK(out[0].alpha == Catch::Approx(1.0F));
-    CHECK(out[0].blend == GcAnim::Blend::Normal);
+    CHECK(out[0].blend == GcAnim::Blend::Replace);
 
     GcAnim::Evaluate(pkg, 0, 10, 100.0F, 50.0F, out);
     CHECK(out.empty());
@@ -131,7 +131,7 @@ TEST_CASE("An alpha track past 100 percent combined coverage selects additive bl
     SysIdx::Package pkg;
     FillCells(pkg);
     SysIdx::Record rec = DrawCell(0, 0, 10);
-    rec.flags = SysIdx::kFlagAlphaTrack;
+    rec.flags = SysIdx::kFlagBlend;
     rec.alpha = {{.t = 0, .a = 60, .b = 60}, {.t = 10, .a = 60, .b = 60}};
     pkg.records.push_back(rec);
     pkg.records.push_back(EndAnimation());
@@ -147,7 +147,7 @@ TEST_CASE("The subtract flag outranks the additive alpha rule") {
     SysIdx::Package pkg;
     FillCells(pkg);
     SysIdx::Record rec = DrawCell(0, 0, 10);
-    rec.flags = SysIdx::kFlagAlphaTrack | SysIdx::kFlagSubtract;
+    rec.flags = SysIdx::kFlagBlend | SysIdx::kFlagSubtract;
     rec.alpha = {{.t = 0, .a = 60, .b = 60}, {.t = 10, .a = 60, .b = 60}};
     pkg.records.push_back(rec);
     pkg.records.push_back(EndAnimation());
@@ -162,7 +162,7 @@ TEST_CASE("Fully transparent with full secondary coverage is culled") {
     SysIdx::Package pkg;
     FillCells(pkg);
     SysIdx::Record rec = DrawCell(0, 0, 10);
-    rec.flags = SysIdx::kFlagAlphaTrack;
+    rec.flags = SysIdx::kFlagBlend;
     rec.alpha = {{.t = 0, .a = 0, .b = 100}, {.t = 10, .a = 0, .b = 100}};
     pkg.records.push_back(rec);
     pkg.records.push_back(EndAnimation());
@@ -184,7 +184,7 @@ TEST_CASE("Without the alpha-track flag a zero alpha still emits at alpha zero")
     GcAnim::Evaluate(pkg, 0, 5, 0.0F, 0.0F, out);
     REQUIRE(out.size() == 1);
     CHECK(out[0].alpha == Catch::Approx(0.0F));
-    CHECK(out[0].blend == GcAnim::Blend::Normal);
+    CHECK(out[0].blend == GcAnim::Blend::Replace);
 }
 
 TEST_CASE("A nested record remaps the child frame through its duration") {
@@ -193,7 +193,8 @@ TEST_CASE("A nested record remaps the child frame through its duration") {
     SysIdx::Record nested = DrawCell(2, 0, 10);
     nested.type = SysIdx::kRecNested;
     nested.duration = 5;
-    nested.flags = SysIdx::kFlagSubtract;
+    nested.flags = SysIdx::kFlagSubtract | SysIdx::kFlagBlend;
+    nested.alpha = {{.t = 0, .a = 100, .b = 50}, {.t = 10, .a = 100, .b = 50}};
     pkg.records.push_back(nested);
     pkg.records.push_back(EndAnimation());
     pkg.records.push_back(DrawCell(0, 20, 21));
@@ -314,4 +315,29 @@ TEST_CASE("A hidden part stays hidden inside a nested child") {
     GcAnim::Evaluate(pkg, 0, 1, 0.0F, 0.0F, nodes, skip);
     REQUIRE(nodes.size() == 1);
     CHECK(nodes[0].cell == 0);
+}
+
+TEST_CASE("the blend mode follows the game's own four way rule") {
+    const auto blend_of = [](uint16_t flags, int alpha_a, int alpha_b) {
+        SysIdx::Package pkg;
+        FillCells(pkg);
+        SysIdx::Record rec = DrawCell(0, 0, 10);
+        rec.flags = flags;
+        rec.alpha = {{.t = 0, .a = (int16_t)alpha_a, .b = (int16_t)alpha_b},
+                     {.t = 10, .a = (int16_t)alpha_a, .b = (int16_t)alpha_b}};
+        pkg.records.push_back(rec);
+        pkg.records.push_back(EndAnimation());
+        std::vector<GcAnim::DrawNode> out;
+        GcAnim::Evaluate(pkg, 0, 5, 0.0F, 0.0F, out);
+        REQUIRE(out.size() == 1);
+        return out[0].blend;
+    };
+
+    CHECK(blend_of(0, 100, 0) == GcAnim::Blend::Replace);
+    CHECK(blend_of(0, 100, 80) == GcAnim::Blend::Replace);
+    CHECK(blend_of(SysIdx::kFlagBlend, 100, 0) == GcAnim::Blend::Replace);
+    CHECK(blend_of(SysIdx::kFlagBlend, 50, 40) == GcAnim::Blend::Normal);
+    CHECK(blend_of(SysIdx::kFlagBlend, 100, 80) == GcAnim::Blend::Additive);
+    CHECK(blend_of(SysIdx::kFlagBlend | SysIdx::kFlagSubtract, 100, 80) == GcAnim::Blend::Subtract);
+    CHECK(blend_of(SysIdx::kFlagSubtract, 100, 80) == GcAnim::Blend::Replace);
 }

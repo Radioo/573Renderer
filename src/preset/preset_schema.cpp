@@ -21,6 +21,15 @@ template <> struct ScopeOwner<Scope::Countdown> {
 template <> struct ScopeOwner<Scope::Intro> {
     using type = Intro;
 };
+template <> struct ScopeOwner<Scope::Beat> {
+    using type = Beat;
+};
+template <> struct ScopeOwner<Scope::Pulse> {
+    using type = Pulse;
+};
+template <> struct ScopeOwner<Scope::Jitter> {
+    using type = Jitter;
+};
 template <> struct ScopeOwner<Scope::Light> {
     using type = DirectionalLight;
 };
@@ -50,6 +59,7 @@ constexpr std::array<std::string_view, 5> kBlendLabels = {"opaque", "opaque (1)"
                                                           "additive", "subtract"};
 constexpr std::array<std::string_view, 3> kSpriteBlendLabels = {"normal", "additive", "subtract"};
 constexpr std::array<std::string_view, 3> kPlaybackLabels = {"loop", "hold last", "hide after end"};
+constexpr std::array<std::string_view, 2> kGridLabels = {"grid A", "grid B"};
 
 constexpr auto kRows = std::to_array<ParamDesc>({
     Row<Scope::Scene, &Effective::sprite_split_priority>(
@@ -308,6 +318,17 @@ constexpr auto kRows = std::to_array<ParamDesc>({
                                              .kind = ValueKind::Float,
                                              .range = {.min = 0.0F, .max = 1.0F, .step = 0.005F},
                                              .apply = Apply::Rebind}),
+    Row<Scope::Sprite, &SpriteState::scale>(
+        {.key = "scale",
+         .label = "Scale",
+         .group = "2D layer",
+         .kind = ValueKind::Float,
+         .range = {.min = 0.05F, .max = 16.0F, .step = 0.005F, .soft = true},
+         .apply = Apply::Rebind,
+         .help = "Uniform scale about the 640x480 centre, the point the game blits these "
+                 "layers from. RED's ending zooms its backdrop this way over the whole "
+                 "timeline.",
+         .aliases = "zoom size scale"}),
     Row<Scope::Sprite, &SpriteState::blend>({.key = "blend",
                                              .label = "Blend",
                                              .group = "2D layer",
@@ -405,12 +426,148 @@ constexpr auto kRows = std::to_array<ParamDesc>({
                                            .kind = ValueKind::Float,
                                            .range = {.min = -16.0F, .max = 16.0F, .step = 0.005F},
                                            .apply = Apply::Live}),
+    Row<Scope::Intro, &Intro::fov_from>(
+        {.key = "intro.fov_from",
+         .label = "Intro fov from",
+         .group = "Timing",
+         .kind = ValueKind::Float,
+         .range = {.min = 0.0F, .max = 64.0F, .soft = true},
+         .apply = Apply::Live,
+         .unit = "rad",
+         .help = "Projection field of view at the start of the intro ramp. Zero means the "
+                 "screen does not ramp the projection at all.",
+         .aliases = "fov zoom intro"}),
+    Row<Scope::Intro, &Intro::fov_to>({.key = "intro.fov_to",
+                                       .label = "Intro fov to",
+                                       .group = "Timing",
+                                       .kind = ValueKind::Float,
+                                       .range = {.min = 0.0F, .max = 64.0F, .soft = true},
+                                       .apply = Apply::Live,
+                                       .unit = "rad",
+                                       .aliases = "fov zoom intro"}),
     Row<Scope::Intro, &Intro::speed_to>({.key = "intro.speed_to",
                                          .label = "Intro speed to",
                                          .group = "Timing",
                                          .kind = ValueKind::Float,
                                          .range = {.min = -16.0F, .max = 16.0F, .step = 0.005F},
                                          .apply = Apply::Live}),
+
+    Row<Scope::Scene, &Effective::rng_seed>(
+        {.key = "rng.seed",
+         .label = "Random seed",
+         .group = "Beat and noise",
+         .kind = ValueKind::Int,
+         .range = {.min = 0.0F, .max = 2000000000.0F, .step = 1.0F, .soft = true},
+         .apply = Apply::Live,
+         .help = "Seed for the game's own subtractive generator. IIDX RED reseeds it from the "
+                 "wall clock when a stage starts, so its ending draws a different scatter every "
+                 "run. Pick a seed here and the whole timeline replays identically.",
+         .aliases = "random noise particles seed"}),
+
+    Row<Scope::Beat, &Beat::rate>(
+        {.key = "beat.rate",
+         .label = "Beat rate",
+         .group = "Beat and noise",
+         .kind = ValueKind::Int,
+         .range = {.min = 0.0F, .max = 1000.0F, .step = 1.0F},
+         .apply = Apply::Live,
+         .help = "Beats counted per beat span. RED's ending uses 155 over 3600 frames, which is "
+                 "155 BPM at 60 frames a second. Zero disables the beat entirely.",
+         .aliases = "bpm tempo beat"}),
+    Row<Scope::Beat, &Beat::span>({.key = "beat.span",
+                                   .label = "Beat span",
+                                   .group = "Beat and noise",
+                                   .kind = ValueKind::Int,
+                                   .range = {.min = 1.0F, .max = 36000.0F, .step = 1.0F},
+                                   .apply = Apply::Live,
+                                   .unit = "frames",
+                                   .aliases = "bpm tempo beat"}),
+    Row<Scope::Beat, &Beat::offset_a>({.key = "beat.offset_a",
+                                       .label = "Beat A offset",
+                                       .group = "Beat and noise",
+                                       .kind = ValueKind::Int,
+                                       .range = {.min = -3600.0F, .max = 3600.0F, .step = 1.0F},
+                                       .apply = Apply::Live,
+                                       .unit = "frames",
+                                       .help = "Frame the first beat grid starts counting from.",
+                                       .aliases = "beat phase offset"}),
+    Row<Scope::Beat, &Beat::offset_b>(
+        {.key = "beat.offset_b",
+         .label = "Beat B offset",
+         .group = "Beat and noise",
+         .kind = ValueKind::Int,
+         .range = {.min = -3600.0F, .max = 3600.0F, .step = 1.0F},
+         .apply = Apply::Live,
+         .unit = "frames",
+         .help = "Frame the second beat grid starts counting from. RED runs it eleven frames "
+                 "ahead of the first so one section can pulse off the other grid.",
+         .aliases = "beat phase offset"}),
+
+    Row<Scope::Pulse, &Pulse::grid>({.key = "pulse.grid",
+                                     .label = "Pulse grid",
+                                     .group = "Beat and noise",
+                                     .kind = ValueKind::Enum,
+                                     .apply = Apply::Live,
+                                     .help = "Which beat grid the scale pulse fires on.",
+                                     .aliases = "beat pulse grid",
+                                     .enum_labels = kGridLabels}),
+    Row<Scope::Pulse, &Pulse::scale_odd>(
+        {.key = "pulse.scale_odd",
+         .label = "Pulse on odd beats",
+         .group = "Beat and noise",
+         .kind = ValueKind::Float,
+         .range = {.min = 0.25F, .max = 4.0F, .step = 0.005F},
+         .apply = Apply::Live,
+         .help = "Model scale on the frame an odd beat lands, decaying back to one over the "
+                 "pulse length. One means no pulse.",
+         .aliases = "beat pulse scale punch"}),
+    Row<Scope::Pulse, &Pulse::scale_even>(
+        {.key = "pulse.scale_even",
+         .label = "Pulse on even beats",
+         .group = "Beat and noise",
+         .kind = ValueKind::Float,
+         .range = {.min = 0.25F, .max = 4.0F, .step = 0.005F},
+         .apply = Apply::Live,
+         .help = "Scale on even beats. RED's logo section punches to 1.5 on odd beats and only "
+                 "1.2 on even ones, which is what gives it the limp.",
+         .aliases = "beat pulse scale punch"}),
+    Row<Scope::Pulse, &Pulse::frames>({.key = "pulse.frames",
+                                       .label = "Pulse length",
+                                       .group = "Beat and noise",
+                                       .kind = ValueKind::Int,
+                                       .range = {.min = 1.0F, .max = 120.0F, .step = 1.0F},
+                                       .apply = Apply::Live,
+                                       .unit = "frames",
+                                       .aliases = "beat pulse decay"}),
+
+    Row<Scope::Jitter, &Jitter::from_frame>(
+        {.key = "jitter.from_frame",
+         .label = "Jitter from",
+         .group = "Beat and noise",
+         .kind = ValueKind::Int,
+         .range = {.min = 0.0F, .max = 36000.0F, .step = 1.0F},
+         .apply = Apply::Live,
+         .unit = "frames",
+         .help = "Scene frame the per-frame position jitter starts on.",
+         .aliases = "shake noise jitter"}),
+    Row<Scope::Jitter, &Jitter::span>(
+        {.key = "jitter.span",
+         .label = "Jitter span",
+         .group = "Beat and noise",
+         .kind = ValueKind::Int,
+         .range = {.min = 0.0F, .max = 4096.0F, .step = 1.0F},
+         .apply = Apply::Live,
+         .help = "Width of the random draw. The offset is the draw minus half the span, so the "
+                 "shake is centred. Zero switches the jitter off.",
+         .aliases = "shake noise jitter"}),
+    Row<Scope::Jitter, &Jitter::scale>({.key = "jitter.scale",
+                                        .label = "Jitter scale",
+                                        .group = "Beat and noise",
+                                        .kind = ValueKind::Float,
+                                        .range = {.min = 0.0F, .max = 0.01F, .step = 0.000001F},
+                                        .apply = Apply::Live,
+                                        .help = "World units each step of the draw is worth.",
+                                        .aliases = "shake noise jitter"}),
 
     Row<Scope::Option, &OptionState::transition_frames>(
         {.key = "transition_frames",

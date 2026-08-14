@@ -28,10 +28,17 @@ format and must never be the reason a layer is classified.
 1. Render the whole package to one PNG per layer:
 
 ```bash
-573Renderer.exe --gc2d-sheet "<iidx-red-dir>/data/graph/sys/mselect" screenshots/sheet_red_mselect 30
+573Renderer.exe --gc2d-sheet "<iidx-red-dir>/data/graph/sys/mselect" screenshots/sheet_red_mselect 4
 ```
 
-2. **Look at every candidate image.** Not the name, the image.
+The last argument is how many frames to SAMPLE per animation, spread across its
+length, written as `anim_NAME_f<frame>.png`. It is not one frame, because a layer
+can be clean early and bring chrome in later: IIDX RED's `COURSE_DECIDE` is a
+plain blue flash at frame 30 and has SELECT KEY MODE and both option strips by
+frame 119. A single sample classified it as clean art, and the caption only
+turned up in a preset render afterwards.
+
+2. **Look at every candidate image, at every sample.** Not the name, the image.
 3. Add a row to the table below with the verdict and one line on what the image
    showed.
 4. Only then add the layer to the preset.
@@ -80,7 +87,8 @@ Verdicts below were each read off a `--gc2d-sheet` render of that layer.
 | data/graph/sys/card | P2_CARD_IN | animation | chrome | the 2P insert-card prompt |
 | data/graph/sys/card | 1P_START_IN | animation | chrome | the 1P press-start prompt |
 | data/graph/sys/card | 2P_START_IN | animation | chrome | the 2P press-start prompt |
-| data/graph/sys/title | TITLE | animation | background | the blue lens flare that opens the attract loop |
+| data/graph/sys/title | TITLE | animation | background | the 1736 frame boot sequence: the BEATMANIA 2DX header rule, the genre words fading in and out, and the RED logo settling into the red band. Nests TITLE_TAIKI as a child for its own tail |
+| data/graph/sys/title | TITLE_TAIKI | animation | background | the standby logo loop the game swaps to once TITLE ends, RED wordmark on the red band |
 | data/graph/sys/title | LOGIN | animation | background | the RED logo reveal, with a header and footer bar baked in |
 | data/graph/sys/title | OP_BG_U | cell | chrome | the BEATMANIA 2DX header bar and its red rule |
 | data/graph/sys/title | OP_BG_D | cell | chrome | the IIDXRED BOOT_ footer bar and its red rule |
@@ -94,5 +102,10 @@ Verdicts below were each read off a `--gc2d-sheet` render of that layer.
 | data/graph/sys/expert | EX_BG | animation | background | IIDX 10's blue circuit-trace backdrop |
 | data/graph/sys/expert | EXPERT_BG | animation | background | RED's red concentric-ring backdrop |
 | data/graph/sys/expert | EXPERT_IN | animation | chrome | the COURSE SELECT frame |
+| data/graph/sys/expert | COURSE_DECIDE | animation | background | the blue flash the outro swaps in; clean early, but it brings in the key-mode and option chrome later in its timeline |
+| data/graph/sys/expert | SKM | cell | chrome | the SELECT KEY MODE caption, drawn from inside COURSE_DECIDE |
+| data/graph/sys/expert | OPTION_1P | animation | chrome | the 1P option strip COURSE_DECIDE nests |
+| data/graph/sys/expert | OPTION_2P | animation | chrome | the 2P option strip COURSE_DECIDE nests |
+| data/graph/sys/expert | DECIDE_BG | animation | chrome | the outro hexagon field, but its only backdrop cell EXDECIDE has YOUR SELECT COURSE printed into it, so the caption cannot be separated from the art |
 | data/graph/sys/gameover | GAMEOVER | animation | chrome | the GAME OVER banner |
 | data/graph/sys/ending | END_BG1 | cell | background | the ending's machine-room artwork |

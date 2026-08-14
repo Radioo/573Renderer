@@ -16,6 +16,12 @@ struct Status {
     float model_speed = 0.0F;
     float model_alpha = 1.0F;
     int blend_mode = 0;
+    int frame = 0;
+    int beat = 0;
+    int beat_since = 0;
+    float pulse_scale = 1.0F;
+    float jitter = 0.0F;
+    int live_particles = 0;
     std::vector<int> option_choices;
 };
 
@@ -78,6 +84,8 @@ int LoadTweaks(const std::string& path);
 void SetOption(int option, int choice);
 
 int NaturalFrames();
+
+bool OpaqueScreen();
 
 void Restart();
 

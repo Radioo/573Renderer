@@ -2,6 +2,7 @@
 
 #include "preset/preset_params.h"
 #include "preset/preset_effective.h"
+#include "preset/preset_rng.h"
 
 #include "formats/gcanim.h"
 #include "gc2d/gc_host.h"
@@ -17,6 +18,7 @@
 #include <cstddef>
 #include <filesystem>
 #include <fstream>
+#include <span>
 #include <sstream>
 #include <string>
 #include <string_view>
@@ -30,6 +32,43 @@ namespace {
 const Preset::Scene* g_scene = nullptr;
 Preset::Materialized g_mat;
 Preset::TweakSet g_tweaks;
+int g_phase = 0;
+constexpr float kDegrees = 0.017453292F;
+std::vector<int> g_choices;
+
+std::vector<Preset::ParamOverride> g_layers;
+
+std::span<const Preset::ParamOverride> PhaseParams() {
+    g_layers.clear();
+    if (g_scene == nullptr) return {};
+    if (!g_scene->phases.empty()) {
+        const auto index = (size_t)std::clamp(g_phase, 0, (int)g_scene->phases.size() - 1);
+        for (const auto& param : g_scene->phases[index].params)
+            g_layers.push_back(param);
+    }
+    if (!g_scene->options.empty() && !g_choices.empty()) {
+        const auto& choices = g_scene->options.front().choices;
+        const int choice = std::clamp(g_choices.front(), 0, (int)choices.size() - 1);
+        for (const auto& param : choices[(size_t)choice].params)
+            g_layers.push_back(param);
+    }
+    return g_layers;
+}
+
+int PhaseAt(int frame) {
+    if (g_scene == nullptr || g_scene->phases.empty()) return 0;
+    int found = 0;
+    for (size_t i = 0; i < g_scene->phases.size(); i++) {
+        if (g_scene->phases[i].start_frame <= frame) found = (int)i;
+    }
+    return found;
+}
+
+int PhaseStart() {
+    if (g_scene == nullptr || g_scene->phases.empty()) return 0;
+    const auto index = (size_t)std::clamp(g_phase, 0, (int)g_scene->phases.size() - 1);
+    return g_scene->phases[index].start_frame;
+}
 
 const Preset::Effective& g_eff() {
     return g_mat.effective;
@@ -43,10 +82,31 @@ float g_spin_kick = 1.0F;
 std::vector<std::array<float, 3>> g_spins;
 std::array<float, 3> g_transition_from = {0.0F, 0.0F, 0.0F};
 std::array<float, 3> g_camera_from = {0.0F, 0.0F, 0.0F};
-std::vector<int> g_choices;
 float g_speed = 1.0F;
 float g_alpha = 1.0F;
 int g_blend = 0;
+
+Preset::Ran3 g_rng;
+int g_seeded = 0;
+
+struct Live {
+    std::string cell;
+    int from_x = 320;
+    int from_y = 240;
+    int to_x = 0;
+    int to_y = 0;
+    int life = 1;
+    int age = -1;
+    int priority = 0;
+    int blend = 0;
+    float scale = 1.0F;
+};
+
+std::vector<Live> g_live;
+std::array<int, 2> g_beat = {0, 0};
+std::array<int, 2> g_beat_since = {0, 0};
+float g_jitter = 0.0F;
+float g_pulse = 1.0F;
 
 std::string Resolve(const std::string& game_dir, std::string_view relative) {
     return (std::filesystem::path(game_dir) / std::filesystem::path(relative)).string();
@@ -95,9 +155,69 @@ bool Moves(const Preset::ModelMotion& motion) {
            motion.spin_per_frame != std::array<float, 3>{0.0F, 0.0F, 0.0F};
 }
 
+int BeatIndex(int offset) {
+    const Preset::Beat& beat = g_eff().beat;
+    return (beat.rate * (g_frame - offset)) / std::max(1, beat.span);
+}
+
+void AdvanceBeat() {
+    const Preset::Beat& beat = g_eff().beat;
+    if (beat.rate <= 0) return;
+    const std::array<int, 2> offsets = {beat.offset_a, beat.offset_b};
+    for (size_t i = 0; i < offsets.size(); i++) {
+        const int index = BeatIndex(offsets[i]);
+        if (index == g_beat[i]) {
+            g_beat_since[i]++;
+            continue;
+        }
+        g_beat[i] = index;
+        g_beat_since[i] = 0;
+    }
+}
+
+bool PulseActive() {
+    const Preset::Pulse& pulse = g_eff().pulse;
+    return g_eff().beat.rate > 0 && (pulse.scale_odd != 1.0F || pulse.scale_even != 1.0F);
+}
+
+float PulseScale() {
+    if (!PulseActive()) return 1.0F;
+    const Preset::Pulse& pulse = g_eff().pulse;
+    const auto grid = (size_t)(pulse.grid == Preset::Grid::B ? 1 : 0);
+    const int frames = std::max(1, pulse.frames);
+    const int since = g_beat_since[grid];
+    if (since >= frames) return 1.0F;
+    const float from = ((g_beat[grid] & 1) != 0) ? pulse.scale_odd : pulse.scale_even;
+    return from - ((from - 1.0F) * (float)since / (float)frames);
+}
+
+bool JitterActive() {
+    const Preset::Jitter& jitter = g_eff().jitter;
+    return jitter.span > 0 && g_frame > jitter.from_frame;
+}
+
+float DrawJitter() {
+    if (!JitterActive()) return 0.0F;
+    const Preset::Jitter& jitter = g_eff().jitter;
+    const int centre = jitter.span / 2;
+    const int draw = (g_rng.Next() % jitter.span) - centre;
+    return (float)draw * jitter.scale;
+}
+
+void ApplyPulse() {
+    g_pulse = PulseScale();
+    if (!PulseActive()) return;
+    const float pulse = g_pulse;
+    for (const Preset::ModelState& layer : g_eff().models) {
+        Scene3dHost::SetModelScale(
+            layer.model, {layer.scale[0] * pulse, layer.scale[1] * pulse, layer.scale[2] * pulse});
+    }
+}
+
 void ApplyMotion() {
     if (g_eff().models.empty()) return;
     const bool chooses = !g_eff().options.empty() && !g_choices.empty();
+    const bool shaken = JitterActive();
     if (g_transition > 0 && !g_eff().options.empty())
         g_transition -= std::max(1, g_eff().options.front().transition_step);
     ApplyChoiceCamera();
@@ -106,7 +226,7 @@ void ApplyMotion() {
         const Preset::ModelState& layer = g_eff().models[i];
         const Preset::ModelMotion& motion = layer.motion;
         const bool lead = (i == 0);
-        if (!Moves(motion) && !(lead && chooses)) continue;
+        if (!Moves(motion) && !(lead && chooses) && !shaken) continue;
 
         if (lead) {
             if (g_spin_kick > 1.0F) {
@@ -121,7 +241,9 @@ void ApplyMotion() {
             spin[axis] += motion.spin_per_frame[axis] * kick;
 
         std::array<float, 3> position = layer.position;
-        if (motion.orbit_radius > 0.0F) {
+        if (shaken) {
+            position = {g_jitter, g_jitter, 0.0F};
+        } else if (motion.orbit_radius > 0.0F) {
             position = OrbitPosition(motion);
         } else if (lead && chooses) {
             position = ChoicePosition();
@@ -134,18 +256,171 @@ void ApplyMotion() {
 
 void ApplyIntro() {
     const Preset::Intro& intro = g_eff().intro;
-    if (intro.frames <= 0 || g_lead_model.empty()) return;
-    const int frame = std::min(g_frame, intro.frames);
+    if (intro.frames <= 0) return;
+    const int frame = std::clamp(g_frame - PhaseStart(), 0, intro.frames);
     const float t = (float)frame / (float)intro.frames;
-    g_speed = intro.speed_from + ((intro.speed_to - intro.speed_from) * t);
-    Scene3dHost::SetModelSpeed(g_lead_model, g_speed);
+    if (!g_lead_model.empty() && intro.speed_to != intro.speed_from) {
+        g_speed = intro.speed_from + ((intro.speed_to - intro.speed_from) * t);
+        Scene3dHost::SetModelSpeed(g_lead_model, g_speed);
+    }
+    if (intro.fov_from <= 0.0F) return;
+    const Preset::Effective& scene = g_eff();
+    Scene3dHost::SetProjection(
+        Scene3d::Projection{.fov_y = intro.fov_from + ((intro.fov_to - intro.fov_from) * t),
+                            .near_z = scene.camera.near_z,
+                            .far_z = scene.camera.far_z,
+                            .aspect = scene.aspect_auto ? 0.0F : scene.aspect_value});
+}
+
+void Rematerialize(bool rebind, bool replace_sprites);
+
+void PushSpriteScales();
+
+std::span<const Preset::Ramp> PhaseRamps() {
+    if (g_scene == nullptr || g_scene->phases.empty()) return {};
+    const auto index = (size_t)std::clamp(g_phase, 0, (int)g_scene->phases.size() - 1);
+    return g_scene->phases[index].ramps;
+}
+
+void ApplyRamps() {
+    const std::span<const Preset::Ramp> ramps = PhaseRamps();
+    if (ramps.empty()) return;
+    const int elapsed = std::max(0, g_frame - PhaseStart());
+    for (const Preset::Ramp& ramp : ramps) {
+        const int span = std::max(1, ramp.frames);
+        const float t = (float)std::min(elapsed, span) / (float)span;
+        float k = t;
+        if (ramp.curve == Preset::Curve::Sine) {
+            const auto degrees = (float)std::min(elapsed, span) * ramp.degrees_per_frame;
+            k = std::sin(degrees * 0.017453292F);
+        }
+        Preset::Value value;
+        for (size_t i = 0; i < value.f.size(); i++)
+            value.f[i] = ramp.from[i] + ((ramp.to[i] - ramp.from[i]) * k);
+        value.i = (int)std::lround(value.f[0]);
+        Preset::WriteParam(g_mat.params, std::string(ramp.id), value, g_mat.effective);
+    }
+}
+
+std::span<const Preset::Emitter> PhaseEmitters() {
+    if (g_scene == nullptr || g_scene->phases.empty()) return {};
+    const auto index = (size_t)std::clamp(g_phase, 0, (int)g_scene->phases.size() - 1);
+    return g_scene->phases[index].emitters;
+}
+
+bool Spawns(const Preset::Emitter& emitter) {
+    switch (emitter.spawn) {
+    case Preset::Spawn::PhaseStart:
+        return g_frame == PhaseStart();
+    case Preset::Spawn::EveryFrame:
+        return true;
+    case Preset::Spawn::Beat: {
+        if (g_eff().beat.rate <= 0) return false;
+        const auto grid = (size_t)(emitter.beat_grid == Preset::Grid::B ? 1 : 0);
+        if (g_beat_since[grid] != 0) return false;
+        return (g_beat[grid] & 1) == emitter.beat_odd;
+    }
+    }
+    return false;
+}
+
+int RingReach(const Preset::Emitter& emitter, int elapsed) {
+    const int span = std::max(1, emitter.frames);
+    return emitter.radius_from +
+           (((emitter.radius_to - emitter.radius_from) * std::min(elapsed, span)) / span);
+}
+
+float RingPhase(const Preset::Emitter& emitter) {
+    const float wobble =
+        std::sin((float)g_frame * emitter.phase_rate_deg * kDegrees) * emitter.phase_amplitude_deg;
+    return (float)(int)wobble;
+}
+
+void SpawnParticles() {
+    const int elapsed = std::max(0, g_frame - PhaseStart());
+    for (const Preset::Emitter& emitter : PhaseEmitters()) {
+        if (emitter.scatter && (emitter.span_x <= 0 || emitter.span_y <= 0)) continue;
+        if (!Spawns(emitter)) continue;
+        const int reach = RingReach(emitter, elapsed);
+        const float phase = RingPhase(emitter);
+        for (int i = 0; i < emitter.count; i++) {
+            Live particle;
+            particle.cell = std::string(emitter.cell);
+            particle.from_x = (int)emitter.center_x;
+            particle.from_y = (int)emitter.center_y;
+            if (emitter.scatter) {
+                particle.to_x = (g_rng.Next() % emitter.span_x) + emitter.offset_x;
+                particle.to_y = (g_rng.Next() % emitter.span_y) + emitter.offset_y;
+            } else {
+                const float angle = (((float)i * emitter.angle_step_deg) + phase) * kDegrees;
+                particle.to_x = (int)((std::sin(angle) * (float)reach) + emitter.center_x);
+                particle.to_y = (int)((std::cos(angle) * (float)reach) + emitter.center_y);
+            }
+            particle.life = (emitter.life_span > 0)
+                                ? ((g_rng.Next() % emitter.life_span) + emitter.life_base)
+                                : emitter.life;
+            particle.life = std::max(1, particle.life);
+            particle.priority = emitter.priority;
+            particle.blend = emitter.blend;
+            particle.scale = (float)emitter.scale * 0.01F;
+            g_live.push_back(std::move(particle));
+        }
+    }
+}
+
+void AgeParticles() {
+    for (Live& particle : g_live)
+        particle.age++;
+    std::erase_if(g_live, [](const Live& particle) { return particle.age >= particle.life; });
+}
+
+void CollectParticles(bool behind_models, std::vector<Gc2dHost::CellDraw>& cells) {
+    const int split = g_eff().sprite_split_priority;
+    for (const Live& particle : g_live) {
+        if ((particle.priority >= split) != behind_models) continue;
+        if (particle.age < 0) continue;
+        const int age = particle.age;
+        const int life = particle.life;
+        const int x = particle.from_x + ((age * (particle.to_x - particle.from_x)) / life);
+        const int y = particle.from_y + ((age * (particle.to_y - particle.from_y)) / life);
+        const int alpha = 100 - ((100 * age) / life);
+        cells.push_back(Gc2dHost::CellDraw{.name = particle.cell,
+                                           .x = (float)x,
+                                           .y = (float)y,
+                                           .alpha = (float)alpha * 0.01F,
+                                           .scale = particle.scale,
+                                           .blend = particle.blend});
+    }
+}
+
+void DrawEmitters(bool behind_models) {
+    std::vector<Gc2dHost::CellDraw> cells;
+    CollectParticles(behind_models, cells);
+    Gc2dHost::DrawParticles(cells);
+}
+
+void AdvancePhase() {
+    if (g_scene == nullptr || g_scene->phases.empty()) return;
+    const int want = PhaseAt(g_frame);
+    if (want == g_phase) return;
+    g_phase = want;
+    g_spins.assign(g_eff().models.size(), std::array<float, 3>{0.0F, 0.0F, 0.0F});
+    Rematerialize(true, true);
 }
 
 void Advance() {
     if (g_scene == nullptr) return;
     g_frame++;
+    AdvancePhase();
+    AgeParticles();
+    ApplyRamps();
+    PushSpriteScales();
+    SpawnParticles();
+    g_jitter = DrawJitter();
     ApplyMotion();
+    ApplyPulse();
     ApplyIntro();
+    AdvanceBeat();
 
     const Preset::Countdown& cd = g_eff().countdown;
     if (cd.start_frames <= 0) return;
@@ -163,7 +438,7 @@ void Advance() {
     Scene3dHost::SetModelAlpha(g_lead_model, g_alpha);
 }
 
-void PlaceSprites(const Preset::Effective& scene) {
+std::vector<const Preset::SpriteState*> DrawOrder(const Preset::Effective& scene) {
     std::vector<const Preset::SpriteState*> ordered;
     ordered.reserve(scene.sprites.size());
     for (const auto& sprite : scene.sprites) {
@@ -174,6 +449,17 @@ void PlaceSprites(const Preset::Effective& scene) {
                              [](const Preset::SpriteState* a, const Preset::SpriteState* b) {
                                  return a->priority > b->priority;
                              });
+    return ordered;
+}
+
+void PushSpriteScales() {
+    const std::vector<const Preset::SpriteState*> ordered = DrawOrder(g_eff());
+    for (size_t i = 0; i < ordered.size(); i++)
+        Gc2dHost::SetSpriteScale((int)i, ordered[i]->scale);
+}
+
+void PlaceSprites(const Preset::Effective& scene) {
+    const std::vector<const Preset::SpriteState*> ordered = DrawOrder(scene);
     std::vector<Gc2dHost::SpritePlacement> placements;
     placements.reserve(ordered.size());
     for (const auto* sprite : ordered) {
@@ -183,6 +469,7 @@ void PlaceSprites(const Preset::Effective& scene) {
                                                        .x = sprite->x,
                                                        .y = sprite->y,
                                                        .alpha = sprite->alpha,
+                                                       .scale = sprite->scale,
                                                        .blend = (GcAnim::Blend)sprite->blend,
                                                        .timing = sprite->timing,
                                                        .skip_parts = sprite->hidden_parts,
@@ -219,7 +506,18 @@ void PushRebind() {
     }
 }
 
+void ResetTimeline(const Preset::Effective& scene) {
+    g_live.clear();
+    g_beat = {0, 0};
+    g_beat_since = {0, 0};
+    g_jitter = 0.0F;
+    g_pulse = 1.0F;
+    g_seeded = scene.rng_seed;
+    g_rng.Seed(g_seeded);
+}
+
 void ResetPlayback(const Preset::Effective& scene) {
+    ResetTimeline(scene);
     g_countdown = scene.countdown.start_frames;
     g_frame = 0;
     g_transition = 0;
@@ -271,7 +569,9 @@ Scene3dHost::Setup BuildSetup(const Preset::Effective& scene, std::string_view s
 
 bool Load(const std::string& game_dir, const Preset::Scene& scene) {
     Unload();
-    g_mat = Preset::Materialize(scene, g_tweaks);
+    g_scene = &scene;
+    g_phase = 0;
+    g_mat = Preset::Materialize(scene, PhaseParams(), g_tweaks);
     const Preset::Effective& eff = g_eff();
 
     if (!eff.models.empty()) {
@@ -294,9 +594,13 @@ bool Load(const std::string& game_dir, const Preset::Scene& scene) {
         PlaceSprites(eff);
     }
 
-    g_scene = &scene;
     g_game_dir = game_dir;
+    for (const auto& phase : scene.phases) {
+        for (const auto& emitter : phase.emitters)
+            Gc2dHost::LoadParticles(Resolve(game_dir, emitter.package_dir));
+    }
     ResetPlayback(eff);
+    PushRebind();
     LOG("Preset", "'%s' ready: %zu 3D layer(s), %zu 2D layer(s)", std::string(scene.name).c_str(),
         scene.models.size(), scene.sprites.size());
     return true;
@@ -318,15 +622,17 @@ void RenderFrame(float dt) {
     if (g_scene == nullptr) return;
     const int split = g_eff().sprite_split_priority;
     Gc2dHost::DrawSprites(split, INT_MAX);
+    DrawEmitters(true);
     Scene3dHost::RenderFrame(dt);
     Gc2dHost::DrawSprites(INT_MIN, split - 1);
+    DrawEmitters(false);
     Gc2dHost::AdvanceSprites(dt);
     Advance();
 }
 
-int NaturalFrames() {
-    if (g_scene == nullptr) return 0;
-    if (g_eff().countdown.start_frames > 0) return g_eff().countdown.start_frames;
+namespace {
+
+int ClipFrames() {
     if (g_eff().models.empty()) return 0;
     const float speed = g_eff().models.front().anim_speed;
     const float ticks = Scene3dHost::GetStatus().max_time;
@@ -334,12 +640,44 @@ int NaturalFrames() {
     return (int)std::lround(ticks / speed);
 }
 
+int PhaseTail(const Preset::Phase& phase) {
+    int tail = ClipFrames();
+    for (const Preset::Ramp& ramp : phase.ramps)
+        tail = std::max(tail, ramp.frames);
+    const Preset::Materialized last = Preset::Materialize(*g_scene, phase.params, g_tweaks);
+    for (const Preset::SpriteState& sprite : last.effective.sprites) {
+        if (!sprite.visible || !sprite.animated) continue;
+        tail = std::max(tail, Gc2dHost::AnimationLength(sprite.sprite));
+    }
+    return tail;
+}
+
+}
+
+int NaturalFrames() {
+    if (g_scene == nullptr) return 0;
+    if (g_eff().countdown.start_frames > 0) return g_eff().countdown.start_frames;
+    if (g_scene->phases.empty()) return ClipFrames();
+    const Preset::Phase& last = g_scene->phases.back();
+    return last.start_frame + PhaseTail(last);
+}
+
+bool OpaqueScreen() {
+    return g_scene != nullptr && g_eff().opaque_screen;
+}
+
 void Restart() {
     if (g_scene == nullptr) return;
+    ResetTimeline(g_eff());
     g_countdown = g_eff().countdown.start_frames;
     g_frame = 0;
+    g_phase = PhaseAt(0);
+    Rematerialize(true, true);
+    g_spins.assign(g_eff().models.size(), std::array<float, 3>{0.0F, 0.0F, 0.0F});
     Scene3dHost::SetTime(0.0F);
     Gc2dHost::SetFrame(0);
+    for (size_t i = 0; i < Gc2dHost::ListSprites().size(); i++)
+        Gc2dHost::SetSpriteFrame((int)i, 0);
     if (g_eff().models.empty()) return;
     const Preset::ModelState& lead = g_eff().models.front();
     g_speed = lead.anim_speed;
@@ -360,6 +698,13 @@ Status GetStatus() {
     s.model_speed = g_speed;
     s.model_alpha = g_alpha;
     s.blend_mode = g_blend;
+    s.frame = g_frame;
+    const auto grid = (size_t)(g_eff().pulse.grid == Preset::Grid::B ? 1 : 0);
+    s.beat = g_beat[grid];
+    s.beat_since = g_beat_since[grid];
+    s.pulse_scale = g_pulse;
+    s.jitter = g_jitter;
+    s.live_particles = (int)g_live.size();
     s.option_choices = g_choices;
     return s;
 }
@@ -378,6 +723,7 @@ void SetOption(int option, int choice) {
     g_camera_from = choices[(size_t)current].camera_eye;
     g_choices[(size_t)option] = clamped;
     g_transition = spec.transition_frames;
+    if (!spec.choices[(size_t)clamped].params.empty()) Rematerialize(true, true);
     const bool forward = clamped > previous;
     g_spin_kick = std::max(1.0F, spec.spin_kick);
     if (!forward) g_spin_kick = -g_spin_kick;
@@ -415,7 +761,12 @@ void Rematerialize(bool rebind, bool replace_sprites) {
     if (g_scene == nullptr) return;
     const int countdown = g_countdown;
     const std::vector<int> choices = g_choices;
-    g_mat = Preset::Materialize(*g_scene, g_tweaks);
+    g_mat = Preset::Materialize(*g_scene, PhaseParams(), g_tweaks);
+    if (g_eff().rng_seed != g_seeded) {
+        g_seeded = g_eff().rng_seed;
+        g_rng.Seed(g_seeded);
+        g_live.clear();
+    }
     if (rebind) PushRebind();
     if (replace_sprites) PlaceSprites(g_eff());
     g_choices = choices;

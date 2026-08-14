@@ -35,6 +35,7 @@ void Init() {
         setvbuf(S().file, nullptr, _IONBF, 0);
     }
     setvbuf(stdout, nullptr, _IONBF, 0);
+    LOG("Build", "573Renderer built %s %s", __DATE__, __TIME__);
 }
 
 void Shutdown() {

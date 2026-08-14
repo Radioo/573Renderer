@@ -77,16 +77,31 @@ void SplitCell(const Package& pkg, const SysIdx::Cell& cell, std::vector<CellSeg
 }
 
 void ApplyBlend(IDirect3DDevice9* dev, GcAnim::Blend blend) {
+    dev->SetRenderState(D3DRS_SEPARATEALPHABLENDENABLE, TRUE);
+    dev->SetRenderState(D3DRS_BLENDOPALPHA, D3DBLENDOP_ADD);
+    dev->SetRenderState(D3DRS_SRCBLENDALPHA, D3DBLEND_ONE);
+    dev->SetRenderState(D3DRS_DESTBLENDALPHA, D3DBLEND_INVSRCALPHA);
     switch (blend) {
     case GcAnim::Blend::Additive:
         dev->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
         dev->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_ONE);
         dev->SetRenderState(D3DRS_BLENDOP, D3DBLENDOP_ADD);
+        dev->SetRenderState(D3DRS_SRCBLENDALPHA, D3DBLEND_ZERO);
+        dev->SetRenderState(D3DRS_DESTBLENDALPHA, D3DBLEND_ONE);
         break;
     case GcAnim::Blend::Subtract:
         dev->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
         dev->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_ONE);
         dev->SetRenderState(D3DRS_BLENDOP, D3DBLENDOP_REVSUBTRACT);
+        dev->SetRenderState(D3DRS_SRCBLENDALPHA, D3DBLEND_ZERO);
+        dev->SetRenderState(D3DRS_DESTBLENDALPHA, D3DBLEND_ONE);
+        break;
+    case GcAnim::Blend::Replace:
+        dev->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
+        dev->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_ZERO);
+        dev->SetRenderState(D3DRS_BLENDOP, D3DBLENDOP_ADD);
+        dev->SetRenderState(D3DRS_SRCBLENDALPHA, D3DBLEND_ONE);
+        dev->SetRenderState(D3DRS_DESTBLENDALPHA, D3DBLEND_ZERO);
         break;
     default:
         dev->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);

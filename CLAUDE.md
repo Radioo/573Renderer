@@ -24,10 +24,16 @@ one again: a toggle turns shipping chrome into a user problem instead of a bug.
 - **Never classify a layer from its NAME or from the disassembly.** KONAMI's `MUSIC_IN` is the
   entire music-select UI frame; `EXPERT_IN` is the course-select frame. Names lie.
 - **Before ANY 2D layer goes into a preset, render it and LOOK at it:**
-  `573Renderer.exe --gc2d-sheet <package-dir> <out-dir> <frame>` writes one PNG per animation
-  and per named cell. Then write the verdict into `docs/preset_layers.md`. This is enforced by
-  `tools/ci/check_preset_layers.py`: a layer with no row, or a row that says `chrome`, fails
-  the build.
+  `573Renderer.exe --gc2d-sheet <package-dir> <out-dir> <samples>` writes SEVERAL PNGs per
+  animation, spread across its length, plus one per named cell. Then write the verdict into
+  `docs/preset_layers.md`. This is enforced by `tools/ci/check_preset_layers.py`: a layer with
+  no row, or a row that says `chrome`, fails the build.
+- **One frame is not a classification.** A layer can be clean early and bring chrome in later.
+  RED's `COURSE_DECIDE` is a plain blue flash at frame 30 and carries SELECT KEY MODE plus both
+  option strips by frame 119, so a single-frame look called it clean and the caption turned up
+  in a preset render afterwards. Look at every sample, and if a layer's chrome lives in the SAME
+  cell as its art (RED's `EXDECIDE` has its caption printed into the hexagon field), the layer
+  cannot be cleaned and does not go in a preset at all.
 - **The init is not the truth - find the per-frame update.** A screen's init often sets a model
   transform that its update overwrites every frame. IIDX RED music select inits the emblem at
   (-0.58,-0.5,0) and then `sub_41C620` moves it to (-0.1,0,-0.276) on every single frame. Trace
@@ -35,6 +41,19 @@ one again: a toggle turns shipping chrome into a user problem instead of a bug.
 - **When a preset render is finished, LOOK at the PNG and ask "is any chrome visible?"** - not
   "did it crash". Shipping a preset whose render is 90 percent UI, having looked at that exact
   PNG, is how this rule came to exist.
+- **A SCREEN IS A SEQUENCE, NOT A POSE. Reproduce the whole thing.** Screens fade in, warp in,
+  settle, then change again on input or a timer. A preset that carries only the settled pose is
+  the LAST FRAME of the screen, not the screen. Every state goes in `docs/preset_states.md` with
+  where it came from in the game, and `tools/ci/check_preset_states.py` fails the build in both
+  directions: a documented state the preset does not expose, or a state in the preset with no row.
+  Phases advance on the frame counter because the game advances them; options are chosen because
+  the game chooses them. A state that genuinely cannot be built yet goes in the gaps table, which
+  prints on every build, so the gap is visible rather than silently absent.
+- **Never let the preset FORMAT decide what the truth is.** When a screen does something the
+  format cannot hold, extend the format. Do not encode the part that fits and move on. Burned
+  (2026-08-14): the attract screen plays a 291-frame warp-in, rotating and zooming, with the
+  models hidden before it, and the RE brief said so in the state list right below the settled
+  table. The preset shipped as the settled loop alone because one pose was all the format held.
 - Burned (2026-08-14): `iidx11-music-select` shipped as the whole MUSIC SELECT frame with no
   background at all, and the same class of miss put chrome in eight other presets. The user had
   already said this once, about IIDX 10 mode select, and it was fixed for that one screen

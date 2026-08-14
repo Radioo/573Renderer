@@ -8,6 +8,7 @@
 #include "support/log.h"
 #include "window.h"
 
+#include <algorithm>
 #include <climits>
 #include <filesystem>
 #include <fstream>
@@ -33,6 +34,19 @@ std::string SafeName(const std::string& name) {
         out += keep ? c : '_';
     }
     return out;
+}
+
+const char* BlendName(int blend) {
+    switch (blend) {
+    case 1:
+        return "additive";
+    case 2:
+        return "subtract";
+    case 3:
+        return "replace";
+    default:
+        return "normal";
+    }
 }
 
 void Shoot(const std::string& name, bool animated, int frame, const std::string& path) {
@@ -81,11 +95,25 @@ int Run(const std::string& package_dir, const std::string& out_dir, int frame) {
         out_dir.c_str());
 
     std::ofstream parts((root / "parts.txt").string(), std::ios::binary | std::ios::trunc);
+    std::ofstream draws((root / "draws.txt").string(), std::ios::binary | std::ios::trunc);
     int done = 0;
     const auto total = (int)(animations.size() + cells.size());
+    const int samples = std::max(1, frame);
     for (const std::string& name : animations) {
-        const std::string path = (root / ("anim_" + SafeName(name) + ".png")).string();
-        Shoot(name, true, frame, path);
+        const int length = Gc2dHost::AnimationLength(name);
+        for (int s = 0; s < samples; s++) {
+            const int at = (length > 1) ? (((length - 1) * s) / std::max(1, samples - 1)) : 0;
+            const std::string path =
+                (root / ("anim_" + SafeName(name) + "_f" + std::to_string(at) + ".png")).string();
+            Shoot(name, true, at, path);
+            draws << name << " frame " << at << '\n';
+            for (const Gc2dHost::DrawInfo& d : Gc2dHost::ListDrawNodes()) {
+                draws << "    " << d.cell << "  " << BlendName(d.blend) << "  x=" << (int)d.x
+                      << " y=" << (int)d.y << " w=" << (int)d.w << " h=" << (int)d.h
+                      << " alpha=" << d.alpha << '\n';
+            }
+            if (length <= 1) break;
+        }
         parts << name << "\n";
         for (const std::string& part : Gc2dHost::ListParts(name))
             parts << "    " << part << "\n";

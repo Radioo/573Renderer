@@ -37,6 +37,20 @@ std::vector<std::string> ListCells();
 
 std::vector<std::string> ListParts(const std::string& animation);
 
+struct DrawInfo {
+    std::string cell;
+    int blend = 0;
+    float x = 0.0F;
+    float y = 0.0F;
+    float w = 0.0F;
+    float h = 0.0F;
+    float alpha = 1.0F;
+};
+
+std::vector<DrawInfo> ListDrawNodes();
+
+int AnimationLength(const std::string& animation);
+
 struct SpritePlacement {
     std::string name;
     bool animated = false;
@@ -44,6 +58,7 @@ struct SpritePlacement {
     float x = 0.0F;
     float y = 0.0F;
     float alpha = 1.0F;
+    float scale = 1.0F;
     GcAnim::Blend blend = GcAnim::Blend::Normal;
     GcAnim::Timing timing = {};
     std::vector<std::string> skip_parts;
@@ -63,6 +78,19 @@ struct SpriteStatus {
     int scroll_wrap = 0;
 };
 
+struct CellDraw {
+    std::string name;
+    float x = 0.0F;
+    float y = 0.0F;
+    float alpha = 1.0F;
+    float scale = 1.0F;
+    int blend = 0;
+};
+
+bool LoadParticles(const std::string& dir);
+
+void DrawParticles(const std::vector<CellDraw>& cells);
+
 void SetSprites(std::vector<SpritePlacement> sprites);
 
 std::vector<SpriteStatus> ListSprites();
@@ -70,6 +98,8 @@ std::vector<SpriteStatus> ListSprites();
 void SetSpriteFrame(int index, int frame);
 
 void SetSpriteScroll(int index, int offset);
+
+void SetSpriteScale(int index, float scale);
 
 void AdvanceSprites(float dt);
 

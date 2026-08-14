@@ -4,6 +4,7 @@
 #include "game_fingerprint.h"
 #include "preset/preset_effective.h"
 #include "preset/preset_params.h"
+#include "preset/preset_rng.h"
 #include "preset/scene_preset.h"
 
 #include <algorithm>
@@ -368,7 +369,7 @@ TEST_CASE("IIDX RED ending draws its background as a static cell") {
 
 TEST_CASE("every parameter's default is the value the preset table authors") {
     for (const auto* scene : Preset::ForBuild("iidx11")) {
-        const Preset::Materialized pristine = Preset::Materialize(*scene, {});
+        const Preset::Materialized pristine = Preset::Materialize(*scene, {}, {});
         INFO("preset " << scene->id);
         REQUIRE_FALSE(pristine.params.empty());
         for (const auto& param : pristine.params) {
@@ -383,23 +384,23 @@ TEST_CASE("every parameter's default is the value the preset table authors") {
 
 TEST_CASE("a tweak overrides one parameter and clearing it restores the game's value") {
     const Preset::Scene& scene = PresetById("iidx11-mode-select");
-    const Preset::Materialized pristine = Preset::Materialize(scene, {});
+    const Preset::Materialized pristine = Preset::Materialize(scene, {}, {});
     REQUIRE(pristine.effective.camera.fov_y == 1.0471976F);
 
     Preset::TweakSet tweaks;
     Preset::SetTweak(tweaks, "camera.fov_y", Preset::ToValue(1.2F));
-    const Preset::Materialized tweaked = Preset::Materialize(scene, tweaks);
+    const Preset::Materialized tweaked = Preset::Materialize(scene, {}, tweaks);
     REQUIRE(tweaked.effective.camera.fov_y == 1.2F);
     REQUIRE(tweaked.effective.models.size() == pristine.effective.models.size());
 
     Preset::ClearTweak(tweaks, "camera.fov_y");
-    REQUIRE(Preset::Materialize(scene, tweaks).effective.camera.fov_y == 1.0471976F);
+    REQUIRE(Preset::Materialize(scene, {}, tweaks).effective.camera.fov_y == 1.0471976F);
 }
 
 TEST_CASE("a range never makes the game's own value unreachable") {
     for (const char* build : {"iidx10", "iidx11"}) {
         for (const auto* scene : Preset::ForBuild(build)) {
-            const Preset::Materialized pristine = Preset::Materialize(*scene, {});
+            const Preset::Materialized pristine = Preset::Materialize(*scene, {}, {});
             for (const auto& param : pristine.params) {
                 INFO(build << " " << scene->id << " " << param.id);
                 REQUIRE(Preset::SameValue(Preset::ClampValue(*param.desc, param.fallback),
@@ -411,7 +412,7 @@ TEST_CASE("a range never makes the game's own value unreachable") {
 
 TEST_CASE("no parameter can rewrite a layer's identity") {
     const Preset::Scene& scene = PresetById("iidx11-dan-select");
-    for (const auto& param : Preset::Materialize(scene, {}).params) {
+    for (const auto& param : Preset::Materialize(scene, {}, {}).params) {
         INFO("param " << param.id);
         const std::string key(param.desc->key);
         REQUIRE(key != "scene_dir");
@@ -437,7 +438,7 @@ TEST_CASE("IIDX RED class course select offers every course as a camera state") 
 TEST_CASE("every parameter id is unique within its preset") {
     for (const char* build : {"iidx10", "iidx11"}) {
         for (const auto* scene : Preset::ForBuild(build)) {
-            const Preset::Materialized mat = Preset::Materialize(*scene, {});
+            const Preset::Materialized mat = Preset::Materialize(*scene, {}, {});
             std::vector<std::string> seen;
             for (const auto& param : mat.params) {
                 INFO(build << " " << scene->id << " " << param.id);
@@ -454,7 +455,7 @@ TEST_CASE("a layer placed twice gets two addressable parameter sets") {
     REQUIRE(scene.sprites[1].sprite == "BG_SKY");
     REQUIRE(scene.sprites[2].sprite == "BG_SKY");
 
-    const Preset::Materialized mat = Preset::Materialize(scene, {});
+    const Preset::Materialized mat = Preset::Materialize(scene, {}, {});
     int first = 0;
     int second = 0;
     for (const auto& param : mat.params) {
@@ -466,13 +467,13 @@ TEST_CASE("a layer placed twice gets two addressable parameter sets") {
 
     Preset::TweakSet tweaks;
     Preset::SetTweak(tweaks, "sprite[BG_SKY#2].x", Preset::ToValue(123.0F));
-    const Preset::Effective eff = Preset::Materialize(scene, tweaks).effective;
+    const Preset::Effective eff = Preset::Materialize(scene, {}, tweaks).effective;
     REQUIRE(eff.sprites[1].x == 640.0F);
     REQUIRE(eff.sprites[2].x == 123.0F);
 }
 
 TEST_CASE("a parameter's group names the layer it belongs to") {
-    const Preset::Materialized mat = Preset::Materialize(PresetById("iidx11-music-select"), {});
+    const Preset::Materialized mat = Preset::Materialize(PresetById("iidx11-music-select"), {}, {});
     bool saw_core = false;
     for (const auto& param : mat.params) {
         if (param.id == "model[core].alpha") {
@@ -481,4 +482,233 @@ TEST_CASE("a parameter's group names the layer it belongs to") {
         }
     }
     REQUIRE(saw_core);
+}
+
+TEST_CASE("the attract preset plays the screen's sequence, not just its settled pose") {
+    const Preset::Scene& scene = PresetById("iidx11-attract");
+    REQUIRE(scene.phases.size() == 5);
+    REQUIRE(scene.phases[0].start_frame == 0);
+    REQUIRE(scene.phases[1].start_frame == 502);
+    REQUIRE(scene.phases[2].start_frame == 793);
+    REQUIRE(scene.phases[3].start_frame == 902);
+    REQUIRE(scene.phases[4].start_frame == 1736);
+
+    for (const size_t phase : {(size_t)0, (size_t)2}) {
+        const Preset::Materialized hidden =
+            Preset::Materialize(scene, scene.phases[phase].params, {});
+        for (const auto& model : hidden.effective.models)
+            REQUIRE_FALSE(model.visible);
+    }
+
+    const Preset::Materialized warp = Preset::Materialize(scene, scene.phases[1].params, {});
+    REQUIRE(warp.effective.intro.frames == 291);
+    REQUIRE(warp.effective.intro.fov_from == 22.546017F);
+    REQUIRE(warp.effective.intro.fov_to == 25.110188F);
+    for (const auto& model : warp.effective.models) {
+        REQUIRE(model.visible);
+        REQUIRE(model.position == std::array<float, 3>{0.0F, 0.0F, -0.15F});
+        REQUIRE(model.motion.spin_per_frame[1] == 0.017453292F);
+    }
+
+    const Preset::Materialized loop = Preset::Materialize(scene, scene.phases[3].params, {});
+    REQUIRE(loop.effective.intro.fov_from == 0.0F);
+    for (const auto& model : loop.effective.models)
+        REQUIRE(model.position == std::array<float, 3>{0.105F, 0.0F, 0.0F});
+
+    for (const auto& sprite : loop.effective.sprites)
+        REQUIRE(sprite.visible == (sprite.sprite == "TITLE"));
+
+    const Preset::Materialized standby = Preset::Materialize(scene, scene.phases[4].params, {});
+    for (const auto& sprite : standby.effective.sprites)
+        REQUIRE(sprite.visible == (sprite.sprite == "TITLE_TAIKI"));
+}
+
+TEST_CASE("a phase override never changes what a parameter reports as the game's value") {
+    const Preset::Scene& scene = PresetById("iidx11-attract");
+    const Preset::Materialized warp = Preset::Materialize(scene, scene.phases[1].params, {});
+    for (const auto& param : warp.params) {
+        INFO("param " << param.id);
+        REQUIRE(Preset::SameValue(Preset::ReadParam(param, warp.effective), param.fallback));
+    }
+}
+
+TEST_CASE("every phase override names a parameter that exists") {
+    for (const char* build : {"iidx10", "iidx11"}) {
+        for (const auto* scene : Preset::ForBuild(build)) {
+            const Preset::Materialized mat = Preset::Materialize(*scene, {}, {});
+            for (const auto& phase : scene->phases) {
+                for (const auto& param : phase.params) {
+                    INFO(scene->id << " phase '" << phase.label << "' sets '" << param.id << "'");
+                    const auto match = std::ranges::find_if(
+                        mat.params, [&param](const Preset::ParamInstance& instance) {
+                            return instance.id == param.id;
+                        });
+                    REQUIRE(match != mat.params.end());
+                }
+            }
+        }
+    }
+}
+
+TEST_CASE("a fly-in phase carries the curve the screen actually uses") {
+    const Preset::Scene& music = PresetById("iidx11-music-select");
+    REQUIRE(music.phases.size() == 2);
+    REQUIRE_FALSE(music.phases[0].ramps.empty());
+    for (const auto& ramp : music.phases[0].ramps)
+        REQUIRE(ramp.curve == Preset::Curve::Sine);
+
+    const Preset::Scene& mode = PresetById("iidx11-mode-select");
+    REQUIRE(mode.phases.size() == 4);
+    for (const auto& ramp : mode.phases[0].ramps) {
+        REQUIRE(ramp.curve == Preset::Curve::Linear);
+        REQUIRE(ramp.from[1] > ramp.to[1]);
+    }
+}
+
+TEST_CASE("every ramp names a parameter that exists") {
+    for (const char* build : {"iidx10", "iidx11"}) {
+        for (const auto* scene : Preset::ForBuild(build)) {
+            const Preset::Materialized mat = Preset::Materialize(*scene, {}, {});
+            for (const auto& phase : scene->phases) {
+                for (const auto& ramp : phase.ramps) {
+                    INFO(scene->id << " phase '" << phase.label << "' ramps '" << ramp.id << "'");
+                    REQUIRE(std::ranges::any_of(mat.params,
+                                                [&ramp](const Preset::ParamInstance& instance) {
+                                                    return instance.id == ramp.id;
+                                                }));
+                    REQUIRE(ramp.frames > 0);
+                }
+            }
+        }
+    }
+}
+
+TEST_CASE("every state override names a parameter that exists") {
+    for (const char* build : {"iidx10", "iidx11"}) {
+        for (const auto* scene : Preset::ForBuild(build)) {
+            const Preset::Materialized mat = Preset::Materialize(*scene, {}, {});
+            for (const auto& option : scene->options) {
+                for (const auto& choice : option.choices) {
+                    for (const auto& param : choice.params) {
+                        INFO(scene->id << " choice '" << choice.label << "' sets '" << param.id
+                                       << "'");
+                        REQUIRE(std::ranges::any_of(
+                            mat.params, [&param](const Preset::ParamInstance& instance) {
+                                return instance.id == param.id;
+                            }));
+                    }
+                }
+            }
+        }
+    }
+}
+
+TEST_CASE("the attract warp carries the ring emitter the screen blits") {
+    const Preset::Scene& scene = PresetById("iidx11-attract");
+    REQUIRE(scene.phases[1].emitters.size() == 1);
+    const Preset::Emitter& ring = scene.phases[1].emitters[0];
+    REQUIRE(ring.cell == "PTC_ORAN");
+    REQUIRE(ring.count == 16);
+    REQUIRE(ring.angle_step_deg == 22.5F);
+    REQUIRE(ring.radius_from == 10);
+    REQUIRE(ring.radius_to == 630);
+    REQUIRE(ring.frames == 290);
+    REQUIRE(ring.priority == 31);
+    REQUIRE(ring.priority >= scene.sprite_split_priority);
+    REQUIRE(ring.package_dir != scene.sprites.front().package_dir);
+    REQUIRE_FALSE(ring.scatter);
+    REQUIRE(ring.spawn == Preset::Spawn::EveryFrame);
+    REQUIRE(ring.life == 60);
+    REQUIRE(ring.scale == 100);
+    for (const size_t phase : {(size_t)0, (size_t)2, (size_t)3, (size_t)4})
+        REQUIRE(scene.phases[phase].emitters.empty());
+}
+
+TEST_CASE("the ending carries its whole phase timeline") {
+    const Preset::Scene& scene = PresetById("iidx11-ending");
+    REQUIRE(scene.phases.size() == 18);
+    REQUIRE(scene.phases[0].start_frame == 0);
+    REQUIRE(scene.phases[1].start_frame == 71);
+    REQUIRE(scene.phases[6].start_frame == 1930);
+    REQUIRE(scene.phases[17].start_frame == 4065);
+    for (size_t i = 1; i < scene.phases.size(); i++)
+        REQUIRE(scene.phases[i].start_frame > scene.phases[i - 1].start_frame);
+
+    int bursts = 0;
+    int repeats = 0;
+    int beats = 0;
+    for (const auto& phase : scene.phases) {
+        for (const auto& emitter : phase.emitters) {
+            REQUIRE(emitter.scatter);
+            REQUIRE(emitter.span_x == 1280);
+            REQUIRE(emitter.span_y == 960);
+            REQUIRE(emitter.scale == 200);
+            switch (emitter.spawn) {
+            case Preset::Spawn::PhaseStart:
+                REQUIRE(emitter.count == 480);
+                REQUIRE(emitter.life == 45);
+                REQUIRE(emitter.life_span == 0);
+                bursts++;
+                break;
+            case Preset::Spawn::EveryFrame:
+                REQUIRE(emitter.count == 32);
+                REQUIRE(emitter.life_base == 48);
+                REQUIRE(emitter.life_span == 48);
+                repeats++;
+                break;
+            case Preset::Spawn::Beat:
+                REQUIRE(emitter.count == 128);
+                REQUIRE(emitter.beat_odd == 1);
+                REQUIRE(emitter.life_base == 48);
+                REQUIRE(emitter.life_span == 48);
+                beats++;
+                break;
+            }
+        }
+    }
+    REQUIRE(bursts == 5);
+    REQUIRE(repeats == 1);
+    REQUIRE(beats == 1);
+}
+
+TEST_CASE("the ending drives its pulses and jitter off the game's own beat grid") {
+    const Preset::Scene& scene = PresetById("iidx11-ending");
+    REQUIRE(scene.beat.rate == 155);
+    REQUIRE(scene.beat.span == 3600);
+    REQUIRE(scene.beat.offset_a == 70);
+    REQUIRE(scene.beat.offset_b == 59);
+
+    int pulsing = 0;
+    int shaking = 0;
+    for (const auto& phase : scene.phases) {
+        for (const auto& param : phase.params) {
+            if (param.id == "pulse.scale_odd") pulsing++;
+            if (param.id == "jitter.span") shaking++;
+        }
+    }
+    REQUIRE(pulsing == 5);
+    REQUIRE(shaking == 2);
+}
+
+TEST_CASE("the game's subtractive generator reproduces its own stream") {
+    Preset::Ran3 rng;
+    rng.Seed(1);
+    std::vector<int> first;
+    for (int i = 0; i < 512; i++) {
+        const int draw = rng.Next();
+        REQUIRE(draw >= 0);
+        REQUIRE(draw < 1000000000);
+        first.push_back(draw);
+    }
+
+    rng.Seed(1);
+    for (const int expected : first)
+        REQUIRE(rng.Next() == expected);
+
+    rng.Seed(2);
+    int same = 0;
+    for (const int expected : first) {
+        if (rng.Next() == expected) same++;
+    }
+    REQUIRE(same < 8);
 }

@@ -83,6 +83,17 @@ void DrawSpriteFrames() {
     }
 }
 
+void DrawTimeline(const PresetHost::Status& status) {
+    ImGui::Text("frame %d, beat %d (+%d), pulse %.3f, jitter %+.4f, %d particle(s)", status.frame,
+                status.beat, status.beat_since, status.pulse_scale, status.jitter,
+                status.live_particles);
+    if (!ImGui::IsItemHovered()) return;
+    ImGui::SetTooltip(
+        "The screen's own frame counter, the beat index it derives from that counter, the "
+        "frames since that index last changed, the scale the beat pulse is applying right now, "
+        "the position offset it drew this frame, and how many particles are still alive.");
+}
+
 void DrawCountdown(const PresetHost::Status& status) {
     if (status.countdown_start <= 0) return;
     int countdown = status.countdown;
@@ -147,6 +158,7 @@ void Render() {
                           "captured on its own. The game's chrome - titles, timers, lists, "
                           "instructions - is never part of a preset.");
     }
+    DrawTimeline(status);
     DrawCountdown(status);
     DrawSpriteFrames();
 }

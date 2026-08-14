@@ -23,11 +23,18 @@ struct ModelMotion {
     float spin_kick_decay = 0.0F;
 };
 
+struct ParamOverride {
+    std::string_view id;
+    std::array<float, 3> f = {0.0F, 0.0F, 0.0F};
+    int i = 0;
+};
+
 struct OptionChoice {
     std::string_view label;
     std::array<float, 3> position = {0.0F, 0.0F, 0.0F};
     std::array<float, 3> camera_eye = {0.0F, 0.0F, 0.0F};
     bool moves_camera = false;
+    std::span<const ParamOverride> params = {};
 };
 
 struct Option {
@@ -58,6 +65,7 @@ struct SpriteLayer {
     float x = 0.0F;
     float y = 0.0F;
     float alpha = 1.0F;
+    float scale = 1.0F;
     int blend = 0;
     int priority = 0;
     GcAnim::Timing timing = {};
@@ -96,6 +104,89 @@ struct Intro {
     int frames = 0;
     float speed_from = 0.0F;
     float speed_to = 0.0F;
+    float fov_from = 0.0F;
+    float fov_to = 0.0F;
+};
+
+enum class Curve : uint8_t {
+    Linear,
+    Sine,
+};
+
+struct Ramp {
+    std::string_view id;
+    std::array<float, 3> from = {0.0F, 0.0F, 0.0F};
+    std::array<float, 3> to = {0.0F, 0.0F, 0.0F};
+    int frames = 0;
+    float degrees_per_frame = 0.0F;
+    Curve curve = Curve::Linear;
+};
+
+enum class Grid : uint8_t {
+    A,
+    B,
+};
+
+enum class Spawn : uint8_t {
+    PhaseStart,
+    EveryFrame,
+    Beat,
+};
+
+struct Beat {
+    int rate = 0;
+    int span = 1;
+    int offset_a = 0;
+    int offset_b = 0;
+};
+
+struct Pulse {
+    Grid grid = Grid::A;
+    float scale_odd = 1.0F;
+    float scale_even = 1.0F;
+    int frames = 8;
+};
+
+struct Jitter {
+    int from_frame = 0;
+    int span = 0;
+    float scale = 0.0F;
+};
+
+struct Emitter {
+    std::string_view package_dir;
+    std::string_view cell;
+    int count = 0;
+    float angle_step_deg = 0.0F;
+    float phase_rate_deg = 0.0F;
+    float phase_amplitude_deg = 0.0F;
+    int radius_from = 0;
+    int radius_to = 0;
+    int frames = 0;
+    float center_x = 320.0F;
+    float center_y = 240.0F;
+    int priority = 0;
+    int blend = 1;
+    int scale = 100;
+    bool scatter = false;
+    int span_x = 0;
+    int span_y = 0;
+    int offset_x = 0;
+    int offset_y = 0;
+    Spawn spawn = Spawn::PhaseStart;
+    Grid beat_grid = Grid::A;
+    int beat_odd = 0;
+    int life = 0;
+    int life_base = 0;
+    int life_span = 0;
+};
+
+struct Phase {
+    std::string_view label;
+    int start_frame = 0;
+    std::span<const ParamOverride> params = {};
+    std::span<const Ramp> ramps = {};
+    std::span<const Emitter> emitters = {};
 };
 
 enum class Shading : uint8_t {
@@ -114,10 +205,16 @@ struct Scene {
     Camera camera = {};
     Countdown countdown = {};
     Intro intro = {};
+    Beat beat = {};
+    Pulse pulse = {};
+    Jitter jitter = {};
+    int rng_seed = 1;
+    bool opaque_screen = true;
     std::span<const ModelLayer> models;
     std::span<const SpriteLayer> sprites;
     std::span<const DirectionalLight> lights;
     std::span<const Option> options = {};
+    std::span<const Phase> phases = {};
 };
 
 std::vector<const Scene*> ForBuild(std::string_view build);

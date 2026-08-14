@@ -38,6 +38,8 @@ int CurrentLength() {
 }
 
 std::vector<SpritePlacement> g_sprites;
+Gc2d::Package g_particles;
+Gc2d::Renderer g_particle_renderer;
 std::vector<GcAnim::DrawNode> g_scratch;
 
 float ScrollOffset(const SpritePlacement& sprite) {
@@ -107,15 +109,32 @@ void AppendAnimation(const SpritePlacement& sprite) {
     g_nodes.insert(g_nodes.end(), g_scratch.begin(), g_scratch.end());
 }
 
+void ScaleAbout(size_t from, const SpritePlacement& sprite) {
+    if (sprite.scale == 1.0F) return;
+    const float cx = sprite.x + 320.0F;
+    const float cy = sprite.y + 240.0F;
+    for (size_t i = from; i < g_nodes.size(); i++) {
+        GcAnim::DrawNode& node = g_nodes[i];
+        node.x = cx + ((node.x - cx) * sprite.scale);
+        node.y = cy + ((node.y - cy) * sprite.scale);
+        node.pivot_x = cx + ((node.pivot_x - cx) * sprite.scale);
+        node.pivot_y = cy + ((node.pivot_y - cy) * sprite.scale);
+        node.w *= sprite.scale;
+        node.h *= sprite.scale;
+    }
+}
+
 void EvaluateSprites(int min_priority, int max_priority) {
     g_nodes.clear();
     for (const auto& sprite : g_sprites) {
         if (sprite.priority < min_priority || sprite.priority > max_priority) continue;
+        const size_t from = g_nodes.size();
         if (sprite.animated) {
             AppendAnimation(sprite);
         } else {
             AppendCell(sprite);
         }
+        ScaleAbout(from, sprite);
     }
 }
 
@@ -222,6 +241,83 @@ void SetSpriteScroll(int index, int offset) {
     sprite.time = (float)std::max(0, offset) / sprite.scroll_x;
 }
 
+void SetSpriteScale(int index, float scale) {
+    if (index < 0 || (size_t)index >= g_sprites.size()) return;
+    g_sprites[(size_t)index].scale = scale;
+}
+
+std::vector<DrawInfo> ListDrawNodes() {
+    std::vector<DrawInfo> out;
+    out.reserve(g_nodes.size());
+    for (const GcAnim::DrawNode& node : g_nodes) {
+        DrawInfo info;
+        for (const auto& [name, id] : g_pkg.index.cell_names) {
+            if (std::cmp_equal(id, node.cell)) info.cell = name;
+        }
+        if (info.cell.empty()) info.cell = "#" + std::to_string(node.cell);
+        info.blend = (int)node.blend;
+        info.x = node.x;
+        info.y = node.y;
+        info.w = node.w;
+        info.h = node.h;
+        info.alpha = node.alpha;
+        out.push_back(std::move(info));
+    }
+    return out;
+}
+
+bool LoadParticles(const std::string& dir) {
+    if (g_particles.name == dir) return true;
+    std::string err;
+    Gc2d::Package package;
+    if (!Gc2d::Load(dir, package, err)) {
+        LOG("Gc2d", "particle package '%s' failed: %s", dir.c_str(), err.c_str());
+        return false;
+    }
+    g_particle_renderer.Release();
+    g_particles = std::move(package);
+    if (!g_particle_renderer.Init(g_d3d.device, g_particles)) {
+        LOG("Gc2d", "particle renderer init failed");
+        return false;
+    }
+    LOG("Gc2d", "particle package '%s' ready: %zu cells", g_particles.name.c_str(),
+        g_particles.index.cells.size());
+    return true;
+}
+
+void DrawParticles(const std::vector<CellDraw>& cells) {
+    if (cells.empty() || g_particles.index.cells.empty()) return;
+    g_scratch.clear();
+    for (const CellDraw& draw : cells) {
+        const auto it = g_particles.index.cell_names.find(draw.name);
+        if (it == g_particles.index.cell_names.end()) continue;
+        if ((size_t)it->second >= g_particles.index.cells.size()) continue;
+        const SysIdx::Cell& cell = g_particles.index.cells[it->second];
+        const float w = (float)cell.w * draw.scale;
+        const float h = (float)cell.h * draw.scale;
+        GcAnim::DrawNode node;
+        node.cell = it->second;
+        node.x = draw.x - (w * 0.5F);
+        node.y = draw.y - (h * 0.5F);
+        node.w = w;
+        node.h = h;
+        node.pivot_x = node.x;
+        node.pivot_y = node.y;
+        node.alpha = draw.alpha;
+        node.blend = (GcAnim::Blend)draw.blend;
+        g_scratch.push_back(node);
+    }
+    if (g_scratch.empty()) return;
+    int w = 0;
+    int h = 0;
+    g_d3d.GetOffscreenSize(w, h);
+    if (w <= 0 || h <= 0) {
+        w = g_d3d.width;
+        h = g_d3d.height;
+    }
+    g_particle_renderer.Draw(g_particles, g_scratch, w, h);
+}
+
 void DrawSprites(int min_priority, int max_priority) {
     if (!g_active || g_sprites.empty()) return;
     EvaluateSprites(min_priority, max_priority);
@@ -283,6 +379,12 @@ std::vector<std::string> ListParts(const std::string& animation) {
     return out;
 }
 
+int AnimationLength(const std::string& animation) {
+    const auto it = g_pkg.index.animation_names.find(animation);
+    if (it == g_pkg.index.animation_names.end()) return 0;
+    return SysIdx::AnimationLength(g_pkg.index, it->second);
+}
+
 std::vector<std::string> ListCells() {
     std::vector<std::string> names;
     names.reserve(g_pkg.index.cell_names.size());
@@ -293,10 +395,19 @@ std::vector<std::string> ListCells() {
 }
 
 void SetSprites(std::vector<SpritePlacement> sprites) {
+    const std::vector<SpritePlacement> previous = std::move(g_sprites);
     g_sprites = std::move(sprites);
     g_time = 0.0F;
-    for (auto& sprite : g_sprites)
+    std::vector<bool> taken(previous.size(), false);
+    for (auto& sprite : g_sprites) {
         sprite.time = 0.0F;
+        for (size_t i = 0; i < previous.size(); i++) {
+            if (taken[i] || previous[i].name != sprite.name) continue;
+            sprite.time = previous[i].time;
+            taken[i] = true;
+            break;
+        }
+    }
     for (const auto& sprite : g_sprites) {
         if (!sprite.animated) {
             if (!g_pkg.index.cell_names.contains(sprite.name)) {

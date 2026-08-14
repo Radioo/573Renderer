@@ -774,12 +774,80 @@ which is what the scene panel and the timeline show.
 
 `Export::PlannedFrames(max_frames, preset_frames, package_frames)` picks the
 length in that order of precedence: an explicit "Limit frames" always wins, then
-the preset's `NaturalFrames()` (its countdown length when it has one - IIDX 10
-music select = 1800 frames = one full 30 s screen including the end-of-timer
-speed-up - else the lead model's animation loop, `max_time / anim_speed`), then
-the loaded package's animation length. Zero on all three fails the export
-immediately with a message telling the user to set a frame limit, rather than
-capturing forever.
+the preset's `NaturalFrames()`, then the loaded package's animation length. Zero
+on all three fails the export immediately with a message telling the user to set
+a frame limit, rather than capturing forever.
+
+`NaturalFrames()` answers "how long is one full pass of this screen", in this
+order:
+
+1. The countdown length, when the screen has one. IIDX 10 music select is 1800
+   frames, a full 30 s including the end-of-timer speed-up.
+2. Otherwise, for a preset with PHASES, the last phase's start frame plus that
+   phase's own content: the longer of the lead model's animation loop
+   (`max_time / anim_speed`), the longest ramp in that phase, and the longest
+   animated 2D layer VISIBLE in that phase. IIDX RED's attract is
+   `1736 + 720 = 2456` frames, where 1736 is the frame TITLE_TAIKI takes over
+   and 720 is one pass of it; the ending is `4065 + 320 = 4385`.
+3. Otherwise the lead model's animation loop on its own.
+
+Step 2 is why this is not just the clip length. The attract preset used to export
+320 frames, the bare `max_time / anim_speed` of the red scene's clip, which cut
+off in the middle of the boot animation's genre list and never reached the
+warp-in at 502, let alone the attract loop at 902. A phased preset's length is
+its TIMELINE, and the 3D clip length has nothing to do with it.
+
+`Restart()` is what the exporter calls before capturing, so it has to put the
+preset back to frame 0 completely: the phase index, the model spins, the RNG, the
+live particles, the beat counters and every 2D layer's playhead. Leaving the
+phase alone made the first captured frame carry the previous phase's state, and
+leaving the playheads alone made a second export start mid-animation.
+
+## Export defaults have exactly ONE definition
+
+`App::ExportRequest`'s member initializers in `src/state/commands.h` ARE the
+defaults. The GUI panel seeds every one of its globals from a default-constructed
+`ExportRequest` (`const App::ExportRequest kDefaults{}` in
+`src/gui/gui_export_panel.cpp`), and `Cli::ToolCommand` does the same. There is no
+second set of literals anywhere, and `cli_tests` pins the two together.
+
+This is not tidiness, it is the reason a real bug survived three rounds of "fixed".
+The GUI held its own literals - `fps = 60`, `bg_rgb = {0.13, 0.14, 0.17}` - while
+`ExportRequest` said `fps = 30` and a black background. So a CLI export could not
+reproduce a GUI export, every headless verification passed, and the user's actual
+export stayed broken. If you add an export setting, it goes in `ExportRequest` and
+nowhere else.
+
+Note also that `Scene3dCaptureDriver::Caps().transparent_bg` is false, so the GUI
+FORCES `bg_transparent = false` for this backend regardless of the checkbox. Any
+test of that backend's export must therefore exercise the OPAQUE composite path;
+testing with `--export-bg transparent` tests a path the GUI can never take.
+
+## A game screen is opaque, so transparency has to be derived
+
+The IIDX 9 to 19 2D library has no alpha channel concept at all. Every layer is
+composited onto an opaque black screen, and plenty of its artwork is opaque black
+outside the visible shape: a lens flare is a glow painted on a black quad, and the
+game's default blend REPLACES that quad. On the cabinet that is invisible. In a
+transparent export it is a hard-edged black rectangle that tracks the sprite, and
+in an opaque export it punches the background colour out of the same rectangle.
+
+So a preset carries `opaque_screen` (true by default, because a game screen IS
+opaque), and when it is set the exporter derives the alpha channel from the
+finished frame: `alpha = max(r, g, b)`. Black becomes transparent, a glow keeps
+coverage proportional to its brightness, and nothing needs the source library to
+have alpha semantics it never had. `Frame::DeriveAlphaFromCoverage`.
+
+Verify this class of bug with a straight-edge detector over the WHOLE frame, and
+validate the detector against a frame you already know is broken before trusting
+a pass. A rectangle is a single-row or single-column step running most of the
+width or height; the flare's own streak and the boot art's bars also produce hard
+edges and are legitimate content, so look at what gets flagged.
+
+`573Renderer.exe --gc2d-sheet <package> <out> <samples>` writes `draws.txt`
+alongside the PNGs, listing every draw node the evaluator emits per sampled frame
+with its cell, blend mode, quad rect and alpha. That is what identifies which
+layer is responsible, instead of inferring it from pixels.
 
 Frames come from `ReadPresentBGRA`, so a stretched preview exports stretched.
 Because the export tick runs before `EndFrame`, that call resolves

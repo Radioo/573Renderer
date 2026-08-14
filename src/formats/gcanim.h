@@ -13,6 +13,7 @@ enum class Blend : uint8_t {
     Normal,
     Additive,
     Subtract,
+    Replace,
 };
 
 enum class Playback : uint8_t {

@@ -112,7 +112,7 @@ int Run(const Cli::ToolCommand& cmd) {
                                cmd.tweaks_path);
     case Cli::ToolKind::PresetExport:
         return PresetTest::RunExport(cmd.in_path, cmd.arc_path, cmd.out_path, cmd.frames,
-                                     cmd.option);
+                                     cmd.option, cmd.bg_transparent, cmd.bg_rgb.data());
     case Cli::ToolKind::DdrTest:
         return RunDdrTest(cmd);
     case Cli::ToolKind::ExtractArc:

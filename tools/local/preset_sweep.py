@@ -12,6 +12,11 @@ SHOTS = ROOT / "screenshots"
 SCENE_ID = re.compile(r'\.id\s*=\s*"([^"]+)"')
 OPTION_CHOICES = re.compile(r"constexpr\s+std::array<OptionChoice,\s*(\d+)>\s+(\w+)")
 SCENE_OPTIONS = re.compile(r"\.options\s*=\s*(\w+)")
+SCENE_PHASES = re.compile(r"\.phases\s*=\s*(\w+)")
+PHASE_ARRAY = re.compile(
+    r"constexpr\s+std::array<Phase,\s*\d+>\s+(\w+)\s*=\s*\{\{(.*?)\}\};", re.S
+)
+PHASE_ENTRY = re.compile(r'\.label\s*=\s*"([^"]+)",\s*\.start_frame\s*=\s*(\d+)')
 OPTION_LIST = re.compile(
     r"constexpr\s+std::array<Option,\s*\d+>\s+(\w+)\s*=\s*\{\{(.*?)\}\};", re.S
 )
@@ -21,12 +26,18 @@ CHOICES_FIELD = re.compile(r"\.choices\s*=\s*(\w+)")
 def scenes_for(build):
     path = PRESET_DIR / f"scene_presets_{build}.cpp"
     text = path.read_text(encoding="utf-8")
+    for extra in sorted(PRESET_DIR.glob(f"scene_presets_{build}_*.h")):
+        text += extra.read_text(encoding="utf-8")
     choice_counts = {name: int(n) for n, name in OPTION_CHOICES.findall(text)}
     option_choices = {}
     for name, body in OPTION_LIST.findall(text):
         field = CHOICES_FIELD.search(body)
         if field is not None:
             option_choices[name] = choice_counts.get(field.group(1), 1)
+
+    phase_sets = {}
+    for name, body in PHASE_ARRAY.findall(text):
+        phase_sets[name] = PHASE_ENTRY.findall(body)
 
     out = []
     for block in text.split(".id = ")[1:]:
@@ -38,7 +49,9 @@ def scenes_for(build):
         scene_id = ident.group(1)
         if not scene_id.startswith(f"{build}-"):
             continue
-        out.append((scene_id, states))
+        phases = SCENE_PHASES.search(block[:600])
+        entries = phase_sets.get(phases.group(1), []) if phases else []
+        out.append((scene_id, states, entries))
     return out
 
 
@@ -54,28 +67,35 @@ def main():
     SHOTS.mkdir(exist_ok=True)
     failures = []
     total = 0
-    for scene, states in scenes_for(args.build):
+    for scene, states, phases in scenes_for(args.build):
+        shots = [("", args.frames)]
+        if phases:
+            shots = [
+                (f"-{label.split(',')[0].strip().replace(' ', '_').lower()}", int(start) + 60)
+                for label, start in phases
+            ]
         for state in range(states):
-            total += 1
-            suffix = "" if states == 1 else f"-state{state}"
-            out = SHOTS / f"{scene}{suffix}.png"
-            result = subprocess.run(
-                [
-                    str(RENDERER),
-                    "--preset-test",
-                    args.game_dir,
-                    scene,
-                    str(out),
-                    str(args.frames),
-                    str(state),
-                ],
-                check=False,
-                capture_output=True,
-            )
-            verdict = "ok" if result.returncode == 0 else f"FAILED ({result.returncode})"
-            print(f"{scene}{suffix}: {verdict} -> {out.name}")
-            if result.returncode != 0:
-                failures.append(f"{scene}{suffix}")
+            for phase_suffix, frames in shots:
+                total += 1
+                suffix = phase_suffix if states == 1 else f"-state{state}{phase_suffix}"
+                out = SHOTS / f"{scene}{suffix}.png"
+                result = subprocess.run(
+                    [
+                        str(RENDERER),
+                        "--preset-test",
+                        args.game_dir,
+                        scene,
+                        str(out),
+                        str(frames),
+                        str(state),
+                    ],
+                    check=False,
+                    capture_output=True,
+                )
+                verdict = "ok" if result.returncode == 0 else f"FAILED ({result.returncode})"
+                print(f"{scene}{suffix}: {verdict} -> {out.name}")
+                if result.returncode != 0:
+                    failures.append(f"{scene}{suffix}")
 
     print(f"\n{total - len(failures)}/{total} preset state(s) render with a moving model")
     if failures:

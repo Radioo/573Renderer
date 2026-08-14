@@ -2,6 +2,8 @@
 
 #include "cli/cli.h"
 #include "cli/tool_command.h"
+#include "media/media_format.h"
+#include "state/commands.h"
 
 #include <string>
 #include <vector>
@@ -340,4 +342,22 @@ TEST_CASE("Parse defaults match the documented option table") {
     CHECK(r.opts.screenshot_prefix == "screenshots/auto_f");
     CHECK(r.opts.root_loop_mode == -1);
     CHECK(r.opts.seek_frame == -1);
+}
+
+TEST_CASE("every export default has exactly one definition, shared by the UI and the CLI") {
+    const App::ExportRequest canonical;
+    const Cli::ToolCommand tool;
+
+    REQUIRE(tool.bg_transparent == canonical.bg_transparent);
+    REQUIRE(tool.bg_rgb[0] == canonical.bg_r);
+    REQUIRE(tool.bg_rgb[1] == canonical.bg_g);
+    REQUIRE(tool.bg_rgb[2] == canonical.bg_b);
+
+    REQUIRE(canonical.fps == 60);
+    REQUIRE(canonical.format == MediaSink::ToIndex(MediaSink::kDefaultFormat));
+    REQUIRE(canonical.prefer_hardware);
+    REQUIRE(canonical.loop_count == 1);
+    REQUIRE(canonical.max_frames == 0);
+    REQUIRE(canonical.width == 0);
+    REQUIRE(canonical.height == 0);
 }

@@ -40,6 +40,39 @@ sprite[BG_SKY].scroll_x
 option[course].choice[10TH DAN].camera_eye
 ```
 
+## The Beat and noise group
+
+Four scopes exist purely so the timing a screen derives arithmetically is editable
+rather than hard-coded, and they are all populated by IIDX RED's ending:
+
+```
+rng.seed            the seed for Preset::Ran3, the game's own subtractive generator
+beat.rate           beats counted per beat.span frames, 0 disables the beat
+beat.span
+beat.offset_a       the frame each of the two beat grids counts from
+beat.offset_b
+pulse.grid          which grid the model scale pulse fires on
+pulse.scale_odd     scale on the frame an odd beat lands, decaying to 1 over
+pulse.scale_even    pulse.frames, and the same for even beats
+pulse.frames
+jitter.from_frame   the scene frame per-frame position jitter starts on
+jitter.span         width of the draw, 0 disables it, the offset is draw - span/2
+jitter.scale        world units per step of the draw
+```
+
+`pulse` and `jitter` are phase-scoped in practice: a phase sets them through the
+same `ParamOverride` list it uses for everything else, exactly as `intro` works,
+so the ending's four pulsing phases and two shaking phases are table data and the
+user can still retune all of it live. The current beat index, the frames since it
+changed, the pulse being applied and the offset drawn this frame all show in the
+preset panel, so the arithmetic is visible rather than inferred.
+
+`rng.seed` is a parameter because the GAME has no reproducible seed to copy: IIDX
+RED reseeds from `timeGetTime()` when a stage starts and gameplay then spends an
+unknown number of draws before the ending runs. Every other input to the ending is
+derived exactly; this one is genuinely a per-play accident, so it is exposed with a
+default rather than guessed. See `docs/preset_states.md` for the full account.
+
 ## Apply kinds
 
 `Live` means an existing per-frame reader picks the new value up next frame.

@@ -1,6 +1,9 @@
 #pragma once
 
 #include <cstdint>
+#include "state/commands.h"
+
+#include <array>
 #include <span>
 #include <string>
 
@@ -26,6 +29,10 @@ struct ToolCommand {
     std::string out_path;
     int frames = 120;
     int option = 0;
+    bool bg_transparent = App::ExportRequest{}.bg_transparent;
+    bool bg_black = false;
+    std::array<float, 3> bg_rgb = {App::ExportRequest{}.bg_r, App::ExportRequest{}.bg_g,
+                                   App::ExportRequest{}.bg_b};
     std::string tweaks_path;
 };
 

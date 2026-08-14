@@ -12,7 +12,9 @@ constexpr int kMaxTextures = 12;
 constexpr int kAtlasWidth = 1024;
 constexpr int kAtlasTileHeight = 1024;
 
-constexpr uint16_t kFlagAlphaTrack = 0x0002;
+constexpr uint16_t kFlagBlend = 0x0002;
+constexpr uint16_t kBlendCodeMask = 0x0003;
+constexpr uint16_t kBlendCodeXor = 0x000C;
 constexpr uint16_t kFlagSubtract = 0x0010;
 
 constexpr int16_t kRecDrawCell = 0;

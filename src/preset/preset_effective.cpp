@@ -76,6 +76,11 @@ void CopyScene(const Scene& src, Effective& out) {
         out.aspect_auto ? ((float)src.render_w / (float)src.render_h) : src.camera.aspect;
     out.countdown = src.countdown;
     out.intro = src.intro;
+    out.beat = src.beat;
+    out.pulse = src.pulse;
+    out.jitter = src.jitter;
+    out.rng_seed = src.rng_seed;
+    out.opaque_screen = src.opaque_screen;
 }
 
 void CopyModels(const Scene& src, Effective& out) {
@@ -105,6 +110,7 @@ void CopySprites(const Scene& src, Effective& out) {
         state.x = layer.x;
         state.y = layer.y;
         state.alpha = layer.alpha;
+        state.scale = layer.scale;
         state.blend = layer.blend;
         state.priority = layer.priority;
         state.timing = layer.timing;
@@ -183,6 +189,12 @@ void* ResolveOwner(Effective& out, const Target& target) {
         return &out.countdown;
     case Scope::Intro:
         return &out.intro;
+    case Scope::Beat:
+        return &out.beat;
+    case Scope::Pulse:
+        return &out.pulse;
+    case Scope::Jitter:
+        return &out.jitter;
     case Scope::Light:
         return (index < out.lights.size()) ? &out.lights[index] : nullptr;
     case Scope::Model:
@@ -272,6 +284,9 @@ std::vector<ParamInstance> Instantiate(const Effective& pristine) {
         case Scope::Camera:
         case Scope::Countdown:
         case Scope::Intro:
+        case Scope::Beat:
+        case Scope::Pulse:
+        case Scope::Jitter:
             AddInstance(out, desc, std::string(desc.key), std::string(desc.label),
                         std::string(desc.group), Target{.scope = desc.scope}, pristine);
             break;
@@ -307,7 +322,29 @@ std::vector<ParamInstance> Instantiate(const Effective& pristine) {
     return out;
 }
 
-Materialized Materialize(const Scene& src, const TweakSet& tweaks) {
+namespace {
+
+void Write(const ParamInstance& param, Effective& out, const Value& value) {
+    void* owner = ResolveOwner(out, param.target);
+    if (owner == nullptr) return;
+    param.desc->accessor.set(owner, ClampValue(*param.desc, value));
+}
+
+}
+
+void WriteParam(std::span<const ParamInstance> params, const std::string& id, const Value& value,
+                Effective& out) {
+    for (const ParamInstance& param : params) {
+        if (param.id != id) continue;
+        Value next = value;
+        next.kind = param.desc->kind;
+        Write(param, out, next);
+        return;
+    }
+}
+
+Materialized Materialize(const Scene& src, std::span<const ParamOverride> phase,
+                         const TweakSet& tweaks) {
     Materialized out;
     CopyScene(src, out.effective);
     CopyModels(src, out.effective);
@@ -316,12 +353,22 @@ Materialized Materialize(const Scene& src, const TweakSet& tweaks) {
     CopyOptions(src, out.effective);
 
     out.params = Instantiate(out.effective);
+    for (const ParamOverride& override : phase) {
+        for (const ParamInstance& param : out.params) {
+            if (param.id != override.id) continue;
+            Value value;
+            value.kind = param.desc->kind;
+            value.f = override.f;
+            value.i = override.i;
+            Write(param, out.effective, value);
+        }
+    }
+    for (ParamInstance& param : out.params)
+        param.fallback = ReadParam(param, out.effective);
+
     for (const ParamInstance& param : out.params) {
         const Value* tweak = FindTweak(tweaks, param.id);
-        if (tweak == nullptr) continue;
-        void* owner = ResolveOwner(out.effective, param.target);
-        if (owner == nullptr) continue;
-        param.desc->accessor.set(owner, ClampValue(*param.desc, *tweak));
+        if (tweak != nullptr) Write(param, out.effective, *tweak);
     }
     return out;
 }

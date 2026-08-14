@@ -5,6 +5,7 @@
 #include "export.h"
 #include "export_capture.h"
 #include "export_internal.h"
+#include "formats/frame_process.h"
 #include "game_revision.h"
 #include "gc2d/gc_host.h"
 #include "gc2d/gc_package.h"
@@ -24,6 +25,8 @@
 #include <system_error>
 #include <thread>
 #include <utility>
+#include <cstddef>
+#include <span>
 #include <cstdint>
 #include <vector>
 
@@ -70,6 +73,12 @@ public:
         if (!d3d.ReadPresentBGRA(bgra, w, h)) {
             Export::FailSession(sess, "D3D9 presented-frame readback failed");
             return;
+        }
+        const std::span<uint8_t> frame{bgra.data(), (size_t)w * h * 4};
+        if (!sess.bg_transparent) {
+            Frame::SetAlphaOpaque(frame);
+        } else if (PresetHost::Active() && PresetHost::OpaqueScreen()) {
+            Frame::DeriveAlphaFromCoverage(frame);
         }
         Export::SubmitOneFrame(sess, bgra.data(), w, h);
         if (!sess.active) return;

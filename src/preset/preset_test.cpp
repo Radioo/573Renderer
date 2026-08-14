@@ -4,6 +4,7 @@
 #include "backend/backend.h"
 #include "export.h"
 #include "game_fingerprint.h"
+#include "gc2d/gc_host.h"
 #include "game_profile.h"
 #include "media/media_format.h"
 #include "preset/preset_host.h"
@@ -177,6 +178,11 @@ int Run(const std::string& game_dir, const std::string& preset_id, const std::st
         "%d frames: countdown %d/%d, model speed %.3f, alpha %.3f, blend %d, model t=%.1f ticks",
         frames, status.countdown, status.countdown_start, status.model_speed, status.model_alpha,
         status.blend_mode, model_time);
+    LOG("PresetTest", "  frame %d, beat %d (+%d), pulse %.4f, jitter %+.6f, %d live particle(s)",
+        status.frame, status.beat, status.beat_since, status.pulse_scale, status.jitter,
+        status.live_particles);
+    LOG("PresetTest", "  2D: %d draw node(s) from %d placed layer(s)",
+        Gc2dHost::GetStatus().draw_nodes, (int)Gc2dHost::ListSprites().size());
     g_d3d.SaveBackBufferToFile(out_png.c_str());
     PresetHost::Unload();
     LOG("PresetTest", "done -> %s", out_png.c_str());
@@ -184,7 +190,8 @@ int Run(const std::string& game_dir, const std::string& preset_id, const std::st
 }
 
 int RunExport(const std::string& game_dir, const std::string& preset_id,
-              const std::string& out_path, int frames, int option) {
+              const std::string& out_path, int frames, int option, bool bg_transparent,
+              const float* bg_rgb) {
     const int rc = Prepare(game_dir, preset_id);
     if (rc != 0) return rc;
     PresetHost::SetOption(0, option);
@@ -200,7 +207,10 @@ int RunExport(const std::string& game_dir, const std::string& preset_id,
     req.fps = 60;
     req.quality = 60;
     req.max_frames = frames;
-    req.bg_transparent = false;
+    req.bg_transparent = bg_transparent;
+    req.bg_r = bg_rgb[0];
+    req.bg_g = bg_rgb[1];
+    req.bg_b = bg_rgb[2];
     req.format = MediaSink::ToIndex(FormatFromPath(out_path));
     Export::HandleStartRequest(req, g_d3d);
 

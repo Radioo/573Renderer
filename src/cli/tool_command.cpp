@@ -80,6 +80,22 @@ ToolCommand ParsePresetJob(std::span<const std::string> args, std::size_t i, Too
     if (i + 5 < args.size() && args[i + 5][0] != '-') c.option = ParseIntAtoiLike(args[i + 5]);
     const std::size_t tweaks = FindFlagWithValue(args, "--preset-tweaks");
     if (tweaks < args.size()) c.tweaks_path = args[tweaks + 1];
+    const std::size_t bg = FindFlagWithValue(args, "--export-bg");
+    if (bg < args.size()) {
+        c.bg_transparent = (args[bg + 1] == "transparent");
+        if (!c.bg_transparent) {
+            c.bg_black = (args[bg + 1] == "0,0,0");
+            std::size_t at = 0;
+            const std::string& spec = args[bg + 1];
+            for (float& channel : c.bg_rgb) {
+                if (at >= spec.size()) break;
+                const std::size_t comma = spec.find(',', at);
+                channel = (float)ParseIntAtoiLike(spec.substr(at, comma - at)) / 255.0F;
+                if (comma == std::string::npos) break;
+                at = comma + 1;
+            }
+        }
+    }
     return c;
 }
 

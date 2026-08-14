@@ -33,6 +33,7 @@ struct SpriteState {
     float x = 0.0F;
     float y = 0.0F;
     float alpha = 1.0F;
+    float scale = 1.0F;
     int blend = 0;
     int priority = 0;
     GcAnim::Timing timing = {};
@@ -45,6 +46,7 @@ struct ChoiceState {
     std::array<float, 3> position = {0.0F, 0.0F, 0.0F};
     std::array<float, 3> camera_eye = {0.0F, 0.0F, 0.0F};
     bool moves_camera = false;
+    std::span<const ParamOverride> params = {};
 };
 
 struct OptionState {
@@ -70,6 +72,11 @@ struct Effective {
     float aspect_value = 1.0F;
     Countdown countdown = {};
     Intro intro = {};
+    Beat beat = {};
+    Pulse pulse = {};
+    Jitter jitter = {};
+    int rng_seed = 1;
+    bool opaque_screen = true;
     std::vector<ModelState> models;
     std::vector<SpriteState> sprites;
     std::vector<DirectionalLight> lights;
@@ -106,6 +113,10 @@ std::vector<ParamInstance> Instantiate(const Effective& pristine);
 
 Value ReadParam(const ParamInstance& param, const Effective& src);
 
-Materialized Materialize(const Scene& src, const TweakSet& tweaks);
+void WriteParam(std::span<const ParamInstance> params, const std::string& id, const Value& value,
+                Effective& out);
+
+Materialized Materialize(const Scene& src, std::span<const ParamOverride> phase,
+                         const TweakSet& tweaks);
 
 }

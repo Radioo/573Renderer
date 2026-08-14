@@ -2,8 +2,10 @@
 
 #include "formats/gcanim.h"
 #include "preset/scene_preset.h"
+#include "preset/scene_presets_iidx11_ending.h"
 
 #include <array>
+#include <numbers>
 #include <span>
 #include <string_view>
 
@@ -23,6 +25,7 @@ constexpr std::string_view kExpert = "data/graph/sys/expert";
 constexpr std::string_view kCard = "data/graph/sys/card";
 constexpr std::string_view kTitle = "data/graph/sys/title";
 constexpr std::string_view kEnding = "data/graph/sys/ending";
+constexpr std::string_view kSystem = "data/graph/sys/system";
 
 constexpr std::array<DirectionalLight, 2> kRedLights = {{
     {.direction = {1.0F, 1.0F, 1.0F}},
@@ -87,6 +90,96 @@ constexpr std::array<ModelLayer, 4> kMusicSelectModels = {{
      .motion = kSideSpin},
 }};
 
+constexpr std::array<Ramp, 8> kMusicSelectFlyIn = {{
+    {.id = "model[core].position",
+     .from = {-0.1F, 0.0F, -1.0F},
+     .to = {-0.1F, 0.0F, -0.25F},
+     .frames = 35,
+     .degrees_per_frame = 3.0F,
+     .curve = Curve::Sine},
+    {.id = "model[shield].position",
+     .from = {-0.1F, 0.0F, -1.0F},
+     .to = {-0.1F, 0.0F, -0.25F},
+     .frames = 35,
+     .degrees_per_frame = 3.0F,
+     .curve = Curve::Sine},
+    {.id = "model[flame].position",
+     .from = {-0.1F, 0.0F, -1.0F},
+     .to = {-0.1F, 0.0F, -0.25F},
+     .frames = 35,
+     .degrees_per_frame = 3.0F,
+     .curve = Curve::Sine},
+    {.id = "model[r_side].position",
+     .from = {-0.1F, 0.0F, -1.0F},
+     .to = {-0.1F, 0.0F, -0.25F},
+     .frames = 35,
+     .degrees_per_frame = 3.0F,
+     .curve = Curve::Sine},
+    {.id = "model[core].rotation",
+     .from = {0.0F, 0.0F, 45.0F},
+     .to = {0.0F, 4.712389F, 45.0F},
+     .frames = 34,
+     .degrees_per_frame = 2.6470588F,
+     .curve = Curve::Sine},
+    {.id = "model[shield].rotation",
+     .from = {0.0F, 0.0F, 45.0F},
+     .to = {0.0F, 4.712389F, 45.0F},
+     .frames = 34,
+     .degrees_per_frame = 2.6470588F,
+     .curve = Curve::Sine},
+    {.id = "model[flame].rotation",
+     .from = {0.0F, 0.0F, 45.0F},
+     .to = {0.0F, 4.712389F, 45.0F},
+     .frames = 34,
+     .degrees_per_frame = 2.6470588F,
+     .curve = Curve::Sine},
+    {.id = "model[r_side].rotation",
+     .from = {0.0F, 0.0F, 0.0F},
+     .to = {0.0F, 0.407243F, 0.305433F},
+     .frames = 34,
+     .degrees_per_frame = 2.6470588F,
+     .curve = Curve::Sine},
+}};
+
+constexpr std::array<ParamOverride, 4> kMusicSelectSettled = {{
+    {.id = "model[core].position", .f = {-0.1F, 0.0F, -0.27555565F}},
+    {.id = "model[shield].position", .f = {-0.1F, 0.0F, -0.27555565F}},
+    {.id = "model[flame].position", .f = {-0.1F, 0.0F, -0.27555565F}},
+    {.id = "model[r_side].position", .f = {-0.1F, 0.0F, -0.27555565F}},
+}};
+
+constexpr std::array<Phase, 2> kMusicSelectPhases = {{
+    {.label = "Fly in, punching past the resting point",
+     .start_frame = 0,
+     .ramps = kMusicSelectFlyIn},
+    {.label = "Settled", .start_frame = 35, .params = kMusicSelectSettled},
+}};
+
+constexpr std::array<float, 3> kAttackPos = {-0.05F, -0.01F, -0.85511113F};
+
+constexpr std::array<ParamOverride, 11> kAttackParams = {{
+    {.id = "model[core].position", .f = kAttackPos},
+    {.id = "model[shield].position", .f = kAttackPos},
+    {.id = "model[flame].position", .f = kAttackPos},
+    {.id = "model[r_side].position", .f = kAttackPos},
+    {.id = "model[core].rotation", .f = {0.0F, -std::numbers::pi_v<float>, 45.0F}},
+    {.id = "model[shield].rotation", .f = {0.0F, -3.0F * std::numbers::pi_v<float>, 45.0F}},
+    {.id = "model[flame].rotation", .f = {0.0F, -3.0F * std::numbers::pi_v<float>, 45.0F}},
+    {.id = "model[core].motion.spin_per_frame", .f = {0.004363323F, 0.011635528F, 0.0F}},
+    {.id = "model[shield].motion.spin_per_frame", .f = {0.004363323F, 0.034906585F, 0.0F}},
+    {.id = "model[flame].motion.spin_per_frame", .f = {0.004363323F, 0.034906585F, 0.0F}},
+    {.id = "model[r_side].motion.spin_per_frame", .f = {0.0F, 0.011635529F, 0.008726646F}},
+}};
+
+constexpr std::array<OptionChoice, 2> kMusicSelectModes = {{
+    {.label = "Normal"},
+    {.label = "ATTACK", .params = kAttackParams},
+}};
+
+constexpr std::array<Option, 1> kMusicSelectOptions = {{
+    {.id = "attack", .label = "Screen variant", .choices = kMusicSelectModes},
+}};
+
 constexpr std::array<std::string_view, 1> kCardChrome = {"T_REMAIN"};
 
 constexpr ModelMotion kModeSelectSpin = {.spin_per_frame = {0.0F, -0.008F, 0.0F}};
@@ -106,6 +199,49 @@ constexpr std::array<ModelLayer, 2> kModeSelectModels = {{
      .anim_speed = kRedAnimSpeed,
      .rotation = {0.0F, 4.2F, 0.0F},
      .motion = kModeSelectSpin},
+}};
+
+constexpr std::array<Ramp, 2> kModeSelectSpinA = {{
+    {.id = "model[core].motion.spin_per_frame",
+     .from = {0.0F, 0.12F, 0.0F},
+     .to = {0.0F, 0.064F, 0.0F},
+     .frames = 15},
+    {.id = "model[flame].motion.spin_per_frame",
+     .from = {0.0F, 0.12F, 0.0F},
+     .to = {0.0F, 0.064F, 0.0F},
+     .frames = 15},
+}};
+
+constexpr std::array<Ramp, 2> kModeSelectSpinB = {{
+    {.id = "model[core].motion.spin_per_frame",
+     .from = {0.0F, 0.30F, 0.0F},
+     .to = {0.0F, 0.06F, 0.0F},
+     .frames = 13},
+    {.id = "model[flame].motion.spin_per_frame",
+     .from = {0.0F, 0.30F, 0.0F},
+     .to = {0.0F, 0.06F, 0.0F},
+     .frames = 13},
+}};
+
+constexpr std::array<ParamOverride, 4> kModeSelectFloor = {{
+    {.id = "model[core].motion.spin_per_frame", .f = {0.0F, 0.04F, 0.0F}},
+    {.id = "model[flame].motion.spin_per_frame", .f = {0.0F, 0.04F, 0.0F}},
+    {.id = "model[core].rotation", .f = {0.0F, 0.0F, 0.0F}},
+    {.id = "model[flame].rotation", .f = {0.0F, 0.0F, 0.0F}},
+}};
+
+constexpr std::array<ParamOverride, 4> kModeSelectUnwind = {{
+    {.id = "model[core].motion.spin_per_frame", .f = {0.0F, -0.008F, 0.0F}},
+    {.id = "model[flame].motion.spin_per_frame", .f = {0.0F, -0.008F, 0.0F}},
+    {.id = "model[core].rotation", .f = {0.0F, 4.2F, 0.0F}},
+    {.id = "model[flame].rotation", .f = {0.0F, 4.2F, 0.0F}},
+}};
+
+constexpr std::array<Phase, 4> kModeSelectPhases = {{
+    {.label = "Fly in, fast wind up", .start_frame = 0, .ramps = kModeSelectSpinA},
+    {.label = "Fly in, five times the accumulate", .start_frame = 15, .ramps = kModeSelectSpinB},
+    {.label = "Fly in, spin at its floor", .start_frame = 28, .params = kModeSelectFloor},
+    {.label = "Interactive, unwinding", .start_frame = 40, .params = kModeSelectUnwind},
 }};
 
 constexpr Camera kModeSelectCamera = {.eye = {-0.15F, 0.14F, -0.06F},
@@ -199,12 +335,79 @@ constexpr std::array<ModelLayer, 2> kExpertSelectModels = {{
      .motion = {.spin_per_frame = {0.0F, -0.008726646F, -0.004363323F}}},
 }};
 
-constexpr std::array<SpriteLayer, 1> kExpertSelectSprites = {{
+constexpr std::array<ParamOverride, 2> kExpertFlyInLayers = {{
+    {.id = "sprite[EXPERT_BG].visible", .i = 1},
+    {.id = "sprite[COURSE_DECIDE].visible"},
+}};
+
+constexpr std::array<ParamOverride, 4> kExpertFade = {{
+    {.id = "model[core].position", .f = {0.0F, 0.0F, -0.699999988F}},
+    {.id = "model[flame].position", .f = {0.0F, 0.0F, -0.699999988F}},
+    {.id = "sprite[EXPERT_BG].visible"},
+    {.id = "sprite[COURSE_DECIDE].visible", .i = 1},
+}};
+
+constexpr std::array<Ramp, 2> kExpertFade0ut = {{
+    {.id = "model[core].alpha", .from = {0.8F, 0.0F, 0.0F}, .to = {0.0F, 0.0F, 0.0F}, .frames = 31},
+    {.id = "model[flame].alpha",
+     .from = {1.0F, 0.0F, 0.0F},
+     .to = {0.0F, 0.0F, 0.0F},
+     .frames = 31},
+}};
+
+constexpr std::array<Ramp, 2> kExpertFlyIn = {{
+    {.id = "model[core].position",
+     .from = {0.2F, 0.0F, -1.0F},
+     .to = {-0.196F, -0.006F, -0.7F},
+     .frames = 42,
+     .degrees_per_frame = 2.3684211F,
+     .curve = Curve::Sine},
+    {.id = "model[flame].position",
+     .from = {0.2F, 0.0F, -1.0F},
+     .to = {-0.196F, -0.006F, -0.7F},
+     .frames = 42,
+     .degrees_per_frame = 2.3684211F,
+     .curve = Curve::Sine},
+}};
+
+constexpr std::array<ParamOverride, 4> kExpertSettled = {{
+    {.id = "model[core].position", .f = {-0.19112459F, -0.00592613F, -0.7036935F}},
+    {.id = "model[flame].position", .f = {-0.19112459F, -0.00592613F, -0.7036935F}},
+    {.id = "sprite[EXPERT_BG].visible", .i = 1},
+    {.id = "sprite[COURSE_DECIDE].visible"},
+}};
+
+constexpr std::array<ParamOverride, 4> kExpertOutro = {{
+    {.id = "model[core].position", .f = {0.0F, 0.0F, -0.699999988F}},
+    {.id = "model[flame].position", .f = {0.0F, 0.0F, -0.699999988F}},
+    {.id = "sprite[EXPERT_BG].visible"},
+    {.id = "sprite[COURSE_DECIDE].visible", .i = 1},
+}};
+
+constexpr std::array<Phase, 4> kExpertPhases = {{
+    {.label = "Fly in from the eye plane",
+     .start_frame = 0,
+     .params = kExpertFlyInLayers,
+     .ramps = kExpertFlyIn},
+    {.label = "Settled", .start_frame = 42, .params = kExpertSettled},
+    {.label = "Outro hold, snapped to centre", .start_frame = 400, .params = kExpertOutro},
+    {.label = "Outro fade", .start_frame = 550, .params = kExpertFade, .ramps = kExpertFade0ut},
+}};
+
+constexpr std::array<std::string_view, 3> kCourseDecideChrome = {"SKM", "OPTION_1P", "OPTION_2P"};
+
+constexpr std::array<SpriteLayer, 2> kExpertSelectSprites = {{
     {.package_dir = kExpert,
      .sprite = "EXPERT_BG",
      .animated = true,
      .priority = 31,
      .timing = kHold},
+    {.package_dir = kExpert,
+     .sprite = "COURSE_DECIDE",
+     .animated = true,
+     .priority = 31,
+     .timing = kHold,
+     .hidden_parts = kCourseDecideChrome},
 }};
 
 constexpr std::array<ModelLayer, 1> kNewPlayerModels = {{
@@ -237,6 +440,106 @@ constexpr std::array<float, 3> kAttractPos = {0.105F, 0.0F, 0.0F};
 
 constexpr ModelMotion kAttractSpin = {.spin_per_frame = {0.0F, kDegree * 0.125F, 0.0F}};
 constexpr ModelMotion kAttractSideSpin = {.spin_per_frame = {0.0F, kDegree * 0.5F, 0.0F}};
+
+constexpr std::array<float, 3> kWarpPos = {0.0F, 0.0F, -0.15F};
+constexpr float kWarpSpin = kDegree;
+
+constexpr std::array<ParamOverride, 21> kAttractHidden = {{
+    {.id = "model[core].visible"},
+    {.id = "model[shield].visible"},
+    {.id = "model[flame].visible"},
+    {.id = "model[r_side].visible"},
+    {.id = "model[core].position", .f = kWarpPos},
+    {.id = "model[shield].position", .f = kWarpPos},
+    {.id = "model[flame].position", .f = kWarpPos},
+    {.id = "model[r_side].position", .f = kWarpPos},
+    {.id = "model[core].rotation", .f = {0.0F, 0.0F, 45.0F}},
+    {.id = "model[shield].rotation", .f = {0.0F, 0.0F, 45.0F}},
+    {.id = "model[flame].rotation", .f = {0.0F, 0.0F, 45.0F}},
+    {.id = "model[r_side].rotation", .f = {0.0F, 0.0F, 85.0F}},
+    {.id = "model[core].motion.spin_per_frame", .f = {0.0F, kWarpSpin, 0.0F}},
+    {.id = "model[shield].motion.spin_per_frame", .f = {0.0F, kWarpSpin, 0.0F}},
+    {.id = "model[flame].motion.spin_per_frame", .f = {0.0F, kWarpSpin, 0.0F}},
+    {.id = "model[r_side].motion.spin_per_frame", .f = {0.0F, kWarpSpin, 0.0F}},
+    {.id = "model[r_side].blend_mode", .i = 3},
+    {.id = "camera.aspect_auto", .i = 0},
+    {.id = "camera.aspect_value", .f = {1.3333334F, 0.0F, 0.0F}},
+    {.id = "sprite[TITLE].visible", .i = 1},
+    {.id = "sprite[TITLE_TAIKI].visible"},
+}};
+
+constexpr std::array<ParamOverride, 24> kAttractWarp = {{
+    {.id = "model[core].visible", .i = 1},
+    {.id = "model[shield].visible", .i = 1},
+    {.id = "model[flame].visible", .i = 1},
+    {.id = "model[r_side].visible", .i = 1},
+    {.id = "model[core].position", .f = kWarpPos},
+    {.id = "model[shield].position", .f = kWarpPos},
+    {.id = "model[flame].position", .f = kWarpPos},
+    {.id = "model[r_side].position", .f = kWarpPos},
+    {.id = "model[core].rotation", .f = {0.0F, 8.7615527F, 45.0F}},
+    {.id = "model[shield].rotation", .f = {0.0F, 8.7615527F, 45.0F}},
+    {.id = "model[flame].rotation", .f = {0.0F, 8.7615527F, 45.0F}},
+    {.id = "model[r_side].rotation", .f = {0.0F, 8.7615527F, 85.0F}},
+    {.id = "model[core].motion.spin_per_frame", .f = {0.0F, kWarpSpin, 0.0F}},
+    {.id = "model[shield].motion.spin_per_frame", .f = {0.0F, kWarpSpin, 0.0F}},
+    {.id = "model[flame].motion.spin_per_frame", .f = {0.0F, kWarpSpin, 0.0F}},
+    {.id = "model[r_side].motion.spin_per_frame", .f = {0.0F, kWarpSpin, 0.0F}},
+    {.id = "model[r_side].blend_mode", .i = 3},
+    {.id = "camera.aspect_auto", .i = 0},
+    {.id = "camera.aspect_value", .f = {1.3333334F, 0.0F, 0.0F}},
+    {.id = "intro.frames", .i = 291},
+    {.id = "intro.fov_from", .f = {22.546017F, 0.0F, 0.0F}},
+    {.id = "intro.fov_to", .f = {25.110188F, 0.0F, 0.0F}},
+    {.id = "sprite[TITLE].visible", .i = 1},
+    {.id = "sprite[TITLE_TAIKI].visible"},
+}};
+
+constexpr std::array<ParamOverride, 6> kAttractLoop = {{
+    {.id = "model[core].rotation", .f = {0.0F, 1.9678687F, 45.0F}},
+    {.id = "model[shield].rotation", .f = {0.0F, 1.9678687F, 45.0F}},
+    {.id = "model[flame].rotation", .f = {0.0F, 1.9678687F, 45.0F}},
+    {.id = "model[r_side].rotation", .f = {0.0F, 7.8714347F, -10.0F}},
+    {.id = "sprite[TITLE].visible", .i = 1},
+    {.id = "sprite[TITLE_TAIKI].visible"},
+}};
+
+constexpr std::array<ParamOverride, 6> kAttractStandby = {{
+    {.id = "model[core].rotation", .f = {0.0F, 3.7873644F, 45.0F}},
+    {.id = "model[shield].rotation", .f = {0.0F, 3.7873644F, 45.0F}},
+    {.id = "model[flame].rotation", .f = {0.0F, 3.7873644F, 45.0F}},
+    {.id = "model[r_side].rotation", .f = {0.0F, 15.1494575F, -10.0F}},
+    {.id = "sprite[TITLE].visible"},
+    {.id = "sprite[TITLE_TAIKI].visible", .i = 1},
+}};
+
+constexpr std::array<Emitter, 1> kWarpParticles = {{
+    {.package_dir = kSystem,
+     .cell = "PTC_ORAN",
+     .count = 16,
+     .angle_step_deg = 22.5F,
+     .phase_rate_deg = 32.0F,
+     .phase_amplitude_deg = 360.0F,
+     .radius_from = 10,
+     .radius_to = 630,
+     .frames = 290,
+     .priority = 31,
+     .spawn = Spawn::EveryFrame,
+     .life = 60},
+}};
+
+constexpr std::array<Phase, 5> kAttractPhases = {{
+    {.label = "Boot animation, models hidden", .start_frame = 0, .params = kAttractHidden},
+    {.label = "Warp in, rotating and zooming",
+     .start_frame = 502,
+     .params = kAttractWarp,
+     .emitters = kWarpParticles},
+    {.label = "Boot animation runs on, models hidden again",
+     .start_frame = 793,
+     .params = kAttractHidden},
+    {.label = "Attract loop, settled to the right", .start_frame = 902, .params = kAttractLoop},
+    {.label = "Standby logo, TITLE_TAIKI looping", .start_frame = 1736, .params = kAttractStandby},
+}};
 
 constexpr std::array<ModelLayer, 4> kAttractModels = {{
     {.scene_dir = kRedScene,
@@ -273,8 +576,13 @@ constexpr std::array<ModelLayer, 4> kAttractModels = {{
      .motion = kAttractSideSpin},
 }};
 
-constexpr std::array<SpriteLayer, 1> kAttractSprites = {{
-    {.package_dir = kTitle, .sprite = "TITLE", .animated = true, .priority = 31, .timing = kOnce},
+constexpr std::array<SpriteLayer, 2> kAttractSprites = {{
+    {.package_dir = kTitle, .sprite = "TITLE", .animated = true, .priority = 15, .timing = kHold},
+    {.package_dir = kTitle,
+     .sprite = "TITLE_TAIKI",
+     .animated = true,
+     .priority = 15,
+     .timing = {}},
 }};
 
 constexpr std::array<ModelLayer, 1> kCardInModels = {{
@@ -310,7 +618,7 @@ constexpr std::array<SpriteLayer, 1> kLoginSprites = {{
     {.package_dir = kTitle,
      .sprite = "LOGIN",
      .animated = true,
-     .priority = 31,
+     .priority = 15,
      .timing = kOnce,
      .hidden_parts = kLoginChrome},
 }};
@@ -357,6 +665,8 @@ constexpr std::array<Scene, 9> kScenes = {{
         .models = kMusicSelectModels,
         .sprites = {},
         .lights = kRedLights,
+        .options = kMusicSelectOptions,
+        .phases = kMusicSelectPhases,
     },
     {
         .id = "iidx11-mode-select",
@@ -368,6 +678,7 @@ constexpr std::array<Scene, 9> kScenes = {{
         .models = kModeSelectModels,
         .sprites = {},
         .lights = kRedLights,
+        .phases = kModeSelectPhases,
     },
     {
         .id = "iidx11-dan-select",
@@ -391,6 +702,7 @@ constexpr std::array<Scene, 9> kScenes = {{
         .models = kExpertSelectModels,
         .sprites = kExpertSelectSprites,
         .lights = kRedLights,
+        .phases = kExpertPhases,
     },
     {
         .id = "iidx11-new-player",
@@ -412,6 +724,7 @@ constexpr std::array<Scene, 9> kScenes = {{
         .models = kAttractModels,
         .sprites = kAttractSprites,
         .lights = kRedLights,
+        .phases = kAttractPhases,
     },
     {
         .id = "iidx11-card-in",
@@ -440,9 +753,11 @@ constexpr std::array<Scene, 9> kScenes = {{
         .build = "iidx11",
         .shading = Shading::LitMaterial,
         .camera = kEndingCamera,
+        .beat = {.rate = 155, .span = 3600, .offset_a = 70, .offset_b = 59},
         .models = kEndingModels,
         .sprites = kEndingSprites,
         .lights = kRedLights,
+        .phases = kEndingPhases,
     },
 }};
 

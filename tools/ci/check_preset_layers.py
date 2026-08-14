@@ -18,6 +18,12 @@ SPRITE = re.compile(r'\.sprite\s*=\s*"([^"]+)"')
 HIDDEN = re.compile(r"\.hidden_parts\s*=\s*(\w+)")
 
 
+def preset_sources():
+    return sorted(PRESET_DIR.glob("scene_presets_*.cpp")) + sorted(
+        PRESET_DIR.glob("scene_presets_*.h")
+    )
+
+
 def read_doc():
     verdicts = {}
     for line in DOC.read_text(encoding="utf-8").splitlines():
@@ -33,7 +39,7 @@ def read_doc():
 def read_presets():
     used = []
     hidden = []
-    for path in sorted(PRESET_DIR.glob("scene_presets_*.cpp")):
+    for path in preset_sources():
         text = path.read_text(encoding="utf-8")
         packages = dict(PACKAGE_CONST.findall(text))
         parts = {
@@ -59,7 +65,7 @@ def main():
     used, hidden = read_presets()
     problems = []
 
-    for path in sorted(PRESET_DIR.glob("scene_presets_*.cpp")):
+    for path in preset_sources():
         declared = len(SPRITE.findall(path.read_text(encoding="utf-8")))
         parsed = len([u for u in used if u[0] == path.name])
         if declared == parsed:

@@ -231,6 +231,7 @@ add_library(r573_app STATIC
     src/preset/preset_params.cpp
     src/preset/preset_schema.cpp
     src/preset/preset_effective.cpp
+    src/preset/preset_rng.cpp
     src/preset/preset_test.cpp
     src/scene3d/anim.cpp
     src/scene3d/camera.cpp
@@ -313,6 +314,7 @@ add_executable(game_tests
     src/preset/preset_params.cpp
     src/preset/preset_schema.cpp
     src/preset/preset_effective.cpp
+    src/preset/preset_rng.cpp
     src/mc_control.cpp
 )
 target_include_directories(game_tests PRIVATE src)
@@ -342,7 +344,8 @@ add_executable(state_tests
     tests/state/app_state_tests.cpp
     tests/state/fifo_queue_tests.cpp
 )
-target_link_libraries(state_tests PRIVATE Catch2::Catch2WithMain r573_state r573::warnings)
+target_link_libraries(state_tests PRIVATE Catch2::Catch2WithMain r573_state r573_media_format
+                                             r573::warnings)
 catch_discover_tests(state_tests DISCOVERY_MODE POST_BUILD PROPERTIES LABELS ci)
 
 add_executable(support_tests
@@ -419,6 +422,7 @@ add_executable(local_dll_tests
     src/preset/preset_params.cpp
     src/preset/preset_schema.cpp
     src/preset/preset_effective.cpp
+    src/preset/preset_rng.cpp
 )
 target_include_directories(local_dll_tests PRIVATE src)
 target_link_libraries(local_dll_tests PRIVATE Catch2::Catch2WithMain r573_support r573_state
