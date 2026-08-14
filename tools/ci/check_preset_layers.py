@@ -59,6 +59,19 @@ def main():
     used, hidden = read_presets()
     problems = []
 
+    for path in sorted(PRESET_DIR.glob("scene_presets_*.cpp")):
+        declared = len(SPRITE.findall(path.read_text(encoding="utf-8")))
+        parsed = len([u for u in used if u[0] == path.name])
+        if declared == parsed:
+            continue
+        print("preset-layer gate FAILED:")
+        print(
+            f"  {path.name} declares {declared} sprite layer(s) but the structured parse "
+            f"found {parsed}. The gate can only check what it parses, so a mismatch means it "
+            f"is silently passing layers. Fix the parser in tools/ci/check_preset_layers.py."
+        )
+        return 1
+
     for origin, package, layer in used:
         verdict = verdicts.get((package, layer))
         if verdict is None:

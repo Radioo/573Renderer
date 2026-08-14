@@ -181,6 +181,7 @@ add_library(r573_app STATIC
     src/gui/gui_scene3d_panel.cpp
     src/gui/gui_gc2d_panel.cpp
     src/gui/gui_preset_panel.cpp
+    src/gui/gui_preset_workspace.cpp
     src/gui/panel_registry.cpp
     src/gui/gui_style.cpp
     src/gui/gui_widgets.cpp
@@ -227,6 +228,9 @@ add_library(r573_app STATIC
     src/preset/scene_presets_iidx10.cpp
     src/preset/scene_presets_iidx11.cpp
     src/preset/preset_host.cpp
+    src/preset/preset_params.cpp
+    src/preset/preset_schema.cpp
+    src/preset/preset_effective.cpp
     src/preset/preset_test.cpp
     src/scene3d/anim.cpp
     src/scene3d/camera.cpp
@@ -306,6 +310,9 @@ add_executable(game_tests
     src/preset/scene_presets.cpp
     src/preset/scene_presets_iidx10.cpp
     src/preset/scene_presets_iidx11.cpp
+    src/preset/preset_params.cpp
+    src/preset/preset_schema.cpp
+    src/preset/preset_effective.cpp
     src/mc_control.cpp
 )
 target_include_directories(game_tests PRIVATE src)
@@ -409,6 +416,9 @@ add_executable(local_dll_tests
     src/preset/scene_presets.cpp
     src/preset/scene_presets_iidx10.cpp
     src/preset/scene_presets_iidx11.cpp
+    src/preset/preset_params.cpp
+    src/preset/preset_schema.cpp
+    src/preset/preset_effective.cpp
 )
 target_include_directories(local_dll_tests PRIVATE src)
 target_link_libraries(local_dll_tests PRIVATE Catch2::Catch2WithMain r573_support r573_state

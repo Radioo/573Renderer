@@ -407,7 +407,13 @@ void RenderRendererView() {
     ImGui::SameLine(0.0F, 0.0F);
 
     ImGui::BeginChild("pane_center", ImVec2(center_w, row_h), 0);
-    RenderScenePane();
+    static std::vector<const Gui::PanelDesc*> center;
+    Gui::CollectActivePanels(Gui::PanelSlot::CenterPane, center);
+    if (center.empty()) {
+        RenderScenePane();
+    } else {
+        center.front()->draw();
+    }
     ImGui::EndChild();
 
     ImGui::SameLine(0.0F, 0.0F);

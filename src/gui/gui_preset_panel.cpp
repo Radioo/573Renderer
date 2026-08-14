@@ -11,7 +11,6 @@
 #include <cfloat>
 #include <cstddef>
 #include <string>
-#include <utility>
 #include <vector>
 
 namespace Panels::PresetPanel {
@@ -35,28 +34,6 @@ void RescanIfNeeded() {
     g_build_name = match.build->name;
     g_build_id = match.build->id;
     g_scenes = Preset::ForBuild(g_build_id);
-}
-
-void DrawOptions(const Preset::Scene& scene, const PresetHost::Status& status) {
-    for (std::size_t i = 0; i < scene.options.size(); i++) {
-        const Preset::Option& option = scene.options[i];
-        if (i >= status.option_choices.size()) break;
-        const int current = status.option_choices[i];
-        std::string title(option.label);
-        title += ": ";
-        title += option.choices[(std::size_t)current].label;
-        std::string tag("##presetoption");
-        tag += option.id;
-        ImGui::SetNextItemWidth(-FLT_MIN);
-        if (!ImGui::BeginCombo(tag.c_str(), title.c_str())) continue;
-        for (std::size_t c = 0; c < option.choices.size(); c++) {
-            const std::string choice(option.choices[c].label);
-            if (ImGui::Selectable(choice.c_str(), std::cmp_equal(c, current))) {
-                PresetHost::SetOption((int)i, (int)c);
-            }
-        }
-        ImGui::EndCombo();
-    }
 }
 
 void DrawSpriteFrames() {
@@ -169,10 +146,6 @@ void Render() {
         ImGui::SetTooltip("A screen preset reproduces the screen's BACKGROUND so it can be "
                           "captured on its own. The game's chrome - titles, timers, lists, "
                           "instructions - is never part of a preset.");
-    }
-    for (const auto* scene : g_scenes) {
-        if (status.id != std::string(scene->id)) continue;
-        DrawOptions(*scene, status);
     }
     DrawCountdown(status);
     DrawSpriteFrames();

@@ -65,6 +65,19 @@ void SetModelAlpha(const std::string& model, float alpha);
 
 void SetModelBlendByName(const std::string& model, int mode);
 
+void SetModelScale(const std::string& model, const std::array<float, 3>& scale);
+
+void SetModelVisibleByName(const std::string& model, bool visible);
+
+void SetProjection(const Scene3d::Projection& projection);
+
+void SetView(const std::array<float, 3>& eye, const std::array<float, 3>& at,
+             const std::array<float, 3>& up);
+
+void SetStyle(Scene3d::RenderStyle style);
+
+void SetLights(const std::vector<Scene3d::Light>& lights);
+
 void SetModelTransform(const std::string& model, const std::array<float, 3>& position,
                        const std::array<float, 3>& rotation);
 

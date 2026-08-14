@@ -61,3 +61,19 @@ TEST_CASE("screens tab lists the presets of a fingerprinted build", "[gui][prese
     std::error_code ec;
     std::filesystem::remove_all(root, ec);
 }
+
+TEST_CASE("the parameter workspace takes the centre pane while a preset is active",
+          "[gui][presets]") {
+    const std::filesystem::path root = MakeFingerprintedInstall();
+    GuiTest::Harness harness;
+    App::Global().SetGameDir(root.string());
+    GuiTest::EnterReadyView("scene3d", "iidx11");
+
+    ImGuiTest* idle = harness.NewTest("workspace_absent_without_preset");
+    idle->TestFunc = [](ImGuiTestContext* ctx) {
+        ctx->SetRef("##main");
+        GuiTest::FocusChild(ctx, "main_view/pane_center");
+        IM_CHECK(ctx->ItemExists("##paramfilter") == false);
+    };
+    harness.Run(idle);
+}

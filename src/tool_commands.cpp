@@ -108,7 +108,8 @@ int Run(const Cli::ToolCommand& cmd) {
     case Cli::ToolKind::Gc2dSheet:
         return Gc2dSheet::Run(cmd.in_path, cmd.out_path, cmd.frames);
     case Cli::ToolKind::PresetTest:
-        return PresetTest::Run(cmd.in_path, cmd.arc_path, cmd.out_path, cmd.frames, cmd.option);
+        return PresetTest::Run(cmd.in_path, cmd.arc_path, cmd.out_path, cmd.frames, cmd.option,
+                               cmd.tweaks_path);
     case Cli::ToolKind::PresetExport:
         return PresetTest::RunExport(cmd.in_path, cmd.arc_path, cmd.out_path, cmd.frames,
                                      cmd.option);

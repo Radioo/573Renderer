@@ -151,9 +151,10 @@ MediaSink::Format FormatFromPath(const std::string& path) {
 }
 
 int Run(const std::string& game_dir, const std::string& preset_id, const std::string& out_png,
-        int frames, int option) {
+        int frames, int option, const std::string& tweaks_path) {
     const int rc = Prepare(game_dir, preset_id);
     if (rc != 0) return rc;
+    if (!tweaks_path.empty()) PresetHost::LoadTweaks(tweaks_path);
     PresetHost::SetOption(0, option);
 
     frames = (frames > 0) ? frames : 1;

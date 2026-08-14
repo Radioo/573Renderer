@@ -146,6 +146,34 @@ constexpr Camera kDanSelectCamera = {.eye = {0.0F, 0.59045085F, -0.00809017F},
                                      .far_z = 1000.0F,
                                      .aspect = 1.7708334F};
 
+constexpr std::array<OptionChoice, 17> kDanCourses = {{
+    {.label = "CLASS 7", .camera_eye = {0.0F, 0.54270510F, -0.00904509F}, .moves_camera = true},
+    {.label = "CLASS 6", .camera_eye = {0.0F, 0.51169339F, -0.01809017F}, .moves_camera = true},
+    {.label = "CLASS 5", .camera_eye = {0.0F, 0.48068167F, -0.03618034F}, .moves_camera = true},
+    {.label = "CLASS 4", .camera_eye = {0.0F, 0.44966993F, -0.05427051F}, .moves_camera = true},
+    {.label = "CLASS 3", .camera_eye = {0.0F, 0.41865821F, -0.07236068F}, .moves_camera = true},
+    {.label = "CLASS 2", .camera_eye = {0.0F, 0.38764650F, -0.09045085F}, .moves_camera = true},
+    {.label = "CLASS 1", .camera_eye = {0.0F, 0.35663478F, -0.10854102F}, .moves_camera = true},
+    {.label = "1ST DAN", .camera_eye = {0.0F, 0.32562306F, -0.12663119F}, .moves_camera = true},
+    {.label = "2ND DAN", .camera_eye = {0.0F, 0.29461132F, -0.14472136F}, .moves_camera = true},
+    {.label = "3RD DAN", .camera_eye = {0.0F, 0.26359959F, -0.16281153F}, .moves_camera = true},
+    {.label = "4TH DAN", .camera_eye = {0.0F, 0.23258788F, -0.18090170F}, .moves_camera = true},
+    {.label = "5TH DAN", .camera_eye = {0.0F, 0.20157616F, -0.19899187F}, .moves_camera = true},
+    {.label = "6TH DAN", .camera_eye = {0.0F, 0.17056445F, -0.21708204F}, .moves_camera = true},
+    {.label = "7TH DAN", .camera_eye = {0.0F, 0.13955274F, -0.23517221F}, .moves_camera = true},
+    {.label = "8TH DAN", .camera_eye = {0.0F, 0.10854102F, -0.25326238F}, .moves_camera = true},
+    {.label = "9TH DAN", .camera_eye = {0.0F, 0.10854102F, -0.17185662F}, .moves_camera = true},
+    {.label = "10TH DAN", .camera_eye = {0.0F, 0.10854102F, -0.09045085F}, .moves_camera = true},
+}};
+
+constexpr std::array<Option, 1> kDanOptions = {{
+    {.id = "course",
+     .label = "Selected course",
+     .choices = kDanCourses,
+     .default_choice = 0,
+     .transition_frames = 12},
+}};
+
 constexpr std::array<SpriteLayer, 1> kDanSelectSprites = {{
     {.package_dir = kDan, .sprite = "BG", .animated = true, .priority = 31, .timing = kHold},
 }};
@@ -351,6 +379,7 @@ constexpr std::array<Scene, 9> kScenes = {{
         .models = kDanSelectModels,
         .sprites = kDanSelectSprites,
         .lights = kRedLights,
+        .options = kDanOptions,
     },
     {
         .id = "iidx11-expert-select",

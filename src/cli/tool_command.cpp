@@ -78,6 +78,8 @@ ToolCommand ParsePresetJob(std::span<const std::string> args, std::size_t i, Too
     c.frames = 1;
     if (i + 4 < args.size() && args[i + 4][0] != '-') c.frames = ParseIntAtoiLike(args[i + 4]);
     if (i + 5 < args.size() && args[i + 5][0] != '-') c.option = ParseIntAtoiLike(args[i + 5]);
+    const std::size_t tweaks = FindFlagWithValue(args, "--preset-tweaks");
+    if (tweaks < args.size()) c.tweaks_path = args[tweaks + 1];
     return c;
 }
 

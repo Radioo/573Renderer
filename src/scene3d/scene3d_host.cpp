@@ -143,6 +143,34 @@ void SetModelBlendByName(const std::string& model, int mode) {
     if (m != nullptr) m->blend_mode = mode;
 }
 
+void SetModelScale(const std::string& model, const std::array<float, 3>& scale) {
+    Scene3d::Model* m = FindModel(model);
+    if (m != nullptr) m->scale = scale;
+}
+
+void SetModelVisibleByName(const std::string& model, bool visible) {
+    Scene3d::Model* m = FindModel(model);
+    if (m != nullptr) m->visible = visible;
+}
+
+void SetProjection(const Scene3d::Projection& projection) {
+    g_renderer.SetProjection(projection);
+}
+
+void SetView(const std::array<float, 3>& eye, const std::array<float, 3>& at,
+             const std::array<float, 3>& up) {
+    g_fixed_view = Scene3d::LookAtView(eye.data(), at.data(), up.data());
+    g_fixed_camera = true;
+}
+
+void SetStyle(Scene3d::RenderStyle style) {
+    g_renderer.SetStyle(style);
+}
+
+void SetLights(const std::vector<Scene3d::Light>& lights) {
+    g_renderer.SetLights(lights);
+}
+
 void Unload() {
     if (!g_active) return;
     Scene3d::SetInputEnabled(false);

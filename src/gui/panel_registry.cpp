@@ -5,6 +5,7 @@
 #include "gc2d/gc_host.h"
 #include "gui_gc2d_panel.h"
 #include "gui_preset_panel.h"
+#include "gui_preset_workspace.h"
 #include "gui_scene3d_panel.h"
 #include "scene3d/scene3d_host.h"
 
@@ -30,6 +31,10 @@ bool Gc2dTabVisible() {
 
 bool PresetTabVisible() {
     return Panels::PresetPanel::HasPresets();
+}
+
+bool ScenePaneIdle() {
+    return !Panels::PresetWorkspace::Visible();
 }
 
 constexpr PanelDesc kModernPanels[] = {
@@ -104,6 +109,16 @@ constexpr PanelDesc kScene3dPanels[] = {
      .slot = PanelSlot::InspectorTab,
      .draw = &Panels::Gc2dPanel::Render,
      .visible = &Gc2dTabVisible},
+    {.id = "preset_workspace",
+     .tab_label = "Parameters",
+     .slot = PanelSlot::CenterPane,
+     .draw = &Panels::PresetWorkspace::Render,
+     .visible = &Panels::PresetWorkspace::Visible},
+    {.id = "scene_tree",
+     .tab_label = "Scene",
+     .slot = PanelSlot::CenterPane,
+     .draw = &Panels::RenderScenePane,
+     .visible = &ScenePaneIdle},
 };
 
 struct PanelSet {

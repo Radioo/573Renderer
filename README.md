@@ -35,6 +35,18 @@ build.bat
 CMake presets + vcpkg (manifest mode, pinned toolchain). Details, including
 the ffmpeg feature set and the x265-alpha overlay port: `docs/build.md`.
 
+## Tweaking a scene preset
+
+Every value a preset transcribes from the game is a live parameter with the game's
+own value as its default, editable in the centre pane while a preset is active, or
+headlessly:
+
+```
+573Renderer.exe --preset-test <game-dir> iidx11-mode-select out.png 120 0 --preset-tweaks tweaks.txt
+```
+
+See `docs/preset_params.md`.
+
 ## Looking at a 2D package
 
 Render every animation and every named cell of a pre-AFP IIDX package to one

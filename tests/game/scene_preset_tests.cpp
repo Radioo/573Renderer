@@ -2,6 +2,8 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "game_fingerprint.h"
+#include "preset/preset_effective.h"
+#include "preset/preset_params.h"
 #include "preset/scene_preset.h"
 
 #include <algorithm>
@@ -362,4 +364,72 @@ TEST_CASE("IIDX RED ending draws its background as a static cell") {
     REQUIRE_FALSE(scene.sprites[0].animated);
     REQUIRE(scene.sprites[0].priority == 31);
     REQUIRE(scene.camera.eye[2] == 0.249F);
+}
+
+TEST_CASE("every parameter's default is the value the preset table authors") {
+    for (const auto* scene : Preset::ForBuild("iidx11")) {
+        const Preset::Materialized pristine = Preset::Materialize(*scene, {});
+        INFO("preset " << scene->id);
+        REQUIRE_FALSE(pristine.params.empty());
+        for (const auto& param : pristine.params) {
+            INFO("param " << param.id);
+            REQUIRE(
+                Preset::SameValue(Preset::ReadParam(param, pristine.effective), param.fallback));
+            REQUIRE(
+                Preset::SameValue(Preset::ClampValue(*param.desc, param.fallback), param.fallback));
+        }
+    }
+}
+
+TEST_CASE("a tweak overrides one parameter and clearing it restores the game's value") {
+    const Preset::Scene& scene = PresetById("iidx11-mode-select");
+    const Preset::Materialized pristine = Preset::Materialize(scene, {});
+    REQUIRE(pristine.effective.camera.fov_y == 1.0471976F);
+
+    Preset::TweakSet tweaks;
+    Preset::SetTweak(tweaks, "camera.fov_y", Preset::ToValue(1.2F));
+    const Preset::Materialized tweaked = Preset::Materialize(scene, tweaks);
+    REQUIRE(tweaked.effective.camera.fov_y == 1.2F);
+    REQUIRE(tweaked.effective.models.size() == pristine.effective.models.size());
+
+    Preset::ClearTweak(tweaks, "camera.fov_y");
+    REQUIRE(Preset::Materialize(scene, tweaks).effective.camera.fov_y == 1.0471976F);
+}
+
+TEST_CASE("a range never makes the game's own value unreachable") {
+    for (const char* build : {"iidx10", "iidx11"}) {
+        for (const auto* scene : Preset::ForBuild(build)) {
+            const Preset::Materialized pristine = Preset::Materialize(*scene, {});
+            for (const auto& param : pristine.params) {
+                INFO(build << " " << scene->id << " " << param.id);
+                REQUIRE(Preset::SameValue(Preset::ClampValue(*param.desc, param.fallback),
+                                          param.fallback));
+            }
+        }
+    }
+}
+
+TEST_CASE("no parameter can rewrite a layer's identity") {
+    const Preset::Scene& scene = PresetById("iidx11-dan-select");
+    for (const auto& param : Preset::Materialize(scene, {}).params) {
+        INFO("param " << param.id);
+        const std::string key(param.desc->key);
+        REQUIRE(key != "scene_dir");
+        REQUIRE(key != "model");
+        REQUIRE(key != "package_dir");
+        REQUIRE(key != "sprite");
+        REQUIRE(key != "hidden_parts");
+    }
+}
+
+TEST_CASE("IIDX RED class course select offers every course as a camera state") {
+    const Preset::Scene& scene = PresetById("iidx11-dan-select");
+    REQUIRE(scene.options.size() == 1);
+    REQUIRE(scene.options[0].choices.size() == 17);
+    REQUIRE(scene.options[0].choices[0].label == "CLASS 7");
+    REQUIRE(scene.options[0].choices[16].label == "10TH DAN");
+    for (const auto& choice : scene.options[0].choices) {
+        REQUIRE(choice.moves_camera);
+        REQUIRE(choice.camera_eye[1] > 0.0F);
+    }
 }

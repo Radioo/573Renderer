@@ -26,6 +26,7 @@ struct ToolCommand {
     std::string out_path;
     int frames = 120;
     int option = 0;
+    std::string tweaks_path;
 };
 
 [[nodiscard]] ToolCommand ParseToolCommand(std::span<const std::string> args);

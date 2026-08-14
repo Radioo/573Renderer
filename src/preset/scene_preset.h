@@ -26,6 +26,8 @@ struct ModelMotion {
 struct OptionChoice {
     std::string_view label;
     std::array<float, 3> position = {0.0F, 0.0F, 0.0F};
+    std::array<float, 3> camera_eye = {0.0F, 0.0F, 0.0F};
+    bool moves_camera = false;
 };
 
 struct Option {

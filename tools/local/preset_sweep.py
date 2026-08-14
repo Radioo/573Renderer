@@ -35,7 +35,10 @@ def scenes_for(build):
             continue
         options = SCENE_OPTIONS.search(block.split("},")[0] + block[:400])
         states = option_choices.get(options.group(1), 1) if options else 1
-        out.append((ident.group(1), states))
+        scene_id = ident.group(1)
+        if not scene_id.startswith(f"{build}-"):
+            continue
+        out.append((scene_id, states))
     return out
 
 
