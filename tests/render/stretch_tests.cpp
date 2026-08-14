@@ -52,3 +52,32 @@ TEST_CASE("every filter has a distinct name") {
     }
     REQUIRE(count == 4);
 }
+
+TEST_CASE("a crop picked on a stretched preview maps onto the exported frame") {
+    const Stretch::Size frame = Stretch::Present(640, 480, true);
+    const Stretch::Size client = {.w = 854, .h = 480};
+
+    CHECK(Stretch::ClientToFrame(0, 0, client, frame) == Stretch::Point{.x = 0, .y = 0});
+    CHECK(Stretch::ClientToFrame(854, 480, client, frame) == Stretch::Point{.x = 854, .y = 480});
+    CHECK(Stretch::ClientToFrame(427, 240, client, frame) == Stretch::Point{.x = 427, .y = 240});
+
+    const Stretch::Size window = {.w = 1708, .h = 960};
+    CHECK(Stretch::ClientToFrame(1708, 960, window, frame) == Stretch::Point{.x = 854, .y = 480});
+    CHECK(Stretch::ClientToFrame(-40, 5000, window, frame) == Stretch::Point{.x = 0, .y = 480});
+}
+
+TEST_CASE("the crop overlay draws where the crop actually is on the presented image") {
+    const Stretch::Size frame = Stretch::Present(640, 480, true);
+    const Stretch::Rect right_half = {.x = 427, .y = 0, .w = 427, .h = 480};
+
+    const Stretch::RectF same = Stretch::FrameToTarget(right_half, frame, frame);
+    CHECK(same.x0 == 427.0F);
+    CHECK(same.x1 == 854.0F);
+
+    const Stretch::RectF doubled =
+        Stretch::FrameToTarget(right_half, frame, Stretch::Size{.w = 1708, .h = 960});
+    CHECK(doubled.x0 == 854.0F);
+    CHECK(doubled.x1 == 1708.0F);
+    CHECK(doubled.y0 == 0.0F);
+    CHECK(doubled.y1 == 960.0F);
+}

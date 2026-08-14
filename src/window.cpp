@@ -2,9 +2,9 @@
 #include "state/app_state.h"
 #include "state/live_controls.h"
 #include "support/log.h"
+#include "render/stretch.h"
 #include "scene3d/scene3d_input.h"
 
-#include <cstdint>
 #include <windowsx.h>
 
 #include <algorithm>
@@ -31,12 +31,11 @@ namespace {
 void ClientToRt(HWND hwnd, POINT p, int& rt_x, int& rt_y) {
     RECT rc{};
     GetClientRect(hwnd, &rc);
-    const int cw = (std::max)(1L, rc.right - rc.left);
-    const int ch = (std::max)(1L, rc.bottom - rc.top);
-    const int px = std::clamp((int)p.x, 0, cw);
-    const int py = std::clamp((int)p.y, 0, ch);
-    rt_x = (int)((int64_t)px * g_rt_w / cw);
-    rt_y = (int)((int64_t)py * g_rt_h / ch);
+    const Stretch::Size client{.w = (int)(rc.right - rc.left), .h = (int)(rc.bottom - rc.top)};
+    const Stretch::Point mapped =
+        Stretch::ClientToFrame((int)p.x, (int)p.y, client, Stretch::Size{.w = g_rt_w, .h = g_rt_h});
+    rt_x = mapped.x;
+    rt_y = mapped.y;
 }
 }
 

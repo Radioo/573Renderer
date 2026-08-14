@@ -565,3 +565,24 @@ TEST_CASE("export modal names a 2D package by file and animation, not by path", 
     REQUIRE(start != nullptr);
     CHECK(start->req.output_path == "0313_00.avif");
 }
+
+TEST_CASE("export sizes follow the stretched frame, not the internal render size",
+          "[gui][export]") {
+    GuiTest::Harness harness;
+    ReadyForExport("stretched.ifs");
+    App::Global().SetRenderSize(640, 480);
+    App::Global().SetStretchWide(true);
+
+    ImGuiTest* test = harness.NewTest("export_stretched_native");
+    test->TestFunc = [](ImGuiTestContext* ctx) {
+        OpenModal(ctx);
+        GuiTest::ComboPick(ctx, "##exp_sz", "Native (854x480)");
+        ctx->ItemClick("Start export");
+    };
+    harness.Run(test);
+
+    std::optional<App::Command> slot;
+    const auto* start = TakeStart(slot);
+    REQUIRE(start != nullptr);
+    App::Global().SetStretchWide(false);
+}

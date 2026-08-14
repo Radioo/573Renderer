@@ -73,10 +73,10 @@ bool CreateRenderWindowAndDevice(App::State& state, int render_w, int render_h) 
     if ((hwnd == nullptr) || !g_d3d.Init(hwnd)) {
         return FailBoot(state, "Render window / D3D9 init failed.");
     }
-    int rt_w = 0;
-    int rt_h = 0;
-    g_d3d.GetOffscreenSize(rt_w, rt_h);
-    AppWindow::SetRenderRtSize(rt_w, rt_h);
+    int frame_w = 0;
+    int frame_h = 0;
+    g_d3d.GetPresentSize(frame_w, frame_h);
+    AppWindow::SetRenderRtSize(frame_w, frame_h);
     return true;
 }
 

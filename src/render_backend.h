@@ -54,6 +54,8 @@ struct D3D9State {
 
     void GetBackBufferSize(int& w, int& h) const;
 
+    void GetPresentSize(int& w, int& h) const;
+
     void DrawCropOverlay() const;
 };
 

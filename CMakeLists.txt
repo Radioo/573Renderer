@@ -381,6 +381,7 @@ add_executable(pixel_golden_tests
     tests/render/pixel_golden_tests.cpp
     src/afp_d3d9_callbacks.cpp
     src/afp_d3d9_commands.cpp
+    src/render_backend.cpp
     src/render_executor.cpp
     src/warp_device.cpp
 )

@@ -7,6 +7,7 @@
 #include "../video_encoder.h"
 #include "imgui.h"
 #include "media/media_format.h"
+#include "render/stretch.h"
 #include "state/live_controls.h"
 #include "state/telemetry.h"
 
@@ -379,6 +380,9 @@ void DrawOutputResolution(App::State& state) {
     state.GetRenderSize(rw, rh);
     if (rw <= 0) rw = 1920;
     if (rh <= 0) rh = 1080;
+    const Stretch::Size frame = Stretch::Present(rw, rh, state.GetStretchWide());
+    rw = frame.w;
+    rh = frame.h;
 
     DrawResolutionPresetCombo(rw, rh);
     int w_disp = 0;

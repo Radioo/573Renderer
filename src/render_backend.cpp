@@ -396,6 +396,11 @@ void D3D9State::GetOffscreenSize(int& w, int& h) const {
     }
 }
 
+void D3D9State::GetPresentSize(int& w, int& h) const {
+    w = (present_width > 0) ? present_width : width;
+    h = (present_height > 0) ? present_height : height;
+}
+
 void D3D9State::GetBackBufferSize(int& w, int& h) const {
     w = h = 0;
     if (backbuffer == nullptr) return;
@@ -459,16 +464,19 @@ void D3D9State::DrawCropOverlay() const {
     int bb_w = 0;
     int bb_h = 0;
     GetBackBufferSize(bb_w, bb_h);
-    int rt_w = 0;
-    int rt_h = 0;
-    GetOffscreenSize(rt_w, rt_h);
-    if (bb_w <= 0 || bb_h <= 0 || rt_w <= 0 || rt_h <= 0) return;
+    int frame_w = 0;
+    int frame_h = 0;
+    GetPresentSize(frame_w, frame_h);
+    if (bb_w <= 0 || bb_h <= 0 || frame_w <= 0 || frame_h <= 0) return;
     if (!has_rect) return;
 
-    const float x0 = (float)rect_x * (float)bb_w / (float)rt_w;
-    const float y0 = (float)rect_y * (float)bb_h / (float)rt_h;
-    const float x1 = (float)(rect_x + rect_w) * (float)bb_w / (float)rt_w;
-    const float y1 = (float)(rect_y + rect_h) * (float)bb_h / (float)rt_h;
+    const Stretch::RectF box = Stretch::FrameToTarget(
+        Stretch::Rect{.x = rect_x, .y = rect_y, .w = rect_w, .h = rect_h},
+        Stretch::Size{.w = frame_w, .h = frame_h}, Stretch::Size{.w = bb_w, .h = bb_h});
+    const float x0 = box.x0;
+    const float y0 = box.y0;
+    const float x1 = box.x1;
+    const float y1 = box.y1;
     const auto bbw = (float)bb_w;
     const auto bbh = (float)bb_h;
 

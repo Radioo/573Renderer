@@ -80,9 +80,8 @@ for them.
 
 The pipeline is unchanged up to present time:
 
-- `offscreen_rt` stays at the render size, so everything the game draws, the
-  crop picker's coordinate mapping and the asset-extraction readbacks all still
-  work in native pixels;
+- `offscreen_rt` stays at the render size, so everything the game draws and the
+  asset-extraction readbacks still work in native pixels;
 - a `present_rt` at the widened size exists only while stretching, and
   `EndFrame` does `offscreen -> present` with the chosen filter, then a plain
   copy `present -> backbuffer`;
@@ -91,7 +90,18 @@ The pipeline is unchanged up to present time:
 
 Exports read `ReadPresentBGRA`, which returns `present_rt` when stretching and
 falls back to the offscreen when not, so a capture is exactly the picture on
-screen. The DDR loop detector shares that readback for the same reason: what it
+screen.
+
+**The crop rect therefore lives in PRESENTED pixels, not render pixels.** It is
+applied to the frame `ReadPresentBGRA` hands back, so every other place that
+touches it has to agree: `AppWindow::SetRenderRtSize` is fed
+`D3D9State::GetPresentSize`, `Stretch::ClientToFrame` maps a click in the window
+onto that frame, `Stretch::FrameToTarget` maps the rect back onto the backbuffer
+for the on-screen overlay, and the export modal's output-resolution row derives
+its native size from `Stretch::Present` as well. Mapping picks into the RENDER
+size instead is what made a stretched 4:3 crop land on the wrong region: a click
+at the right edge of an 854-wide window resolved to x=640, so the exported crop
+was shifted left and about 75% of the intended width. The DDR loop detector shares that readback for the same reason: what it
 compares is what it encodes. `ReadOffscreenBGRA` stays native-resolution and is
 still what qpro extraction and the DDR test harness use.
 
