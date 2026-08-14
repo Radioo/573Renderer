@@ -16,16 +16,50 @@ namespace Preset {
 
 namespace {
 
-std::string Bracket(std::string_view prefix, const std::string& name, std::string_view key) {
-    std::string id(prefix);
-    id += '[';
-    id += name;
-    id += ']';
+std::string Slot(std::string_view prefix, const std::string& name, size_t index,
+                 size_t occurrence) {
+    std::string slot(prefix);
+    slot += '[';
+    slot += name.empty() ? std::to_string(index) : name;
+    if (occurrence > 0) {
+        slot += '#';
+        slot += std::to_string(occurrence + 1);
+    }
+    slot += ']';
+    return slot;
+}
+
+std::string Bracket(const std::string& slot, std::string_view key) {
+    std::string id(slot);
     if (!key.empty()) {
         id += '.';
         id += key;
     }
     return id;
+}
+
+size_t Occurrence(const std::vector<std::string>& names, size_t index) {
+    size_t seen = 0;
+    for (size_t i = 0; i < index && i < names.size(); i++) {
+        if (names[i] == names[index]) seen++;
+    }
+    return seen;
+}
+
+std::vector<std::string> ModelNames(const Effective& src) {
+    std::vector<std::string> names;
+    names.reserve(src.models.size());
+    for (const auto& model : src.models)
+        names.push_back(model.model);
+    return names;
+}
+
+std::vector<std::string> SpriteNames(const Effective& src) {
+    std::vector<std::string> names;
+    names.reserve(src.sprites.size());
+    for (const auto& sprite : src.sprites)
+        names.push_back(sprite.sprite);
+    return names;
 }
 
 void CopyScene(const Scene& src, Effective& out) {
@@ -104,10 +138,12 @@ void CopyLights(const Scene& src, Effective& out) {
 }
 
 void AddInstance(std::vector<ParamInstance>& out, const ParamDesc& desc, std::string id,
-                 std::string label, const Target& target, const Effective& pristine) {
+                 std::string label, std::string group, const Target& target,
+                 const Effective& pristine) {
     ParamInstance instance;
     instance.id = std::move(id);
     instance.label = std::move(label);
+    instance.group = std::move(group);
     instance.desc = &desc;
     instance.target = target;
     instance.fallback = ReadParam(instance, pristine);
@@ -181,6 +217,53 @@ Value ReadParam(const ParamInstance& param, const Effective& src) {
     return value;
 }
 
+namespace {
+
+void InstantiateModels(const ParamDesc& desc, const Effective& pristine,
+                       std::vector<ParamInstance>& out) {
+    const std::vector<std::string> names = ModelNames(pristine);
+    for (size_t i = 0; i < names.size(); i++) {
+        const std::string slot = Slot("model", names[i], i, Occurrence(names, i));
+        AddInstance(out, desc, Bracket(slot, desc.key), std::string(desc.label),
+                    "Model " + slot.substr(6, slot.size() - 7),
+                    Target{.scope = desc.scope, .index = (int16_t)i}, pristine);
+    }
+}
+
+void InstantiateSprites(const ParamDesc& desc, const Effective& pristine,
+                        std::vector<ParamInstance>& out) {
+    const std::vector<std::string> names = SpriteNames(pristine);
+    for (size_t i = 0; i < names.size(); i++) {
+        const std::string slot = Slot("sprite", names[i], i, Occurrence(names, i));
+        AddInstance(out, desc, Bracket(slot, desc.key), std::string(desc.label),
+                    "2D layer " + slot.substr(7, slot.size() - 8),
+                    Target{.scope = desc.scope, .index = (int16_t)i}, pristine);
+    }
+}
+
+void InstantiateOptionChoices(const ParamDesc& desc, const Effective& pristine,
+                              std::vector<ParamInstance>& out) {
+    for (size_t i = 0; i < pristine.options.size(); i++) {
+        const OptionState& option = pristine.options[i];
+        std::vector<std::string> labels;
+        labels.reserve(option.choices.size());
+        for (const auto& choice : option.choices)
+            labels.push_back(choice.label);
+        for (size_t c = 0; c < labels.size(); c++) {
+            std::string id = Slot("option", option.id, i, 0);
+            id += '.';
+            id += Slot("choice", labels[c], c, Occurrence(labels, c));
+            id += '.';
+            id += desc.key;
+            AddInstance(out, desc, std::move(id), labels[c], "States: " + option.label,
+                        Target{.scope = desc.scope, .index = (int16_t)i, .sub = (int16_t)c},
+                        pristine);
+        }
+    }
+}
+
+}
+
 std::vector<ParamInstance> Instantiate(const Effective& pristine) {
     std::vector<ParamInstance> out;
     for (const ParamDesc& desc : Schema()) {
@@ -190,52 +273,34 @@ std::vector<ParamInstance> Instantiate(const Effective& pristine) {
         case Scope::Countdown:
         case Scope::Intro:
             AddInstance(out, desc, std::string(desc.key), std::string(desc.label),
-                        Target{.scope = desc.scope}, pristine);
+                        std::string(desc.group), Target{.scope = desc.scope}, pristine);
             break;
         case Scope::Light:
             for (size_t i = 0; i < pristine.lights.size(); i++) {
-                AddInstance(out, desc, Bracket("light", std::to_string(i), desc.key),
-                            std::string(desc.label),
+                const std::string slot = Slot("light", "", i, 0);
+                AddInstance(out, desc, Bracket(slot, desc.key), std::string(desc.label),
+                            "Lighting " + std::to_string(i),
                             Target{.scope = desc.scope, .index = (int16_t)i}, pristine);
             }
             break;
         case Scope::Model:
         case Scope::ModelMotion:
-            for (size_t i = 0; i < pristine.models.size(); i++) {
-                AddInstance(out, desc, Bracket("model", pristine.models[i].model, desc.key),
-                            std::string(desc.label),
-                            Target{.scope = desc.scope, .index = (int16_t)i}, pristine);
-            }
+            InstantiateModels(desc, pristine, out);
             break;
         case Scope::Sprite:
         case Scope::SpriteTiming:
-            for (size_t i = 0; i < pristine.sprites.size(); i++) {
-                AddInstance(out, desc, Bracket("sprite", pristine.sprites[i].sprite, desc.key),
-                            std::string(desc.label),
-                            Target{.scope = desc.scope, .index = (int16_t)i}, pristine);
-            }
+            InstantiateSprites(desc, pristine, out);
             break;
         case Scope::Option:
             for (size_t i = 0; i < pristine.options.size(); i++) {
-                AddInstance(out, desc, Bracket("option", pristine.options[i].id, desc.key),
-                            std::string(desc.label),
+                const std::string slot = Slot("option", pristine.options[i].id, i, 0);
+                AddInstance(out, desc, Bracket(slot, desc.key), std::string(desc.label),
+                            "States: " + pristine.options[i].label,
                             Target{.scope = desc.scope, .index = (int16_t)i}, pristine);
             }
             break;
         case Scope::OptionChoice:
-            for (size_t i = 0; i < pristine.options.size(); i++) {
-                const auto& option = pristine.options[i];
-                for (size_t c = 0; c < option.choices.size(); c++) {
-                    std::string id = Bracket("option", option.id, "");
-                    id += ".choice[";
-                    id += option.choices[c].label;
-                    id += "].";
-                    id += desc.key;
-                    AddInstance(out, desc, std::move(id), std::string(option.choices[c].label),
-                                Target{.scope = desc.scope, .index = (int16_t)i, .sub = (int16_t)c},
-                                pristine);
-                }
-            }
+            InstantiateOptionChoices(desc, pristine, out);
             break;
         }
     }

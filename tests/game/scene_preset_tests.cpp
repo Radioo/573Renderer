@@ -433,3 +433,52 @@ TEST_CASE("IIDX RED class course select offers every course as a camera state") 
         REQUIRE(choice.camera_eye[1] > 0.0F);
     }
 }
+
+TEST_CASE("every parameter id is unique within its preset") {
+    for (const char* build : {"iidx10", "iidx11"}) {
+        for (const auto* scene : Preset::ForBuild(build)) {
+            const Preset::Materialized mat = Preset::Materialize(*scene, {});
+            std::vector<std::string> seen;
+            for (const auto& param : mat.params) {
+                INFO(build << " " << scene->id << " " << param.id);
+                REQUIRE(std::ranges::find(seen, param.id) == seen.end());
+                seen.push_back(param.id);
+            }
+        }
+    }
+}
+
+TEST_CASE("a layer placed twice gets two addressable parameter sets") {
+    const Preset::Scene& scene = PresetById("iidx10-music-select");
+    REQUIRE(scene.sprites.size() == 3);
+    REQUIRE(scene.sprites[1].sprite == "BG_SKY");
+    REQUIRE(scene.sprites[2].sprite == "BG_SKY");
+
+    const Preset::Materialized mat = Preset::Materialize(scene, {});
+    int first = 0;
+    int second = 0;
+    for (const auto& param : mat.params) {
+        if (param.id.starts_with("sprite[BG_SKY].")) first++;
+        if (param.id.starts_with("sprite[BG_SKY#2].")) second++;
+    }
+    REQUIRE(first > 0);
+    REQUIRE(first == second);
+
+    Preset::TweakSet tweaks;
+    Preset::SetTweak(tweaks, "sprite[BG_SKY#2].x", Preset::ToValue(123.0F));
+    const Preset::Effective eff = Preset::Materialize(scene, tweaks).effective;
+    REQUIRE(eff.sprites[1].x == 640.0F);
+    REQUIRE(eff.sprites[2].x == 123.0F);
+}
+
+TEST_CASE("a parameter's group names the layer it belongs to") {
+    const Preset::Materialized mat = Preset::Materialize(PresetById("iidx11-music-select"), {});
+    bool saw_core = false;
+    for (const auto& param : mat.params) {
+        if (param.id == "model[core].alpha") {
+            REQUIRE(param.group == "Model core");
+            saw_core = true;
+        }
+    }
+    REQUIRE(saw_core);
+}

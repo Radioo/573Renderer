@@ -18,6 +18,9 @@ namespace Panels::PresetWorkspace {
 
 namespace {
 
+constexpr float kLabelFraction = 0.42F;
+constexpr float kLabelMax = 190.0F;
+
 char g_filter[96] = {};
 std::string g_filter_scene;
 
@@ -45,8 +48,7 @@ void Tooltip(const PresetHost::ParamView& param) {
 }
 
 bool DrawValue(const PresetHost::ParamView& param, std::array<float, 3>& value, int& ivalue) {
-    const std::string tag = "##pp" + param.id;
-    ImGui::SetNextItemWidth(-FLT_MIN);
+    const std::string tag = "##v";
     const float speed = (param.step > 0.0F) ? param.step : 0.01F;
     switch (param.kind) {
     case 0:
@@ -76,7 +78,6 @@ bool DrawValue(const PresetHost::ParamView& param, std::array<float, 3>& value, 
 
 void DrawRow(const PresetHost::ParamView& param) {
     ImGui::PushID(param.id.c_str());
-    ImGui::BeginGroup();
 
     ImGui::BeginDisabled(!param.overridden);
     if (ImGui::SmallButton(param.overridden ? "*" : ".")) PresetHost::ResetParam(param.id);
@@ -88,18 +89,21 @@ void DrawRow(const PresetHost::ParamView& param) {
 
     std::string label = param.label;
     if (!param.unit.empty()) {
-        label += "  ";
+        label += " ";
         label += param.unit;
     }
+    const float avail = ImGui::GetContentRegionAvail().x;
+    const float label_w = std::min(avail * kLabelFraction, kLabelMax);
     ImGui::TextUnformatted(label.c_str());
     Tooltip(param);
+    ImGui::SameLine(0.0F, std::max(4.0F, label_w - ImGui::CalcTextSize(label.c_str()).x));
 
     std::array<float, 3> value = param.value;
     int ivalue = param.ivalue;
+    ImGui::SetNextItemWidth(-FLT_MIN);
     if (DrawValue(param, value, ivalue)) PresetHost::SetParam(param.id, value, ivalue);
     Tooltip(param);
 
-    ImGui::EndGroup();
     ImGui::PopID();
 }
 
@@ -147,8 +151,10 @@ void DrawStates(const PresetHost::Status& status) {
         for (size_t c = 0; c < state.choices.size(); c++) {
             if (c > 0 && (c % 4) != 0) ImGui::SameLine();
             const bool active = std::cmp_equal(c, state.choice);
+            ImGui::PushID((int)c);
             if (ImGui::RadioButton(state.choices[c].c_str(), active) && !active)
                 PresetHost::SetOption((int)i, (int)c);
+            ImGui::PopID();
         }
         ImGui::PopID();
     }

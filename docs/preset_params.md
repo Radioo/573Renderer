@@ -106,3 +106,23 @@ is a flat id to numbers map, the repo has no JSON parser today, and adding one
 would pull a dependency into the two test targets as well as the renderer. If the
 format needs nesting or string values, that trade goes the other way and the
 dependency is the right call.
+
+## Ids must be unique, and a repeated layer proves it
+
+A screen may place the same layer twice. IIDX 10's music select draws `BG_SKY`
+twice, half a screen apart, to make the scrolling sky band. Keying ids on the
+name alone gave both copies the same id, which silently merged two independent
+layers into one row and produced a real ImGui ID conflict on screen.
+
+A repeated name now takes an occurrence suffix, so the second copy is
+`sprite[BG_SKY#2]` and both are separately addressable. The first occurrence is
+never suffixed, so ids stay readable and stable for the common case.
+
+Two tests hold this: every parameter id is unique within every preset of both
+builds, and IIDX 10 music select specifically must expose two `BG_SKY` sets where
+a tweak on one moves only that copy.
+
+Each instance also carries its own GROUP, naming the layer it belongs to
+("Model core", "2D layer BG_SKY#2"), so a row is never an anonymous "Visible" or
+"X px" with no way to tell which layer it drives. Group reset matches on the
+instance group, not the schema's static one.

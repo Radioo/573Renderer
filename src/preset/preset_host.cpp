@@ -456,7 +456,7 @@ std::vector<ParamView> ListParams() {
         ParamView view;
         view.id = param.id;
         view.label = param.label;
-        view.group = std::string(param.desc->group);
+        view.group = param.group;
         view.unit = std::string(param.desc->unit);
         view.help = std::string(param.desc->help);
         view.aliases = std::string(param.desc->aliases);
@@ -498,7 +498,7 @@ void ResetParam(const std::string& id) {
 
 void ResetGroup(const std::string& group) {
     for (const auto& param : g_mat.params) {
-        if (param.desc->group != group) continue;
+        if (param.group != group) continue;
         Preset::ClearTweak(g_tweaks, param.id);
     }
     RematerializeAll();

@@ -79,6 +79,7 @@ struct Effective {
 struct ParamInstance {
     std::string id;
     std::string label;
+    std::string group;
     const ParamDesc* desc = nullptr;
     Target target;
     Value fallback;
