@@ -1,5 +1,6 @@
 #include "formats/sysidx.h"
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <span>
@@ -270,6 +271,16 @@ bool Parse(std::span<const uint8_t> file, Package& out, std::string& err) {
         return false;
     }
     return true;
+}
+
+int AnimationContentEnd(const Package& pkg, size_t start_index) {
+    int last = 0;
+    for (size_t i = start_index; i < pkg.records.size(); i++) {
+        const Record& rec = pkg.records[i];
+        if (rec.type < 0) break;
+        last = (std::max)(last, (int)rec.t_end);
+    }
+    return last;
 }
 
 int AnimationLength(const Package& pkg, size_t start_index) {

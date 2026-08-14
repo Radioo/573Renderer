@@ -755,6 +755,17 @@ The same driver also serves the 2D package browser, which has a timeline of its
 own: the selected animation's length. It rewinds with `Gc2dHost::SetFrame(0)` and
 captures one full loop. Only a browser with NOTHING loaded is refused.
 
+Both hosts DRAW THE CURRENT PLAYHEAD AND ADVANCE AFTERWARDS, which is what makes
+"rewind, then capture N frames" cover frames 0..N-1 exactly once.
+`Gc2dHost::RenderFrame` and `PresetHost::RenderFrame` used to advance first, so a
+capture ran 1..N-1 and then wrapped, putting the animation's own frame 0 at the
+END of the file and dropping frame N-1 - which read as "the exporter appends
+blank frames" whenever an animation opens on a blank frame. IIDX 10's `TITLE` is
+exactly that: its frame 0 draws a backdrop at 1% alpha and two bars parked just
+off-screen, so the wrapped frame encoded as fully transparent. Drawing before
+advancing also keeps `GetStatus().frame` equal to the frame that was just drawn,
+which is what the scene panel and the timeline show.
+
 `Export::PlannedFrames(max_frames, preset_frames, package_frames)` picks the
 length in that order of precedence: an explicit "Limit frames" always wins, then
 the preset's `NaturalFrames()` (its countdown length when it has one - IIDX 10

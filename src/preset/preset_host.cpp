@@ -255,10 +255,10 @@ bool Active() {
 void RenderFrame(float dt) {
     if (g_scene == nullptr) return;
     const int split = g_scene->sprite_split_priority;
-    Gc2dHost::AdvanceSprites(dt);
     Gc2dHost::DrawSprites(split, INT_MAX);
     Scene3dHost::RenderFrame(dt);
     Gc2dHost::DrawSprites(INT_MIN, split - 1);
+    Gc2dHost::AdvanceSprites(dt);
     Advance();
 }
 

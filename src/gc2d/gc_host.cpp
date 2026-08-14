@@ -167,12 +167,13 @@ bool Active() {
 
 void RenderFrame(float dt) {
     if (!g_active) return;
-    if (!g_paused) g_time += dt * kFramesPerSecond * g_speed;
-
-    const int length = CurrentLength();
-    if (length > 0 && g_time >= (float)length) g_time -= (float)length;
     GcAnim::Evaluate(g_pkg.index, g_start, (int)g_time, 0.0F, 0.0F, g_nodes);
     DrawNodes();
+    if (g_paused) return;
+
+    g_time += dt * kFramesPerSecond * g_speed;
+    const int length = CurrentLength();
+    if (length > 0 && g_time >= (float)length) g_time -= (float)length;
 }
 
 void AdvanceSprites(float dt) {

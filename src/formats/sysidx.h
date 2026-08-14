@@ -63,4 +63,6 @@ bool Parse(std::span<const uint8_t> file, Package& out, std::string& err);
 
 int AnimationLength(const Package& pkg, size_t start_index);
 
+int AnimationContentEnd(const Package& pkg, size_t start_index);
+
 }

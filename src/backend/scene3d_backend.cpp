@@ -208,6 +208,9 @@ public:
         const bool live = Scene3dHost::Active() || Gc2dHost::Active();
         in.clip_live = live;
         in.scene_renderable = live;
+        const bool wanted = (cli_ != nullptr) && !cli_->animation_name.empty();
+        in.anim_name_matches = !wanted || Gc2dHost::GetStatus().animation == cli_->animation_name;
+        in.active_clip_matches = in.anim_name_matches;
     }
 
     void BindSubmonitor() override {}
