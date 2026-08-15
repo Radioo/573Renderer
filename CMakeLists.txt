@@ -308,6 +308,7 @@ add_executable(game_tests
     src/game_profile.cpp
     src/game_revision.cpp
     src/game_fingerprint.cpp
+    src/backend/afp_profiles.cpp
     src/preset/scene_presets.cpp
     src/preset/scene_presets_iidx10.cpp
     src/preset/scene_presets_iidx11.cpp

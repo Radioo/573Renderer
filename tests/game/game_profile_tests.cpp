@@ -1,6 +1,7 @@
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include "backend/afp_profiles.h"
 #include "game_profile.h"
 #include "game_revision.h"
 
@@ -118,6 +119,24 @@ TEST_CASE("Profile order keeps the specific IIDX substrings ahead of the generic
     const GameProfile::Profile* generic = GameProfile::AutoDetect("F:/IIDX/IIDX 33");
     REQUIRE(generic != nullptr);
     CHECK(std::string(generic->slug) == "iidx33");
+}
+
+TEST_CASE("Every AFP-family profile has an engine config row") {
+    for (const GameProfile::Profile& p : GameProfile::All()) {
+        const std::string backend = p.backend_id != nullptr ? p.backend_id : "";
+        if (backend != "afp_modern" && backend != "afp_ddr") continue;
+        INFO("profile '" << p.slug << "' uses backend '" << backend
+                         << "' but AfpProfiles::For(slug) has no row, so its boot fails");
+        CHECK(AfpProfiles::For(p.slug) != nullptr);
+    }
+}
+
+TEST_CASE("A pop'n install auto-detects as pop'n music 29") {
+    const GameProfile::Profile* popn = GameProfile::AutoDetect("F:/POPN/29");
+    REQUIRE(popn != nullptr);
+    CHECK(std::string(popn->slug) == "popn29");
+    CHECK(popn->default_render_w == 1920);
+    CHECK(popn->default_render_h == 1080);
 }
 
 TEST_CASE("AutoDetect falls back to the profile's own game DLL when the name says nothing") {

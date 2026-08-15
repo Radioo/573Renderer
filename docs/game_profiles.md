@@ -489,6 +489,34 @@ global):
 | afpu_render_context     | 0x28880 | same as IIDX 33                            |
 | afpu_set_screen_rect_fn | 0x18810 | IIDX 33 has 0x18550; body is identical     |
 
+pop'n music 29 (`kPopn29Offsets`; afp-core 2.14.28 / afp-utils 1.2.28 - the
+NEWEST afp build the renderer targets (IIDX 33 is 2.14.18, GITADORA DELTA
+2.14.26, T44 2.14.19), same XCd229cc / XE592acd export scheme and the same
+export counts (126 / 123). Every data-segment global moved. Derived exactly as
+the entries above: afp_set_afp_data (afp-core ord 0x000) has the IIDX-33 shape,
+so the callback table is the DESTINATION of its 35-qword copy loop and also the
+first argument of the rebind helper in the & 0x800 branch, and the render-flags
+dword is the & 0x800 gate itself - which again sits at table + 0x32C, the same
+relation IIDX 26 and IIDX 33 have. afpu_render_init (afp-utils ord 0x070)
+stores its argument into the render-context global on its first line and passes
+the data-struct global to afp_set_afp_data on its last. The set-screen-rect
+function was located through the afpu data struct's slot +0x70, the slot IIDX
+33's set-rect function occupies in ITS struct, and confirmed by body shape:
+it takes an int pointer, stores four ints into consecutive rect globals, ORs 1
+into a flag byte and zeroes a counter, with nothing else in the function. The
+neighbouring slot +0x68 in the same struct is afpu's get_near_far (it asserts
+with the literal `"get_near_far"` from `afpu-render.c`), which cross-checks the
+slot numbering):
+
+| field                   | value   | note                                     |
+|-------------------------|---------|-------------------------------------------|
+| afp_callback_table      | 0xF20A8 | in afp_set_afp_data                        |
+| afp_render_flags        | 0xF23D4 | = table + 0x32C, the & 0x800 gate          |
+| afp_nearfar_slot        | 0xF2110 | = table + 0x68                             |
+| afpu_data_struct        | 0x2B2D0 | in afpu_render_init                        |
+| afpu_render_context     | 0x2B8B8 | in afpu_render_init                        |
+| afpu_set_screen_rect_fn | 0x15790 | data-struct slot +0x70 + body-shape match  |
+
 ## AfpOrdinals - the afp-core ordinal map
 
 Defaults match IIDX 33 (Sparkle Shower), the first / primary RE target. Any
@@ -941,6 +969,91 @@ Gate set == GITADORA DELTA's exactly; per-gate provenance:
 - `skip_explicit_afp_set_afp_data = true` - the game never even imports
   afp-core 0x000; like gdxg it relies solely on afpu_render_init's internal
   rebind-path call.
+
+### pop'n music 29 - slug `popn29`, dir hint "popn"
+
+Game DLL popn.dll; default DLL names (avs2-core / afp-core / afp-utils) are
+correct. avs2-core 2.17.4 (same build IIDX 33 ships, so the default
+`AvsGeneration::Avs217` ordinal map applies), afp-core 2.14.28 / afp-utils
+1.2.28. Content is loose `.ifs` under `plain_data/tex/**` (there is no `data/`
+directory - `AfpModernBackend::LoadPersistentIfses` falls back to the game root
+and the boot scan walks the tree, so nothing special is needed).
+
+Native render is **1920x1080 at 120 Hz**, read off the game's InitD3D routine
+(find it via the `"InitD3D"` log-tag string; it also holds
+`"D3DFMT_A8R8G8B8 mode cnt: %d"` and `"RefreshRate:%.2f"`). The routine builds a
+12-byte `{width, height, refresh}` mode struct and fills the PREFERRED one with
+`780h, 438h, 78h` = 1920, 1080, 120 in three consecutive stores, then a fallback
+candidate list of `{1280, 800, 60}` and `{1280, 800, 59}` for cabinets that
+cannot do the preferred mode. The renderer needs no per-profile frame rate for
+this: `render_fps` already defaults to 120 globally and the per-frame advance is
+`dt = 1/fps`, so afp runs at real-time speed at any rate (docs/settings.md).
+
+The entire afp bring-up lives in ONE popn.dll function - find it via the xref to
+the afp_boot import. popn.dll imports afp-core and afp-utils BY ORDINAL, so IDA
+names the thunks `afp_core_<N>` / `afp_utils_<N>` where N is the PE ordinal and
+the renderer's ordinal is `N - 1`: afp_boot is `afp_core_3`, afp_set_stream_nr
+`afp_core_30`, afpu_boot `afp_utils_1`, afpu_render_init `afp_utils_113`. The
+sequence: afp_boot(ctx), afp_set_stream_nr(0x4000), afp_set_verbose(1) 1-arg,
+afp_set_flag(0x10, 0x10), afp_set_flag(8, 8) - MIRRORED args, so SET those bits,
+and no third 65537 call - afpu_boot(0, data) 2-arg with a NULL config node,
+afpu_render_init(cfg), the afpu memory-hook install (afpu suffix 000006, skipped
+by the renderer as on T44 and IIDX 26), D3D setup, afpu_set_config(1, 4096),
+then afpu_set_flag(4, 0) - note the `xor edx, edx`, a CLEAR - afpu_set_flag(8, 8),
+afpu_set_flag(16, 16), and finally afpu_set_config(2, 16). popn.dll never
+imports afp_set_afp_data (afp-core 0x000) at all, and never calls
+afpu_set_config(3, ...).
+
+The resulting gate set is identical to IIDX 26 Rootage's; per-gate provenance:
+
+- `call_afp_set_stream_nr = true` - game calls afp_set_stream_nr(0x4000). The
+  renderer passes its own 4096 (the shared value every profile uses); pop'n's
+  16384 is the cap on concurrently live streams, and the renderer creates a
+  handful.
+- `call_afp_stream_create_test = false` - diagnostic probe; afp-core 2.14.28's
+  afp_stream_create is 3-arg (confirmed by decompiling export suffix 000018), so
+  the renderer's 0-arg typedef would hand it register junk.
+- `call_afp_render_init = false` - the boot function never calls afp-core 0x00f.
+  popn.dll does import it, but only from a device-reset helper PAIR
+  (afp_render_init -> per-stream afp_do_update(2) -> afp_render_destroy), the
+  same shape T44 has.
+- `call_afpu_render_init = true` - game calls afpu_render_init(cfg).
+- `call_afpu_set_config = true` - game calls (1, 4096) and (2, 16). The renderer
+  passes (2, 10), its shared value; case 2 is the max_nr_masks resize.
+- `call_afpu_set_flag_setup = true` with
+  `afpu_set_flag_calls = {(4,0), (8,8), (16,16)}` - the game's exact pairs. The
+  first CLEARS afpu bit 4 where the renderer's default list sets it, so the
+  override is load-bearing.
+- `call_afpu_boot = true` - game calls afpu_boot(NULL, data). The renderer passes
+  its max_nr_masks=16 property in place of the NULL node.
+- `afpu_set_config_safe_clean_pos = true` - the game never calls set_config(3),
+  so pass 0 and leave the cleanup callback a no-op stub.
+- `call_afp_set_flag_setup = true` with
+  `afp_set_flag_calls = {(16,16), (8,8)}` - the game's exact mirrored pairs, no
+  65537 third call.
+- `apply_iidx_data_segment_patches = true` - kPopn29Offsets are correct; needed
+  for the poke + slot 12/13 re-patch.
+- `afp_set_afp_data_wide_args = false` - afpu_render_init's internal
+  afp_set_afp_data call is 1-arg (seen directly in its decompile).
+- `afp_set_verbose_wide_args = false` - game calls afp_set_verbose(1) 1-arg
+  (only ecx is set at the call site).
+- `legacy_afp` / `scan_arc_containers` / `scan_txp2_packages` stay false.
+- `skip_explicit_afp_set_afp_data = true` - like gdxg and T44 the game never
+  imports afp-core 0x000 and relies solely on afpu_render_init's internal
+  rebind-path call (0x800 left set).
+
+Ordinal map: spot-verified equal to IIDX 33's. These obfuscated builds keep the
+ARGUMENT-NAME literal in each export's null-check assert, which makes an ordinal
+checkable without comparing bodies: suffix 000046 rejects a null second argument
+named `"info"` and fills a 60-byte struct (afp_get_layer_info), 000066 rejects
+`"path"` and special-cases the `"aep:"` prefix (afp_mc_get_id_by_path), 000087
+rejects `"bitmap"` and logs `MovieClip=%s, bitmap=%s`
+(afp_play_work_load_bitmap). Two more were confirmed by body shape: 000011
+gathers visible streams into a list and hands it to the sort helper
+(afp_do_sort_render) and 00004b walks the stream table filtering on a u16 field
+and returns a count (afp_get_layers_by_nr). The game's own call sites confirm
+five more independently, since each is called with arguments only that function
+takes.
 
 ## Scene presets (`src/preset/`) and build fingerprints (`src/game_fingerprint.h`)
 
