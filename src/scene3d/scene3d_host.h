@@ -59,6 +59,18 @@ bool Load(const std::string& dir);
 
 bool LoadWithSetup(const std::string& dir, const Setup& setup);
 
+bool LoadUnion(const std::vector<std::string>& dirs, const Setup& setup);
+
+struct SceneInfo {
+    bool loaded = false;
+    float max_time = 0.0F;
+    std::vector<std::string> models;
+};
+
+SceneInfo DescribeScene(const std::string& dir);
+
+void SetModelTime(const std::string& model, float ticks);
+
 void SetModelSpeed(const std::string& model, float speed);
 
 void SetModelAlpha(const std::string& model, float alpha);

@@ -7,6 +7,17 @@
 
 namespace Gc2dHost {
 
+struct AnimationInfo {
+    std::string name;
+    int frames = 0;
+};
+
+struct PackageInfo {
+    bool loaded = false;
+    std::vector<std::string> cells;
+    std::vector<AnimationInfo> animations;
+};
+
 struct Status {
     std::string package;
     std::string animation;
@@ -22,6 +33,12 @@ struct Status {
 };
 
 bool Load(const std::string& dir);
+
+bool LoadAsset(const std::string& asset, const std::string& dir);
+
+PackageInfo DescribePackage(const std::string& asset);
+
+void SetCanvas(int width, int height);
 
 void Unload();
 
@@ -57,6 +74,8 @@ std::vector<DrawInfo> ListDrawNodes();
 int AnimationLength(const std::string& animation);
 
 struct SpritePlacement {
+    std::string asset;
+    std::string target;
     std::string name;
     bool animated = false;
     int priority = 0;
@@ -70,6 +89,7 @@ struct SpritePlacement {
     float time = 0.0F;
     float scroll_x = 0.0F;
     float scroll_wrap = 0.0F;
+    float scroll_offset = 0.0F;
 };
 
 bool SelectAnimation(const std::string& name);
@@ -92,17 +112,13 @@ struct CellDraw {
     int blend = 0;
 };
 
-bool LoadParticles(const std::string& dir);
-
-void DrawParticles(const std::vector<CellDraw>& cells);
+void DrawParticles(const std::string& asset, const std::vector<CellDraw>& cells);
 
 void SetSprites(std::vector<SpritePlacement> sprites);
 
 std::vector<SpriteStatus> ListSprites();
 
 void SetSpriteFrame(int index, int frame);
-
-void SetSpriteScroll(int index, int offset);
 
 void SetSpriteScale(int index, float scale);
 

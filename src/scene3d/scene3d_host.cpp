@@ -7,13 +7,16 @@
 #include "scene3d/camera.h"
 #include "scene3d/scene3d.h"
 #include "scene3d/scene3d_input.h"
+#include "scene3d/scene3d_merge.h"
 #include "scene3d/scene3d_render.h"
 #include "support/log.h"
 
 #include <algorithm>
 #include <array>
 #include <cstddef>
+#include <map>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace Scene3dHost {
@@ -37,6 +40,7 @@ float g_tick_rate = kViewerTicksPerSecond;
 
 bool g_fixed_camera = false;
 XFile::Matrix g_fixed_view = XFile::Identity();
+std::map<std::string, SceneInfo> g_assets;
 
 Scene3d::Model* FindModel(const std::string& name) {
     for (auto& m : g_scene.models) {
@@ -55,15 +59,7 @@ void PlaceCameraFromBounds() {
     Scene3d::PlaceFreeCamera(g_camera, center.data(), radius);
 }
 
-}
-
-bool Load(const std::string& dir) {
-    Unload();
-    std::string err;
-    if (!Scene3d::Load(dir, g_scene, err)) {
-        LOG("Scene3d", "load failed for %s: %s", dir.c_str(), err.c_str());
-        return false;
-    }
+bool Activate(const std::string& label) {
     if (!g_renderer.Init(g_d3d.device, g_scene)) {
         LOG("Scene3d", "renderer init failed");
         return false;
@@ -83,21 +79,38 @@ bool Load(const std::string& dir) {
     g_renderer.SetLights({});
     g_renderer.SetProjection(Scene3d::Projection{});
     Scene3d::SetInputEnabled(true);
-    App::Global().SetActiveIfs(dir);
+    App::Global().SetActiveIfs(label);
     LOG("Scene3d", "scene '%s' ready (free camera %s)", g_scene.name.c_str(),
         g_camera.active ? "on" : "off");
     return true;
 }
 
-bool LoadWithSetup(const std::string& dir, const Setup& setup) {
-    if (!Load(dir)) return false;
+bool LoadOne(const std::string& dir) {
+    Scene3d::Scene one;
+    std::string err;
+    if (!Scene3d::Load(dir, one, err)) {
+        LOG("Scene3d", "load failed for %s: %s", dir.c_str(), err.c_str());
+        return false;
+    }
+    SceneInfo info;
+    info.loaded = true;
+    info.max_time = one.max_time;
+    info.models.reserve(one.models.size());
+    for (const Scene3d::Model& model : one.models)
+        info.models.push_back(model.name);
+    g_assets[dir] = std::move(info);
+    Scene3d::Merge(g_scene, std::move(one));
+    return true;
+}
+
+void ApplySetup(const Setup& setup, const std::string& where) {
     for (auto& model : g_scene.models)
         model.visible = false;
     for (const auto& want : setup.models) {
         Scene3d::Model* model = FindModel(want.model);
         if (model == nullptr) {
             LOG("Scene3d", "setup names model '%s' which is not in %s", want.model.c_str(),
-                dir.c_str());
+                where.c_str());
             continue;
         }
         model->visible = true;
@@ -117,7 +130,38 @@ bool LoadWithSetup(const std::string& dir, const Setup& setup) {
     g_fixed_camera = true;
     g_camera.active = false;
     Scene3d::SetInputEnabled(false);
+}
+
+}
+
+bool Load(const std::string& dir) {
+    Unload();
+    if (!LoadOne(dir)) return false;
+    return Activate(dir);
+}
+
+bool LoadWithSetup(const std::string& dir, const Setup& setup) {
+    if (!Load(dir)) return false;
+    ApplySetup(setup, dir);
     return true;
+}
+
+bool LoadUnion(const std::vector<std::string>& dirs, const Setup& setup) {
+    Unload();
+    if (dirs.empty()) return false;
+    for (const std::string& dir : dirs) {
+        if (!LoadOne(dir)) return false;
+    }
+    if (!Activate(dirs.front())) return false;
+    ApplySetup(setup, dirs.front());
+    LOG("Scene3d", "%zu scene dir(s) merged: %zu model(s), %.0f ticks", dirs.size(),
+        g_scene.models.size(), g_scene.max_time);
+    return true;
+}
+
+SceneInfo DescribeScene(const std::string& dir) {
+    const auto found = g_assets.find(dir);
+    return (found == g_assets.end()) ? SceneInfo{} : found->second;
 }
 
 void SetModelSpeed(const std::string& model, float speed) {
@@ -172,7 +216,11 @@ void SetLights(const std::vector<Scene3d::Light>& lights) {
 }
 
 void Unload() {
-    if (!g_active) return;
+    g_assets.clear();
+    if (!g_active) {
+        g_scene = Scene3d::Scene{};
+        return;
+    }
     Scene3d::SetInputEnabled(false);
     g_renderer.Release();
     g_scene = Scene3d::Scene{};
@@ -249,6 +297,11 @@ void SetTime(float ticks) {
     g_time = std::clamp(ticks, 0.0F, (g_scene.max_time > 0.0F) ? g_scene.max_time : ticks);
     for (auto& model : g_scene.models)
         model.time = g_time;
+}
+
+void SetModelTime(const std::string& model, float ticks) {
+    Scene3d::Model* m = FindModel(model);
+    if (m != nullptr) m->time = ticks;
 }
 
 void SetSpeed(float speed) {

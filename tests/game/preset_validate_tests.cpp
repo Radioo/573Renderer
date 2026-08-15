@@ -221,7 +221,7 @@ TEST_CASE("a tween modifier over its draw primary is accepted") {
     REQUIRE(problems.empty());
 }
 
-TEST_CASE("a tween key past the clip duration is an error") {
+TEST_CASE("a tween key past the clip duration is a warning, a key before the start an error") {
     PD::Document doc = BaseDocument();
     doc.tracks.push_back(ModelTrack("core", "core", {DrawClip("core_draw", 0, std::nullopt)}));
 
@@ -235,7 +235,22 @@ TEST_CASE("a tween key past the clip duration is an error") {
 
     const std::vector<PD::Problem> problems = PD::Validate(doc);
     INFO(Describe(problems));
-    REQUIRE(Has(problems, PD::Severity::Error, "key at 45"));
+    REQUIRE(Has(problems, PD::Severity::Warning, "key at 45"));
+    REQUIRE_FALSE(Has(problems, PD::Severity::Error, "key at 45"));
+
+    PD::Document early = BaseDocument();
+    early.tracks.push_back(ModelTrack("core", "core", {DrawClip("core_draw", 0, std::nullopt)}));
+    PD::Clip before;
+    before.id = "core_early";
+    before.start = 10;
+    before.end = 40;
+    before.command = PD::ModelTween{};
+    before.keys.push_back(PD::Key{.at = -1, .values = {PD::KeyValue{.id = "alpha", .value = 1.0}}});
+    early.tracks.push_back(ModelTrack("core_tween", "core", {std::move(before)}));
+
+    const std::vector<PD::Problem> early_problems = PD::Validate(early);
+    INFO(Describe(early_problems));
+    REQUIRE(Has(early_problems, PD::Severity::Error, "key at -1"));
 }
 
 TEST_CASE("a tween with no draw clip under it is a warning, not an error") {

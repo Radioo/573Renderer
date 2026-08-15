@@ -22,6 +22,7 @@ struct Light {
     std::array<float, 3> direction = {0.0F, 0.0F, -1.0F};
     std::array<float, 3> diffuse = {1.0F, 1.0F, 1.0F};
     std::array<float, 3> specular = {1.0F, 1.0F, 1.0F};
+    bool enabled = true;
 };
 
 struct Projection {

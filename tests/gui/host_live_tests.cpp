@@ -330,7 +330,7 @@ TEST_CASE("a placed 2D layer reports the frame it draws, not its raw playhead",
     Gc2dHost::Unload();
 }
 
-TEST_CASE("a scrolling static cell reports and takes a scroll offset", "[gui][hosts][live]") {
+TEST_CASE("a scrolling static cell reports its scroll offset", "[gui][hosts][live]") {
     GuiTest::WarpGpu const gpu;
     if (!gpu.ok()) SKIP("D3D9On12/WARP unavailable: " << WarpD3D9::LastError());
     GuiTest::TempAssetDir const assets("gc2d_scroll");
@@ -355,7 +355,7 @@ TEST_CASE("a scrolling static cell reports and takes a scroll offset", "[gui][ho
     CHECK(listed[0].scroll_wrap == 640);
     CHECK(listed[0].scroll == 27);
 
-    Gc2dHost::SetSpriteScroll(0, 400);
+    Gc2dHost::SetSpriteFrame(0, 400);
     listed = Gc2dHost::ListSprites();
     CHECK(listed[0].scroll == 400);
 

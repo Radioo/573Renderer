@@ -41,7 +41,8 @@ documents, which are THE source of truth. Start here to find the right one.
 
 | doc | read it when |
 |-----|--------------|
-| [preset_document.md](preset_document.md) | the JSON scene preset document: schema, command catalog, units, ease formulas, canonical serialization, validation rules |
+| [preset_document.md](preset_document.md) | the JSON scene preset document: schema, command catalog, units, ease formulas, canonical serialization, validation rules, the evaluation order, and the running `PresetHost` (threading, status and asset index, time ownership, and what `Gc2dHost` / `Scene3dHost` gained for it: the 2D canvas, asset-keyed packages, per model time, the model dir union) |
+| [preset_golden.md](preset_golden.md) | the recorded reference behaviour of the old preset host: what is recorded, the fixture format, how to re-record, and the differences the new evaluator is allowed to have |
 | [preset_params.md](preset_params.md) | the parameter schema behind today's compiled presets: declarations, instances, tweaks, ranges |
 | [preset_layers.md](preset_layers.md) | which 2D layer of a package is clean background and which is chrome, and the gate that enforces it |
 | [preset_states.md](preset_states.md) | what each preset screen does in the game, state by state, with the RE pointers |

@@ -1,8 +1,12 @@
 #pragma once
 
+#include "preset/asset_index.h"
+#include "preset/doc/preset_document.h"
 #include "preset/scene_preset.h"
 
 #include <array>
+#include <functional>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -17,6 +21,10 @@ struct Status {
     float model_alpha = 1.0F;
     int blend_mode = 0;
     int frame = 0;
+    int length = 0;
+    int fps = 60;
+    bool playing = false;
+    int problems = 0;
     int beat = 0;
     int beat_since = 0;
     float pulse_scale = 1.0F;
@@ -25,7 +33,16 @@ struct Status {
     std::vector<int> option_choices;
 };
 
-bool Load(const std::string& game_dir, const Preset::Scene& scene);
+using ProgressFn = std::function<void(const std::string& stage, float fraction)>;
+
+bool Load(const std::string& game_dir, const Preset::Scene& scene, const ProgressFn& progress = {});
+
+bool LoadDocument(const std::string& game_dir,
+                  const std::shared_ptr<const Preset::Doc::Document>& document,
+                  const ProgressFn& progress = {});
+
+void ReplaceDocument(const std::shared_ptr<const Preset::Doc::Document>& document,
+                     const ProgressFn& progress = {});
 
 void Unload();
 
@@ -34,6 +51,12 @@ bool Active();
 void RenderFrame(float dt);
 
 Status GetStatus();
+
+Preset::AssetIndex GetAssetIndex();
+
+void Seek(int frame);
+
+void SetPaused(bool paused);
 
 void SetCountdown(int frames);
 

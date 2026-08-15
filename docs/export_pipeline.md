@@ -778,8 +778,11 @@ the preset's `NaturalFrames()`, then the loaded package's animation length. Zero
 on all three fails the export immediately with a message telling the user to set
 a frame limit, rather than capturing forever.
 
-`NaturalFrames()` answers "how long is one full pass of this screen", in this
-order:
+`NaturalFrames()` is now the DOCUMENT's `length` and nothing else. The evaluator
+has one clock and the document states how many frames it has, so the exporter reads
+a number instead of deriving one from a countdown, a phase table and an asset. The
+converter (`Preset::FromScene`) is what applies the old derivation ONCE, when it
+turns a compiled table into a document, in this order:
 
 1. The countdown length, when the screen has one. IIDX 10 music select is 1800
    frames, a full 30 s including the end-of-timer speed-up.
@@ -797,11 +800,27 @@ off in the middle of the boot animation's genre list and never reached the
 warp-in at 502, let alone the attract loop at 902. A phased preset's length is
 its TIMELINE, and the 3D clip length has nothing to do with it.
 
-`Restart()` is what the exporter calls before capturing, so it has to put the
-preset back to frame 0 completely: the phase index, the model spins, the RNG, the
-live particles, the beat counters and every 2D layer's playhead. Leaving the
-phase alone made the first captured frame carry the previous phase's state, and
-leaving the playheads alone made a second export start mid-animation.
+`Restart()` is what the exporter calls before capturing, and it is now `Seek(0)`:
+one code path that restores the whole `EvalState` (RNG, particle pool, beat grids,
+per model spin accumulators, kick multipliers and 3D ticks, per sprite clocks, the
+option transition) and re-pushes the resolved frame into both hosts. The two reset
+paths that used to disagree, and the phase index and playheads that a restart could
+leave behind, are gone with the phase machine.
+
+The capture driver also pauses and resumes the PRESET now, not just the two engine
+hosts: with `EvalState` owning time, `Gc2dHost::SetPaused` and
+`Scene3dHost::SetPaused` no longer stop a preset, so `BeginCapture` calls
+`PresetHost::SetPaused(false)` and `EndCapture` puts the user's pause back.
+
+### The document tick, and what the display fps no longer does
+
+The export driver still advances exactly one document frame per captured frame,
+because it calls `RenderFrame(1 / TargetFps)` and the host delivers whole document
+frames at the document's `fps`. Live playback now does the same, which is a
+behaviour change on high refresh rate setups: a preset used to run at ONE DOCUMENT
+FRAME PER RENDER FRAME, so a 120 fps display played every screen at double speed
+while its exports stayed correct. It now accumulates wall time and renders each
+document frame twice instead. Export output is unaffected.
 
 ## Export defaults have exactly ONE definition
 

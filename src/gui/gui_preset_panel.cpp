@@ -7,9 +7,7 @@
 #include "preset/scene_preset.h"
 #include "state/app_state.h"
 
-#include <algorithm>
 #include <cfloat>
-#include <cstddef>
 #include <string>
 #include <vector>
 
@@ -42,18 +40,10 @@ void DrawSpriteFrames() {
 
     ImGui::Separator();
     ImGui::TextDisabled("2D layers");
-    for (std::size_t i = 0; i < sprites.size(); i++) {
-        const Gc2dHost::SpriteStatus& sprite = sprites[i];
-        const std::string tag = std::to_string(i);
+    for (const Gc2dHost::SpriteStatus& sprite : sprites) {
         if (sprite.scroll_wrap > 0) {
-            int scroll = std::clamp(sprite.scroll, 0, sprite.scroll_wrap - 1);
-            const std::string format =
-                sprite.name + ": scrolled %d / " + std::to_string(sprite.scroll_wrap) + " px";
-            ImGui::SetNextItemWidth(-FLT_MIN);
-            if (ImGui::SliderInt(("##presetscroll" + tag).c_str(), &scroll, 0,
-                                 sprite.scroll_wrap - 1, format.c_str())) {
-                Gc2dHost::SetSpriteScroll((int)i, scroll);
-            }
+            ImGui::TextDisabled("%s: scrolled %d / %d px", sprite.name.c_str(), sprite.scroll,
+                                sprite.scroll_wrap);
         }
         if (sprite.length <= 0) {
             if (sprite.scroll_wrap <= 0)
@@ -64,34 +54,34 @@ void DrawSpriteFrames() {
             ImGui::TextDisabled("%s (past its end, not drawn)", sprite.name.c_str());
             continue;
         }
-        const int last = sprite.length - 1;
-        int frame = std::clamp(sprite.frame, 0, last);
-        std::string format(sprite.name);
-        format += ": frame %d / " + std::to_string(last);
-        if (sprite.playhead >= sprite.length)
-            format += " (playhead " + std::to_string(sprite.playhead) + ")";
-        ImGui::SetNextItemWidth(-FLT_MIN);
-        if (ImGui::SliderInt(("##presetsprite" + tag).c_str(), &frame, 0, last, format.c_str())) {
-            Gc2dHost::SetSpriteFrame((int)i, frame);
-        }
+        ImGui::TextDisabled("%s: frame %d / %d (playhead %d)", sprite.name.c_str(), sprite.frame,
+                            sprite.length - 1, sprite.playhead);
     }
     if (ImGui::IsItemHovered()) {
         ImGui::SetTooltip("Each 2D layer runs on its own playhead, the way the game gives\n"
-                          "every registered animation its own frame counter. Drag one to\n"
-                          "scrub that layer without touching the others; playback resumes\n"
-                          "from where you leave it.");
+                          "every registered animation its own frame counter. The preset\n"
+                          "timeline owns those clocks now, so they are shown, not dragged;\n"
+                          "move the screen's playhead instead.");
     }
 }
 
 void DrawTimeline(const PresetHost::Status& status) {
-    ImGui::Text("frame %d, beat %d (+%d), pulse %.3f, jitter %+.4f, %d particle(s)", status.frame,
-                status.beat, status.beat_since, status.pulse_scale, status.jitter,
-                status.live_particles);
-    if (!ImGui::IsItemHovered()) return;
-    ImGui::SetTooltip(
-        "The screen's own frame counter, the beat index it derives from that counter, the "
-        "frames since that index last changed, the scale the beat pulse is applying right now, "
-        "the position offset it drew this frame, and how many particles are still alive.");
+    ImGui::Text("frame %d / %d at %d fps%s", status.frame, status.length, status.fps,
+                status.playing ? "" : " (paused)");
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("The document's frame axis. Playback delivers one document frame per "
+                          "1/fps second of wall time no matter what the display runs at.");
+    }
+    ImGui::Text("beat %d (+%d), pulse %.3f, jitter %+.4f, %d particle(s)", status.beat,
+                status.beat_since, status.pulse_scale, status.jitter, status.live_particles);
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip(
+            "The beat index the screen derives from its frame counter, the frames since that "
+            "index last changed, the scale the beat pulse is applying right now, the position "
+            "offset it drew this frame, and how many particles are still alive.");
+    }
+    if (status.problems <= 0) return;
+    ImGui::TextDisabled("%d validation error(s) - those clips are skipped", status.problems);
 }
 
 void DrawCountdown(const PresetHost::Status& status) {
@@ -139,7 +129,12 @@ void Render() {
         const std::string id(scene->id);
         const bool active = (status.id == id);
         if (ImGui::RadioButton(name.c_str(), active) && !active) {
-            PresetHost::Load(g_scanned_dir, *scene);
+            App::State& state = App::Global();
+            state.BeginLoad(name);
+            PresetHost::Load(g_scanned_dir, *scene, [&state](const std::string& stage, float done) {
+                state.UpdateLoadStage(stage, done);
+            });
+            state.EndLoad();
         }
     }
 

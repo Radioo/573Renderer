@@ -14,6 +14,13 @@ evaluator (M2), the built-in documents and the registry (M3), and the timeline
 editor (M4 onward) are not here yet, so no code outside `tests/game` consumes these
 modules.
 
+Part A of M2 is also in the tree, and it too changes nothing about the app: the
+legacy behaviour of the old host is now recorded as a committed fixture, so the
+evaluator can be built against a frozen reference instead of against a host that
+has to survive the rewrite. See `docs/preset_golden.md` for what was recorded, the
+link-time stub seam it used, the asset lengths it needed and the differences the
+new evaluator is allowed to have.
+
 ## Where the code is
 
 | What | File | Entry points |
@@ -24,7 +31,14 @@ modules.
 | One `FieldDesc` per command parameter | `src/preset/doc/preset_fields.h/.cpp` | `FieldsFor`, `KeyFieldsFor`, `FindField`, `DefaultCommand` |
 | JSON load and save | `src/preset/doc/preset_json.h/.cpp` | `Load`, `Save`, `ParseError`, `Loaded` |
 | Validation | `src/preset/doc/preset_validate.h/.cpp` | `Validate`, `Problem`, `Severity` |
-| Tests | `tests/game/preset_json_tests.cpp`, `tests/game/preset_validate_tests.cpp` | fixtures in `tests/game/fixtures/` |
+| Key sampling and the eases | `src/preset/eval/eval_tween.h/.cpp` | `SampleKeys`, `EaseFactor`, `BlendValues`, `TweenValue` |
+| Per kind clip application | `src/preset/eval/eval_models`, `eval_sprites`, `eval_camera_lights`, `eval_scene` | `ApplyModelDraw`, `ApplySpriteAnimate`, `ApplyCameraSet`, `ReadTarget`, `WriteTarget`, `BeatIndex`, `PulseFactor` |
+| The stateful part | `src/preset/eval/eval_particles.h/.cpp`, `eval_state.h` | `SpawnParticles`, `AgeParticles`, `DrawJitter`, `EvalState` |
+| The frame the evaluator resolves and what it pushes | `src/preset/eval/frame_state.h`, `eval_push.h` | `FrameState`, `ModelSlot`, `SpriteSlot`, `Push`, `PushCall` |
+| The evaluator | `src/preset/eval/preset_evaluator.h/.cpp` | `Evaluator::Load`, `Reset`, `Seek`, `SetOption`, `RenderFrame`, `Resolve` |
+| The one-shot converter from the old tables | `src/preset/preset_convert.h/.cpp` | `FromScene` |
+| Asset lengths the evaluator and the converter need | `src/preset/preset_asset_lengths.h` | `AssetLengths::MaxTime`, `AnimationLength` |
+| Tests | `tests/game/preset_json_tests.cpp`, `preset_validate_tests.cpp`, `eval_tween_tests.cpp`, `preset_eval_tests.cpp`, `preset_convert_tests.cpp`, `preset_golden_tests.cpp` | fixtures in `tests/game/fixtures/` |
 
 Everything lives in `namespace Preset::Doc`. The nested namespace is deliberate:
 the old table structs (`Preset::ParamOverride`, `Preset::ModelMotion`,
@@ -180,6 +194,20 @@ same target on the same track, restart otherwise.
 The layer it scrolls is the track's `target`; the clip must overlap a sprite clip
 on the same track.
 
+The scroll displacement is `fmod(scroll_offset + clock * scroll_x, scroll_wrap)`
+on the sprite instance's own clock (`Gc2d::ScrollOffset`, `src/gc2d/gc_sprite.cpp`),
+and the sprite is drawn at `x` minus that displacement. `scroll_offset` is
+therefore the scroll POSITION of the frame where the instance's clock is 0: it is
+a px position, not a clock, and it is added to the wrapped displacement rather
+than to the clock. Because the displacement is a pure function of the clock, an
+instance whose clock carries over from a previous clip (`SetSprites` carries the
+clock by `target`, `src/gc2d/gc_host.cpp`) continues along the same line and the
+offset is not re-applied: a scroll clip that abuts another on the same target
+scrolls on, exactly as the sprite frame does. With `scroll_wrap` at or below 0
+there is no scroll and the displacement is 0, offset included. The converted
+defaults all leave `scroll_offset` at 0, so the golden recording is unaffected;
+the field replaces the Screens panel's live "scroll offset" slider.
+
 ### emitter (fx track, modifier)
 
 | Param | Kind | Default | T |
@@ -265,6 +293,15 @@ all, so an `aspect` key is rejected as a non-tweenable value.
 `index` (int), `direction` (vec3, T), `diffuse` (colour, T), `specular` (colour,
 T), `enabled` (bool, default true). Absent values fall back to the document
 `lights`.
+
+`enabled` reaches the device: it rides the `SetLights` push (`Preset::Eval::LightPush`)
+into `Scene3d::Light`, and `Renderer::ApplyLights` (`src/scene3d/scene3d_render.cpp`)
+calls `LightEnable(i, FALSE)` for a disabled light instead of `SetLight` plus
+`LightEnable(i, TRUE)`, so a disabled light does not light the scene. The index
+still counts: `active_lights_` stays the size of the pushed list, so the next
+`SetLights` disables every slot this one used. No converted default disables a
+light, so the pushed vocabulary for enabled lights is unchanged and the golden
+fixtures still match.
 
 ### param.override (scene track, modifier)
 
@@ -448,8 +485,7 @@ Errors:
   `rng.seed` and `option.select` only on scene.
 - `start` before frame 0; `end` at or before `start` for a span clip; an `end` on
   an event clip that differs from its `start`.
-- A key `at` outside `[0, duration]`, where duration is `end - start`, or
-  `length - start` for an open-ended clip (not checked when `length` is `"auto"`).
+- A key `at` before the clip start (a negative `at`).
 - `rate_deg` on a key that is not `sine_deg`, or `cp` on a key that is not
   `bezier`.
 - A key value that is not a parameter of the clip's command, or one that is not
@@ -482,6 +518,17 @@ Warnings:
 - A modifier track for a target that sits ABOVE that target's draw track in
   `tracks` order, and is therefore evaluated before it.
 - A `blend` key on a `sprite.animate` clip.
+- A key `at` past the clip's duration (`end - start`, or `length - start` for an
+  open-ended clip): the clip ends before the key is reached, so the tween is cut
+  off. This is a warning and not an error because it is a real authoring state
+  and because the converted IIDX RED ending needs it: its 60-frame alpha ramps at
+  frame 2858 sit in a phase that is 46 frames long, and the old host simply stops
+  applying the ramp when the phase ends (`ApplyRamps` runs for the current phase
+  only). Clamping the key would change the interpolation and with it the value on
+  every frame of the ramp: `preset_eval_tests.cpp` pins the core alpha of that
+  phase at frames 2858, 2859, 2880 and 2903 to `1 - elapsed / 60`, and at 2904 to
+  the next phase's own value. The golden fixture cannot cover this one, because
+  the old host never pushed a per frame alpha at all.
 
 Blocking versus loadable: only a JSON syntax error, a wrong `schema` string, a
 version this build cannot read, a missing required key, a wrong JSON type and an
@@ -492,6 +539,227 @@ offending clip.
 `ParseError` carries `line` and `column` for syntax errors (computed from the byte
 offset nlohmann reports) and `path` plus a message for everything else, where
 `path` is the clip id when the failure was inside a clip.
+
+## Evaluation order and determinism
+
+`Preset::Eval::Evaluator` (`src/preset/eval/preset_evaluator.h`) is the one thing
+that turns a document into per-frame work. It is pure with respect to the
+document, the option choices and one explicit `EvalState`; nothing else carries
+state between frames.
+
+`Load(document, lengths)` binds a document and the asset length table (per
+scene3d asset its `max_time`, per package2d animation its frame count) and
+resets. `RenderFrame(dt)` returns the frame's ordered `Push` list: the draws for
+the current frame, then the state change that prepares the next one, in the order
+the section below lists. `Seek(n)` restores the nearest checkpoint and replays
+`Advance` up to `n`.
+
+`Seek` clamps to `[0, length - 1]`, the frames that exist: `Seek(-5)` lands on 0
+and a seek past the end lands on the last frame. `length` is the document's when it
+has one; a document whose `length` is `"auto"` (an absent `Document::length`) has
+it DERIVED, by `Evaluator::DerivedLength`, as the largest finite clip `end`, and
+when no clip has one, as the longest content tail: per clip, `start` plus the
+`sprite.animate` animation's frame count, or plus `max_time / anim_speed` for a
+`model.draw`, both read from the asset length table. That is the rule the
+converter writes out as a number (`Converter::NaturalLength`), so an auto document
+and its converted twin clamp to the same frame. `PresetHost::Seek` clamps the same
+way before it posts the command, from the published `Status::length`, and leaves
+the upper clamp to the evaluator when the document has no length of its own.
+
+### The order inside one RenderFrame
+
+1. Draw the current frame: `DrawSprites(split, INT_MAX)`, the particles at or
+   above the split, `RenderFrame(dt)`, `DrawSprites(INT_MIN, split - 1)`, the
+   particles below the split, `AdvanceSprites(dt)`.
+2. Advance the model 3D ticks by the `anim_speed` bound for the frame being left
+   and the sprite clocks by their `speed`, then resolve the next frame from the
+   document: tracks in order, muted tracks and clips skipped, non-solo tracks
+   skipped while any track is solo, clips whose `when` gate does not match the
+   selected choice skipped, the primary of a family first and its modifiers after
+   it in clip order.
+3. Reset the per model spin accumulator of every model whose winning `model.draw`
+   primary now has a different `start`, and arm the kick multiplier of every model
+   whose `model.motion` clip starts on this frame to `max(1, spin_kick)`.
+4. On a frame where the set of active PRIMARY clips changes (a clip of a primary
+   family starts or ends), re-push the whole bound state: style, view, projection,
+   lights, then per model alpha, speed, blend, scale and visibility, then the
+   sprite placements. This block is resolved WITHOUT the frame's tweens and clip
+   keys, because it stands for the material the document's parameters define, not
+   the value a tween has reached on this frame.
+5. Age the particle pool, push one `SetSpriteScale` per visible sprite in draw
+   order, spawn the emitters active on this frame from the beat state of the
+   PREVIOUS frame, and draw the single `rhythm.jitter` random value.
+6. Motion: drop the option transition counter by its `step`, apply the choice
+   values (blended from the captured start values while a transition is in
+   flight), push the choice camera when the selected choice names `camera.eye`,
+   then per model decay the kick multiplier toward 1, integrate the resolved
+   `spin_per_frame` times that multiplier into the accumulator, and push the
+   transform. Position priority is jitter, then orbit, then the resolved
+   (choice-blended) position.
+7. Pulse: while a `model.motion` pulse is active and a `rhythm.beat` clip gives a
+   positive rate, push every model's scale multiplied by the pulse factor read
+   from the beat state of the PREVIOUS frame.
+8. Push the material a tween wrote this frame: `anim_speed`, `blend_mode`,
+   `alpha`, model `scale`, `fov_y` and the camera vectors, in the order the tracks
+   and clips wrote them.
+9. Advance the two beat grids for the frame just resolved, then push the values
+   that do not depend on the old host's code paths at all: alpha per visible
+   model, view, projection, `SetModelTime` per model and `SetSpriteFrame` per
+   sprite instance.
+10. Apply the `rng.seed` events of this frame (reseed and clear the pool).
+
+### EvalState and checkpoints
+
+`EvalState` (`src/preset/eval/eval_state.h`) is exactly: the frame, the `Ran3`
+stream and its seed, the particle pool, the two beat grid indices with their age,
+the last jitter draw, the pulse factor, per model the spin accumulator, the
+legacy-parity accumulator, the kick multiplier, the 3D tick and the winning draw
+and motion clip starts, per sprite instance the clock and its winning clip start,
+the option transition counter, the captured transition start values and the
+selected choices. Nothing else survives a frame.
+
+A checkpoint is a copy of `EvalState` every 256 frames. `Load` discards every
+checkpoint, so replacing a document always re-simulates from frame 0: an edit
+anywhere before the playhead changes the RNG stream and the particle pool that a
+later checkpoint holds. `preset_eval_tests.cpp` pins both halves: `Seek(700)`
+equals 700 `RenderFrame` calls for every member of `EvalState`, and a document
+whose emitter moved to frame 10 gives the same state through `Load` plus
+`Seek(700)` as a fresh run.
+
+The 3D tick follows the host's own rule (`scene3d_host.cpp`, `RenderFrame`): it
+adds `anim_speed` per frame and RESETS TO ZERO on the first frame it exceeds
+`max_time`, so it is not a modulo. The IIDX RED attract core reaches exactly
+240 ticks at frame 320, is zero at 321, and is `0.75 * (502 - 321)` at frame 502.
+
+### The legacy-parity accumulator
+
+`ModelRuntime` carries a second spin accumulator next to its own. Both integrate
+the same per-frame rate; the difference is that the evaluator's accumulator is
+zeroed on the first frame of a new draw clip and adds nothing on that frame, while
+the legacy one adds a step there as well. It exists so the golden comparison can
+be bit exact: float addition is not associative, so adding the missing step to the
+finished sum would not reproduce the old host's value for a ramped rate.
+`docs/preset_golden.md` describes what the comparison does with it.
+
+## The running host
+
+`PresetHost` (`src/preset/preset_host.h`) is the only thing that turns the
+evaluator's `Push` list into engine calls. It is thin on purpose: it owns an
+`Evaluator`, the assets a document names, a command queue, and one published
+snapshot. It has no countdown, no phases, no `Materialize`.
+
+### Loading
+
+`Load(game_dir, scene, progress)` is the temporary bridge for the compiled
+`Preset::Scene` tables: it converts with `Preset::FromScene` and evaluates the
+document. `LoadDocument(game_dir, document, progress)` is the real entry point and
+is what the registry will call in M3.
+
+Loading runs in two passes, because both the asset length table and the document's
+own length come from the assets:
+
+1. Bind the document with an EMPTY `AssetLengths` and resolve frame 0. Frame 0
+   does not depend on any length, and the resolved `FrameState` is what the
+   `Scene3dHost::Setup` is built from: style, camera, lights, and every model a
+   `model.draw` clip names with its frame-0 material.
+2. Load the assets, build the `AssetIndex` from what the hosts report, derive
+   `AssetLengths` from that index, and bind the document again with it. The
+   converter is re-run on the `Scene` path so `length` uses the real numbers.
+
+`progress` is a `ProgressFn(stage, fraction)`. The Screens panel wraps the call in
+`BeginLoad` / `UpdateLoadStage` / `EndLoad`, so the loading overlay names the asset
+being loaded and climbs a determinate bar; passing no callback is silent, which is
+what the CLI does.
+
+### The published snapshot
+
+Everything the GUI reads is a copy taken under one mutex at the end of every
+rendered frame:
+
+| Published | Carries |
+|-----------|---------|
+| `Status` | id, name, frame, length, fps, playing, validation error count, the countdown-shaped `countdown` / `countdown_start` pair (`length - frame` and `length`), the lead model's speed / alpha / blend, beat index and age, pulse factor, last jitter draw, live particle count, the selected choice per option |
+| `AssetIndex` | per asset id: kind, dir, loaded, the scene3d model names, the package2d cell names, and the animation names with their frame counts |
+| `FrameState` | the frame the evaluator last resolved, which the parameter list reads |
+
+`AssetIndex` (`src/preset/asset_index.h`) is the ONLY source of asset names on the
+GUI side. Nothing in the editor asks a host for a name, which is what lets the
+editor stay off the render thread. The M2 host test asserts the index is published
+after `ReplaceDocument` loads an asset.
+
+### Commands and threading
+
+GUI-thread calls do not touch the evaluator. `Seek`, `SetPaused`, `SetOption` and
+`ReplaceDocument` push a command onto a mutex-guarded queue that `RenderFrame`
+drains at the frame boundary, before it draws. `Restart()` is `Seek(0)` and
+`SetCountdown(n)` is `Seek(length - n)`, so the old "time remain" slider now moves
+the playhead instead of desynchronising a second clock.
+
+`ReplaceDocument(document, progress)` swaps the immutable `shared_ptr<const Document>` and
+RE-SIMULATES: it reloads the assets when the asset set or the render size changed,
+binds the new document (which discards every checkpoint), re-applies the selected
+choices, and replays to the frame the playhead was on. There is no diffing, because
+an edit anywhere before the playhead changes the RNG stream and the particle pool
+that a later checkpoint holds.
+
+The optional `progress` is the same `ProgressFn` `Load` takes, carried on the
+queued command and owned by it (the queue outlives the call, so the callback must
+own what it captures), and it is invoked from the render thread by the same
+`LoadAssets` the load path uses: one report per 3D scene set and per 2D package,
+naming the asset id. A swap that keeps the asset set and the render size reloads
+nothing and reports nothing.
+
+`Load` and `Unload` still run synchronously on the calling thread, as they did
+before this change; moving them behind the queue belongs with the editor (M4).
+
+### Time ownership
+
+`EvalState` is the only clock. The host calls `Scene3dHost::RenderFrame(0)`, never
+calls `Gc2dHost::AdvanceSprites`, and pushes `SetModelTime` per model and
+`SetSpriteFrame` per sprite instance on EVERY frame, so a host clock cannot drift
+from the evaluator's between seeks.
+
+Live playback accumulates wall time and delivers WHOLE document frames at the
+document's `fps`: a 120 fps display renders each document frame twice instead of
+running the screen twice as fast. A render frame that advances no document frame
+re-applies the last state push list, so the engine state is identical on both. The
+frame after `length - 1` is frame 0 again, as a `Seek(0)` that re-simulates. The M2
+test renders 120 host frames for 60 document frames and asserts the pushed host
+tick equals the `EvalState` tick on every one of them.
+
+### The engine gaps this closed
+
+| Gap | Before | Now |
+|-----|--------|-----|
+| 2D canvas | `gc_render.cpp` scaled every node by `width / 640` and `height / 480`, and `gc_host.cpp` scaled a sprite about `(x + 320, y + 240)` | `Gc2dHost::SetCanvas(width, height)` from the document's `render` block. `Gc2d::ScaleFactors` and `Gc2d::PivotFor` (`src/gc2d/gc_sprite.h`) are the single definition, shared by the renderer and by the tests. All 18 converted defaults keep 640x480 |
+| One 2D package | one package plus one particle package | packages are keyed by ASSET ID (`Gc2dHost::LoadAsset`), sprite placements and particle draws name their asset, and `DrawSprites` draws each consecutive same-asset run with that package's own renderer, so draw order is preserved across packages |
+| Sprite identity | placements carried their clock over by ANIMATION name, so two instances of one animation fought over it | a placement carries `target`, the document's unique instance name, and the clock carries over by that |
+| Animation alpha | `sprite.alpha` reached static cells only, so a `sprite.animate` alpha did nothing | `Gc2d::AppendNodes` fades every node it appended, cell or animation. Blend stays per node from the package |
+| One model dir | only `models.front().scene_dir` loaded | `Scene3dHost::LoadUnion(dirs, setup)` merges the union of the dirs a document's assets name. `Scene3d::Merge` (`src/scene3d/scene3d_merge.h`) offsets the second scene's tile indices into the merged tile list, unions the bounds, keeps the larger `max_time` and the first authored camera |
+| One 3D clock | `Scene3dHost::SetTime` wrote one time into every model | `Scene3dHost::SetModelTime(name, ticks)` per model |
+| Conditional pushes | position and rotation only for models that passed `Moves()`; alpha, view and projection only on a rebind | every model's transform, alpha, speed, blend, scale and visibility, and the camera view and projection, are pushed every frame. This is tolerated difference (1) of `docs/preset_golden.md`, and it is what finally makes alpha and camera ramps reach the GPU |
+
+### Parameters while the editor does not exist yet
+
+The Parameters pane still calls `ListParams` / `SetParam` / `ResetParam`, but the
+values are no longer `preset_effective`'s materialised copy. `ListParams`
+enumerates the document-addressable ids from the published `FrameState` (the
+surviving id grammar: `model[X].*`, `sprite[X].*`, `camera.*`, `light[i].*`,
+`shading`, `sprite_split_priority`), reads each value with
+`Preset::Eval::ReadTarget`, and reads the same id from the BASE document resolved
+at the same frame for the reset value. `SetParam` records an override and
+republishes the document with those overrides appended as `param.override` clips on
+one extra scene track, which is a real document edit and therefore a real
+`ReplaceDocument`. The tweak file is parsed into the same overrides.
+
+An override on an INTEGER target (a blend, a priority, `shading`) is stored as a
+JSON number, so `OverrideToTween` fills the integer channel of a double override
+with `lround`, exactly as the old `ApplyRamps` did.
+
+This is a bridge, not the destination: M4 to M7 replace the pane with the clip
+modal and the frame inspector, and M8 deletes `preset_effective` and the schema.
+The Screens panel's sprite frame and scroll sliders are already gone, because the
+evaluator pushes those clocks every frame and a slider could not hold.
 
 ## Fixtures and tests
 

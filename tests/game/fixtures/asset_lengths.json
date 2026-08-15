@@ -1,0 +1,16 @@
+{
+  "scene3d": {
+    "data/graph/texture/music": 240,
+    "data/graph/texture/cube_x": 60,
+    "data/graph/texture/ex01": 480,
+    "data/graph/texture/tranbox": 120,
+    "data/graph/texture/samurai": 60,
+    "data/graph/model/red": 240
+  },
+  "package2d": {
+    "data/graph/sys/title": {
+      "TITLE": 1736,
+      "TITLE_TAIKI": 720
+    }
+  }
+}

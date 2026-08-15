@@ -161,6 +161,10 @@ void Renderer::ApplyLights(const std::vector<Light>& lights) {
         dev_->LightEnable(i, FALSE);
     active_lights_ = (DWORD)lights.size();
     for (DWORD i = 0; i < active_lights_; i++) {
+        if (!lights[i].enabled) {
+            dev_->LightEnable(i, FALSE);
+            continue;
+        }
         D3DLIGHT9 light{};
         light.Type = D3DLIGHT_DIRECTIONAL;
         light.Diffuse = {.r = lights[i].diffuse[0],

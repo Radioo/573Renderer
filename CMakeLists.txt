@@ -150,6 +150,7 @@ add_library(r573_app STATIC
     src/gc2d/gc_host.cpp
     src/gc2d/gc_sheet.cpp
     src/gc2d/gc_render.cpp
+    src/gc2d/gc_sprite.cpp
     src/game_revision.cpp
     src/backend/afp_profiles.cpp
     src/backend/afp_family_backend.cpp
@@ -229,15 +230,32 @@ add_library(r573_app STATIC
     src/preset/scene_presets_iidx10.cpp
     src/preset/scene_presets_iidx11.cpp
     src/preset/preset_host.cpp
+    src/preset/preset_host_push.cpp
+    src/preset/preset_host_params.cpp
+    src/preset/preset_convert.cpp
     src/preset/preset_params.cpp
     src/preset/preset_schema.cpp
     src/preset/preset_effective.cpp
     src/preset/preset_rng.cpp
     src/preset/preset_test.cpp
+    src/preset/eval/eval_tween.cpp
+    src/preset/eval/eval_models.cpp
+    src/preset/eval/eval_sprites.cpp
+    src/preset/eval/eval_camera_lights.cpp
+    src/preset/eval/eval_scene.cpp
+    src/preset/eval/eval_particles.cpp
+    src/preset/eval/eval_resolve.cpp
+    src/preset/eval/eval_emit.cpp
+    src/preset/eval/preset_evaluator.cpp
+    src/preset/doc/preset_enum_names.cpp
+    src/preset/doc/preset_fields.cpp
+    src/preset/doc/preset_json.cpp
+    src/preset/doc/preset_validate.cpp
     src/scene3d/anim.cpp
     src/scene3d/camera.cpp
     src/scene3d/scene3d_host.cpp
     src/scene3d/scene3d_input.cpp
+    src/scene3d/scene3d_merge.cpp
     src/scene3d/scene3d.cpp
     src/scene3d/scene3d_render.cpp
     src/scene3d/scene3d_test.cpp
@@ -293,6 +311,8 @@ add_executable(formats_tests
     tests/formats/blowfish_tests.cpp
     tests/formats/xfile_binary_tests.cpp
     src/gc2d/gc_package.cpp
+    src/gc2d/gc_sprite.cpp
+    tests/formats/gc_sprite_tests.cpp
     tests/formats/frame_process_tests.cpp
     tests/formats/dxt_decode_tests.cpp
     tests/formats/bgra_crop_tests.cpp
@@ -308,6 +328,20 @@ add_executable(game_tests
     tests/game/scene_preset_tests.cpp
     tests/game/preset_json_tests.cpp
     tests/game/preset_validate_tests.cpp
+    tests/game/preset_golden_tests.cpp
+    tests/game/preset_golden_format.cpp
+    tests/game/preset_push_text.cpp
+    tests/game/preset_legacy_view.cpp
+    tests/game/preset_eval_tests.cpp
+    tests/game/preset_convert_tests.cpp
+    tests/game/eval_tween_tests.cpp
+    tests/game/preset_host_tests.cpp
+    tests/game/preset_host_stubs.cpp
+    src/preset/preset_host.cpp
+    src/preset/preset_host_push.cpp
+    src/preset/preset_host_params.cpp
+    src/gc2d/gc_sprite.cpp
+    src/scene3d/scene3d_merge.cpp
     src/game_profile.cpp
     src/game_revision.cpp
     src/game_fingerprint.cpp
@@ -319,6 +353,16 @@ add_executable(game_tests
     src/preset/preset_schema.cpp
     src/preset/preset_effective.cpp
     src/preset/preset_rng.cpp
+    src/preset/preset_convert.cpp
+    src/preset/eval/eval_tween.cpp
+    src/preset/eval/eval_models.cpp
+    src/preset/eval/eval_sprites.cpp
+    src/preset/eval/eval_camera_lights.cpp
+    src/preset/eval/eval_scene.cpp
+    src/preset/eval/eval_particles.cpp
+    src/preset/eval/eval_resolve.cpp
+    src/preset/eval/eval_emit.cpp
+    src/preset/eval/preset_evaluator.cpp
     src/preset/doc/preset_enum_names.cpp
     src/preset/doc/preset_fields.cpp
     src/preset/doc/preset_json.cpp
@@ -328,7 +372,7 @@ add_executable(game_tests
 target_include_directories(game_tests PRIVATE src)
 target_compile_definitions(game_tests
     PRIVATE R573_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/game/fixtures")
-target_link_libraries(game_tests PRIVATE Catch2::Catch2WithMain r573_support
+target_link_libraries(game_tests PRIVATE Catch2::Catch2WithMain r573_support r573_formats
                                          nlohmann_json::nlohmann_json r573::warnings)
 catch_discover_tests(game_tests DISCOVERY_MODE POST_BUILD PROPERTIES LABELS ci)
 

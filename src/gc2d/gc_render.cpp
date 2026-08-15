@@ -3,11 +3,13 @@
 #include "formats/gcanim.h"
 #include "formats/sysidx.h"
 #include "gc2d/gc_package.h"
+#include "gc2d/gc_sprite.h"
 #include "support/log.h"
 
 #include <d3d9.h>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -19,8 +21,6 @@ namespace Gc2d {
 namespace {
 
 constexpr DWORD kFvf = D3DFVF_XYZRHW | D3DFVF_DIFFUSE | D3DFVF_TEX1;
-constexpr int kCanvasWidth = 640;
-constexpr int kCanvasHeight = 480;
 constexpr float kHalfTexel = 0.5F;
 
 struct Vtx {
@@ -219,12 +219,13 @@ void Renderer::ApplyState() {
 }
 
 void Renderer::Draw(const Package& pkg, const std::vector<GcAnim::DrawNode>& nodes, int width,
-                    int height) {
+                    int height, const Canvas& canvas) {
     if (dev_ == nullptr || textures_.empty() || nodes.empty()) return;
     ApplyState();
 
-    const float sx = (float)width / (float)kCanvasWidth;
-    const float sy = (float)height / (float)kCanvasHeight;
+    const std::array<float, 2> factors = ScaleFactors(canvas, width, height);
+    const float sx = factors[0];
+    const float sy = factors[1];
 
     std::vector<CellSegment> segments;
     for (const auto& n : nodes) {

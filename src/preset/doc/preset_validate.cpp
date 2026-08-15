@@ -241,9 +241,12 @@ void CheckKeys(const Document& doc, const Clip& clip, Report& out) {
     const std::optional<int> duration = Duration(clip, doc);
     const std::span<const FieldDesc> fields = KeyFieldsFor(type);
     for (const Key& key : clip.keys) {
-        if (duration.has_value() && (key.at < 0 || key.at > *duration)) {
-            out.Error(clip.id, "key at " + std::to_string(key.at) +
-                                   " is outside the clip range 0 to " + std::to_string(*duration));
+        if (key.at < 0) {
+            out.Error(clip.id, "key at " + std::to_string(key.at) + " is before the clip start");
+        } else if (duration.has_value() && key.at > *duration) {
+            out.Warn(clip.id, "key at " + std::to_string(key.at) +
+                                  " is never reached: the clip is " + std::to_string(*duration) +
+                                  " frames long");
         }
         if (key.rate_deg.has_value() && key.ease != Ease::SineDeg) {
             out.Error(clip.id, "rate_deg only belongs on a sine_deg key");

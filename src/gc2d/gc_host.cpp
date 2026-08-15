@@ -5,13 +5,15 @@
 #include "formats/sysidx.h"
 #include "gc2d/gc_package.h"
 #include "gc2d/gc_render.h"
+#include "gc2d/gc_sprite.h"
 #include "render_backend.h"
 #include "state/app_state.h"
 #include "support/log.h"
 
 #include <algorithm>
-#include <cmath>
 #include <cstddef>
+#include <map>
+#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
@@ -22,66 +24,121 @@ namespace {
 
 constexpr float kFramesPerSecond = 60.0F;
 
-Gc2d::Package g_pkg;
-Gc2d::Renderer g_renderer;
+struct Loaded {
+    std::string dir;
+    Gc2d::Package pkg;
+    Gc2d::Renderer renderer;
+};
+
+std::map<std::string, std::unique_ptr<Loaded>> g_assets;
+Loaded* g_active = nullptr;
+Gc2d::Canvas g_canvas;
 std::vector<GcAnim::DrawNode> g_nodes;
+std::vector<GcAnim::DrawNode> g_batch;
 std::string g_anim;
 size_t g_start = 0;
-bool g_active = false;
 bool g_paused = false;
 float g_time = 0.0F;
 float g_speed = 1.0F;
+std::vector<SpritePlacement> g_sprites;
+
+Loaded* Find(const std::string& asset) {
+    const auto it = g_assets.find(asset);
+    return (it == g_assets.end()) ? nullptr : it->second.get();
+}
 
 int CurrentLength() {
-    if (!g_active || g_pkg.index.records.empty()) return 0;
-    return SysIdx::AnimationLength(g_pkg.index, g_start);
+    if (g_active == nullptr || g_active->pkg.index.records.empty()) return 0;
+    return SysIdx::AnimationLength(g_active->pkg.index, g_start);
 }
 
-std::vector<SpritePlacement> g_sprites;
-Gc2d::Package g_particles;
-Gc2d::Renderer g_particle_renderer;
-std::vector<GcAnim::DrawNode> g_scratch;
-
-float ScrollOffset(const SpritePlacement& sprite) {
-    if (sprite.scroll_wrap <= 0.0F) return 0.0F;
-    return std::fmod(sprite.time * sprite.scroll_x, sprite.scroll_wrap);
+Gc2d::SpriteDraw DrawOf(const SpritePlacement& sprite) {
+    return Gc2d::SpriteDraw{.name = sprite.name,
+                            .animated = sprite.animated,
+                            .x = sprite.x,
+                            .y = sprite.y,
+                            .alpha = sprite.alpha,
+                            .scale = sprite.scale,
+                            .blend = sprite.blend,
+                            .timing = sprite.timing,
+                            .skip_parts = sprite.skip_parts,
+                            .time = sprite.time,
+                            .scroll_x = sprite.scroll_x,
+                            .scroll_wrap = sprite.scroll_wrap,
+                            .scroll_offset = sprite.scroll_offset};
 }
 
-float PlacedX(const SpritePlacement& sprite) {
-    return sprite.x - ScrollOffset(sprite);
+const std::string& CarryKey(const SpritePlacement& sprite) {
+    return sprite.target.empty() ? sprite.name : sprite.target;
 }
 
-int SpriteLength(const SpritePlacement& sprite) {
-    const auto it = g_pkg.index.animation_names.find(sprite.name);
-    if (it == g_pkg.index.animation_names.end()) return 0;
-    return SysIdx::AnimationLength(g_pkg.index, it->second);
+void TargetSize(int& w, int& h) {
+    g_d3d.GetOffscreenSize(w, h);
+    if (w > 0 && h > 0) return;
+    w = g_d3d.width;
+    h = g_d3d.height;
 }
 
-void AppendCell(const SpritePlacement& sprite) {
-    const auto it = g_pkg.index.cell_names.find(sprite.name);
-    if (it == g_pkg.index.cell_names.end()) return;
-    if ((size_t)it->second >= g_pkg.index.cells.size()) return;
-    const SysIdx::Cell& cell = g_pkg.index.cells[it->second];
-    GcAnim::DrawNode node;
-    node.cell = it->second;
-    node.x = PlacedX(sprite);
-    node.y = sprite.y;
-    node.w = (float)cell.w;
-    node.h = (float)cell.h;
-    node.pivot_x = node.x;
-    node.pivot_y = node.y;
-    node.alpha = sprite.alpha;
-    node.blend = sprite.blend;
-    g_nodes.push_back(node);
+void DrawBatch(Loaded* owner, std::vector<GcAnim::DrawNode>& batch) {
+    if (owner == nullptr || batch.empty()) {
+        batch.clear();
+        return;
+    }
+    g_nodes.insert(g_nodes.end(), batch.begin(), batch.end());
+    int w = 0;
+    int h = 0;
+    TargetSize(w, h);
+    owner->renderer.Draw(owner->pkg, batch, w, h, g_canvas);
+    batch.clear();
 }
 
-std::string ChildNames(size_t start) {
+void PickFirstAnimation() {
+    g_anim.clear();
+    g_start = 0;
+    if (g_active == nullptr || g_active->pkg.animation_names.empty()) return;
+    g_anim = g_active->pkg.animation_names.front();
+    const auto it = g_active->pkg.index.animation_names.find(g_anim);
+    if (it != g_active->pkg.index.animation_names.end()) g_start = it->second;
+}
+
+void CollectParts(const SysIdx::Package& index, size_t start, int depth,
+                  std::vector<std::string>& out) {
+    if (depth > 8) return;
+    for (size_t i = start; i < index.records.size(); i++) {
+        const SysIdx::Record& rec = index.records[i];
+        if (rec.type < 0) return;
+        if (rec.type == SysIdx::kRecDrawCell) {
+            for (const auto& [name, id] : index.cell_names) {
+                if (std::cmp_equal(id, rec.id)) out.push_back("cell " + name);
+            }
+            continue;
+        }
+        if (rec.type != SysIdx::kRecNested) continue;
+        for (const auto& [name, id] : index.animation_names) {
+            if (std::cmp_equal(id, rec.id)) out.push_back("child " + name);
+        }
+        if (rec.id >= 0) CollectParts(index, (size_t)rec.id, depth + 1, out);
+    }
+}
+
+std::vector<std::string> PartsOf(const SysIdx::Package& index, const std::string& animation) {
+    std::vector<std::string> out;
+    const auto it = index.animation_names.find(animation);
+    if (it == index.animation_names.end()) return out;
+    CollectParts(index, it->second, 0, out);
+    std::ranges::sort(out);
+    const auto dup = std::ranges::unique(out);
+    out.erase(dup.begin(), dup.end());
+    return out;
+}
+
+std::string ChildNames(const SysIdx::Package& index, size_t start) {
     std::string listed;
-    for (size_t i = start; i < g_pkg.index.records.size(); i++) {
-        const SysIdx::Record& rec = g_pkg.index.records[i];
+    for (size_t i = start; i < index.records.size(); i++) {
+        const SysIdx::Record& rec = index.records[i];
         if (rec.type < 0) break;
         if (rec.type != SysIdx::kRecNested) continue;
-        for (const auto& [name, child] : g_pkg.index.animation_names) {
+        for (const auto& [name, child] : index.animation_names) {
             if (std::cmp_not_equal(child, rec.id)) continue;
             if (!listed.empty()) listed += ", ";
             listed += name;
@@ -90,114 +147,115 @@ std::string ChildNames(size_t start) {
     return listed;
 }
 
-void AppendAnimation(const SpritePlacement& sprite) {
-    const auto it = g_pkg.index.animation_names.find(sprite.name);
-    if (it == g_pkg.index.animation_names.end()) return;
-    const int length = SysIdx::AnimationLength(g_pkg.index, it->second);
-    const int frame = GcAnim::ResolveFrame((int)sprite.time, length, sprite.timing);
-    if (frame < 0) return;
-    std::vector<size_t> skip_children;
-    std::vector<int> skip_cells;
-    for (const std::string& part : sprite.skip_parts) {
-        const auto child = g_pkg.index.animation_names.find(part);
-        if (child != g_pkg.index.animation_names.end()) skip_children.push_back(child->second);
-        const auto cell = g_pkg.index.cell_names.find(part);
-        if (cell != g_pkg.index.cell_names.end()) skip_cells.push_back(cell->second);
-    }
-    GcAnim::Evaluate(g_pkg.index, it->second, frame, PlacedX(sprite), sprite.y, g_scratch,
-                     GcAnim::SkipSet{.children = skip_children, .cells = skip_cells});
-    g_nodes.insert(g_nodes.end(), g_scratch.begin(), g_scratch.end());
-}
-
-void ScaleAbout(size_t from, const SpritePlacement& sprite) {
-    if (sprite.scale == 1.0F) return;
-    const float cx = sprite.x + 320.0F;
-    const float cy = sprite.y + 240.0F;
-    for (size_t i = from; i < g_nodes.size(); i++) {
-        GcAnim::DrawNode& node = g_nodes[i];
-        node.x = cx + ((node.x - cx) * sprite.scale);
-        node.y = cy + ((node.y - cy) * sprite.scale);
-        node.pivot_x = cx + ((node.pivot_x - cx) * sprite.scale);
-        node.pivot_y = cy + ((node.pivot_y - cy) * sprite.scale);
-        node.w *= sprite.scale;
-        node.h *= sprite.scale;
-    }
-}
-
-void EvaluateSprites(int min_priority, int max_priority) {
-    g_nodes.clear();
-    for (const auto& sprite : g_sprites) {
-        if (sprite.priority < min_priority || sprite.priority > max_priority) continue;
-        const size_t from = g_nodes.size();
-        if (sprite.animated) {
-            AppendAnimation(sprite);
-        } else {
-            AppendCell(sprite);
+void LogPlacement(const Loaded& owner, const SpritePlacement& sprite) {
+    if (!sprite.animated) {
+        if (!owner.pkg.index.cell_names.contains(sprite.name)) {
+            LOG("Gc2d", "package '%s' has no cell named '%s'", owner.pkg.name.c_str(),
+                sprite.name.c_str());
         }
-        ScaleAbout(from, sprite);
+        return;
     }
-}
-
-void DrawNodes() {
-    int w = 0;
-    int h = 0;
-    g_d3d.GetOffscreenSize(w, h);
-    if (w <= 0 || h <= 0) {
-        w = g_d3d.width;
-        h = g_d3d.height;
+    const auto it = owner.pkg.index.animation_names.find(sprite.name);
+    if (it == owner.pkg.index.animation_names.end()) {
+        LOG("Gc2d", "package '%s' has no animation named '%s'", owner.pkg.name.c_str(),
+            sprite.name.c_str());
+        return;
     }
-    g_renderer.Draw(g_pkg, g_nodes, w, h);
+    LOG("Gc2d", "layer '%s': %d frames, children: %s", sprite.name.c_str(),
+        SysIdx::AnimationLength(owner.pkg.index, it->second),
+        ChildNames(owner.pkg.index, it->second).c_str());
 }
 
-void PickFirstAnimation() {
-    g_anim.clear();
-    g_start = 0;
-    if (g_pkg.animation_names.empty()) return;
-    g_anim = g_pkg.animation_names.front();
-    const auto it = g_pkg.index.animation_names.find(g_anim);
-    if (it != g_pkg.index.animation_names.end()) g_start = it->second;
 }
 
+bool LoadAsset(const std::string& asset, const std::string& dir) {
+    Loaded* existing = Find(asset);
+    if (existing != nullptr && existing->dir == dir) return true;
+    auto entry = std::make_unique<Loaded>();
+    entry->dir = dir;
+    std::string err;
+    if (!Gc2d::Load(dir, entry->pkg, err)) {
+        LOG("Gc2d", "load failed for %s: %s", dir.c_str(), err.c_str());
+        return false;
+    }
+    if (!entry->renderer.Init(g_d3d.device, entry->pkg)) {
+        LOG("Gc2d", "renderer init failed for %s", dir.c_str());
+        return false;
+    }
+    if (existing != nullptr) existing->renderer.Release();
+    const bool was_active = (existing != nullptr) && (existing == g_active);
+    Loaded* fresh = entry.get();
+    g_assets[asset] = std::move(entry);
+    if (g_active == nullptr || was_active) g_active = fresh;
+    LOG("Gc2d", "package '%s' ready as asset '%s': %zu cells, %zu animations",
+        fresh->pkg.name.c_str(), asset.c_str(), fresh->pkg.index.cells.size(),
+        fresh->pkg.animation_names.size());
+    return true;
 }
 
 bool Load(const std::string& dir) {
     Unload();
-    std::string err;
-    if (!Gc2d::Load(dir, g_pkg, err)) {
-        LOG("Gc2d", "load failed for %s: %s", dir.c_str(), err.c_str());
-        return false;
-    }
-    if (!g_renderer.Init(g_d3d.device, g_pkg)) {
-        LOG("Gc2d", "renderer init failed");
-        return false;
-    }
+    if (!LoadAsset({}, dir)) return false;
     PickFirstAnimation();
     g_time = 0.0F;
     g_paused = false;
-    g_active = true;
     App::Global().SetActiveIfs(dir);
-    LOG("Gc2d", "package '%s' ready, animation '%s' (%d frames)", g_pkg.name.c_str(),
+    LOG("Gc2d", "package '%s' ready, animation '%s' (%d frames)", g_active->pkg.name.c_str(),
         g_anim.c_str(), CurrentLength());
     return true;
 }
 
+PackageInfo DescribePackage(const std::string& asset) {
+    PackageInfo info;
+    const Loaded* owner = Find(asset);
+    if (owner == nullptr) return info;
+    info.loaded = true;
+    info.cells.reserve(owner->pkg.index.cell_names.size());
+    for (const auto& [name, id] : owner->pkg.index.cell_names)
+        info.cells.push_back(name);
+    std::ranges::sort(info.cells);
+    info.animations.reserve(owner->pkg.animation_names.size());
+    for (const std::string& name : owner->pkg.animation_names) {
+        const auto it = owner->pkg.index.animation_names.find(name);
+        const int frames = (it == owner->pkg.index.animation_names.end())
+                               ? 0
+                               : SysIdx::AnimationLength(owner->pkg.index, it->second);
+        info.animations.push_back(AnimationInfo{.name = name, .frames = frames});
+    }
+    return info;
+}
+
+void SetCanvas(int width, int height) {
+    if (width <= 0 || height <= 0) return;
+    g_canvas = Gc2d::Canvas{.width = width, .height = height};
+}
+
 void Unload() {
-    if (!g_active) return;
-    g_renderer.Release();
-    g_pkg = Gc2d::Package{};
+    if (g_assets.empty()) return;
+    for (auto& [asset, entry] : g_assets)
+        entry->renderer.Release();
+    g_assets.clear();
+    g_active = nullptr;
+    g_canvas = Gc2d::Canvas{};
     g_nodes.clear();
+    g_batch.clear();
     g_sprites.clear();
-    g_active = false;
+    g_anim.clear();
+    g_start = 0;
 }
 
 bool Active() {
-    return g_active;
+    return g_active != nullptr;
 }
 
 void RenderFrame(float dt) {
-    if (!g_active) return;
-    GcAnim::Evaluate(g_pkg.index, g_start, (int)g_time, 0.0F, 0.0F, g_nodes);
-    DrawNodes();
+    if (g_active == nullptr) return;
+    g_nodes.clear();
+    GcAnim::Evaluate(g_active->pkg.index, g_start, (int)g_time, 0.0F, 0.0F, g_nodes);
+    int w = 0;
+    int h = 0;
+    TargetSize(w, h);
+    g_active->renderer.Draw(g_active->pkg, g_nodes, w, h, g_canvas);
     if (g_paused) return;
 
     g_time += dt * kFramesPerSecond * g_speed;
@@ -206,7 +264,7 @@ void RenderFrame(float dt) {
 }
 
 void AdvanceSprites(float dt) {
-    if (!g_active || g_paused) return;
+    if (g_active == nullptr || g_paused) return;
     const float step = dt * kFramesPerSecond * g_speed;
     g_time += step;
     for (auto& sprite : g_sprites)
@@ -217,13 +275,16 @@ std::vector<SpriteStatus> ListSprites() {
     std::vector<SpriteStatus> out;
     out.reserve(g_sprites.size());
     for (const auto& sprite : g_sprites) {
-        const int length = sprite.animated ? SpriteLength(sprite) : 0;
+        const Loaded* owner = Find(sprite.asset);
+        const Gc2d::SpriteDraw draw = DrawOf(sprite);
+        const int length =
+            (sprite.animated && owner != nullptr) ? Gc2d::SpriteLength(owner->pkg.index, draw) : 0;
         out.push_back(
             SpriteStatus{.name = sprite.name,
                          .frame = GcAnim::ResolveFrame((int)sprite.time, length, sprite.timing),
                          .length = length,
                          .playhead = (int)sprite.time,
-                         .scroll = (int)ScrollOffset(sprite),
+                         .scroll = (int)Gc2d::ScrollOffset(draw),
                          .scroll_wrap = (int)sprite.scroll_wrap});
     }
     return out;
@@ -234,13 +295,6 @@ void SetSpriteFrame(int index, int frame) {
     g_sprites[(size_t)index].time = (float)std::max(0, frame);
 }
 
-void SetSpriteScroll(int index, int offset) {
-    if (index < 0 || (size_t)index >= g_sprites.size()) return;
-    SpritePlacement& sprite = g_sprites[(size_t)index];
-    if (sprite.scroll_wrap <= 0.0F || sprite.scroll_x == 0.0F) return;
-    sprite.time = (float)std::max(0, offset) / sprite.scroll_x;
-}
-
 void SetSpriteScale(int index, float scale) {
     if (index < 0 || (size_t)index >= g_sprites.size()) return;
     g_sprites[(size_t)index].scale = scale;
@@ -248,10 +302,11 @@ void SetSpriteScale(int index, float scale) {
 
 std::vector<DrawInfo> ListDrawNodes() {
     std::vector<DrawInfo> out;
+    if (g_active == nullptr) return out;
     out.reserve(g_nodes.size());
     for (const GcAnim::DrawNode& node : g_nodes) {
         DrawInfo info;
-        for (const auto& [name, id] : g_pkg.index.cell_names) {
+        for (const auto& [name, id] : g_active->pkg.index.cell_names) {
             if (std::cmp_equal(id, node.cell)) info.cell = name;
         }
         if (info.cell.empty()) info.cell = "#" + std::to_string(node.cell);
@@ -271,33 +326,15 @@ std::vector<DrawInfo> ListDrawNodes() {
     return out;
 }
 
-bool LoadParticles(const std::string& dir) {
-    if (g_particles.name == dir) return true;
-    std::string err;
-    Gc2d::Package package;
-    if (!Gc2d::Load(dir, package, err)) {
-        LOG("Gc2d", "particle package '%s' failed: %s", dir.c_str(), err.c_str());
-        return false;
-    }
-    g_particle_renderer.Release();
-    g_particles = std::move(package);
-    if (!g_particle_renderer.Init(g_d3d.device, g_particles)) {
-        LOG("Gc2d", "particle renderer init failed");
-        return false;
-    }
-    LOG("Gc2d", "particle package '%s' ready: %zu cells", g_particles.name.c_str(),
-        g_particles.index.cells.size());
-    return true;
-}
-
-void DrawParticles(const std::vector<CellDraw>& cells) {
-    if (cells.empty() || g_particles.index.cells.empty()) return;
-    g_scratch.clear();
+void DrawParticles(const std::string& asset, const std::vector<CellDraw>& cells) {
+    Loaded* owner = Find(asset);
+    if (cells.empty() || owner == nullptr || owner->pkg.index.cells.empty()) return;
+    g_batch.clear();
     for (const CellDraw& draw : cells) {
-        const auto it = g_particles.index.cell_names.find(draw.name);
-        if (it == g_particles.index.cell_names.end()) continue;
-        if ((size_t)it->second >= g_particles.index.cells.size()) continue;
-        const SysIdx::Cell& cell = g_particles.index.cells[it->second];
+        const auto it = owner->pkg.index.cell_names.find(draw.name);
+        if (it == owner->pkg.index.cell_names.end()) continue;
+        if ((size_t)it->second >= owner->pkg.index.cells.size()) continue;
+        const SysIdx::Cell& cell = owner->pkg.index.cells[it->second];
         const float w = (float)cell.w * draw.scale;
         const float h = (float)cell.h * draw.scale;
         GcAnim::DrawNode node;
@@ -310,34 +347,41 @@ void DrawParticles(const std::vector<CellDraw>& cells) {
         node.pivot_y = node.y;
         node.alpha = draw.alpha;
         node.blend = (GcAnim::Blend)draw.blend;
-        g_scratch.push_back(node);
+        g_batch.push_back(node);
     }
-    if (g_scratch.empty()) return;
-    int w = 0;
-    int h = 0;
-    g_d3d.GetOffscreenSize(w, h);
-    if (w <= 0 || h <= 0) {
-        w = g_d3d.width;
-        h = g_d3d.height;
-    }
-    g_particle_renderer.Draw(g_particles, g_scratch, w, h);
+    if (g_batch.empty()) return;
+    int tw = 0;
+    int th = 0;
+    TargetSize(tw, th);
+    owner->renderer.Draw(owner->pkg, g_batch, tw, th, g_canvas);
+    g_batch.clear();
 }
 
 void DrawSprites(int min_priority, int max_priority) {
-    if (!g_active || g_sprites.empty()) return;
-    EvaluateSprites(min_priority, max_priority);
-    if (g_nodes.empty()) return;
-    DrawNodes();
+    if (g_assets.empty() || g_sprites.empty()) return;
+    g_nodes.clear();
+    g_batch.clear();
+    Loaded* run = nullptr;
+    for (const auto& sprite : g_sprites) {
+        if (sprite.priority < min_priority || sprite.priority > max_priority) continue;
+        Loaded* owner = Find(sprite.asset);
+        if (owner == nullptr) continue;
+        if (owner != run) DrawBatch(run, g_batch);
+        run = owner;
+        Gc2d::AppendNodes(owner->pkg.index, DrawOf(sprite), g_canvas, g_batch);
+    }
+    DrawBatch(run, g_batch);
 }
 
 Status GetStatus() {
     Status s;
-    s.package = g_pkg.name;
+    if (g_active == nullptr) return s;
+    s.package = g_active->pkg.name;
     s.animation = g_anim;
-    s.cells = (int)g_pkg.index.cells.size();
-    s.records = (int)g_pkg.index.records.size();
-    s.animations = (int)g_pkg.animation_names.size();
-    s.tiles = (int)g_pkg.tiles.size();
+    s.cells = (int)g_active->pkg.index.cells.size();
+    s.records = (int)g_active->pkg.index.records.size();
+    s.animations = (int)g_active->pkg.animation_names.size();
+    s.tiles = (int)g_active->pkg.tiles.size();
     s.frame = (int)g_time;
     s.length = CurrentLength();
     s.draw_nodes = (int)g_nodes.size();
@@ -347,53 +391,26 @@ Status GetStatus() {
 }
 
 std::vector<std::string> ListAnimations() {
-    return g_pkg.animation_names;
-}
-
-namespace {
-
-void CollectParts(size_t start, int depth, std::vector<std::string>& out) {
-    if (depth > 8) return;
-    for (size_t i = start; i < g_pkg.index.records.size(); i++) {
-        const SysIdx::Record& rec = g_pkg.index.records[i];
-        if (rec.type < 0) return;
-        if (rec.type == SysIdx::kRecDrawCell) {
-            for (const auto& [name, id] : g_pkg.index.cell_names) {
-                if (std::cmp_equal(id, rec.id)) out.push_back("cell " + name);
-            }
-            continue;
-        }
-        if (rec.type != SysIdx::kRecNested) continue;
-        for (const auto& [name, id] : g_pkg.index.animation_names) {
-            if (std::cmp_equal(id, rec.id)) out.push_back("child " + name);
-        }
-        if (rec.id >= 0) CollectParts((size_t)rec.id, depth + 1, out);
-    }
-}
-
+    return (g_active == nullptr) ? std::vector<std::string>{} : g_active->pkg.animation_names;
 }
 
 std::vector<std::string> ListParts(const std::string& animation) {
-    std::vector<std::string> out;
-    const auto it = g_pkg.index.animation_names.find(animation);
-    if (it == g_pkg.index.animation_names.end()) return out;
-    CollectParts(it->second, 0, out);
-    std::ranges::sort(out);
-    const auto dup = std::ranges::unique(out);
-    out.erase(dup.begin(), dup.end());
-    return out;
+    if (g_active == nullptr) return {};
+    return PartsOf(g_active->pkg.index, animation);
 }
 
 int AnimationLength(const std::string& animation) {
-    const auto it = g_pkg.index.animation_names.find(animation);
-    if (it == g_pkg.index.animation_names.end()) return 0;
-    return SysIdx::AnimationLength(g_pkg.index, it->second);
+    if (g_active == nullptr) return 0;
+    const auto it = g_active->pkg.index.animation_names.find(animation);
+    if (it == g_active->pkg.index.animation_names.end()) return 0;
+    return SysIdx::AnimationLength(g_active->pkg.index, it->second);
 }
 
 std::vector<std::string> ListCells() {
+    if (g_active == nullptr) return {};
     std::vector<std::string> names;
-    names.reserve(g_pkg.index.cell_names.size());
-    for (const auto& [name, id] : g_pkg.index.cell_names)
+    names.reserve(g_active->pkg.index.cell_names.size());
+    for (const auto& [name, id] : g_active->pkg.index.cell_names)
         names.push_back(name);
     std::ranges::sort(names);
     return names;
@@ -407,34 +424,27 @@ void SetSprites(std::vector<SpritePlacement> sprites) {
     for (auto& sprite : g_sprites) {
         sprite.time = 0.0F;
         for (size_t i = 0; i < previous.size(); i++) {
-            if (taken[i] || previous[i].name != sprite.name) continue;
+            if (taken[i] || CarryKey(previous[i]) != CarryKey(sprite)) continue;
             sprite.time = previous[i].time;
             taken[i] = true;
             break;
         }
     }
     for (const auto& sprite : g_sprites) {
-        if (!sprite.animated) {
-            if (!g_pkg.index.cell_names.contains(sprite.name)) {
-                LOG("Gc2d", "package '%s' has no cell named '%s'", g_pkg.name.c_str(),
-                    sprite.name.c_str());
-            }
+        const Loaded* owner = Find(sprite.asset);
+        if (owner == nullptr) {
+            LOG("Gc2d", "layer '%s' names asset '%s' which is not loaded", sprite.name.c_str(),
+                sprite.asset.c_str());
             continue;
         }
-        const auto it = g_pkg.index.animation_names.find(sprite.name);
-        if (it == g_pkg.index.animation_names.end()) {
-            LOG("Gc2d", "package '%s' has no animation named '%s'", g_pkg.name.c_str(),
-                sprite.name.c_str());
-            continue;
-        }
-        LOG("Gc2d", "layer '%s': %d frames, children: %s", sprite.name.c_str(),
-            SysIdx::AnimationLength(g_pkg.index, it->second), ChildNames(it->second).c_str());
+        LogPlacement(*owner, sprite);
     }
 }
 
 bool SelectAnimation(const std::string& name) {
-    const auto it = g_pkg.index.animation_names.find(name);
-    if (it == g_pkg.index.animation_names.end()) return false;
+    if (g_active == nullptr) return false;
+    const auto it = g_active->pkg.index.animation_names.find(name);
+    if (it == g_active->pkg.index.animation_names.end()) return false;
     g_anim = name;
     g_start = it->second;
     g_time = 0.0F;

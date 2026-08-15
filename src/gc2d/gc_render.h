@@ -2,6 +2,7 @@
 
 #include "formats/gcanim.h"
 #include "gc2d/gc_package.h"
+#include "gc2d/gc_sprite.h"
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
@@ -17,8 +18,8 @@ public:
 
     void Release();
 
-    void Draw(const Package& pkg, const std::vector<GcAnim::DrawNode>& nodes, int width,
-              int height);
+    void Draw(const Package& pkg, const std::vector<GcAnim::DrawNode>& nodes, int width, int height,
+              const Canvas& canvas);
 
 private:
     void ApplyState();
