@@ -35,17 +35,20 @@ build.bat
 CMake presets + vcpkg (manifest mode, pinned toolchain). Details, including
 the ffmpeg feature set and the x265-alpha overlay port: `docs/build.md`.
 
-## Tweaking a scene preset
+## Editing a scene preset
 
-Every value a preset transcribes from the game is a live parameter with the game's
-own value as its default, editable in the centre pane while a preset is active, or
-headlessly:
+Every shipped screen is a JSON timeline document: tracks of clips on a frame axis,
+round-trippable, editable outside the app. Export one, edit it, run it:
 
 ```
-573Renderer.exe --preset-test <game-dir> iidx11-mode-select out.png 120 0 --preset-tweaks tweaks.txt
+573Renderer.exe --preset-export-json iidx11 iidx11-mode-select mode.json
+573Renderer.exe --preset-validate mode.json
+573Renderer.exe --preset-test <game-dir> out.png 120 --preset-json mode.json --preset-option mode=EXPERT
 ```
 
-See `docs/preset_params.md`.
+Drop a document in `presets/<build>/<id>.json` next to the exe and it shows up in
+the Screens list beside the built-in ones. The schema, the command catalog and the
+registry rules are in `docs/preset_document.md`; the CLI flags in `docs/cli.md`.
 
 ## Looking at a 2D package
 

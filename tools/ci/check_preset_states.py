@@ -1,85 +1,82 @@
-import re
+import argparse
 import sys
 from pathlib import Path
 
+from preset_dump import DumpError, add_dump_argument, documents
+
 ROOT = Path(__file__).resolve().parents[2]
-PRESET_DIR = ROOT / "src" / "preset"
 DOC = ROOT / "docs" / "preset_states.md"
 GAPS_HEADING = "## Screens whose remaining states are not yet exposed"
 
-ARRAY = re.compile(
-    r"constexpr\s+std::array<(Phase|OptionChoice|Option),\s*\d+>\s+(\w+)\s*=\s*\{\{(.*?)\}\};",
-    re.S,
-)
-LABEL = re.compile(r'\.label\s*=\s*"([^"]+)"')
-CHOICES = re.compile(r"\.choices\s*=\s*(\w+)")
-SCENE_ID = re.compile(r'\.id\s*=\s*"([^"]+)"')
-PHASES = re.compile(r"\.phases\s*=\s*(\w+)")
-OPTIONS = re.compile(r"\.options\s*=\s*(\w+)")
+
+def states_of(document):
+    labels = [marker["label"] for marker in document.get("markers", [])]
+    for option in document.get("options", []):
+        labels += [choice["label"] for choice in option.get("choices", [])]
+    return labels
 
 
-def preset_sources():
-    return sorted(PRESET_DIR.glob("scene_presets_*.cpp")) + sorted(
-        PRESET_DIR.glob("scene_presets_*.h")
-    )
-
-
-def read_source():
-    arrays = {}
-    for path in preset_sources():
-        for kind, name, body in ARRAY.findall(path.read_text(encoding="utf-8")):
-            arrays[name] = (kind, body)
-
+def read_dump_states(docs):
     states = {}
-    for path in preset_sources():
-        text = path.read_text(encoding="utf-8")
-        for block in text.split(".id = ")[1:]:
-            ident = SCENE_ID.search(".id = " + block)
-            if ident is None or not ident.group(1).startswith("iidx"):
-                continue
-            head = block[:600]
-            labels = []
-            phases = PHASES.search(head)
-            if phases is not None and phases.group(1) in arrays:
-                labels += LABEL.findall(arrays[phases.group(1)][1])
-            options = OPTIONS.search(head)
-            if options is not None and options.group(1) in arrays:
-                for choice_ref in CHOICES.findall(arrays[options.group(1)][1]):
-                    if choice_ref in arrays:
-                        labels += LABEL.findall(arrays[choice_ref][1])
-            if labels:
-                states[ident.group(1)] = labels
+    for document in docs:
+        labels = states_of(document)
+        if labels:
+            states[document["id"]] = labels
     return states
 
 
-def read_doc():
-    documented = {}
-    gap_rows = []
-    text = DOC.read_text(encoding="utf-8")
-    head, _, gaps = text.partition(GAPS_HEADING)
-    for line in head.splitlines():
+def table_rows(text, second_heading):
+    rows = []
+    inside = False
+    for line in text.splitlines():
         if not line.startswith("|"):
+            inside = False
             continue
         cols = [c.strip() for c in line.strip().strip("|").split("|")]
-        if len(cols) < 3 or not cols[0].startswith("iidx"):
+        if len(cols) < 3:
+            inside = False
             continue
+        if cols[0] == "preset" and cols[1] == second_heading:
+            inside = True
+            continue
+        if inside and "".join(cols).strip("-: "):
+            rows.append(cols)
+    return rows
+
+
+def read_doc():
+    text = DOC.read_text(encoding="utf-8")
+    head, _, gaps = text.partition(GAPS_HEADING)
+    documented = {}
+    for cols in table_rows(head, "state"):
         documented.setdefault(cols[0], []).append(cols[1])
-    for line in gaps.splitlines():
-        if not line.startswith("|"):
-            continue
-        first = line.strip().strip("|").split("|")[0].strip()
-        if first.startswith("iidx"):
-            gap_rows.append(first)
-    return documented, gap_rows
+    return documented, [cols[0] for cols in table_rows(gaps, "state still missing")]
 
 
-def main():
-    source = read_source()
+def check(docs):
+    if not docs:
+        return [
+            "the dump holds no preset documents at all. The gate can only check what the "
+            "renderer dumps, so an empty dump means no state is checked against the docs."
+        ], {}, []
+    states = read_dump_states(docs)
+    if not states:
+        return [
+            f"{len(docs)} document(s) dumped but not one marker or option choice was found. "
+            f"Every screen with a sequence carries markers, so this means the gate is blind."
+        ], {}, []
+
+    known_ids = {document["id"] for document in docs}
     documented, gaps = read_doc()
     problems = []
-
     for preset, labels in documented.items():
-        have = source.get(preset, [])
+        if preset not in known_ids:
+            problems.append(
+                f"{preset}: docs/preset_states.md names a preset no built-in document "
+                f"provides. Fix the id in the docs, or ship the preset."
+            )
+            continue
+        have = states.get(preset, [])
         for label in labels:
             if label in have:
                 continue
@@ -88,7 +85,7 @@ def main():
                 f"expose. A preset must offer every state its screen can show."
             )
 
-    for preset, labels in source.items():
+    for preset, labels in states.items():
         for label in labels:
             if label in documented.get(preset, []):
                 continue
@@ -96,15 +93,33 @@ def main():
                 f"{preset}: state '{label}' has no row in docs/preset_states.md - record "
                 f"where it came from in the game before shipping it."
             )
+    return problems, states, gaps
 
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Check every marker and option choice of a built-in preset against "
+        "docs/preset_states.md"
+    )
+    add_dump_argument(parser)
+    args = parser.parse_args()
+
+    try:
+        docs = documents(args.dump)
+    except DumpError as bad:
+        print("preset-state gate FAILED:")
+        print(f"  {bad}")
+        return 1
+
+    problems, states, gaps = check(docs)
     if problems:
         print("preset-state gate FAILED:")
         for problem in problems:
             print(f"  {problem}")
         return 1
 
-    total = sum(len(v) for v in source.values())
-    print(f"preset-state gate OK: {total} state(s) across {len(source)} preset(s), all recorded")
+    total = sum(len(v) for v in states.values())
+    print(f"preset-state gate OK: {total} state(s) across {len(states)} preset(s), all recorded")
     if gaps:
         print(f"  known gaps still to build: {len(gaps)} (see docs/preset_states.md)")
     return 0

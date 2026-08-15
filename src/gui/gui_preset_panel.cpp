@@ -3,11 +3,13 @@
 #include "game_fingerprint.h"
 #include "imgui.h"
 #include "gc2d/gc_host.h"
+#include "preset/doc/preset_document.h"
+#include "preset/doc/preset_registry.h"
 #include "preset/preset_host.h"
-#include "preset/scene_preset.h"
 #include "state/app_state.h"
 
 #include <cfloat>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -18,7 +20,8 @@ namespace {
 std::string g_scanned_dir;
 std::string g_build_name;
 std::string g_build_id;
-std::vector<const Preset::Scene*> g_scenes;
+Preset::Doc::Registry g_registry;
+std::vector<const Preset::Doc::Entry*> g_screens;
 
 void RescanIfNeeded() {
     const std::string dir = App::Global().GameDir();
@@ -26,12 +29,19 @@ void RescanIfNeeded() {
     g_scanned_dir = dir;
     g_build_name.clear();
     g_build_id.clear();
-    g_scenes.clear();
+    g_screens.clear();
     const GameFingerprint::Match match = GameFingerprint::Identify(dir);
     if (match.build == nullptr) return;
     g_build_name = match.build->name;
     g_build_id = match.build->id;
-    g_scenes = Preset::ForBuild(g_build_id);
+    App::State& state = App::Global();
+    state.BeginLoad("Scene presets");
+    g_registry.Load(Preset::Doc::UserRoot(), [&state](const Preset::Doc::ScanStatus& status) {
+        const float done = (status.total > 0) ? (float)status.done / (float)status.total : 1.0F;
+        state.UpdateLoadStage(status.current, done);
+    });
+    state.EndLoad();
+    g_screens = g_registry.ForBuild(g_build_id);
 }
 
 void DrawSpriteFrames() {
@@ -105,7 +115,7 @@ void DrawCountdown(const PresetHost::Status& status) {
 
 bool HasPresets() {
     RescanIfNeeded();
-    return !g_scenes.empty();
+    return !g_screens.empty();
 }
 
 void Render() {
@@ -118,22 +128,23 @@ void Render() {
     ImGui::TextDisabled("%s", g_build_name.c_str());
     ImGui::Separator();
 
-    if (g_scenes.empty()) {
+    if (g_screens.empty()) {
         ImGui::TextDisabled("No scene presets are registered for this build.");
         return;
     }
 
     const PresetHost::Status status = PresetHost::GetStatus();
-    for (const auto* scene : g_scenes) {
-        const std::string name(scene->name);
-        const std::string id(scene->id);
-        const bool active = (status.id == id);
+    for (const Preset::Doc::Entry* entry : g_screens) {
+        const std::string& name = entry->document.name;
+        const bool active = (status.id == entry->document.id);
         if (ImGui::RadioButton(name.c_str(), active) && !active) {
             App::State& state = App::Global();
             state.BeginLoad(name);
-            PresetHost::Load(g_scanned_dir, *scene, [&state](const std::string& stage, float done) {
-                state.UpdateLoadStage(stage, done);
-            });
+            auto document = std::make_shared<const Preset::Doc::Document>(entry->document);
+            PresetHost::LoadDocument(g_scanned_dir, document,
+                                     [&state](const std::string& stage, float done) {
+                                         state.UpdateLoadStage(stage, done);
+                                     });
             state.EndLoad();
         }
     }

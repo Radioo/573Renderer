@@ -10,6 +10,7 @@ struct Build {
     const char* id;
     const char* name;
     const char* file;
+    const char* profile_slug;
     std::uint64_t size;
     std::uint32_t crc;
 };
@@ -20,5 +21,7 @@ struct Match {
 };
 
 Match Identify(const std::string& game_dir);
+
+const char* ProfileSlugFor(const std::string& build_id);
 
 }

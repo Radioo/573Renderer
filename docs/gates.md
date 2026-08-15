@@ -97,6 +97,63 @@ headless GUI suite necessarily drives ImGui directly (docs/gui_tests.md); it
 is the only test directory allowed to, and it tests the shell rather than
 violating it.
 
+### Preset layers (`check_preset_layers.py`) and preset states (`check_preset_states.py`)
+
+Both gates read the SAME input: the JSON the renderer itself dumps with
+`573Renderer.exe --preset-dump-defaults <tmp>` (`tools/ci/preset_dump.py` runs it
+into a temporary directory and loads `*/*.json`; `--dump <dir>` reuses an existing
+dump instead). They stopped regex-parsing `scene_presets_*.cpp` when the built-in
+presets became documents: the C++ these gates used to scrape no longer describes
+what a preset draws.
+
+This is why both gates run in `tools/checks.sh` (which builds first) and NOT in
+the hosted `quality-gates` job, which has no C++ toolchain. What the hosted job
+does run is the gates' own pytest self-test, which needs no exe.
+
+- The layers gate collects, per document, every `sprite.draw` / `sprite.animate`
+  clip's (asset dir, cell or animation) and every `hidden_parts` entry, and checks
+  each against `docs/preset_layers.md`: drawn layers must have a `background`
+  verdict, hidden parts a `chrome` one, and a layer with no row at all fails.
+- The states gate collects every `markers[].label` and every option choice label
+  per document and checks `docs/preset_states.md` in both directions: a documented
+  state no preset exposes fails, a marker or choice with no row fails, and a row
+  naming a preset id no built-in provides fails. There is NO id rule of any kind
+  left, neither the original "the id must start with `iidx`" nor a `<build>-`
+  prefix: a row is recognised by the table it sits in (the one headed
+  `| preset | state |`, and `| preset | state still missing |` for the gaps) and is
+  keyed by document id alone, with the dump as the authority on which ids exist.
+  A prefix rule would have quietly skipped exactly the rows worth catching, since
+  a mistyped id is usually one that matches no prefix either.
+
+Both gates fail loudly on an empty input instead of passing vacuously: zero
+documents, zero sprite clips, or zero states each produce a FAILED line saying the
+gate would otherwise be blind. That replaced the old "declared versus parsed
+count" self-check, which existed for the same reason (a parser that silently
+matched nothing).
+
+A dump that exits non-zero is reported with its exit code and the tail of the
+renderer's own log. `Log::Init` hands the process a fresh console
+(`AllocConsole` plus `freopen("CONOUT$")`), so a pipe on the exe's stdout captures
+nothing at all and the first version of this printed `exited 2:` and two spaces.
+`preset_dump.py` therefore runs the exe WITH the dump directory as its working
+directory, which is where `renderer.log` is written, and reads it back from there;
+the log dies with the temporary dump instead of being left in whatever directory
+the gate was started from.
+
+`tools/ci/tests/test_preset_gates.py` (`uv run pytest` from `tools/ci`) is the
+gate self-test: it builds synthetic dump directories in a tmp dir and asserts each
+of those failure modes actually fails, plus the real problems (an unclassified
+layer, an undocumented marker, a documented state a preset lost, a docs row whose
+id carries no build prefix and matches no document). Two cases stand a fake
+renderer (a one-line `.bat` or `sh` script that exits non-zero, with and without
+writing a log) in for the exe, so the failure path is exercised without breaking
+the real one. A gate that cannot fail is worth nothing, so the self-test is what
+proves these two can.
+
+`tools/local/preset_sweep.py` reads the same dump: it renders every built-in of a
+build, once per marker (`--preset-test ... <marker frame + 60>`) and once per
+choice of the first option (`--preset-option <id>=<label>`), into `screenshots/`.
+
 ### Format (`clang-format --dry-run --Werror`)
 
 `.clang-format` codifies the style the codebase already uses: LLVM base,
@@ -224,6 +281,14 @@ three-layer per-directory config chain:
   TexUpload callback ABI is a fixed 9-parameter signature; the module
   configs re-pin the threshold to 8). These subtractions die per-file as
   files migrate into modules.
+- `src/preset/defaults/.clang-tidy` subtracts `readability-function-size` for
+  that directory alone. Those files are the 18 built-in preset documents
+  (docs/preset_document.md): one function per screen, whose whole body is a
+  single `return Document{...}` data literal generated from the converter. The
+  line threshold measures control-flow complexity a human has to hold in their
+  head, and a data literal has none; splitting one into 60-line pieces would add
+  call indirection to a table. Every other check, including the 1000-line file
+  limit that forced the ending into two halves, still applies there.
 - `clang-analyzer-optin.core.EnumCastOutOfRange` (an OPT-IN analyzer
   check) is subtracted at the ROOT config, not per-layer: it only ever
   fires on system-header patterns we cannot change - the D3D9 SDK's own

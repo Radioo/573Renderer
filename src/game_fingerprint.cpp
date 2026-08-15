@@ -23,6 +23,7 @@ const std::vector<Build> kBuilds = {
         .id = "iidx10",
         .name = "IIDX 10th style (D01 JAE)",
         .file = "bm2dx.exe",
+        .profile_slug = "iidx11",
         .size = 860160,
         .crc = 0x4EB98F3BU,
     },
@@ -30,6 +31,7 @@ const std::vector<Build> kBuilds = {
         .id = "iidx11",
         .name = "IIDX RED (E01 JAA)",
         .file = "bm2dx.exe",
+        .profile_slug = "iidx11",
         .size = 1032192,
         .crc = 0x63423A04U,
     },
@@ -106,6 +108,13 @@ Match Identify(const std::string& game_dir) {
         match.file = by_size_file;
     }
     return match;
+}
+
+const char* ProfileSlugFor(const std::string& build_id) {
+    for (const Build& build : kBuilds) {
+        if (build_id == build.id) return build.profile_slug;
+    }
+    return nullptr;
 }
 
 }

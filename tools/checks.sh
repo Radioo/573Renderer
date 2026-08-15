@@ -34,6 +34,7 @@ uv run --project tools/ci python tools/ci/check_machine_paths.py
 uv run --project tools/ci python tools/ci/check_gui_isolation.py
 uv run --project tools/ci python tools/ci/check_preset_layers.py
 uv run --project tools/ci python tools/ci/check_preset_states.py
+(cd tools/ci && uv run pytest -q)
 uv run --project tools/ci python tools/ci/run_format.py
 uv run --project tools/ci --group dev ruff check tools/
 uv run --project tools/ci python tools/ci/run_tidy.py

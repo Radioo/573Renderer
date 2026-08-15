@@ -50,6 +50,13 @@ chrome; it can only guarantee that every layer in a preset was written down as
 looked-at, which is exactly the step that was skipped when music select shipped
 with its whole UI frame in it.
 
+What the gate reads is the preset documents themselves, dumped by the renderer
+(`573Renderer.exe --preset-dump-defaults <tmp>`): every `sprite.draw` and
+`sprite.animate` clip of every built-in, resolved through the document's `assets`
+block to the package dir plus the cell or animation name, and every
+`hidden_parts` entry. It fails on a dump with no documents or no sprite clips
+rather than passing on an empty scan. See docs/gates.md.
+
 ## Classification
 
 Verdicts below were each read off a `--gc2d-sheet` render of that layer.

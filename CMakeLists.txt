@@ -238,6 +238,7 @@ add_library(r573_app STATIC
     src/preset/preset_effective.cpp
     src/preset/preset_rng.cpp
     src/preset/preset_test.cpp
+    src/preset/preset_tools.cpp
     src/preset/eval/eval_tween.cpp
     src/preset/eval/eval_models.cpp
     src/preset/eval/eval_sprites.cpp
@@ -247,9 +248,17 @@ add_library(r573_app STATIC
     src/preset/eval/eval_resolve.cpp
     src/preset/eval/eval_emit.cpp
     src/preset/eval/preset_evaluator.cpp
+    src/preset/defaults/defaults.cpp
+    src/preset/defaults/defaults_build.cpp
+    src/preset/defaults/iidx10_defaults.cpp
+    src/preset/defaults/iidx11_defaults.cpp
+    src/preset/defaults/iidx11_select_defaults.cpp
+    src/preset/defaults/iidx11_ending_a_defaults.cpp
+    src/preset/defaults/iidx11_ending_b_defaults.cpp
     src/preset/doc/preset_enum_names.cpp
     src/preset/doc/preset_fields.cpp
     src/preset/doc/preset_json.cpp
+    src/preset/doc/preset_registry.cpp
     src/preset/doc/preset_validate.cpp
     src/scene3d/anim.cpp
     src/scene3d/camera.cpp
@@ -334,6 +343,8 @@ add_executable(game_tests
     tests/game/preset_legacy_view.cpp
     tests/game/preset_eval_tests.cpp
     tests/game/preset_convert_tests.cpp
+    tests/game/preset_defaults_tests.cpp
+    tests/game/preset_registry_tests.cpp
     tests/game/eval_tween_tests.cpp
     tests/game/preset_host_tests.cpp
     tests/game/preset_host_stubs.cpp
@@ -363,9 +374,18 @@ add_executable(game_tests
     src/preset/eval/eval_resolve.cpp
     src/preset/eval/eval_emit.cpp
     src/preset/eval/preset_evaluator.cpp
+    src/preset/defaults/defaults.cpp
+    src/preset/defaults/defaults_build.cpp
+    src/preset/defaults/iidx10_defaults.cpp
+    src/preset/defaults/iidx11_defaults.cpp
+    src/preset/defaults/iidx11_select_defaults.cpp
+    src/preset/defaults/iidx11_ending_a_defaults.cpp
+    src/preset/defaults/iidx11_ending_b_defaults.cpp
     src/preset/doc/preset_enum_names.cpp
     src/preset/doc/preset_fields.cpp
     src/preset/doc/preset_json.cpp
+    src/preset/doc/preset_registry.cpp
+    src/preset/preset_tools.cpp
     src/preset/doc/preset_validate.cpp
     src/mc_control.cpp
 )

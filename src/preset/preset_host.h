@@ -2,7 +2,6 @@
 
 #include "preset/asset_index.h"
 #include "preset/doc/preset_document.h"
-#include "preset/scene_preset.h"
 
 #include <array>
 #include <functional>
@@ -34,8 +33,6 @@ struct Status {
 };
 
 using ProgressFn = std::function<void(const std::string& stage, float fraction)>;
-
-bool Load(const std::string& game_dir, const Preset::Scene& scene, const ProgressFn& progress = {});
 
 bool LoadDocument(const std::string& game_dir,
                   const std::shared_ptr<const Preset::Doc::Document>& document,
@@ -101,8 +98,6 @@ void ResetGroup(const std::string& group);
 void ResetAllParams();
 
 int ChangedParamCount();
-
-int LoadTweaks(const std::string& path);
 
 void SetOption(int option, int choice);
 

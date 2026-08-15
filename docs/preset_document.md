@@ -6,20 +6,20 @@ document-wide render, camera, light, asset, option and marker blocks. This file 
 the single source of truth for the schema, the command catalog, the canonical
 serialization rules and the validation rules.
 
-Status: milestone M1 of `docs/scene_preset_editor_plan.html` is in the tree. That
-milestone is the document model, the JSON layer and validation only. Nothing loads
-or renders a document yet: `preset_host.cpp`, `preset_effective.*`, `scene_preset.h`
-and the `scene_presets_*.cpp` tables are untouched and still drive the app. The
-evaluator (M2), the built-in documents and the registry (M3), and the timeline
-editor (M4 onward) are not here yet, so no code outside `tests/game` consumes these
-modules.
+Status: milestones M1 to M3 of `docs/scene_preset_editor_plan.html` are in the
+tree. Documents now drive the app end to end: the host evaluates a document
+(`preset_host.cpp` on `src/preset/eval/`), the 18 shipped screens ARE documents
+built in code (`src/preset/defaults/`, below), and the Screens panel and the
+preset CLI resolve them through the registry. What is left of the old world is the
+`Preset::Scene` tables plus `preset_convert.cpp`, kept only so the tests can prove
+the defaults still equal the converter output; nothing in the app reads a table
+any more. The timeline editor (M4 onward) is not here yet.
 
-Part A of M2 is also in the tree, and it too changes nothing about the app: the
-legacy behaviour of the old host is now recorded as a committed fixture, so the
-evaluator can be built against a frozen reference instead of against a host that
-has to survive the rewrite. See `docs/preset_golden.md` for what was recorded, the
-link-time stub seam it used, the asset lengths it needed and the differences the
-new evaluator is allowed to have.
+The legacy behaviour of the old host is a committed fixture, so the evaluator was
+built against a frozen reference instead of against a host that had to survive the
+rewrite. See `docs/preset_golden.md` for what was recorded, the link-time stub seam
+it used, the asset lengths it needed and the differences the new evaluator is
+allowed to have.
 
 ## Where the code is
 
@@ -38,7 +38,7 @@ new evaluator is allowed to have.
 | The evaluator | `src/preset/eval/preset_evaluator.h/.cpp` | `Evaluator::Load`, `Reset`, `Seek`, `SetOption`, `RenderFrame`, `Resolve` |
 | The one-shot converter from the old tables | `src/preset/preset_convert.h/.cpp` | `FromScene` |
 | Asset lengths the evaluator and the converter need | `src/preset/preset_asset_lengths.h` | `AssetLengths::MaxTime`, `AnimationLength` |
-| Tests | `tests/game/preset_json_tests.cpp`, `preset_validate_tests.cpp`, `eval_tween_tests.cpp`, `preset_eval_tests.cpp`, `preset_convert_tests.cpp`, `preset_golden_tests.cpp` | fixtures in `tests/game/fixtures/` |
+| Tests | `tests/game/preset_json_tests.cpp`, `preset_validate_tests.cpp`, `eval_tween_tests.cpp`, `preset_eval_tests.cpp`, `preset_convert_tests.cpp`, `preset_defaults_tests.cpp`, `preset_registry_tests.cpp`, `preset_golden_tests.cpp` | fixtures in `tests/game/fixtures/` |
 
 Everything lives in `namespace Preset::Doc`. The nested namespace is deliberate:
 the old table structs (`Preset::ParamOverride`, `Preset::ModelMotion`,
@@ -47,8 +47,9 @@ until the last milestone deletes them, and the converter of M2 has to include bo
 headers at once.
 
 JSON is `nlohmann-json` (vcpkg port `nlohmann-json`, header only), used through
-`nlohmann::ordered_json` so key order is what the writer wrote. It is linked into
-`game_tests` today; the app targets pick it up when M2 gives them a consumer.
+`nlohmann::ordered_json` so key order is what the writer wrote. It is a header-only
+dependency of the preset JSON layer, so only the targets that compile
+`preset_json.cpp` need it.
 
 ## Top level
 
@@ -87,8 +88,8 @@ in the file.
   `sine_deg` rate). Every `FieldDesc` carries its unit.
 - 2D coordinates are pixels on the document canvas (`render.width` by
   `render.height`); the sprite scale pivot is `(x + render.width/2, y +
-  render.height/2)`. Making that true needs the `Gc2dHost::SetCanvas` change
-  listed as an M2 engine gap.
+  render.height/2)`, which is what `Gc2dHost::SetCanvas(width, height)` makes true
+  (it replaced the fixed 640x480 canvas and the 320/240 pivot literals in M2).
 - 3D clip time is ticks at 60 ticks per second. `render.ticks_per_second` is
   deliberately NOT a document key: every `anim_speed` in the game tables is
   expressed against 60 ticks per second, so a per-document rate would only rescale
@@ -760,6 +761,98 @@ This is a bridge, not the destination: M4 to M7 replace the pane with the clip
 modal and the frame inspector, and M8 deletes `preset_effective` and the schema.
 The Screens panel's sprite frame and scroll sliders are already gone, because the
 evaluator pushes those clocks every frame and a slider could not hold.
+
+## Built-in documents and the registry
+
+The 18 shipped screens ARE documents. They are C++ functions that build a
+`Document` out of owning structs, not a JSON blob compiled into the binary and
+parsed at startup, so a mistake in one of them is a compile error and the editor
+of a later milestone can duplicate one without a parse step.
+
+| What | File | Entry points |
+|------|------|--------------|
+| The built-in list | `src/preset/defaults/defaults.h/.cpp` | `BuiltIns()` |
+| Shared builders every defaults file uses | `src/preset/defaults/defaults_build.h/.cpp` | `Widen`, `DefaultLens`, `WideLens`, `WideLensAt`, `StandardLights`, `Scene3dAsset`, `Package2dAsset`, `SpriteTrack`, `ModelTrack`, `CameraTrack`, `FxTrack`, `SceneTrack`, `AppendPart` |
+| IIDX 10, all 9 screens | `src/preset/defaults/iidx10_defaults.cpp` | `Iidx10Defaults` |
+| IIDX RED attract, card in, login, new player | `src/preset/defaults/iidx11_defaults.cpp` | `Iidx11Defaults` |
+| IIDX RED dan, expert, mode and music select | `src/preset/defaults/iidx11_select_defaults.cpp` | `Iidx11SelectDefaults` |
+| The ending, markers 1 to 9 plus the document header | `src/preset/defaults/iidx11_ending_a_defaults.cpp` | `Iidx11Ending`, file-local `Iidx11EndingPartA` |
+| The ending, markers 10 to 18 | `src/preset/defaults/iidx11_ending_b_defaults.cpp` | `Iidx11EndingPartB` |
+| The registry over built-ins plus user files | `src/preset/doc/preset_registry.h/.cpp` | `Registry::Load`, `ForBuild`, `Find`, `Problems`, `UserRoot`, `LoadFile`, `Entry`, `ScanStatus` |
+| The headless document tools behind the CLI | `src/preset/preset_tools.h/.cpp` | `DumpDefaults`, `ExportJson`, `Validate` |
+
+### How the defaults were produced
+
+They were generated once, mechanically, from the converter, then tidied; they are
+not hand-transcribed a second time from the game. The run was: dump
+`FromScene(scene, asset_lengths)` for all 18 registered scenes as canonical JSON,
+emit C++ from that JSON with a throwaway script (one function per document,
+designated initializers in declaration order, the shared builders above for the
+shapes that repeat), and run clang-format over the result. The generator was
+deleted after the run, because the guarantee does not come from it: the test
+`every old scene has a built-in document equal to the converter output`
+(`tests/game/preset_defaults_tests.cpp`) compares each built-in with
+`FromScene(scene, lengths)` field by field and byte for byte through `Save`, so
+the defaults cannot drift from the tables while both exist, and the golden test
+keeps holding the behaviour afterwards.
+
+Two conventions in the generated files are worth knowing before editing one:
+
+- `Widen(0.025F)` (and its two- and three-argument forms) is a float value the
+  converter widened to `double`. The game's tables are `float`; writing the widened
+  literal out in full (`0.02500000037252903`) is what byte equality needs and what
+  a reader cannot check, so the exact float is written instead and widened in one
+  place. A plain literal is used wherever it is short and exact (`0.5`, `100.0`),
+  and where the value is not a widened float at all (the countdown tweens, whose
+  ends are computed in double).
+- `DefaultLens()` is the lens 9 of the 18 screens share (eye `(0,0,-1)`, near
+  `0.1`, far 500, `aspect: "auto"`); `WideLens(eye)` is the IIDX RED lens (near 0,
+  far 1000, aspect `1.7708334`), and `WideLensAt(eye, at)` is the one RED screen
+  that also aims the camera.
+
+The ending is split across two files because one file would pass the 1000-line
+limit. The split is by marker range: part A carries markers 1 to 9 and every clip
+that starts before frame 2486, part B the rest. `AppendPart` merges them by track
+id, so a track that both halves touch keeps one entry with its clips in frame
+order, and part A declares the tracks that only part B fills so that track order
+matches the converter exactly. The M3 test asserts the merged document has its 18
+markers in ascending order with unique track and clip ids.
+
+### User documents
+
+A user document lives in `presets/<build>/<id>.json` NEXT to `573Renderer.exe`
+(`UserRoot()` is the exe directory plus `presets`, the same portable-app rule as
+`settings.ini`). The registry scans `presets/*/*.json`, so the build directory is
+where a document is FOUND, while the document's own `build` field is what it is
+LISTED under; a file whose directory and `build` disagree is listed under its
+`build` with a warning, never silently moved. Import (a later milestone) reads a
+file from anywhere and copies it there.
+
+`Registry::Load` reports progress through a `ScanProgressFn` taking a
+`ScanStatus` (`done`, `total`, `current` path), called once per file before it is
+read, so a caller can print or publish "scanning user presets 2/5: <file>" while a
+directory is walked; nothing about the scan is silent or unbounded.
+
+Rules the registry applies:
+
+- A user id equal to a BUILT-IN id of the same build is a validation error
+  (`Validate`'s `builtin_ids` argument). The file is not dropped: it is listed by
+  `Problems()` with its path and its problems, so the library can offer to rename
+  it, and the built-in keeps the id. Exactly one entry with that id is resolvable.
+  The rule belongs to the REGISTRY, not to a document on its own: `--preset-validate`
+  and `--preset-json` pass no `builtin_ids`, so exporting a built-in, editing the
+  file and running it by path keeps working without a rename.
+- A user id equal to one an EARLIER user file of the same build already claimed is
+  the same kind of error, with the winning file's path in the message. Order is the
+  scan order, so the first file to claim an id keeps it. Without this the id would
+  resolve to two documents: `ForBuild` would list both and `--preset-test <id>`
+  would pick whichever came last, silently.
+- A file that does not parse is listed by `Problems()` with the line and column,
+  and contributes nothing to `ForBuild`.
+- A user document with other validation errors IS resolvable (the evaluator skips
+  the offending clips, see Validation above) and is listed by `Problems()` too.
+- `Find(build, id)` and `ForBuild(build)` never mix builds: a document for another
+  build is invisible to this build's list.
 
 ## Fixtures and tests
 

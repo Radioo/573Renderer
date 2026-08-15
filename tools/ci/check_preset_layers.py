@@ -1,27 +1,13 @@
-import re
+import argparse
 import sys
 from pathlib import Path
 
+from preset_dump import DumpError, add_dump_argument, asset_dirs, clips_of, documents
+
 ROOT = Path(__file__).resolve().parents[2]
-PRESET_DIR = ROOT / "src" / "preset"
 DOC = ROOT / "docs" / "preset_layers.md"
 
-PACKAGE_CONST = re.compile(r'constexpr\s+std::string_view\s+(\w+)\s*=\s*"([^"]+)"\s*;')
-PART_LIST = re.compile(
-    r"constexpr\s+std::array<std::string_view,\s*\d+>\s+(\w+)\s*=\s*\{([^}]*)\}", re.S
-)
-QUOTED = re.compile(r'"([^"]+)"')
-LAYER = re.compile(
-    r"\.package_dir\s*=\s*(\w+)\s*,(?P<body>.*?)(?=\.package_dir\s*=|\}\}\s*;)", re.S
-)
-SPRITE = re.compile(r'\.sprite\s*=\s*"([^"]+)"')
-HIDDEN = re.compile(r"\.hidden_parts\s*=\s*(\w+)")
-
-
-def preset_sources():
-    return sorted(PRESET_DIR.glob("scene_presets_*.cpp")) + sorted(
-        PRESET_DIR.glob("scene_presets_*.h")
-    )
+SPRITE_TYPES = ("sprite.draw", "sprite.animate")
 
 
 def read_doc():
@@ -36,48 +22,40 @@ def read_doc():
     return verdicts
 
 
-def read_presets():
+def read_layers(docs):
     used = []
     hidden = []
-    for path in preset_sources():
-        text = path.read_text(encoding="utf-8")
-        packages = dict(PACKAGE_CONST.findall(text))
-        parts = {
-            name: QUOTED.findall(body) for name, body in PART_LIST.findall(text)
-        }
-        for match in LAYER.finditer(text):
-            package = packages.get(match.group(1))
+    for document in docs:
+        dirs = asset_dirs(document)
+        origin = f"{document['build']}/{document['id']}"
+        for clip in clips_of(document, SPRITE_TYPES):
+            params = clip.get("params", {})
+            package = dirs.get(params.get("asset"))
             if package is None:
                 continue
-            body = match.group("body")
-            sprite = SPRITE.search(body)
-            if sprite is not None:
-                used.append((path.name, package, sprite.group(1)))
-            skip = HIDDEN.search(body)
-            if skip is not None:
-                for part in parts.get(skip.group(1), []):
-                    hidden.append((path.name, package, part))
+            layer = params.get("cell") or params.get("animation")
+            if layer is not None:
+                used.append((origin, package, layer))
+            for part in params.get("hidden_parts", []):
+                hidden.append((origin, package, part))
     return used, hidden
 
 
-def main():
-    verdicts = read_doc()
-    used, hidden = read_presets()
+def check(docs):
     problems = []
+    if not docs:
+        return [
+            "the dump holds no preset documents at all. The gate can only check what the "
+            "renderer dumps, so an empty dump means it is silently passing every layer."
+        ]
+    used, hidden = read_layers(docs)
+    if not used:
+        return [
+            f"{len(docs)} document(s) dumped but not one sprite.draw or sprite.animate clip "
+            f"was found. The gate would pass without looking at a single layer."
+        ]
 
-    for path in preset_sources():
-        declared = len(SPRITE.findall(path.read_text(encoding="utf-8")))
-        parsed = len([u for u in used if u[0] == path.name])
-        if declared == parsed:
-            continue
-        print("preset-layer gate FAILED:")
-        print(
-            f"  {path.name} declares {declared} sprite layer(s) but the structured parse "
-            f"found {parsed}. The gate can only check what it parses, so a mismatch means it "
-            f"is silently passing layers. Fix the parser in tools/ci/check_preset_layers.py."
-        )
-        return 1
-
+    verdicts = read_doc()
     for origin, package, layer in used:
         verdict = verdicts.get((package, layer))
         if verdict is None:
@@ -96,24 +74,43 @@ def main():
         verdict = verdicts.get((package, part))
         if verdict is None:
             problems.append(
-                f"{origin}: hidden part {package}/{part} has no row in "
-                f"docs/preset_layers.md"
+                f"{origin}: hidden part {package}/{part} has no row in docs/preset_layers.md"
             )
         elif verdict != "chrome":
             problems.append(
                 f"{origin}: hidden part {package}/{part} is classified '{verdict}' - "
                 f"only chrome is worth hiding"
             )
+    return problems
 
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Check every 2D layer a built-in preset draws against docs/preset_layers.md"
+    )
+    add_dump_argument(parser)
+    args = parser.parse_args()
+
+    try:
+        docs = documents(args.dump)
+    except DumpError as bad:
+        print("preset-layer gate FAILED:")
+        print(f"  {bad}")
+        return 1
+
+    problems = check(docs)
     if problems:
         print("preset-layer gate FAILED:")
         for problem in problems:
             print(f"  {problem}")
         return 1
 
+    used, hidden = read_layers(docs)
+    distinct = {(package, layer) for _, package, layer in used}
     print(
-        f"preset-layer gate OK: {len(used)} layer(s) and {len(hidden)} hidden part(s), "
-        f"all classified as background art"
+        f"preset-layer gate OK: {len(distinct)} layer(s) drawn by {len(used)} clip(s) and "
+        f"{len(hidden)} hidden part(s) across {len(docs)} document(s), all classified as "
+        f"background art"
     )
     return 0
 

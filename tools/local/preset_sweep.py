@@ -1,101 +1,97 @@
 import argparse
-import re
 import subprocess
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
+
 RENDERER = ROOT / "bin" / "573Renderer.exe"
-PRESET_DIR = ROOT / "src" / "preset"
 SHOTS = ROOT / "screenshots"
 
-SCENE_ID = re.compile(r'\.id\s*=\s*"([^"]+)"')
-OPTION_CHOICES = re.compile(r"constexpr\s+std::array<OptionChoice,\s*(\d+)>\s+(\w+)")
-SCENE_OPTIONS = re.compile(r"\.options\s*=\s*(\w+)")
-SCENE_PHASES = re.compile(r"\.phases\s*=\s*(\w+)")
-PHASE_ARRAY = re.compile(
-    r"constexpr\s+std::array<Phase,\s*\d+>\s+(\w+)\s*=\s*\{\{(.*?)\}\};", re.S
-)
-PHASE_ENTRY = re.compile(r'\.label\s*=\s*"([^"]+)",\s*\.start_frame\s*=\s*(\d+)')
-OPTION_LIST = re.compile(
-    r"constexpr\s+std::array<Option,\s*\d+>\s+(\w+)\s*=\s*\{\{(.*?)\}\};", re.S
-)
-CHOICES_FIELD = re.compile(r"\.choices\s*=\s*(\w+)")
+
+def dump_module():
+    sys.path.insert(0, str(ROOT / "tools" / "ci"))
+    import preset_dump
+
+    return preset_dump
 
 
-def scenes_for(build):
-    path = PRESET_DIR / f"scene_presets_{build}.cpp"
-    text = path.read_text(encoding="utf-8")
-    for extra in sorted(PRESET_DIR.glob(f"scene_presets_{build}_*.h")):
-        text += extra.read_text(encoding="utf-8")
-    choice_counts = {name: int(n) for n, name in OPTION_CHOICES.findall(text)}
-    option_choices = {}
-    for name, body in OPTION_LIST.findall(text):
-        field = CHOICES_FIELD.search(body)
-        if field is not None:
-            option_choices[name] = choice_counts.get(field.group(1), 1)
+def slug(label):
+    return label.split(",")[0].strip().replace(" ", "_").lower()
 
-    phase_sets = {}
-    for name, body in PHASE_ARRAY.findall(text):
-        phase_sets[name] = PHASE_ENTRY.findall(body)
 
-    out = []
-    for block in text.split(".id = ")[1:]:
-        ident = SCENE_ID.search(".id = " + block)
-        if ident is None:
-            continue
-        options = SCENE_OPTIONS.search(block.split("},")[0] + block[:400])
-        states = option_choices.get(options.group(1), 1) if options else 1
-        scene_id = ident.group(1)
-        if not scene_id.startswith(f"{build}-"):
-            continue
-        phases = SCENE_PHASES.search(block[:600])
-        entries = phase_sets.get(phases.group(1), []) if phases else []
-        out.append((scene_id, states, entries))
-    return out
+def shots_of(document, frames):
+    markers = document.get("markers", [])
+    if not markers:
+        return [("", frames)]
+    return [(f"-{slug(m['label'])}", int(m["frame"]) + 60) for m in markers]
+
+
+def states_of(document):
+    options = document.get("options", [])
+    if not options:
+        return [[]]
+    first = options[0]
+    return [[f"{first['id']}={choice['label']}"] for choice in first.get("choices", [])]
+
+
+def run_one(game_dir, preset, out, frames, option):
+    command = [
+        str(RENDERER),
+        "--preset-test",
+        game_dir,
+        preset,
+        str(out),
+        str(frames),
+    ]
+    for spec in option:
+        command += ["--preset-option", spec]
+    result = subprocess.run(command, check=False, capture_output=True)
+    return result.returncode
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Render every preset of a build in every state and fail on a frozen model"
+        description="Render every built-in preset of a build in every state and fail on a "
+        "frozen model"
     )
     parser.add_argument("build", help="build id, e.g. iidx11")
     parser.add_argument("game_dir", help="the game install directory")
     parser.add_argument("--frames", type=int, default=120)
+    parser.add_argument(
+        "--dump",
+        default=None,
+        help="read documents from an existing --preset-dump-defaults directory",
+    )
     args = parser.parse_args()
+
+    preset_dump = dump_module()
+    try:
+        docs = [d for d in preset_dump.documents(args.dump) if d["build"] == args.build]
+    except preset_dump.DumpError as bad:
+        print(f"preset sweep FAILED: {bad}")
+        return 1
+    if not docs:
+        print(f"preset sweep FAILED: no built-in preset document has build '{args.build}'")
+        return 1
 
     SHOTS.mkdir(exist_ok=True)
     failures = []
     total = 0
-    for scene, states, phases in scenes_for(args.build):
-        shots = [("", args.frames)]
-        if phases:
-            shots = [
-                (f"-{label.split(',')[0].strip().replace(' ', '_').lower()}", int(start) + 60)
-                for label, start in phases
-            ]
-        for state in range(states):
-            for phase_suffix, frames in shots:
+    for document in docs:
+        preset = document["id"]
+        states = states_of(document)
+        for index, option in enumerate(states):
+            for marker_suffix, frames in shots_of(document, args.frames):
                 total += 1
-                suffix = phase_suffix if states == 1 else f"-state{state}{phase_suffix}"
-                out = SHOTS / f"{scene}{suffix}.png"
-                result = subprocess.run(
-                    [
-                        str(RENDERER),
-                        "--preset-test",
-                        args.game_dir,
-                        scene,
-                        str(out),
-                        str(frames),
-                        str(state),
-                    ],
-                    check=False,
-                    capture_output=True,
-                )
-                verdict = "ok" if result.returncode == 0 else f"FAILED ({result.returncode})"
-                print(f"{scene}{suffix}: {verdict} -> {out.name}")
-                if result.returncode != 0:
-                    failures.append(f"{scene}{suffix}")
+                suffix = marker_suffix if len(states) == 1 else f"-state{index}{marker_suffix}"
+                out = SHOTS / f"{preset}{suffix}.png"
+                print(f"[{total}] {preset}{suffix} -> {out.name}", flush=True)
+                code = run_one(args.game_dir, preset, out, frames, option)
+                verdict = "ok" if code == 0 else f"FAILED ({code})"
+                print(f"    {verdict}")
+                if code != 0:
+                    failures.append(f"{preset}{suffix}")
 
     print(f"\n{total - len(failures)}/{total} preset state(s) render with a moving model")
     if failures:

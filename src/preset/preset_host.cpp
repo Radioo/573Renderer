@@ -10,10 +10,8 @@
 #include "preset/eval/frame_state.h"
 #include "preset/eval/preset_evaluator.h"
 #include "preset/preset_asset_lengths.h"
-#include "preset/preset_convert.h"
 #include "preset/preset_host_params.h"
 #include "preset/preset_host_push.h"
-#include "preset/scene_preset.h"
 
 #include "gc2d/gc_host.h"
 #include "scene3d/scene3d_host.h"
@@ -25,10 +23,8 @@
 #include <atomic>
 #include <cstddef>
 #include <filesystem>
-#include <fstream>
 #include <memory>
 #include <mutex>
-#include <sstream>
 #include <string>
 #include <utility>
 #include <vector>
@@ -406,14 +402,6 @@ bool LoadDocument(const std::string& game_dir, const std::shared_ptr<const Doc::
     return true;
 }
 
-bool Load(const std::string& game_dir, const Preset::Scene& scene, const ProgressFn& progress) {
-    const Preset::AssetLengths none;
-    auto probe = std::make_shared<const Doc::Document>(Preset::FromScene(scene, none));
-    if (!Prepare(game_dir, probe, progress)) return false;
-    Finish(std::make_shared<const Doc::Document>(Preset::FromScene(scene, g_lengths)));
-    return true;
-}
-
 void ReplaceDocument(const std::shared_ptr<const Doc::Document>& document,
                      const ProgressFn& progress) {
     if (!g_loaded) return;
@@ -596,32 +584,6 @@ void ResetAllParams() {
 int ChangedParamCount() {
     const std::scoped_lock guard(g_lock);
     return (int)g_shared.overrides.size();
-}
-
-int LoadTweaks(const std::string& path) {
-    std::ifstream file(path);
-    if (!file) {
-        LOG("Preset", "tweak file '%s' could not be opened", path.c_str());
-        return 0;
-    }
-    int applied = 0;
-    std::string line;
-    while (std::getline(file, line)) {
-        const std::size_t eq = line.find('=');
-        if (line.empty() || line[0] == '#' || eq == std::string::npos) continue;
-        std::string id = line.substr(0, eq);
-        while (!id.empty() && id.back() == ' ')
-            id.pop_back();
-        std::istringstream values(line.substr(eq + 1));
-        std::array<float, 3> vector = {0.0F, 0.0F, 0.0F};
-        int integer = 0;
-        values >> vector[0] >> vector[1] >> vector[2] >> integer;
-        const std::scoped_lock guard(g_lock);
-        if (WriteOverride(g_shared.overrides, id, vector, integer, g_shared.frame)) applied++;
-    }
-    LOG("Preset", "tweak file '%s': %d override(s)", path.c_str(), applied);
-    RebuildEffective();
-    return applied;
 }
 
 }

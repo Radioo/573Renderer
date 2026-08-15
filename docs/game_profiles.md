@@ -213,6 +213,16 @@ above. Registry order drives the GUI dropdown display order; most-likely
 profiles go first. `AutoDetect` and `BySlug` return nullptr on no match. The
 registry is constructed at static init and never empty.
 
+A fingerprinted BUILD is not the same thing as a profile: `GameFingerprint::Build`
+(src/game_fingerprint.cpp) identifies the exact `bm2dx.exe` a scene preset was
+transcribed from, and carries a `profile_slug` naming the render profile its
+export runs through (`GameFingerprint::ProfileSlugFor`, used by
+`PresetTest::RunExport`). Both preset builds point at `iidx11`: 10th style and RED
+share one legacy D3D9 path, and there is no `iidx10` profile row to point at. A
+build with no `profile_slug` cannot be exported, and says so instead of exporting
+through someone else's profile, which is what the old `BySlug("iidx11")` literal
+did for every build.
+
 Adding a modern-AFP profile:
 
 1. Append an identity row in game_profile.cpp (name / slug / dir_substring
@@ -1094,9 +1104,10 @@ Run one headless:
 ```
 
 The build is identified from the directory, the preset id selects the screen
-(omit it for the build's first preset), and the frame count drives the countdown
-so the last-ten-seconds speed-up can be captured. A sixth argument picks an
-option choice, which is how each of a screen's states is rendered for review.
+(omit it for the build's first preset), and the frame count is how far along the
+document's frame axis the capture runs, so a late state such as the end-of-timer
+speed-up can be reached. `--preset-option <option-id>=<choice>` picks an option
+choice, which is how each of a screen's states is rendered for review.
 
 **The tool exits 8 when no visible model's transform changed over the capture.**
 Every one of these screens drives its models from a per-frame update, so a preset
@@ -1162,23 +1173,27 @@ somewhere different for every entry in the mode menu - so a single fixed
 placement would only ever be one sixth of that screen. `PresetHost::SetOption`
 runs the game's own transition when the choice changes (mode select lerps over 25
 frames and kicks the spin in the direction of the turntable move), the GUI draws
-one combo per option in the Screens tab, and the CLI takes the choice index as
-the last argument:
+one combo per option in the Screens tab, and the CLI names the option and the
+choice (a label or an index, repeatable per option):
 
 ```bash
-573Renderer.exe --preset-test <iidx10-install-dir> iidx10-mode-select out.png 120 3
+573Renderer.exe --preset-test <iidx10-install-dir> iidx10-mode-select out.png 120 --preset-option mode=EXPERT
 ```
 
-Layers can also mark `ui_parts`: names of cells or nested child animations INSIDE
-an animation that belong to the screen's chrome rather than its background. The
-"Show UI layers" toggle hides them, which is how mode select's backdrop renders
-without the `MODE SELECT` title, the marquee and the `INFORMATION` bar that share
-its one `MODE_BG_LOOP` animation.
+A sprite clip can also list `hidden_parts`: names of cells or nested child
+animations INSIDE an animation that belong to the screen's chrome rather than its
+background. They are hidden unconditionally, with no toggle anywhere, which is how
+mode select's backdrop renders without the `MODE SELECT` title, the marquee and
+the `INFORMATION` bar that share its one `MODE_BG_LOOP` animation. Every one of
+those names needs a `chrome` row in `docs/preset_layers.md`.
 
-Presets are split per build: `scene_presets_iidx10.cpp` and
-`scene_presets_iidx11.cpp` each expose their table through `scene_registry.h`,
-and `scene_presets.cpp` only aggregates them for `ForBuild`. Registered IIDX RED
-screens (`IIDX/red_3d_screens.md`):
+Built-in presets are split per build under `src/preset/defaults/`
+(`iidx10_defaults.cpp`, `iidx11_defaults.cpp`, `iidx11_select_defaults.cpp` and the
+two ending halves), each a function returning a `Preset::Doc::Document`;
+`defaults.cpp` aggregates them for `BuiltIns()`, and `Preset::Doc::Registry`
+resolves a build's list out of those plus the user documents in
+`presets/<build>/*.json` (docs/preset_document.md). Registered IIDX RED screens
+(`IIDX/red_3d_screens.md`):
 
 | id | content | natural length |
 |---|---|---|

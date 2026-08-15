@@ -116,29 +116,19 @@ A choice can move the model, the camera, or both. IIDX RED's class course select
 is the camera case: all seventeen courses share one model pose and differ only in
 where the camera settles.
 
-## Tweak files
+## The tweak file is retired
 
-```bash
-573Renderer.exe --preset-test <game-dir> <preset-id> out.png 120 0 --preset-tweaks tweaks.txt
-```
+A preset's user-editable form is now the JSON document (docs/preset_document.md):
+`--preset-export-json <build> <id> <out.json>`, edit, `--preset-json <file>`.
+`--preset-tweaks` no longer exists; naming it makes the process print that
+sentence and exit 2 instead of silently ignoring the flag, and
+`PresetHost::LoadTweaks` went with it. The line format it used to take
+(`id = x y z i`, one override per line) is described in the git history of this
+file; nothing reads it any more.
 
-One override per line, `id = x y z i`, blank lines and `#` comments ignored:
-
-```
-camera.fov_y = 2.6 0 0 0
-model[core].alpha = 1.0 0 0 0
-sprite[BG_SKY].scroll_x = 2.0 0 0 0
-```
-
-Overrides never load by themselves. A preset with a tweak file sitting next to it
-applies zero overrides, so `--preset-test` exit 8 keeps meaning "this preset is
-frozen" rather than "the user tweaked it to a standstill".
-
-The plan called for JSON here. This ships a line format instead, because the file
-is a flat id to numbers map, the repo has no JSON parser today, and adding one
-would pull a dependency into the two test targets as well as the renderer. If the
-format needs nesting or string values, that trade goes the other way and the
-dependency is the right call.
+The live parameter overrides in the Parameters pane are unaffected: they are a
+session-only override set on top of the loaded document
+(`PresetHost::SetParam` / `ResetParam`), never a file.
 
 ## Ids must be unique, and a repeated layer proves it
 

@@ -114,15 +114,22 @@ so a data-less run is visibly a skip, not a pass.
 
 ## Scene preset sweep
 
-`tools/local/preset_sweep.py` renders every preset of a build, in every option
-state, and fails if any of them shows a model whose transform never changes:
+`tools/local/preset_sweep.py` renders every built-in preset of a build, at every
+marker and in every option state, and fails if any of them shows a model whose
+transform never changes:
 
 ```bash
 python tools/local/preset_sweep.py iidx11 <iidx-red-dir> --frames 120
 ```
 
-It writes one PNG per state into `screenshots/` (named `<preset>-state<N>.png`
-when the preset has options) so every state can be reviewed by eye, which is the
-other half of the check the tool cannot make. A non-zero exit means at least one
+It takes the preset list from the renderer's own document dump
+(`--preset-dump-defaults`, shared with the CI gates through
+`tools/ci/preset_dump.py`; `--dump <dir>` reuses an existing one), so it needs a
+built `bin/573Renderer.exe`. Shot names come from the document: one per marker
+(rendered at the marker frame plus 60) and one per choice of the first option,
+passed as `--preset-option <option-id>=<label>`. It prints the current preset and
+state as it goes, and writes one PNG per state into `screenshots/` (named
+`<preset>-state<N>-<marker>.png` when the preset has options) so every state can be
+reviewed by eye, which is the other half of the check the tool cannot make. A non-zero exit means at least one
 preset was built from a screen's INIT and misses the per-frame update that drives
 its models: see `docs/game_profiles.md` and the `game-scene-preset` skill.

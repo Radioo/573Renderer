@@ -9,6 +9,15 @@ game, and `tools/ci/check_preset_states.py` fails the build in both directions:
 a documented state the preset does not expose, or a state in the preset with no
 row here.
 
+A "state" in a preset document is a MARKER on the frame axis (a phase) or an
+OPTION CHOICE label. The gate reads them out of the documents the renderer dumps
+(`573Renderer.exe --preset-dump-defaults <tmp>`), so a marker is required for
+every documented state, including spans that carry no clip at all, such as the
+attract screen's two "models hidden" spans. A row belongs to the table it sits in
+and is keyed by preset id alone, with no id or prefix rule of any kind: an id in
+the first column that no dumped document carries fails the gate, so a typo is a
+build failure rather than a silently skipped row. See docs/gates.md.
+
 This exists because `iidx11-attract` shipped as the settled attract loop alone,
 while the screen actually plays a 291-frame warp-in first, with the models hidden
 before it. The reverse-engineering brief listed all of it. The preset format at

@@ -1,14 +1,25 @@
 #pragma once
 
+#include <array>
 #include <string>
+#include <vector>
 
 namespace PresetTest {
 
-int Run(const std::string& game_dir, const std::string& preset_id, const std::string& out_png,
-        int frames, int option, const std::string& tweaks_path);
+struct Job {
+    std::string game_dir;
+    std::string preset_id;
+    std::string json_path;
+    std::string out_path;
+    int frames = 1;
+    std::vector<std::string> options;
+    bool force = false;
+    bool bg_transparent = false;
+    std::array<float, 3> bg_rgb = {0.0F, 0.0F, 0.0F};
+};
 
-int RunExport(const std::string& game_dir, const std::string& preset_id,
-              const std::string& out_path, int frames, int option, bool bg_transparent,
-              const float* bg_rgb);
+int Run(const Job& job);
+
+int RunExport(const Job& job);
 
 }
