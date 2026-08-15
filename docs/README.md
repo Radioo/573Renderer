@@ -37,6 +37,15 @@ documents, which are THE source of truth. Start here to find the right one.
 | [media_formats.md](media_formats.md) | export formats: the Format enum, tokens/extensions, stability contract, the CI encode net |
 | [formats.md](formats.md) | pure parsers: IFS/arc containers, LZ77, DXT decode, BGRA frame ops |
 
+## Scene presets
+
+| doc | read it when |
+|-----|--------------|
+| [preset_document.md](preset_document.md) | the JSON scene preset document: schema, command catalog, units, ease formulas, canonical serialization, validation rules |
+| [preset_params.md](preset_params.md) | the parameter schema behind today's compiled presets: declarations, instances, tweaks, ranges |
+| [preset_layers.md](preset_layers.md) | which 2D layer of a package is clean background and which is chrome, and the gate that enforces it |
+| [preset_states.md](preset_states.md) | what each preset screen does in the game, state by state, with the RE pointers |
+
 ## Module references (gated libs)
 
 | doc | read it when |

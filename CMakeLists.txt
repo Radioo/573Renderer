@@ -30,6 +30,7 @@ find_package(imgui CONFIG REQUIRED)
 find_package(FFMPEG REQUIRED COMPONENTS avcodec avformat avutil swscale)
 find_package(Catch2 3 CONFIG REQUIRED)
 find_package(tl-expected CONFIG REQUIRED)
+find_package(nlohmann_json CONFIG REQUIRED)
 
 set(R573_MSVC_WARNING_FLAGS
     /W4
@@ -305,6 +306,8 @@ add_executable(game_tests
     tests/game/game_profile_tests.cpp
     tests/game/mc_control_tests.cpp
     tests/game/scene_preset_tests.cpp
+    tests/game/preset_json_tests.cpp
+    tests/game/preset_validate_tests.cpp
     src/game_profile.cpp
     src/game_revision.cpp
     src/game_fingerprint.cpp
@@ -316,10 +319,17 @@ add_executable(game_tests
     src/preset/preset_schema.cpp
     src/preset/preset_effective.cpp
     src/preset/preset_rng.cpp
+    src/preset/doc/preset_enum_names.cpp
+    src/preset/doc/preset_fields.cpp
+    src/preset/doc/preset_json.cpp
+    src/preset/doc/preset_validate.cpp
     src/mc_control.cpp
 )
 target_include_directories(game_tests PRIVATE src)
-target_link_libraries(game_tests PRIVATE Catch2::Catch2WithMain r573_support r573::warnings)
+target_compile_definitions(game_tests
+    PRIVATE R573_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/game/fixtures")
+target_link_libraries(game_tests PRIVATE Catch2::Catch2WithMain r573_support
+                                         nlohmann_json::nlohmann_json r573::warnings)
 catch_discover_tests(game_tests DISCOVERY_MODE POST_BUILD PROPERTIES LABELS ci)
 
 add_executable(cli_tests

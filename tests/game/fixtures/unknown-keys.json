@@ -1,0 +1,79 @@
+{
+  "schema": "573renderer/scene-preset",
+  "version": 1,
+  "id": "unknown-keys",
+  "name": "Unknown keys",
+  "build": "iidx11",
+  "fps": 60,
+  "length": 120,
+  "render": {
+    "width": 640,
+    "height": 480,
+    "opaque": true,
+    "shading": "lit_material",
+    "sprite_split_priority": 30
+  },
+  "camera": {
+    "eye": [
+      0.0,
+      0.0,
+      -1.0
+    ],
+    "at": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "up": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "fov_y": 1.0471976,
+    "near_z": 0.1,
+    "far_z": 500.0,
+    "aspect": "auto"
+  },
+  "lights": [],
+  "assets": {
+    "red": {
+      "kind": "scene3d",
+      "dir": "data/graph/model/red"
+    }
+  },
+  "options": [],
+  "rng_seed": 1,
+  "markers": [],
+  "tracks": [
+    {
+      "id": "core",
+      "name": "core",
+      "kind": "model",
+      "target": "core",
+      "clips": [
+        {
+          "id": "core_draw",
+          "type": "model.draw",
+          "start": 0,
+          "end": null,
+          "params": {
+            "asset": "red",
+            "future_param": [
+              1,
+              2
+            ]
+          },
+          "future_clip_note": "kept by an older editor"
+        }
+      ],
+      "future_track_flag": true
+    }
+  ],
+  "future_block": {
+    "a": 1,
+    "b": [
+      1,
+      2
+    ]
+  }
+}
