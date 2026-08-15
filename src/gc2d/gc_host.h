@@ -45,6 +45,11 @@ struct DrawInfo {
     float w = 0.0F;
     float h = 0.0F;
     float alpha = 1.0F;
+    int flags = 0;
+    int blend_code = 0;
+    int alpha_a = 100;
+    int alpha_b = 0;
+    int alpha_keys = 0;
 };
 
 std::vector<DrawInfo> ListDrawNodes();

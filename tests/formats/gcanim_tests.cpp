@@ -341,7 +341,9 @@ TEST_CASE("the blend mode follows the game's own four way rule") {
     CHECK(blend_of(SysIdx::kFlagBlend, 50, 40) == GcAnim::Blend::Normal);
     CHECK(blend_of(SysIdx::kFlagBlend, 100, 80) == GcAnim::Blend::Additive);
     CHECK(blend_of(SysIdx::kFlagBlend | SysIdx::kFlagSubtract, 100, 80) == GcAnim::Blend::Subtract);
-    CHECK(blend_of(SysIdx::kFlagSubtract, 100, 80) == GcAnim::Blend::Replace);
+    INFO("the subtract flag wins on its own, without the blend enable bit");
+    CHECK(blend_of(SysIdx::kFlagSubtract, 100, 80) == GcAnim::Blend::Subtract);
+    CHECK(blend_of(SysIdx::kFlagSubtract, 100, 0) == GcAnim::Blend::Subtract);
 }
 
 namespace {
@@ -419,4 +421,34 @@ TEST_CASE("a logo drawn over a background does not punch a black rectangle throu
     INFO("a transparent texel that is dark but not pure black must also leave the backdrop alone");
     CHECK(dark.r == backdrop.r);
     CHECK(dark.b == backdrop.b);
+}
+
+TEST_CASE("a subtract flagged record subtracts even when its alpha pair is not authored") {
+    SysIdx::Package pkg;
+    FillCells(pkg);
+    SysIdx::Record rec = DrawCell(0, 0, 10);
+    rec.flags = SysIdx::kFlagBlend | SysIdx::kFlagSubtract;
+    rec.alpha = {{.t = 0, .a = 100, .b = 0}, {.t = 10, .a = 100, .b = 0}};
+    pkg.records.push_back(rec);
+    pkg.records.push_back(EndAnimation());
+
+    std::vector<GcAnim::DrawNode> out;
+    GcAnim::Evaluate(pkg, 0, 5, 0.0F, 0.0F, out);
+    REQUIRE(out.size() == 1);
+    INFO("IIDX 17's CREDIT line has flags 0x12 and an alpha pair of (100,0)");
+    CHECK(out[0].blend == GcAnim::Blend::Subtract);
+
+    const Texel backdrop{.r = 236, .g = 236, .b = 236, .a = 255};
+
+    const Texel glyph{.r = 255, .g = 255, .b = 255, .a = 255};
+    const Texel inked = Composite(backdrop, glyph, out[0].blend);
+    INFO("white glyphs subtract from the backdrop, giving DARK text");
+    CHECK(inked.r < backdrop.r);
+
+    const Texel field{.r = 0, .g = 0, .b = 0, .a = 255};
+    const Texel around = Composite(backdrop, field, out[0].blend);
+    INFO("the cell's opaque BLACK field must subtract nothing and leave the backdrop exact");
+    CHECK(around.r == backdrop.r);
+    CHECK(around.g == backdrop.g);
+    CHECK(around.b == backdrop.b);
 }

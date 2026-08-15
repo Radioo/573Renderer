@@ -44,9 +44,9 @@ struct Shade {
 };
 
 Blend SelectBlend(uint16_t code, int alpha_a, int alpha_b) {
+    if ((code & SysIdx::kFlagSubtract) != 0) return Blend::Subtract;
     const int blended = ((code & SysIdx::kFlagBlend) != 0) ? alpha_b : 0;
     if (blended == 0) return Blend::Replace;
-    if ((code & SysIdx::kFlagSubtract) != 0) return Blend::Subtract;
     if ((alpha_a + blended) > kPercent) return Blend::Additive;
     return Blend::Normal;
 }
@@ -80,6 +80,39 @@ Shade ShadeOf(const SysIdx::Record& rec, int frame, const Transform& xf) {
     const bool authored = (out.alpha_a != kPercent) || (out.alpha_b != 0);
     out.code = BlendCode(rec.flags, xf.blend_code, authored);
     return out;
+}
+
+struct Placement {
+    float x = 0.0F;
+    float y = 0.0F;
+    float sx = 1.0F;
+    float sy = 1.0F;
+};
+
+struct Pivot {
+    float x = 0.0F;
+    float y = 0.0F;
+};
+
+DrawNode MakeNode(const SysIdx::Record& rec, const SysIdx::Cell& cell, const Shade& shade,
+                  Blend blend, float alpha, Placement at, Pivot pivot, int rot) {
+    DrawNode node;
+    node.cell = rec.id;
+    node.x = at.x;
+    node.y = at.y;
+    node.w = (float)cell.w * at.sx;
+    node.h = (float)cell.h * at.sy;
+    node.rotation = (float)rot * kRotationScale;
+    node.pivot_x = pivot.x;
+    node.pivot_y = pivot.y;
+    node.alpha = std::clamp(alpha, 0.0F, 1.0F);
+    node.blend = blend;
+    node.flags = rec.flags;
+    node.blend_code = shade.code;
+    node.alpha_a = shade.alpha_a;
+    node.alpha_b = shade.alpha_b;
+    node.alpha_keys = (int)rec.alpha.size();
+    return node;
 }
 
 void EvaluateRecord(const SysIdx::Package& pkg, const SysIdx::Record& rec, int frame,
@@ -128,18 +161,9 @@ void EvaluateRecord(const SysIdx::Package& pkg, const SysIdx::Record& rec, int f
     if (rec.id < 0 || (size_t)rec.id >= pkg.cells.size()) return;
 
     const SysIdx::Cell& cell = pkg.cells[(size_t)rec.id];
-    DrawNode node;
-    node.cell = rec.id;
-    node.x = draw_x;
-    node.y = draw_y;
-    node.w = (float)cell.w * sx;
-    node.h = (float)cell.h * sy;
-    node.rotation = (float)rot * kRotationScale;
-    node.pivot_x = pivot_x;
-    node.pivot_y = pivot_y;
-    node.alpha = std::clamp(alpha, 0.0F, 1.0F);
-    node.blend = blend;
-    out.push_back(node);
+    out.push_back(MakeNode(rec, cell, shade, blend, alpha,
+                           Placement{.x = draw_x, .y = draw_y, .sx = sx, .sy = sy},
+                           Pivot{.x = pivot_x, .y = pivot_y}, rot));
 }
 
 void EvaluateGroup(const SysIdx::Package& pkg, size_t start_index, int frame, const Transform& xf,

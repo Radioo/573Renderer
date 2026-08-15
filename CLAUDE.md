@@ -13,6 +13,40 @@
 - When fixing a bug with AVS/AFP instrumentation, you MUST provide proof of game pseudocode from RE to ensure the fix is correct. Attach it to docs along with a way how to find that code (remember, no raw offsets because they will change on each game version).
 - Prefer existing libraries and solutions known to work as opposed to writing code that another library can provide, adding new vcpkg dependencies for this is very welcome
 
+# FIXING A BUG: FAILING TEST FIRST, THEN THE FIX, THEN PROVE IT PASSES
+
+Every bug fix follows this order, with no steps merged or skipped:
+
+1. **Reproduce the bug in a test, and watch it FAIL.** Write the test before
+   touching app code, run it, and confirm it fails for the reason the bug
+   describes. A test that has never failed proves nothing: it may be asserting
+   something that cannot break, or asserting it in a place the bug does not reach.
+2. **Fix the app code.**
+3. **Run the test again and confirm it now passes**, then run the full gate
+   (`bash tools/checks.sh`) so the fix is checked against everything else.
+
+The test is the deliverable, not the scaffolding. It stays, it runs in CI under
+the `ci` label, and it is what stops the bug coming back.
+
+**Prefer a UNIT test that needs no game install, no GPU and no window.** A
+2D package is a handful of `SysIdx::Cell` and `SysIdx::Record` values, so build
+the failing case in code. Anything that needs a real game directory cannot run in
+CI and will rot. When behaviour is per-pixel, express the pipeline once as pure
+data that BOTH the renderer and the test consume (see `GcAnim::FactorsFor` and
+`GcAnim::TexelDiscarded`) so the test cannot drift from what the screen does.
+
+**Verify the test can actually see the bug.** Before trusting a pass, run the
+check against a known-broken input and confirm it fails there. Burned repeatedly
+(2026-08-14, the export rectangle): a check scanned a single pixel column, then a
+later one scanned rows for horizontal steps a full-width band cannot have. Neither
+could fail, both reported success, and the user was told "fixed" three times while
+the bug was untouched.
+
+**Reproduce the user's exact path before claiming a fix.** Same settings, same
+entry point, same format. That same bug survived because every headless test
+passed a transparent background, a path the UI cannot take for that backend, so
+the broken branch was never executed once.
+
 # A SCENE PRESET IS A CLEAN BACKGROUND CAPTURE - NEVER A SCREEN REPLICA
 
 Scene presets exist for ONE reason: to capture the cool BACKGROUND ANIMATION a game screen

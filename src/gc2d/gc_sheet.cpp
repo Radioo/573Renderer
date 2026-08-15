@@ -49,6 +49,16 @@ const char* BlendName(int blend) {
     }
 }
 
+void WriteDraws(std::ofstream& draws, const std::string& name, int frame) {
+    draws << name << " frame " << frame << "\n";
+    for (const Gc2dHost::DrawInfo& d : Gc2dHost::ListDrawNodes()) {
+        draws << "    " << d.cell << "  " << BlendName(d.blend) << "  x=" << (int)d.x
+              << " y=" << (int)d.y << " w=" << (int)d.w << " h=" << (int)d.h << " alpha=" << d.alpha
+              << " flags=0x" << std::hex << d.flags << " code=0x" << d.blend_code << std::dec
+              << " pair=" << d.alpha_a << "," << d.alpha_b << " keys=" << d.alpha_keys << "\n";
+    }
+}
+
 void Shoot(const std::string& name, bool animated, int frame, const std::string& path) {
     std::vector<Gc2dHost::SpritePlacement> sprites;
     Gc2dHost::SpritePlacement placement;
@@ -106,12 +116,7 @@ int Run(const std::string& package_dir, const std::string& out_dir, int frame) {
             const std::string path =
                 (root / ("anim_" + SafeName(name) + "_f" + std::to_string(at) + ".png")).string();
             Shoot(name, true, at, path);
-            draws << name << " frame " << at << '\n';
-            for (const Gc2dHost::DrawInfo& d : Gc2dHost::ListDrawNodes()) {
-                draws << "    " << d.cell << "  " << BlendName(d.blend) << "  x=" << (int)d.x
-                      << " y=" << (int)d.y << " w=" << (int)d.w << " h=" << (int)d.h
-                      << " alpha=" << d.alpha << '\n';
-            }
+            WriteDraws(draws, name, at);
             if (length <= 1) break;
         }
         parts << name << "\n";

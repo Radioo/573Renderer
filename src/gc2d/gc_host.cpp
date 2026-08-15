@@ -261,6 +261,11 @@ std::vector<DrawInfo> ListDrawNodes() {
         info.w = node.w;
         info.h = node.h;
         info.alpha = node.alpha;
+        info.flags = node.flags;
+        info.blend_code = node.blend_code;
+        info.alpha_a = node.alpha_a;
+        info.alpha_b = node.alpha_b;
+        info.alpha_keys = node.alpha_keys;
         out.push_back(std::move(info));
     }
     return out;

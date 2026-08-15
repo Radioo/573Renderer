@@ -63,6 +63,11 @@ struct DrawNode {
     float pivot_y = 0.0F;
     float alpha = 1.0F;
     Blend blend = Blend::Normal;
+    uint16_t flags = 0;
+    uint16_t blend_code = 0;
+    int alpha_a = 100;
+    int alpha_b = 0;
+    int alpha_keys = 0;
 };
 
 int SampleTrack(const std::vector<SysIdx::Key>& keys, int t, int fallback_a, int& out_b);
