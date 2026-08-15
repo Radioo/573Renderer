@@ -1,9 +1,11 @@
 #include <catch2/catch_approx.hpp>
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include "formats/gcanim.h"
 #include "formats/sysidx.h"
 
+#include <algorithm>
 #include <cstdint>
 #include <vector>
 
@@ -340,4 +342,81 @@ TEST_CASE("the blend mode follows the game's own four way rule") {
     CHECK(blend_of(SysIdx::kFlagBlend, 100, 80) == GcAnim::Blend::Additive);
     CHECK(blend_of(SysIdx::kFlagBlend | SysIdx::kFlagSubtract, 100, 80) == GcAnim::Blend::Subtract);
     CHECK(blend_of(SysIdx::kFlagSubtract, 100, 80) == GcAnim::Blend::Replace);
+}
+
+namespace {
+
+struct Texel {
+    int r = 0;
+    int g = 0;
+    int b = 0;
+    int a = 0;
+};
+
+int ApplyFactor(GcAnim::Factor f, int value, int src_alpha) {
+    switch (f) {
+    case GcAnim::Factor::Zero:
+        return 0;
+    case GcAnim::Factor::One:
+        return value;
+    case GcAnim::Factor::SrcAlpha:
+        return (value * src_alpha) / 255;
+    case GcAnim::Factor::InvSrcAlpha:
+        return (value * (255 - src_alpha)) / 255;
+    }
+    return 0;
+}
+
+int Combine(GcAnim::BlendOp op, int s, int d) {
+    const int out = (op == GcAnim::BlendOp::RevSubtract) ? (d - s) : (d + s);
+    return std::clamp(out, 0, 255);
+}
+
+Texel Composite(const Texel& dst, const Texel& src, GcAnim::Blend blend) {
+    if (GcAnim::TexelDiscarded(src.a)) return dst;
+    const GcAnim::BlendFactors f = GcAnim::FactorsFor(blend);
+    Texel out;
+    out.r = Combine(f.op, ApplyFactor(f.src, src.r, src.a), ApplyFactor(f.dst, dst.r, src.a));
+    out.g = Combine(f.op, ApplyFactor(f.src, src.g, src.a), ApplyFactor(f.dst, dst.g, src.a));
+    out.b = Combine(f.op, ApplyFactor(f.src, src.b, src.a), ApplyFactor(f.dst, dst.b, src.a));
+    out.a = Combine(f.op, ApplyFactor(f.src_alpha, src.a, src.a),
+                    ApplyFactor(f.dst_alpha, dst.a, src.a));
+    return out;
+}
+
+}
+
+TEST_CASE("a logo drawn over a background does not punch a black rectangle through it") {
+    SysIdx::Package pkg;
+    pkg.cells.push_back(SysIdx::Cell{.x = 0, .y = 0, .w = 64, .h = 64});
+    pkg.cells.push_back(SysIdx::Cell{.x = 64, .y = 0, .w = 32, .h = 32});
+    pkg.records.push_back(DrawCell(0, 0, 10));
+    pkg.records.push_back(DrawCell(1, 0, 10));
+    pkg.records.push_back(EndAnimation());
+
+    std::vector<GcAnim::DrawNode> out;
+    GcAnim::Evaluate(pkg, 0, 5, 0.0F, 0.0F, out);
+    REQUIRE(out.size() == 2);
+
+    const Texel backdrop{.r = 20, .g = 40, .b = 90, .a = 255};
+
+    const Texel logo_art{.r = 230, .g = 240, .b = 255, .a = 255};
+    const Texel lit = Composite(backdrop, logo_art, out[1].blend);
+    CHECK(lit.r == 230);
+    CHECK(lit.g == 240);
+    CHECK(lit.b == 255);
+
+    const Texel logo_surround{.r = 0, .g = 0, .b = 0, .a = 0};
+    const Texel around = Composite(backdrop, logo_surround, out[1].blend);
+    INFO("a fully transparent texel must leave the backdrop untouched, not wipe it to black");
+    CHECK(around.r == backdrop.r);
+    CHECK(around.g == backdrop.g);
+    CHECK(around.b == backdrop.b);
+    CHECK(around.a == backdrop.a);
+
+    const Texel below_art{.r = 10, .g = 10, .b = 10, .a = 0};
+    const Texel dark = Composite(backdrop, below_art, out[1].blend);
+    INFO("a transparent texel that is dark but not pure black must also leave the backdrop alone");
+    CHECK(dark.r == backdrop.r);
+    CHECK(dark.b == backdrop.b);
 }

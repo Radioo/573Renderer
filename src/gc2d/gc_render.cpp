@@ -203,6 +203,9 @@ void Renderer::ApplyState() {
     dev_->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
     dev_->SetRenderState(D3DRS_ZENABLE, FALSE);
     dev_->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
+    dev_->SetRenderState(D3DRS_ALPHATESTENABLE, TRUE);
+    dev_->SetRenderState(D3DRS_ALPHAFUNC, D3DCMP_GREATER);
+    dev_->SetRenderState(D3DRS_ALPHAREF, 0);
     dev_->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_MODULATE);
     dev_->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_TEXTURE);
     dev_->SetTextureStageState(0, D3DTSS_COLORARG2, D3DTA_DIFFUSE);

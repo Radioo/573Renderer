@@ -16,6 +16,30 @@ enum class Blend : uint8_t {
     Replace,
 };
 
+enum class Factor : uint8_t {
+    Zero,
+    One,
+    SrcAlpha,
+    InvSrcAlpha,
+};
+
+enum class BlendOp : uint8_t {
+    Add,
+    RevSubtract,
+};
+
+struct BlendFactors {
+    Factor src = Factor::SrcAlpha;
+    Factor dst = Factor::InvSrcAlpha;
+    BlendOp op = BlendOp::Add;
+    Factor src_alpha = Factor::One;
+    Factor dst_alpha = Factor::InvSrcAlpha;
+};
+
+BlendFactors FactorsFor(Blend blend);
+
+bool TexelDiscarded(int src_alpha);
+
 enum class Playback : uint8_t {
     Loop,
     HoldLast,

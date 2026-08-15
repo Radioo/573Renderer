@@ -310,3 +310,20 @@ git ls-files '*.cpp' '*.h' '*.hpp' | xargs clang-format --dry-run --Werror
 
 The DLL-dependent pixel tier runs separately (never hosted):
 `python tools/local/render_regression.py` - see docs/local_regression.md.
+
+## The 2D blend equations are unit tested, pixel exact, with no GPU
+
+`GcAnim::FactorsFor(Blend)` and `GcAnim::TexelDiscarded(alpha)` are the single
+description of the 2D pipeline's per-pixel behaviour. `Gc2d::Renderer` translates
+them into D3D9 render states, and `gcanim_tests` composites with them on the CPU,
+so a blend change is checked against exact expected pixels without a device, a
+window, or any game data.
+
+The regression that test exists for: a logo cell drawn over a background must not
+punch a black rectangle through it. A fully transparent texel has to leave the
+destination byte-identical. That failed the moment the replace blend shipped
+without the alpha test, and it broke the IIDX 17 SIRIUS title screen.
+
+Build the synthetic package in the test rather than reaching for real game files:
+a package is a few `SysIdx::Cell` and `SysIdx::Record` values, and a test that
+needs a game install cannot run in CI.

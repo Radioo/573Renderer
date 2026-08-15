@@ -173,6 +173,39 @@ int ResolveFrame(int time, int length, const Timing& timing) {
     return -1;
 }
 
+bool TexelDiscarded(int src_alpha) {
+    return src_alpha <= 0;
+}
+
+BlendFactors FactorsFor(Blend blend) {
+    switch (blend) {
+    case Blend::Additive:
+        return {.src = Factor::SrcAlpha,
+                .dst = Factor::One,
+                .op = BlendOp::Add,
+                .src_alpha = Factor::Zero,
+                .dst_alpha = Factor::One};
+    case Blend::Subtract:
+        return {.src = Factor::SrcAlpha,
+                .dst = Factor::One,
+                .op = BlendOp::RevSubtract,
+                .src_alpha = Factor::Zero,
+                .dst_alpha = Factor::One};
+    case Blend::Replace:
+        return {.src = Factor::SrcAlpha,
+                .dst = Factor::Zero,
+                .op = BlendOp::Add,
+                .src_alpha = Factor::One,
+                .dst_alpha = Factor::Zero};
+    default:
+        return {.src = Factor::SrcAlpha,
+                .dst = Factor::InvSrcAlpha,
+                .op = BlendOp::Add,
+                .src_alpha = Factor::One,
+                .dst_alpha = Factor::InvSrcAlpha};
+    }
+}
+
 int SampleTrack(const std::vector<SysIdx::Key>& keys, int t, int fallback_a, int& out_b) {
     if (keys.empty()) {
         out_b = fallback_a;
