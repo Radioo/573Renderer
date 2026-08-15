@@ -13,6 +13,7 @@ constexpr float kSplitterW = 6.0f;
 
 constexpr float kTopBarH = 46.0f;
 constexpr float kTimelineH = 76.0f;
+constexpr float kPaneRowMinH = 120.0f;
 constexpr float kStatusStripH = 28.0f;
 
 constexpr int kMinClientW =

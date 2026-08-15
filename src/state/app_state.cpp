@@ -274,6 +274,14 @@ ExportState State::GetExport() const {
     return telemetry_.GetExport();
 }
 
+PresetStatus State::GetPresetStatus() const {
+    return telemetry_.GetPreset();
+}
+
+void State::SetPresetStatus(PresetStatus p) {
+    telemetry_.SetPreset(std::move(p));
+}
+
 void State::SetExport(ExportState e) {
     telemetry_.SetExport(std::move(e));
 }

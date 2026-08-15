@@ -97,6 +97,30 @@ headless GUI suite necessarily drives ImGui directly (docs/gui_tests.md); it
 is the only test directory allowed to, and it tests the shell rather than
 violating it.
 
+### Host isolation (`check_host_isolation.py`)
+
+The OPPOSITE direction to the gui-isolation gate, and a narrower claim.
+`check_gui_isolation.py` keeps ImGui out of the engine; this one keeps the ENGINE
+HOSTS out of the scene preset editor: no `PresetHost::`, `Scene3dHost::` or
+`Gc2dHost::` may appear in `src/gui/timeline/**` or `src/gui/gui_preset_library.*`.
+Those files run on the GUI thread while the render thread is inside
+`PresetHost::RenderFrame`, and there is no mutex in `src/preset`, `src/scene3d` or
+`src/gc2d`; the editor therefore posts `PresetCmd`s through `App::State` and reads
+`App::PresetStatus` back, and `Backend::ApplyPresetCommand` applies them on the
+render thread at a frame boundary (docs/gui.md 3.5).
+
+The claim is deliberately SCOPED. `gui_scene3d_panel.cpp`, `gui_gc2d_panel.cpp`,
+`gui_preset_panel.cpp` and the visibility predicates in `panel_registry.cpp` still
+call the hosts directly and keep that convention until a separate change; the gate
+covers only the editor, so it starts clean and any hit inside that scope fails CI.
+Adding a file to the scope means adding it to `SCOPES` in the script.
+
+Self-tested by `tools/ci/tests/test_host_isolation.py`, which builds throwaway git
+repositories: one editor file that only posts commands passes, one that calls each
+of the three hosts fails with the file, line and host named, a library file is in
+scope, and a panel outside the scope is ignored (`checked == 0`, so the test also
+proves the gate is not silently scanning nothing).
+
 ### Preset layers (`check_preset_layers.py`) and preset states (`check_preset_states.py`)
 
 Both gates read the SAME input: the JSON the renderer itself dumps with
@@ -289,6 +313,20 @@ three-layer per-directory config chain:
   head, and a data literal has none; splitting one into 60-line pieces would add
   call indirection to a table. Every other check, including the 1000-line file
   limit that forced the ending into two halves, still applies there.
+- `src/gui/timeline/.clang-tidy` subtracts `bugprone-exception-escape` for the
+  timeline editor alone. Every editor gesture defers its document mutation to the
+  end of the GUI frame as an `Editor::Edit` (`std::function<bool(Document&)>`,
+  docs/gui.md 3.5), and MSVC's `std::function` converting constructor is
+  CONDITIONALLY `noexcept` when the callable fits its small-object buffer. Those
+  lambdas capture clip and track ids by value, so clang-tidy walks the lambda's
+  copy constructor from inside a `noexcept` frame, finds `std::string`'s allocating
+  copy, and reports an escaping `bad_array_new_length` for every one of them. The
+  callables genuinely must own their captures - the locals they read are gone by the
+  time the edit runs - and nothing else in the tree hits this, because the other
+  `std::function` seams (`App::State::MutateLiveOverrides`, the progress callbacks)
+  take reference captures. Every other check applies there, including the function
+  size and cognitive-complexity thresholds, which is why the transport row, the track
+  header and the shortcut table are each split into three functions.
 - `clang-analyzer-optin.core.EnumCastOutOfRange` (an OPT-IN analyzer
   check) is subtracted at the ROOT config, not per-layer: it only ever
   fires on system-header patterns we cannot change - the D3D9 SDK's own
@@ -373,7 +411,7 @@ python tools/ci/check_gui_isolation.py
 git ls-files '*.cpp' '*.h' '*.hpp' | xargs clang-format --dry-run --Werror
 ```
 
-The DLL-dependent pixel tier runs separately (never hosted):
+The DLL-dependent pixel leg runs separately (never hosted):
 `python tools/local/render_regression.py` - see docs/local_regression.md.
 
 ## The 2D blend equations are unit tested, pixel exact, with no GPU

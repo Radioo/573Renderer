@@ -39,7 +39,7 @@ using Preset::Eval::Push;
 
 constexpr float kPresetTicksPerSecond = 60.0F;
 
-enum class CommandKind : unsigned char { Replace, Seek, Paused, Option };
+enum class CommandKind : unsigned char { Replace, Seek, Paused, Loop, Option };
 
 struct Command {
     CommandKind kind = CommandKind::Seek;
@@ -73,6 +73,13 @@ Command PausedCommand(bool paused) {
     return command;
 }
 
+Command LoopCommand(bool loop) {
+    Command command;
+    command.kind = CommandKind::Loop;
+    command.flag = loop;
+    return command;
+}
+
 Command OptionCommand(int option, int choice) {
     Command command;
     command.kind = CommandKind::Option;
@@ -102,6 +109,7 @@ std::string g_game_dir;
 std::vector<Push> g_state_pushes;
 float g_accum = 0.0F;
 bool g_playing = true;
+bool g_loop = true;
 int g_problems = 0;
 
 std::string Resolve(const std::string& game_dir, const std::string& relative) {
@@ -239,6 +247,7 @@ Status BuildStatus(const Doc::Document& document, const FrameState& frame, int p
     status.length = LengthOf(document);
     status.fps = document.fps;
     status.playing = g_playing;
+    status.loop = g_loop;
     status.problems = problems;
     status.countdown_start = status.length;
     status.countdown = std::max(0, status.length - state.frame);
@@ -325,8 +334,13 @@ void Drain() {
         case CommandKind::Paused:
             g_playing = !command.flag;
             break;
+        case CommandKind::Loop:
+            g_loop = command.flag;
+            break;
         case CommandKind::Option:
             g_eval.SetOption(command.a, command.b);
+            g_state_pushes = g_eval.Rebind();
+            ApplyPushes(g_state_pushes);
             break;
         }
     }
@@ -377,6 +391,7 @@ void Finish(const std::shared_ptr<const Doc::Document>& document) {
     g_active = document;
     g_accum = 0.0F;
     g_playing = true;
+    g_loop = true;
     g_problems = ErrorCount(*document);
     g_state_pushes = g_eval.Rebind();
     ApplyPushes(g_state_pushes);
@@ -443,8 +458,13 @@ void RenderFrame(float dt) {
     ApplyPushes(g_eval.DrawFrame(0.0F));
     if (advance) {
         const int length = LengthOf(*g_active);
-        if (length > 0 && g_eval.State().frame + 1 >= length) {
+        const bool at_last = length > 0 && g_eval.State().frame + 1 >= length;
+        if (at_last && g_loop) {
             g_state_pushes = g_eval.Seek(0);
+        } else if (at_last) {
+            g_playing = false;
+            g_accum = 0.0F;
+            g_state_pushes = g_eval.Seek(length - 1);
         } else {
             g_state_pushes = g_eval.AdvanceFrame();
         }
@@ -473,6 +493,11 @@ void Seek(int frame) {
 void SetPaused(bool paused) {
     if (!g_loaded) return;
     Post(PausedCommand(paused));
+}
+
+void SetLoop(bool loop) {
+    if (!g_loaded) return;
+    Post(LoopCommand(loop));
 }
 
 void SetCountdown(int frames) {

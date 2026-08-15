@@ -48,6 +48,15 @@ struct Status {
     bool label_playback_active = false;
 };
 
+struct PresetStatus {
+    std::string id;
+    int frame = 0;
+    int length = 0;
+    int fps = 60;
+    bool playing = false;
+    bool loop = true;
+};
+
 enum class ExportPhase : std::uint8_t {
     Idle,
     Capturing,
@@ -80,10 +89,14 @@ public:
     [[nodiscard]] ExportState GetExport() const;
     void SetExport(ExportState e);
 
+    [[nodiscard]] PresetStatus GetPreset() const;
+    void SetPreset(PresetStatus p);
+
 private:
     mutable std::mutex mu_;
     Status status_;
     ExportState export_;
+    PresetStatus preset_;
 };
 
 }

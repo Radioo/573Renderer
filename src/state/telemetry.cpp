@@ -25,4 +25,14 @@ void Telemetry::SetExport(ExportState e) {
     export_ = std::move(e);
 }
 
+PresetStatus Telemetry::GetPreset() const {
+    const std::scoped_lock lk(mu_);
+    return preset_;
+}
+
+void Telemetry::SetPreset(PresetStatus p) {
+    const std::scoped_lock lk(mu_);
+    preset_ = std::move(p);
+}
+
 }

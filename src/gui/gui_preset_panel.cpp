@@ -1,5 +1,6 @@
 #include "gui_preset_panel.h"
 
+#include "editor/preset_editor_state.h"
 #include "game_fingerprint.h"
 #include "imgui.h"
 #include "gc2d/gc_host.h"
@@ -145,6 +146,7 @@ void Render() {
                                      [&state](const std::string& stage, float done) {
                                          state.UpdateLoadStage(stage, done);
                                      });
+            Editor::Global().LoadDocument(entry->document);
             state.EndLoad();
         }
     }
@@ -156,7 +158,10 @@ void Render() {
     }
 
     ImGui::Separator();
-    if (ImGui::Button("Unload preset")) PresetHost::Unload();
+    if (ImGui::Button("Unload preset")) {
+        PresetHost::Unload();
+        Editor::Global().Close();
+    }
     ImGui::SameLine();
     ImGui::TextDisabled("background layers only");
     if (ImGui::IsItemHovered()) {

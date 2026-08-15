@@ -4,6 +4,7 @@
 
 #include "preset_host_stubs.h"
 
+#include "backend/preset_command_apply.h"
 #include "formats/gcanim.h"
 #include "formats/sysidx.h"
 #include "gc2d/gc_host.h"
@@ -20,11 +21,13 @@
 #include "scene3d/scene3d.h"
 #include "scene3d/scene3d_merge.h"
 #include "scene3d/scene3d_render.h"
+#include "state/preset_commands.h"
 
 #include <nlohmann/json.hpp>
 #include <nlohmann/json_fwd.hpp>
 
 #include <algorithm>
+#include <any>
 #include <array>
 #include <fstream>
 #include <ios>
@@ -342,6 +345,92 @@ TEST_CASE("the host clamps a seek to the frames that exist", "[preset][host]") {
     PresetHost::Seek(500);
     PresetHost::RenderFrame(1.0F / 60.0F);
     CHECK(PresetHost::GetStatus().frame == 119);
+    PresetHost::Unload();
+}
+
+TEST_CASE("with the loop toggle off playback pauses on the last frame", "[preset][host][loop]") {
+    PrepareStub();
+    const auto document = std::make_shared<const Doc::Document>(MakeDocument(640, 480));
+    REQUIRE(PresetHost::LoadDocument({}, document));
+
+    PresetHost::SetLoop(false);
+    PresetHost::Seek(117);
+    for (int i = 0; i < 8; i++)
+        PresetHost::RenderFrame(1.0F / 60.0F);
+
+    CHECK(PresetHost::GetStatus().frame == 119);
+    CHECK_FALSE(PresetHost::GetStatus().playing);
+    CHECK_FALSE(PresetHost::GetStatus().loop);
+    PresetHost::Unload();
+}
+
+TEST_CASE("with the loop toggle on the frame after the last one is zero", "[preset][host][loop]") {
+    PrepareStub();
+    const auto document = std::make_shared<const Doc::Document>(MakeDocument(640, 480));
+    REQUIRE(PresetHost::LoadDocument({}, document));
+
+    PresetHost::SetLoop(true);
+    PresetHost::Seek(118);
+    PresetHost::RenderFrame(1.0F / 60.0F);
+    CHECK(PresetHost::GetStatus().frame == 119);
+    PresetHost::RenderFrame(1.0F / 60.0F);
+    CHECK(PresetHost::GetStatus().frame == 0);
+    CHECK(PresetHost::GetStatus().playing);
+    PresetHost::Unload();
+}
+
+TEST_CASE("every editor command reaches the host through the backend seam",
+          "[preset][host][command]") {
+    PrepareStub();
+    const auto document = std::make_shared<const Doc::Document>(MakeDocument(640, 480));
+    REQUIRE(PresetHost::LoadDocument({}, document));
+
+    CHECK_FALSE(Backend::ApplyPresetCommand(std::any(42)));
+
+    CHECK(Backend::ApplyPresetCommand(std::any(PresetCmd::Any(PresetCmd::Seek{.frame = 40}))));
+    CHECK(Backend::ApplyPresetCommand(
+        std::any(PresetCmd::Any(PresetCmd::SetPaused{.paused = true}))));
+    CHECK(Backend::ApplyPresetCommand(std::any(PresetCmd::Any(PresetCmd::SetLoop{.loop = false}))));
+    PresetHost::RenderFrame(1.0F / 60.0F);
+    CHECK(PresetHost::GetStatus().frame == 40);
+    CHECK_FALSE(PresetHost::GetStatus().playing);
+    CHECK_FALSE(PresetHost::GetStatus().loop);
+
+    Doc::Document longer = MakeDocument(640, 480);
+    longer.length = 240;
+    CHECK(Backend::ApplyPresetCommand(std::any(PresetCmd::Any(PresetCmd::ReplaceDocument{
+        .document = std::make_shared<const Doc::Document>(std::move(longer))}))));
+    PresetHost::RenderFrame(1.0F / 60.0F);
+    CHECK(PresetHost::GetStatus().length == 240);
+    CHECK(PresetHost::GetStatus().frame == 40);
+    PresetHost::Unload();
+}
+
+TEST_CASE("SetOption through the backend seam switches a gated clip",
+          "[preset][host][command][option]") {
+    PrepareStub();
+    Doc::Document gated = MakeDocument(640, 480);
+    Doc::OptionSpec mode;
+    mode.id = "mode";
+    mode.label = "Mode";
+    mode.choices.push_back(Doc::ChoiceSpec{.label = "NORMAL"});
+    mode.choices.push_back(Doc::ChoiceSpec{.label = "ATTACK"});
+    gated.options.push_back(std::move(mode));
+    gated.tracks.front().clips.front().when =
+        Doc::Gate{.option = "mode", .kind = Doc::GateKind::Choice, .choices = {"ATTACK"}};
+    REQUIRE(PresetHost::LoadDocument({}, std::make_shared<const Doc::Document>(std::move(gated))));
+
+    PresetHost::RenderFrame(1.0F / 60.0F);
+    const std::vector<std::string> before = PresetStub::Take();
+    CHECK(Mentions(before, "Scene3dHost::SetModelVisibleByName('core', false)"));
+    CHECK_FALSE(Mentions(before, "Scene3dHost::SetModelVisibleByName('core', true)"));
+    CHECK(PresetHost::GetStatus().option_choices == std::vector<int>{0});
+
+    CHECK(Backend::ApplyPresetCommand(
+        std::any(PresetCmd::Any(PresetCmd::SetOption{.option = 0, .choice = 1}))));
+    PresetHost::RenderFrame(1.0F / 60.0F);
+    CHECK(Mentions(PresetStub::Take(), "Scene3dHost::SetModelVisibleByName('core', true)"));
+    CHECK(PresetHost::GetStatus().option_choices == std::vector<int>{1});
     PresetHost::Unload();
 }
 

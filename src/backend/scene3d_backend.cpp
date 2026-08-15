@@ -1,6 +1,7 @@
 #include "backend/scene3d_backend.h"
 
 #include "backend/backend.h"
+#include "backend/preset_command_apply.h"
 #include "cli/cli.h"
 #include "export.h"
 #include "export_capture.h"
@@ -215,11 +216,20 @@ public:
         (void)exporting;
         const bool live = Scene3dHost::Active() || Gc2dHost::Active();
         std::string playing;
+        App::PresetStatus preset;
         if (PresetHost::Active()) {
-            playing = PresetHost::GetStatus().id;
+            const PresetHost::Status status = PresetHost::GetStatus();
+            playing = status.id;
+            preset.id = status.id;
+            preset.frame = status.frame;
+            preset.length = status.length;
+            preset.fps = status.fps;
+            preset.playing = status.playing;
+            preset.loop = status.loop;
         } else if (Gc2dHost::Active()) {
             playing = Gc2dHost::GetStatus().animation;
         }
+        App::Global().SetPresetStatus(std::move(preset));
         App::Status st = App::Global().GetStatus();
         if (st.scene_loaded != live || st.playing_animation != playing) {
             st.scene_loaded = live;
@@ -249,10 +259,7 @@ public:
 
     void BindSubmonitor() override {}
 
-    bool HandleCommand(const std::any& payload) override {
-        (void)payload;
-        return false;
-    }
+    bool HandleCommand(const std::any& payload) override { return ApplyPresetCommand(payload); }
 
     Export::ICaptureDriver& ExportDriver() override { return capture_; }
 

@@ -103,6 +103,9 @@ public:
     [[nodiscard]] ExportState GetExport() const;
     void SetExport(ExportState e);
 
+    [[nodiscard]] PresetStatus GetPresetStatus() const;
+    void SetPresetStatus(PresetStatus p);
+
     [[nodiscard]] CropRect GetCropRect() const;
     void SetCropRect(CropRect r);
     [[nodiscard]] bool GetCropPickMode() const;

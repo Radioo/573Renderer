@@ -23,6 +23,7 @@ struct Status {
     int length = 0;
     int fps = 60;
     bool playing = false;
+    bool loop = true;
     int problems = 0;
     int beat = 0;
     int beat_since = 0;
@@ -54,6 +55,8 @@ Preset::AssetIndex GetAssetIndex();
 void Seek(int frame);
 
 void SetPaused(bool paused);
+
+void SetLoop(bool loop);
 
 void SetCountdown(int frames);
 

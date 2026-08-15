@@ -690,11 +690,23 @@ after `ReplaceDocument` loads an asset.
 
 ### Commands and threading
 
-GUI-thread calls do not touch the evaluator. `Seek`, `SetPaused`, `SetOption` and
-`ReplaceDocument` push a command onto a mutex-guarded queue that `RenderFrame`
-drains at the frame boundary, before it draws. `Restart()` is `Seek(0)` and
+GUI-thread calls do not touch the evaluator. `Seek`, `SetPaused`, `SetLoop`,
+`SetOption` and `ReplaceDocument` push a command onto a mutex-guarded queue that
+`RenderFrame` drains at the frame boundary, before it draws. The timeline editor
+never calls any of them itself: it posts the matching `PresetCmd` through
+`App::State`, and `Backend::ApplyPresetCommand` (`src/backend/preset_command_apply.cpp`)
+is the one place that turns a queued payload into these calls on the render thread
+(docs/gui.md 3.5, gate `check_host_isolation.py`). `Restart()` is `Seek(0)` and
 `SetCountdown(n)` is `Seek(length - n)`, so the old "time remain" slider now moves
 the playhead instead of desynchronising a second clock.
+
+`SetOption` re-pushes the whole rebind list the way `Seek` does, because a choice
+change can flip a `when` gate and therefore a model's VISIBILITY, blend, scale and
+base speed - and those five are rebind-only pushes (`EmitRebind`), not part of the
+per-frame `EmitUnconditional` set. Without the re-push the choice took effect in the
+evaluator but the model stayed hidden (or visible) on screen until the playhead
+happened to cross a clip boundary, which for an open-ended clip could be never.
+`preset_host_tests.cpp` pins it with a `model.draw` gated on the second choice.
 
 `ReplaceDocument(document, progress)` swaps the immutable `shared_ptr<const Document>` and
 RE-SIMULATES: it reloads the assets when the asset set or the render size changed,
@@ -710,8 +722,9 @@ own what it captures), and it is invoked from the render thread by the same
 naming the asset id. A swap that keeps the asset set and the render size reloads
 nothing and reports nothing.
 
-`Load` and `Unload` still run synchronously on the calling thread, as they did
-before this change; moving them behind the queue belongs with the editor (M4).
+`Load` and `Unload` still run synchronously on the calling thread: the preset library
+panel that picks a screen is not part of the editor and keeps calling them directly
+until M7 replaces it.
 
 ### Time ownership
 
@@ -724,9 +737,14 @@ Live playback accumulates wall time and delivers WHOLE document frames at the
 document's `fps`: a 120 fps display renders each document frame twice instead of
 running the screen twice as fast. A render frame that advances no document frame
 re-applies the last state push list, so the engine state is identical on both. The
-frame after `length - 1` is frame 0 again, as a `Seek(0)` that re-simulates. The M2
-test renders 120 host frames for 60 document frames and asserts the pushed host
-tick equals the `EvalState` tick on every one of them.
+frame after `length - 1` depends on the LOOP toggle (`SetLoop`, default on): with the
+toggle on it is frame 0 again, as a `Seek(0)` that re-simulates; with it off playback
+PAUSES on `length - 1` and stays there, which is the rule the frame axis is defined by
+(3.2) and what export captures. The toggle is document-independent editor state, so it
+lives on the host and is reported back in `PresetHost::Status::loop`, not in the
+document. `preset_host_tests.cpp` pins both directions, and the M2 test renders 120 host
+frames for 60 document frames and asserts the pushed host tick equals the `EvalState`
+tick on every one of them.
 
 ### The engine gaps this closed
 

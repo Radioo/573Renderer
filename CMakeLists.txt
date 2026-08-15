@@ -146,6 +146,13 @@ add_library(r573_app STATIC
     src/boot.cpp
     src/backend/backend_registry.cpp
     src/backend/scene3d_backend.cpp
+    src/backend/preset_command_apply.cpp
+    src/editor/clip_summary.cpp
+    src/editor/preset_editor_state.cpp
+    src/editor/timeline_drag.cpp
+    src/editor/timeline_lanes.cpp
+    src/editor/timeline_edits.cpp
+    src/editor/timeline_view.cpp
     src/gc2d/gc_package.cpp
     src/gc2d/gc_host.cpp
     src/gc2d/gc_sheet.cpp
@@ -190,6 +197,13 @@ add_library(r573_app STATIC
     src/gui/gui_scene_panel.cpp
     src/gui/gui_inspector.cpp
     src/gui/gui_timeline.cpp
+    src/gui/timeline/gui_tl_editor.cpp
+    src/gui/timeline/gui_tl_transport.cpp
+    src/gui/timeline/gui_tl_ruler.cpp
+    src/gui/timeline/gui_tl_tracks.cpp
+    src/gui/timeline/gui_tl_clips.cpp
+    src/gui/timeline/gui_tl_drag.cpp
+    src/gui/timeline/gui_tl_colors.cpp
     src/gui/gui_qpro_panel.cpp
     src/gui/gui_splitter.cpp
     src/gui/gui_export_panel.cpp
@@ -348,6 +362,14 @@ add_executable(game_tests
     tests/game/eval_tween_tests.cpp
     tests/game/preset_host_tests.cpp
     tests/game/preset_host_stubs.cpp
+    tests/editor/timeline_editor_tests.cpp
+    src/backend/preset_command_apply.cpp
+    src/editor/clip_summary.cpp
+    src/editor/preset_editor_state.cpp
+    src/editor/timeline_drag.cpp
+    src/editor/timeline_lanes.cpp
+    src/editor/timeline_edits.cpp
+    src/editor/timeline_view.cpp
     src/preset/preset_host.cpp
     src/preset/preset_host_push.cpp
     src/preset/preset_host_params.cpp
@@ -537,6 +559,7 @@ add_executable(gui_tests
     tests/gui/qpro_panel_tests.cpp
     tests/gui/host_panel_tests.cpp
     tests/gui/preset_panel_tests.cpp
+    tests/gui/timeline_editor_tests.cpp
     tests/gui/host_live_tests.cpp
     tests/gui/gui_mock_assets.cpp
     tests/gui/gui_gpu.cpp

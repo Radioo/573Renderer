@@ -9,6 +9,9 @@
 #include "gui_style.h"
 #include "gui_widgets.h"
 #include "panel_registry.h"
+#include "timeline/gui_timeline_editor.h"
+#include "editor/preset_editor_state.h"
+#include "editor/timeline_view.h"
 #include "../game_profile.h"
 #include "../native_dialog.h"
 #include "../state/app_state.h"
@@ -336,6 +339,33 @@ void DrawExportStatusTag(App::State& state) {
     }
 }
 
+void RenderViewportPane() {
+    static std::vector<const Gui::PanelDesc*> center;
+    Gui::CollectActivePanels(Gui::PanelSlot::CenterPane, center);
+    if (center.empty()) {
+        RenderScenePane();
+    } else {
+        center.front()->draw();
+    }
+}
+
+float ClampEditorHeight(float available) {
+    Editor::View& view = Editor::Global().MutView();
+    const float room =
+        available - Gui::kPaneRowMinH - Gui::kSplitterW - (2.0F * ImGui::GetStyle().ItemSpacing.y);
+    view.height =
+        std::clamp(view.height, Editor::kEditorHeightMin, std::max(Editor::kEditorHeightMin, room));
+    return view.height;
+}
+
+void RenderEditorDock(float width, float row_h) {
+    Editor::View& view = Editor::Global().MutView();
+    float row = row_h;
+    Gui::HSplitter("##split_timeline", width, Gui::kSplitterW, &row, &view.height,
+                   Gui::kPaneRowMinH, Editor::kEditorHeightMin, Editor::kEditorHeightDefault);
+    Timeline::Render(view.height);
+}
+
 void RenderStatusStripImpl(const App::Status& status) {
     auto& state = App::Global();
     ImGui::PushStyleColor(ImGuiCol_ChildBg, ImGui::GetStyleColorVec4(ImGuiCol_TitleBg));
@@ -387,10 +417,14 @@ void RenderRendererView() {
     static float left_w = Gui::kPaneLeftDefault;
     static float right_w = Gui::kPaneRightDefault;
 
+    const bool editor = Timeline::Active();
     const float avail_w = ImGui::GetContentRegionAvail().x;
-    const float row_h =
-        ImGui::GetContentRegionAvail().y - Gui::kTimelineH - ImGui::GetStyle().ItemSpacing.y;
+    const float avail_h = ImGui::GetContentRegionAvail().y;
+    const float spacing = ImGui::GetStyle().ItemSpacing.y;
     const float sw = Gui::kSplitterW;
+    const float editor_h = editor ? ClampEditorHeight(avail_h) : 0.0F;
+    const float row_h = editor ? (avail_h - editor_h - sw - (2.0F * spacing))
+                               : (avail_h - Gui::kTimelineH - spacing);
 
     float center_w = 0.0F;
     ClampPaneWidths(avail_w, sw, left_w, right_w, center_w);
@@ -407,13 +441,7 @@ void RenderRendererView() {
     ImGui::SameLine(0.0F, 0.0F);
 
     ImGui::BeginChild("pane_center", ImVec2(center_w, row_h), 0);
-    static std::vector<const Gui::PanelDesc*> center;
-    Gui::CollectActivePanels(Gui::PanelSlot::CenterPane, center);
-    if (center.empty()) {
-        RenderScenePane();
-    } else {
-        center.front()->draw();
-    }
+    RenderViewportPane();
     ImGui::EndChild();
 
     ImGui::SameLine(0.0F, 0.0F);
@@ -428,6 +456,10 @@ void RenderRendererView() {
     RenderInspectorPane();
     ImGui::EndChild();
 
+    if (editor) {
+        RenderEditorDock(avail_w, row_h);
+        return;
+    }
     RenderTimelineDock();
 }
 

@@ -32,6 +32,7 @@ uv run --project tools/ci python tools/ci/check_no_comments.py
 uv run --project tools/ci python tools/ci/check_banned_chars.py
 uv run --project tools/ci python tools/ci/check_machine_paths.py
 uv run --project tools/ci python tools/ci/check_gui_isolation.py
+uv run --project tools/ci python tools/ci/check_host_isolation.py
 uv run --project tools/ci python tools/ci/check_preset_layers.py
 uv run --project tools/ci python tools/ci/check_preset_states.py
 (cd tools/ci && uv run pytest -q)

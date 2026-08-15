@@ -43,6 +43,9 @@ jobs:
       - name: GUI-isolation gate
         run: uv run --project tools/ci python tools/ci/check_gui_isolation.py
 
+      - name: Host isolation
+        run: uv run --project tools/ci python tools/ci/check_host_isolation.py
+
       - name: Format gate
         run: uv run --project tools/ci python tools/ci/run_format.py
 

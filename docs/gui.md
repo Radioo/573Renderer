@@ -253,7 +253,223 @@ One tree replaces the old Layers + Sub-layers + Variants panels:
   export a determinate visual; the whole dock is disabled while capturing (a seek would
   corrupt the export's loop-wrap counter, a pause would freeze the capture - the render
   thread also hard-ignores such requests; greying just makes it visible).
-- The dock always renders in the Renderer view; without a loaded scene it shows a hint line.
+- The dock renders in the Renderer view whenever the scene preset TIMELINE EDITOR is not
+  active (3.5), which replaces it in the same full-width slot; without a loaded scene it
+  shows a hint line.
+
+### 3.5 Scene preset timeline editor (src/gui/timeline)
+
+The editor replaces the 76 px dock while a preset DOCUMENT is loaded on the scene3d
+backend. `Panels::Timeline::Active()` is the switch: the GUI-side `Editor::State` holds a
+document AND the `App::PresetStatus` snapshot published by the render thread names the same
+`id`. Everything else (the AFP backends, the scene3d backend with a bare package loaded)
+keeps the dock.
+
+#### Layout and docking
+
+The editor is a FULL-WIDTH bottom dock, not a column (user decision, 2026-08-15). It takes
+the place of the 76 px dock and grows: `RenderRendererView` (gui_panels.cpp) lays out the
+three-column row (Browse, viewport, Inspector) above it and the editor below, spanning the
+whole content width, with `Gui::HSplitter` - the horizontal twin of `Gui::VSplitter` -
+between them. The status strip stays below both, drawn by `RenderReadyView` outside the
+`main_view` child, so the editor's bottom edge sits directly on it.
+
+The remembered editor height lives in `Editor::View::height`: default 280 px, minimum 120 px,
+and the only other limit is `Gui::kPaneRowMinH` (120 px) for the row above, so the splitter
+can be dragged until the editor owns nearly the whole window. `ClampEditorHeight` applies
+that every frame, so a window resize never leaves the row shorter than its minimum.
+Double-clicking the splitter resets the editor to its default height. When no document is
+loaded the three columns keep the full height and the 76 px `RenderTimelineDock` is drawn
+instead, exactly as before.
+
+Item paths for tests: the editor child is `main_view/##timeline_editor` (it was
+`main_view/pane_center/##timeline_editor` while it lived in the column) and the splitter is
+`##split_timeline` inside `main_view`. `tl_bottom_dock` pins the geometry: the editor's left
+and right edges equal `main_view`'s, its bottom edge is on the status strip, and the left
+column ends above it.
+
+Inside the editor child, top to bottom: transport row, two-row ruler, track header column
+(200 px, clamped 120..320) plus the lane area, and the horizontal range scroll bar. The
+transport row, the ruler and the range scroll bar are FIXED: only the header column and the
+lanes scroll vertically, together, inside a clipped region between the ruler and the scroll
+bar (`ImGui::PushClipRect` in `DrawTracks`, so a half-scrolled row is cut at the region edge
+instead of painting over the scroll bar). The child itself carries `NoScrollWithMouse` so the
+wheel can never move the whole editor and leave the transport half off screen.
+`Editor::ClampTrackScroll` is applied once per frame against the LANES region height, so the
+last track's bottom edge lands exactly on the bottom of that region.
+
+Every track row is `TrackHeight(track)` tall, and the header column and the lane use that
+same function, so the two can never drift; `###tl_head_<id>` covers the whole row height for
+that reason. A track grows a 16 px SUB-LANE only when it holds a PRIMARY clip AND modifier
+clips (`Editor::LaneCount` / `Editor::LaneOf` in `src/editor/timeline_lanes.cpp`, unit
+tested): one sub-lane per distinct modifier command type, the primary on top. A track whose
+clips are all one family - only draws, only tweens, only emitters - is a single lane and its
+clips fill it at the full 22 px, which is why a camera.tween track and an fx track are the
+same height as a plain model track.
+
+The header row is laid out from its RIGHT edge, so the controls can never be squeezed out:
+the M / S / L toggles are a group flush against the column edge, each a SQUARE of
+`ToggleSide` = `max(text line height + 2 * FramePadding.y, widest of M/S/L + 2 * FramePadding.x)`,
+so a letter is never clipped whatever the font is; the kind badge sits to their left and is
+DROPPED when the remaining name space would fall below 24 px (the colour chip already carries
+the kind); the name takes what is left and is ELLIPSIZED to it (`Ellipsized`, the same helper
+the clip bars use) rather than being hard cut or pushing anything off the column. `tl_header_toggles` pins the rule at the default 200 px and at the
+120 px minimum: each toggle is at least its letter plus twice the frame padding in both axes,
+its clipped rect equals its full rect, and it lies inside the header column. The
+lanes scroll vertically with Shift+wheel (`Editor::View::track_scroll`, clamped by
+`Editor::ClampTrackScroll` so the last track cannot be scrolled off the top).
+
+#### Threading rule (enforced by a gate)
+
+Nothing under `src/gui/timeline/` (and later `gui_preset_library.cpp`) may name
+`PresetHost::`, `Scene3dHost::` or `Gc2dHost::`. The editor owns a GUI-side working
+document and talks to the render thread ONLY through `App::State::PostCommand`:
+
+| command | effect on the render thread |
+|---|---|
+| `PresetCmd::Seek{frame}` | `PresetHost::Seek`, clamped to `[0, length - 1]` |
+| `PresetCmd::SetPaused{paused}` | pause / resume the document clock |
+| `PresetCmd::SetLoop{loop}` | on: the frame after `length - 1` is 0; off: playback pauses on `length - 1` |
+| `PresetCmd::SetOption{option, choice}` | select an option choice; the host re-pushes its whole rebind list, because a choice can flip a `when` gate and visibility is a rebind-only push (docs/preset_document.md) |
+| `PresetCmd::ReplaceDocument{shared_ptr<const Document>}` | swap the evaluator's document at the frame boundary and re-simulate `EvalState` from frame 0 |
+
+`Backend::ApplyPresetCommand` (src/backend/preset_command_apply.cpp) is the single seam that
+unpacks the `std::any` payload; `Scene3dBackend::HandleCommand` delegates to it, and
+`preset_host_tests.cpp` drives it directly against the recording host stubs. Status flows
+back the other way in `App::PresetStatus` (id, frame, length, fps, playing, loop), published
+once per render frame from `Scene3dBackend::AdvanceFrame` and read once per GUI frame.
+
+The playhead the editor draws is the render thread's frame from that snapshot - the GUI
+never owns a second clock, and the transport counter reads `frame / length` from it. Scrubbing
+posts `Seek` plus `SetPaused{true}`.
+
+Editing while playing is allowed and never blocks: the GUI keeps its own working copy,
+`Editor::State::Apply` publishes a fresh immutable snapshot, and the editor posts
+`ReplaceDocument` whenever `Editor::State::Revision()` changes. All document mutations are
+DEFERRED to the end of the GUI frame: `Ctx::pending` is a VECTOR of `Editor::Edit`, applied in
+the order they were queued, so the `Document` the draw code is walking can never be replaced
+under it and two edits raised by one frame (a Ctrl+drag duplicate plus the move that carries
+it) both land instead of the second overwriting the first. A `shared_ptr` kept for the frame
+protects the walk from undo/redo too.
+
+#### Editor state, undo and selection (src/editor)
+
+`src/editor/` is ImGui-free and unit tested by `tests/editor/timeline_editor_tests.cpp`
+(built into `game_tests`):
+
+- `preset_editor_state.h/.cpp` - the working `Document` as `shared_ptr<const Document>`,
+  selection (clip ids), clipboard, view, dirty flag, the M5 `Request` channel, and SNAPSHOT
+  undo: `Apply(edit)` copies the document, pushes the previous one plus the selection it
+  applied to, and clears redo. Depth 200. `BeginGesture()/EndGesture()` bracket a drag so
+  every intermediate state publishes but only ONE undo entry is recorded. Undo restores the
+  selection it was applied with; selection and playhead are otherwise not part of undo.
+- `timeline_view.h/.cpp` - zoom (0.05..8 px per frame), scroll clamping, fit, and the ruler
+  tick rule: the FINEST spacing in 1, 5, 10, 30, 60, 300, 600, 1800 frames that still keeps
+  at least 56 px between labels (the coarsest entry wins when even 1800 frames is tighter
+  than that).
+- `timeline_edits.h/.cpp` - every document mutation as a pure function: move, move to
+  another track, resize, split, trim start/end, make open-ended, mute clip, delete, copy,
+  paste, duplicate, duplicate onto a track at a frame, track M/S/L, rename, reorder,
+  duplicate/delete track, markers, length.
+  `PrimaryPeers` / `Overlaps` implement the overlap rule: one PRIMARY per family per frame
+  per TARGET across all its tracks, modifiers overlap freely, and two primaries whose `when`
+  gates are mutually exclusive may overlap.
+- `timeline_drag.h/.cpp` - hit testing (`ZoneAt`: 6 px resize handles, never more than 30
+  percent of a short bar) and the drag state machine as a pure function. `SnapFrame` walks
+  the snap targets in priority order: playhead, other clips' starts and ends on any track,
+  tween keys, document start and end, ruler major ticks; within 8 px, the nearest candidate
+  of the first non-empty group wins. `ResolveDrag` keeps the duration on a move, REFUSES a
+  move that would overlap a same-family primary, and CLAMPS a resize at the neighbour
+  instead of overlapping it. Alt drops `DragInput::snap`, so the raw frame survives. Ctrl+drag
+  duplicates: the copy is created by `DuplicateClipTo` at the DROP position under the same
+  rules as a move (snap, compatible track, refusal), the original stays where it was, and the
+  drag then carries the copy. `OverlapsSelfCopy` is what refuses a copy dropped on top of its
+  own source, which plain `Overlaps` cannot see because it excludes the dragged clip itself.
+- `clip_summary.h/.cpp` - the text a clip bar carries: its `label` when set, otherwise the
+  command's own summary (`model.draw` = `<model>, <blend>, spin <axis> N deg/f`;
+  `sprite.animate` = `<animation>, <playback>, prio N`; every other family its key params;
+  tweens their key count). Pure, one unit test per family, so the bar text cannot drift from
+  what the tests pin. The GUI only shortens it: `Ellipsized` trims to the bar width and
+  appends an ellipsis.
+
+#### Items, and their Test Engine ids
+
+Every interactive element is a hand-drawn `ImDrawList` shape over an `InvisibleButton` or a
+plain widget, and carries a `###` id so the glyph in its label cannot change the hash.
+
+The transport row is one line of widgets plus a right-aligned tail (zoom, fit, undo depth,
+document badge). `PlaceTail` measures the tail and puts it flush against the right edge of
+the editor, or on a second row when the left group already reaches that far, so nothing is
+clipped at the app's own default window width. A Test Engine case pins that at 1360 px by
+comparing each tail item's clipped rect with its full rect.
+
+| item | id | behaviour |
+|---|---|---|
+| jump to 0 | `###tl_jump_start` | Home |
+| step back | `###tl_step_back` | Left (Shift x100) |
+| play / pause | `###tl_play` | Space; posts `SetPaused` |
+| step forward | `###tl_step_fwd` | Right |
+| jump to last frame | `###tl_jump_end` | End |
+| loop toggle | `###tl_loop` | posts `SetLoop` |
+| snap toggle | `###tl_snap` | editor-side only; Alt suspends it per drag |
+| add command | `###tl_add_command` | M5 placeholder: posts `RequestKind::AddCommand` |
+| add track | `###tl_add_track` | M5 placeholder: posts `RequestKind::AddTrack` |
+| previous / next edge | `###tl_prev_edge`, `###tl_next_edge` | `[` / `]` |
+| zoom slider | `###tl_zoom` | 0.05..8 px per frame, logarithmic |
+| fit | `###tl_fit` | Ctrl+0 |
+| document badge | `###tl_doc_badge` | shows `*` when dirty; posts `RequestKind::DocumentProperties` |
+| ruler | `###tl_ruler` | click or drag seeks; double-click adds a marker; right-click on a marker triangle opens the marker popup |
+| marker name field | `###tl_marker_name` | inside the marker popup |
+| document end line | `###tl_end_line` | drag it to change `length`; the region beyond is dimmed and labelled `end N` |
+| header column edge | `###tl_header_split` | drag to resize the header column, clamped to 120..320 px |
+| track header | `###tl_head_<track id>` | double-click renames, drag reorders, right-click opens the track menu |
+| track rename field | `###tl_rename_<track id>` | Enter commits |
+| track M / S / L | `###tl_mute_<id>`, `###tl_solo_<id>`, `###tl_lock_<id>` | square buttons, filled with the accent when on |
+| track lane | `###tl_lane_<track id>` | press starts the rubber band, right-click opens the empty-area menu |
+| clip bar | `###tl_clip_<clip id>` | click selects, double-click posts the properties request, drag moves, edge drag resizes, Ctrl+drag drops a duplicate |
+| range scroll bar | `###tl_scroll` | drag to pan |
+
+Clip bars are 22 px in the row's main lane, centred in it, and 16 px in a modifier sub-lane
+(sub-lane rule above). The bar text is `Editor::ClipSummary`
+shortened to the bar width with an ellipsis. The bar is filled with the command
+colour (the plan's twelve-colour legend, `gui_tl_colors.cpp`, with separate dark and light
+values chosen from `ImGuiCol_WindowBg` luminance - the only colours in the shell not derived
+from the profile accent). Muted clips and muted or non-solo tracks draw at 40 percent alpha,
+a `when` gate draws a 3 px accent stripe along the top edge, a locked track draws a
+desaturated left bar, an open-ended clip shows a `>` at its right edge, and tween keys draw
+as diamonds.
+
+Selection: a click selects, Shift extends, Ctrl toggles, and a press-drag on empty lane space
+draws a RECTANGLE (`UpdateBand`) that selects exactly the clip bars its rectangle covers, in
+both axes - the clip rects are the ones drawn this frame, so a band never picks up a lane it
+did not reach. Esc clears.
+
+#### Menus
+
+Clip right-click: Properties (posts the request), Cut, Copy, Paste at playhead, Duplicate,
+Split at playhead, Trim start / end to playhead, Make open-ended, Add key at playhead
+(registered DISABLED - key insertion is M6), Mute clip, Delete.
+
+Empty lane right-click: Add command here, Paste at this frame, Add track above / below. The
+three "add" entries post an M5 `Request` and change nothing yet.
+
+Track header right-click: Rename, Move up, Move down, Duplicate track, Change target,
+Delete track.
+
+#### Shortcuts
+
+Active when the editor is focused or hovered and `io.WantTextInput` is false.
+
+| key | action | key | action |
+|---|---|---|---|
+| Space | play / pause | Ctrl+Z / Ctrl+Y | undo / redo |
+| Left / Right | step 1 frame (Shift: 100) | Ctrl+C / X / V | copy / cut / paste at playhead |
+| Home / End | frame 0 / `length - 1` | Ctrl+D | duplicate selection |
+| `[` / `]` | previous / next clip edge, key or marker | Ctrl+0 | fit the whole document |
+| Delete | delete selection | S | split selection at playhead |
+| M | mute the selected clips' track | L | lock the selected clips' track |
+| Enter | properties of the selected clip (M5) | Esc | cancel a drag, clear the selection |
+| Ctrl+wheel | zoom about the cursor | Shift+wheel | scroll the tracks |
 
 ## 4. Export modal + status tag (gui_export_panel)
 
