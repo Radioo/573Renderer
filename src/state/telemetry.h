@@ -52,6 +52,13 @@ struct Status {
     bool label_playback_active = false;
 };
 
+struct PresetTransition {
+    int option = -1;
+    int from = -1;
+    int to = -1;
+    int frames_left = 0;
+};
+
 struct PresetStatus {
     std::string id;
     int frame = 0;
@@ -59,6 +66,8 @@ struct PresetStatus {
     int fps = 60;
     bool playing = false;
     bool loop = true;
+    std::vector<int> option_choices;
+    PresetTransition transition;
     std::shared_ptr<const Preset::AssetIndex> assets;
 };
 

@@ -16,7 +16,7 @@ void ResetDocumentModal();
 
 void ResetProblems();
 
-void RequestClipModal(std::string clip_id);
+void RequestClipModal(std::string clip_id, bool focus_tween);
 
 void RenderClipModal();
 
@@ -31,6 +31,12 @@ void RenderTrackModal();
 void RequestDocumentModal();
 
 void RenderDocumentModal();
+
+void ResetOptionModal();
+
+void RequestOptionModal(int index);
+
+void RenderOptionModal();
 
 void RequestProblems();
 

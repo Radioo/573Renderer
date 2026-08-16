@@ -138,6 +138,7 @@ struct FrameState {
     BeatState beat = {};
     std::vector<const Doc::Clip*> emitters;
     std::vector<const Doc::Clip*> seeds;
+    std::vector<const Doc::Clip*> selects;
     std::vector<MaterialWrite> writes;
     bool boundary = false;
 };

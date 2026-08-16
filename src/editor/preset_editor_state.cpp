@@ -20,6 +20,7 @@ void State::LoadDocument(Doc::Document document) {
     past_.clear();
     future_.clear();
     selection_.clear();
+    key_ = KeyRef{};
     clipboard_.clear();
     request_ = Request{};
     gesture_ = 0;
@@ -36,6 +37,7 @@ void State::Close() {
     past_.clear();
     future_.clear();
     selection_.clear();
+    key_ = KeyRef{};
     clipboard_.clear();
     request_ = Request{};
     gesture_ = 0;
@@ -141,6 +143,15 @@ void State::SetSelection(std::vector<std::string> clip_ids) {
 
 void State::ClearSelection() {
     selection_.clear();
+    key_ = KeyRef{};
+}
+
+void State::SelectKey(std::string clip_id, int index) {
+    key_ = KeyRef{.clip_id = std::move(clip_id), .index = index};
+}
+
+void State::ClearKeySelection() {
+    key_ = KeyRef{};
 }
 
 void State::DropMissingSelection() {
@@ -148,6 +159,14 @@ void State::DropMissingSelection() {
     std::erase_if(selection_, [this](const std::string& clip_id) {
         return !FindClip(*document_, clip_id).Valid();
     });
+    if (!key_.Valid()) return;
+    const ClipRef ref = FindClip(*document_, key_.clip_id);
+    if (!ref.Valid() ||
+        std::cmp_greater_equal(
+            key_.index,
+            document_->tracks[(std::size_t)ref.track].clips[(std::size_t)ref.clip].keys.size())) {
+        key_ = KeyRef{};
+    }
 }
 
 void State::PostRequest(Request request) {

@@ -171,6 +171,9 @@ add_library(r573_app STATIC
     src/editor/timeline_lanes.cpp
     src/editor/timeline_edits.cpp
     src/editor/timeline_view.cpp
+    src/editor/tween_edits.cpp
+    src/editor/curve_geometry.cpp
+    src/editor/options_model.cpp
     src/gc2d/gc_package.cpp
     src/gc2d/gc_host.cpp
     src/gc2d/gc_sheet.cpp
@@ -227,6 +230,10 @@ add_library(r573_app STATIC
     src/gui/timeline/gui_tl_palette.cpp
     src/gui/timeline/gui_tl_clip_modal.cpp
     src/gui/timeline/gui_tl_clip_tab.cpp
+    src/gui/timeline/gui_tl_tween_tab.cpp
+    src/gui/timeline/gui_tl_curve.cpp
+    src/gui/timeline/gui_tl_options.cpp
+    src/gui/timeline/gui_tl_option_modal.cpp
     src/gui/timeline/gui_tl_doc_modal.cpp
     src/gui/timeline/gui_tl_problems.cpp
     src/gui/gui_qpro_panel.cpp
@@ -381,6 +388,7 @@ add_executable(game_tests
     tests/game/preset_push_text.cpp
     tests/game/preset_legacy_view.cpp
     tests/game/preset_eval_tests.cpp
+    tests/game/preset_option_tests.cpp
     tests/game/preset_convert_tests.cpp
     tests/game/preset_defaults_tests.cpp
     tests/game/preset_registry_tests.cpp
@@ -391,6 +399,9 @@ add_executable(game_tests
     tests/editor/clip_form_tests.cpp
     tests/editor/clip_problems_tests.cpp
     tests/editor/timeline_editor_tests.cpp
+    tests/editor/tween_edits_tests.cpp
+    tests/editor/curve_geometry_tests.cpp
+    tests/editor/options_model_tests.cpp
     src/backend/preset_command_apply.cpp
     src/editor/clip_form.cpp
     src/editor/clip_problems.cpp
@@ -402,6 +413,9 @@ add_executable(game_tests
     src/editor/timeline_lanes.cpp
     src/editor/timeline_edits.cpp
     src/editor/timeline_view.cpp
+    src/editor/tween_edits.cpp
+    src/editor/curve_geometry.cpp
+    src/editor/options_model.cpp
     src/preset/preset_host.cpp
     src/preset/preset_host_push.cpp
     src/preset/preset_preview.cpp
@@ -593,6 +607,7 @@ add_executable(gui_tests
     tests/gui/preset_panel_tests.cpp
     tests/gui/clip_modal_tests.cpp
     tests/gui/timeline_editor_tests.cpp
+    tests/gui/tween_ui_tests.cpp
     tests/gui/host_live_tests.cpp
     tests/gui/gui_mock_assets.cpp
     tests/gui/gui_gpu.cpp

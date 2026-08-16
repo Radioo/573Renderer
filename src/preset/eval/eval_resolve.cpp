@@ -149,6 +149,9 @@ void ApplySceneClip(const Doc::Clip& clip, FrameState& state) {
     case Doc::CommandType::RngSeed:
         state.seeds.push_back(&clip);
         break;
+    case Doc::CommandType::OptionSelect:
+        state.selects.push_back(&clip);
+        break;
     default:
         break;
     }

@@ -1,6 +1,7 @@
 #include "gui_tl_modals.h"
 
 #include "editor/command_palette.h"
+#include "editor/options_model.h"
 #include "editor/preset_editor_state.h"
 #include "editor/timeline_edits.h"
 #include "gui_tl_forms.h"
@@ -15,6 +16,7 @@
 #include <array>
 #include <cfloat>
 #include <cstddef>
+#include <string_view>
 #include <memory>
 #include <string>
 #include <utility>
@@ -67,7 +69,7 @@ void Insert(Doc::CommandType type) {
     ImGui::CloseCurrentPopup();
     if (created.empty()) return;
     editor.Select(created);
-    RequestClipModal(created);
+    RequestClipModal(created, false);
 }
 
 void DrawEntry(const Editor::PaletteEntry& entry, bool highlighted) {
@@ -127,6 +129,29 @@ void DrawEntries(const std::vector<Editor::PaletteEntry>& entries) {
         DrawEntry(entry, std::cmp_equal(i, g_highlight));
     }
     if (entries.empty()) ImGui::TextDisabled("no command matches that filter");
+}
+
+void DrawAddOption(const std::vector<Editor::PaletteEntry>& entries, std::string_view filter) {
+    const std::string_view name = "Add option";
+    if (!filter.empty() && name.find(filter) == std::string_view::npos) return;
+    const bool in_section =
+        !entries.empty() && entries.back().section == Editor::PaletteSection::Document;
+    if (!in_section) ImGui::SeparatorText(SectionLabel(Editor::PaletteSection::Document));
+    const bool picked = ImGui::Selectable("Add option###tl_palette_add_option");
+    ImGui::SameLine(0.0F, 12.0F);
+    ImGui::TextDisabled("appends to document.options; not a clip and not a track");
+    if (!picked) return;
+
+    Editor::State& editor = Editor::Global();
+    int index = -1;
+    editor.Apply([&index](Doc::Document& document) {
+        index = Editor::AddOption(document);
+        return index >= 0;
+    });
+    ImGui::CloseCurrentPopup();
+    if (index < 0) return;
+    editor.PostRequest(
+        Editor::Request{.kind = Editor::RequestKind::OptionProperties, .index = index});
 }
 
 int ClampHighlight(const std::vector<Editor::PaletteEntry>& entries, int wanted) {
@@ -244,6 +269,7 @@ void RenderPalette() {
         return;
     }
     DrawEntries(entries);
+    DrawAddOption(entries, g_filter.data());
 
     ImGui::Separator();
     if (ImGui::Button("Cancel###tl_palette_cancel") ||

@@ -7,11 +7,15 @@
 #include "editor/timeline_drag.h"
 #include "editor/timeline_edits.h"
 #include "editor/timeline_lanes.h"
+#include "editor/tween_edits.h"
 #include "imgui.h"
 #include "preset/doc/preset_commands.h"
 #include "preset/doc/preset_document.h"
 
 #include <algorithm>
+#include <cstddef>
+#include <optional>
+#include <utility>
 #include <string>
 #include <vector>
 
@@ -27,6 +31,9 @@ constexpr float kGateStripeH = 3.0F;
 constexpr float kProblemBarW = 4.0F;
 constexpr ImU32 kProblemError = IM_COL32(232, 96, 88, 255);
 constexpr ImU32 kProblemWarning = IM_COL32(232, 176, 72, 255);
+constexpr float kKeyInset = 5.0F;
+constexpr float kKeyHalf = 3.0F;
+constexpr float kLabelDrop = 6.0F;
 
 struct Box {
     float x0 = 0.0F;
@@ -34,6 +41,99 @@ struct Box {
     float y0 = 0.0F;
     float y1 = 0.0F;
 };
+
+struct KeyDrag {
+    std::string clip_id;
+    int index = -1;
+    int start_at = 0;
+    int grab_frame = 0;
+};
+
+KeyDrag g_key_drag;
+
+float KeyY(const Box& box) {
+    return box.y0 + std::min(3.0F, (box.y1 - box.y0) * 0.5F);
+}
+
+float KeyX(const Ctx& ctx, const Doc::Clip& clip, const Box& box, int at) {
+    const float x = FrameToX(ctx, clip.start + at);
+    if (box.x1 - box.x0 < 2.0F * kKeyInset) return x;
+    return std::clamp(x, box.x0 + kKeyInset, box.x1 - kKeyInset);
+}
+
+void DrawKeys(const Ctx& ctx, const Doc::Clip& clip, const Box& box, const Box& visible) {
+    const float ky = KeyY(box);
+    const ImU32 line = ImGui::GetColorU32(ImGuiCol_Text, 0.55F);
+    for (std::size_t i = 0; i + 1 < clip.keys.size(); i++) {
+        const float from = KeyX(ctx, clip, box, clip.keys[i].at);
+        const float to = KeyX(ctx, clip, box, clip.keys[i + 1].at);
+        if (to < visible.x0 || from > visible.x1) continue;
+        ctx.draw->AddLine(ImVec2(std::max(from, visible.x0), ky),
+                          ImVec2(std::min(to, visible.x1), ky), line, 1.0F);
+    }
+    for (std::size_t i = 0; i < clip.keys.size(); i++) {
+        const float kx = KeyX(ctx, clip, box, clip.keys[i].at);
+        if (kx < visible.x0 || kx > visible.x1) continue;
+        const bool selected =
+            ctx.editor->SelectedKey() == Editor::KeyRef{.clip_id = clip.id, .index = (int)i};
+        ctx.draw->AddQuadFilled(ImVec2(kx, ky - kKeyHalf), ImVec2(kx + kKeyHalf, ky),
+                                ImVec2(kx, ky + kKeyHalf), ImVec2(kx - kKeyHalf, ky),
+                                selected ? ImGui::GetColorU32(ImGuiCol_CheckMark)
+                                         : ImGui::GetColorU32(ImGuiCol_Text));
+    }
+}
+
+void DragKey(Ctx& ctx, const Doc::Clip& clip) {
+    if (g_key_drag.clip_id != clip.id || g_key_drag.index < 0) return;
+    Editor::DragInput input;
+    input.cursor_frame = CursorFrame(ctx);
+    input.playhead = ctx.status.frame;
+    input.px_per_frame = ctx.editor->GetView().px_per_frame;
+    input.snap = ctx.editor->GetView().snap && !ImGui::GetIO().KeyAlt;
+    const int wanted =
+        clip.start + g_key_drag.start_at + (input.cursor_frame - g_key_drag.grab_frame);
+    const Editor::Snap snap = Editor::SnapFrame(*ctx.document, wanted, input, clip.id);
+    const std::string id = clip.id;
+    const int index = g_key_drag.index;
+    const int at = snap.frame - clip.start;
+    ApplyEdit(ctx, [id, index, at](Doc::Document& document) {
+        return Editor::MoveKey(document, id, index, at);
+    });
+}
+
+void KeyItems(Ctx& ctx, const Doc::Track& track, const Doc::Clip& clip, const Box& box,
+              const Box& visible) {
+    const float ky = KeyY(box);
+    for (std::size_t i = 0; i < clip.keys.size(); i++) {
+        const float kx = KeyX(ctx, clip, box, clip.keys[i].at);
+        if (kx < visible.x0 || kx > visible.x1) continue;
+        ImGui::SetCursorScreenPos(ImVec2(kx - 5.0F, ky - 5.0F));
+        ImGui::SetNextItemAllowOverlap();
+        ImGui::InvisibleButton(("###tl_key_" + clip.id + "_" + std::to_string(i)).c_str(),
+                               ImVec2(10.0F, 10.0F));
+        if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
+            ctx.editor->PostRequest(Editor::Request{
+                .kind = Editor::RequestKind::ClipProperties, .clip_id = clip.id, .index = (int)i});
+            return;
+        }
+        if (ImGui::IsItemActivated()) {
+            ctx.editor->Select(clip.id);
+            ctx.editor->SelectKey(clip.id, (int)i);
+            if (!Editor::TrackLocked(*ctx.document, track.id)) {
+                g_key_drag = KeyDrag{.clip_id = clip.id,
+                                     .index = (int)i,
+                                     .start_at = clip.keys[i].at,
+                                     .grab_frame = CursorFrame(ctx)};
+                ctx.editor->BeginGesture();
+            }
+        }
+        if (ImGui::IsItemActive() && ImGui::IsMouseDragging(ImGuiMouseButton_Left))
+            DragKey(ctx, clip);
+    }
+    if (ImGui::IsMouseDown(ImGuiMouseButton_Left) || g_key_drag.index < 0) return;
+    ctx.editor->EndGesture();
+    g_key_drag = KeyDrag{};
+}
 
 Box ClipBox(const Ctx& ctx, const Doc::Track& track, const Doc::Clip& clip, float y) {
     const int lane = Editor::LaneOf(track, clip);
@@ -75,17 +175,12 @@ void DrawBody(const Ctx& ctx, const Doc::Track& track, const Doc::Clip& clip, co
                           ImGui::GetColorU32(ImGuiCol_Text), ">");
     }
 
-    for (const Doc::Key& key : clip.keys) {
-        const float kx = FrameToX(ctx, clip.start + key.at);
-        if (kx < visible.x0 || kx > visible.x1) continue;
-        const float ky = (box.y0 + box.y1) * 0.5F;
-        ctx.draw->AddQuadFilled(ImVec2(kx, ky - 4.0F), ImVec2(kx + 4.0F, ky), ImVec2(kx, ky + 4.0F),
-                                ImVec2(kx - 4.0F, ky), ImGui::GetColorU32(ImGuiCol_Text));
-    }
+    DrawKeys(ctx, clip, box, visible);
 
+    const bool keyed = !clip.keys.empty();
     const std::string label =
         Ellipsized(Editor::ClipSummary(clip, track.target), visible.x1 - visible.x0 - 8.0F);
-    ctx.draw->AddText(ImVec2(visible.x0 + 5.0F, box.y0 + 3.0F),
+    ctx.draw->AddText(ImVec2(visible.x0 + 5.0F, box.y0 + (keyed ? kLabelDrop : 3.0F)),
                       ImGui::GetColorU32(ImGuiCol_WindowBg), label.c_str());
 
     if (!ctx.editor->IsSelected(clip.id)) return;
@@ -143,6 +238,28 @@ void HandleClick(Ctx& ctx, const Doc::Track& track, const Doc::Clip& clip, const
 
 }
 
+void AddKeyHere(Ctx& ctx, const std::string& clip_id) {
+    const Doc::Clip* clip = Editor::ClipById(*ctx.document, clip_id);
+    if (clip == nullptr) return;
+    const int at = ctx.status.frame - clip->start;
+    ApplyEdit(ctx, [clip_id, at](Doc::Document& document) {
+        return Editor::AddKeyAt(document, clip_id, at) >= 0;
+    });
+}
+
+void AddTransitionBetween(Ctx& ctx, const std::string& a_id, const std::string& b_id) {
+    if (a_id.empty() || b_id.empty()) return;
+    std::string first = a_id;
+    std::string second = b_id;
+    const Doc::Clip* a = Editor::ClipById(*ctx.document, first);
+    const Doc::Clip* b = Editor::ClipById(*ctx.document, second);
+    if (a == nullptr || b == nullptr) return;
+    if (b->start < a->start) std::swap(first, second);
+    ApplyEdit(ctx, [first, second](Doc::Document& document) {
+        return Editor::AddTransition(document, first, second, Editor::kTransitionFrames).Valid();
+    });
+}
+
 void ClipMenuItems(Ctx& ctx, const Doc::Clip& clip) {
     const std::string id = clip.id;
     const int playhead = ctx.status.frame;
@@ -182,7 +299,17 @@ void ClipMenuItems(Ctx& ctx, const Doc::Clip& clip) {
         ApplyEdit(ctx,
                   [id](Doc::Document& document) { return Editor::MakeOpenEnded(document, id); });
     }
-    ImGui::MenuItem("Add key at playhead", "K", false, false);
+    if (ImGui::MenuItem("Add key at playhead###tl_menu_add_key", "K")) AddKeyHere(ctx, id);
+    const std::string next = Editor::NextDrawClip(*ctx.document, id);
+    if (ImGui::MenuItem("Add transition to next clip###tl_menu_transition_next", nullptr, false,
+                        !next.empty())) {
+        AddTransitionBetween(ctx, id, next);
+    }
+    const std::vector<std::string> chosen = ctx.editor->Selection();
+    if (ImGui::MenuItem("Add transition between selected###tl_menu_transition_selected", nullptr,
+                        false, chosen.size() == 2)) {
+        AddTransitionBetween(ctx, chosen.front(), chosen.back());
+    }
     ImGui::Separator();
     const bool muted = clip.muted;
     if (ImGui::MenuItem("Mute clip", nullptr, muted)) {
@@ -233,6 +360,7 @@ void DrawClip(Ctx& ctx, const Doc::Track& track, const Doc::Clip& clip, float y)
     const float hit_w = Editor::IsEvent(clip) ? kEventHitW : (visible.x1 - visible.x0);
     ImGui::InvisibleButton(clip_id.c_str(), ImVec2(hit_w, box.y1 - box.y0));
     HandleClick(ctx, track, clip, visible);
+    KeyItems(ctx, track, clip, box, visible);
 
     if (!ImGui::BeginPopupContextItem(("##tl_clip_menu_" + clip.id).c_str())) return;
     ClipMenuItems(ctx, clip);

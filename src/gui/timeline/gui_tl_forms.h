@@ -2,6 +2,7 @@
 
 #include "preset/asset_index.h"
 #include "preset/doc/preset_commands.h"
+#include "preset/doc/preset_document.h"
 #include "preset/doc/preset_fields.h"
 
 #include <memory>
@@ -27,6 +28,8 @@ FieldEvent DrawField(const FormContext& context, const Preset::Doc::FieldDesc& f
                      Preset::Doc::Command& command);
 
 FieldEvent DrawParamForm(const FormContext& context, Preset::Doc::Command& command);
+
+FieldEvent DrawTweenTab(Preset::Doc::Document& document, const std::string& clip_id, int playhead);
 
 FieldEvent DrawVec3Row(const char* id, const char* label, Preset::Doc::Vec3& value, float speed,
                        const char* unit);

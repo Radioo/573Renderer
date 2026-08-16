@@ -434,6 +434,11 @@ comparing each tail item's clipped rect with its full rect.
 | track M / S / L | `###tl_mute_<id>`, `###tl_solo_<id>`, `###tl_lock_<id>` | square buttons, filled with the accent when on |
 | track lane | `###tl_lane_<track id>` | press starts the rubber band, right-click opens the empty-area menu |
 | clip bar | `###tl_clip_<clip id>` | click selects, double-click opens the clip properties modal, drag moves, edge drag resizes, Ctrl+drag drops a duplicate. An EVENT clip draws a 4 px tick but its hit rect is 12 px wide, because a 4 px click target cannot be hit reliably - the Test Engine could not hover one either |
+| tween key diamond | `###tl_key_<clip id>_<index>` | 10 px square hit rect centred on the diamond; click selects the key, drag moves it in time (snapped like a clip), double-click opens the clip modal with the Tween tab focused on that key |
+| options track header | `###tl_opt_head_<option id>` | one virtual row per `document.options` entry, above the content tracks |
+| option choice | `###tl_opt_choice_<option id>_<index>` | segmented control; a click posts `PresetCmd::SetOption`, the live choice is filled with the accent |
+| option edit | `###tl_opt_edit_<option id>` | opens the option properties modal |
+| curve editor | `###tl_curve_close`, `###tl_curve_channel`, `###tl_curve_ease_<ease name>`, `###tl_curve_key_<index>`, `###tl_curve_handle_<0\|1>` | the curve editor takes over the lane area, see below |
 | range scroll bar | `###tl_scroll` | drag to pan |
 
 Clip bars are 22 px in the row's main lane, centred in it, and 16 px in a modifier sub-lane
@@ -455,7 +460,10 @@ did not reach. Esc clears.
 
 Clip right-click: Properties (opens the modal), Cut, Copy, Paste at playhead, Duplicate,
 Split at playhead, Trim start / end to playhead, Make open-ended, Add key at playhead
-(registered DISABLED - key insertion is M6), Mute clip, Delete.
+(`###tl_menu_add_key`), Add transition to next clip (`###tl_menu_transition_next`, enabled when
+`Editor::NextDrawClip` finds a later `model.draw` on the same target), Add transition between
+selected (`###tl_menu_transition_selected`, enabled with exactly two clips selected), Mute clip,
+Delete.
 
 Empty lane right-click: Add command here (the palette anchored at the clicked frame), Paste at
 this frame, Add track above / below.
@@ -473,10 +481,11 @@ Active when the editor is focused or hovered and `io.WantTextInput` is false.
 | Left / Right | step 1 frame (Shift: 100) | Ctrl+C / X / V | copy / cut / paste at playhead |
 | Home / End | frame 0 / `length - 1` | Ctrl+D | duplicate selection |
 | `[` / `]` | previous / next clip edge, key or marker | Ctrl+0 | fit the whole document |
-| Delete | delete selection | S | split selection at playhead |
+| Delete | delete the SELECTED KEY when there is one, else the clip selection | S | split selection at playhead |
 | M | mute the selected clips' track | L | lock the selected clips' track |
 | Enter | properties of the selected clip | Esc | cancel a drag, clear the selection |
-| A | command palette at the playhead on the selected track | | |
+| A | command palette at the playhead on the selected track | K | add a tween key at the playhead on the selected clip |
+| C | curve editor for the selected clip | | |
 | Ctrl+wheel | zoom about the cursor | Shift+wheel | scroll the tracks |
 
 #### Modals: palette, clip properties, document properties, problems
@@ -646,6 +655,105 @@ hidden-parts checklist is a `CollapsingHeader` labelled with its count, open by 
 when the animation has 8 parts or fewer: a wall of 80 checkboxes buries the preview strip above
 it even when scrolling works. `clip_modal_tests.cpp` pins the footer geometrically against an
 80-part stub: the item rect of `###tl_clip_done` must sit inside the modal's `InnerRect`.
+
+#### Tween tab, curve editor and the key diamonds
+
+Keys draw as diamonds on the clip bar with a thin connector line between consecutive keys, on
+an upper line inside the bar so the connector never strikes through the clip text. The selected
+key draws in the accent. Every diamond is its own `InvisibleButton` submitted AFTER the clip's
+button (which sets `SetNextItemAllowOverlap`), so a key wins the hit test over the bar under it.
+Dragging one calls `Editor::MoveKey` through the same `Editor::SnapFrame` the clip drag uses, and
+the whole drag is one undo entry (`BeginGesture` on activation, `EndGesture` on release).
+
+The Tween tab (`gui_tl_tween_tab.cpp`, shown for every command whose `KeyFieldsFor` has a
+tweenable field, so `model.tween` and `camera.tween` show only General and Tween) is a key list
+of `at`, the ease that reaches the next key, the values the key names and, for a `sine_deg`
+segment, the fraction of the way its NEXT key is actually reached, which is the unnormalised
+sine the game itself uses. Below it are `+ key at playhead` (`###tl_tween_add_key`) and the
+selected key's editor. `+ key at playhead` is DISABLED, with the reason spelled out beside it,
+while the playhead sits outside the clip: `AddKeyAt` refuses a clip-relative `at` outside
+`[0, duration]`, and a button that silently does nothing reads as a bug. Then the
+selected key's editor: `at` (`###tl_tween_at`), ease (`###tl_tween_ease`), `rate` when the ease
+is `sine_deg`, the four control points when it is `bezier`, then one row per tweenable field:
+either a value widget (`###tl_tween_field_<id>`) with an `x` to unset it, or `(not keyed)` with a
+`+ add` (`###tl_tween_add_<id>`) that captures the value the clip RESOLVES at the playhead. Every
+edit goes through the pure `src/editor/tween_edits.*` functions, so the tab, the diamonds, the
+curve editor and the unit tests share one rule set (documented in `docs/preset_document.md`).
+
+The curve editor (`gui_tl_curve.cpp`) opens from the Tween tab's `Open curve editor` button, the
+`C` key on a selected clip, or a double-click on a diamond, and TAKES OVER the lane area for
+that clip: while it is open the ruler, tracks and playhead of the timeline are not drawn, and
+`Close` (or Esc) returns to them. X is clip-relative frames, Y the value range of the chosen
+channel (a vec3 field contributes one channel per axis), padded so a flat curve still has
+height; the range is frozen while a point is being dragged so the curve does not chase the
+cursor. The curve itself is sampled through `Preset::Eval::SampleKeys`, the very code the
+evaluator runs, so the picture cannot drift from the render; the clip's other channels and the
+channels of other tween clips on the same target draw in the muted neutral for reference. Keys
+that name the channel are filled diamonds and drag in both axes (horizontal = `MoveKey`,
+vertical = `SetKeyValue`); keys that do not name it are hollow and sit on the sampled curve. The
+ease preset buttons apply to the selected key's segment, bezier handles appear only for the
+`bezier` ease and map through the pure `src/editor/curve_geometry.*` helpers, and the playhead
+draws as a line with a live value readout.
+
+The drawn polyline and the auto Y range come from ONE pure sampler, `Editor::CurveSamples` in
+`src/editor/curve_geometry.cpp`, and `Editor::CurveAutoRange` is that same sampler plus the raw
+key values run through `RangeOfValues`. Both take the UNDERLYING value the clip resolves at
+`clip.start` (`Editor::ResolvedFieldValue`, converted with `Preset::Eval::FromParamValue`) as an
+argument, so the GUI passes the identical value to both and the range cannot disagree with the
+line. This is not cosmetic. `SampleKeys` blends FROM the underlying value whenever the first key
+that names the channel is not key 0: a two-key tween whose key 0 names only `alpha` and whose
+key 1 names `alpha` and `scale` draws `scale` from the underlying value at frame 0 to 3.0 at the
+last frame. The range used to be computed with a DEFAULT-CONSTRUCTED `TweenValue` (a zero
+scalar) while the line used the resolved one, so with an underlying `scale` of 10 the range came
+out `[-0.3, 3.3]` and the whole left half of the curve was drawn above the top of the plot.
+`curve_geometry_tests.cpp` pins it: every sample of that clip must lie inside
+`CurveAutoRange` for the same underlying value. `CurveSamples` also always ends ON the last
+frame, appending it when the `duration / 240` step does not divide the duration, so the polyline
+reaches the right edge and the range covers the endpoint the picture shows.
+
+#### Options track and the option properties modal
+
+`gui_tl_options.cpp` draws a VIRTUAL band above the content tracks whenever `document.options`
+is non-empty. Nothing in `tracks` corresponds to it: it is the view of `Document::options`, and
+it scrolls with the tracks like any row. Each option row carries the OPT badge and label in the
+header column, an `Edit...` button, and in the lane a segmented control of the choices with the
+live one filled in the accent (the accent is pushed for `Button`, `ButtonHovered` AND
+`ButtonActive`, because the chip's text is `WindowBg` and the theme's hover grey under that dark
+text is unreadable), followed by `selected <label>` and the transition summary
+(`Editor::TransitionSummary`, e.g. `100 f at step 4, kick 15`). Clicking a choice posts
+`PresetCmd::SetOption`; the choice is session state read back from `App::PresetStatus`, never
+part of the document.
+
+While a transition is in flight the render thread publishes it in `App::PresetStatus::transition`
+(`{option, from, to, frames_left}`, filled from the evaluator's counter), and the band draws the
+runtime overlay: a dashed accent rectangle from the playhead over `frames_left / step` document
+frames on the row of every track the moved targets belong to (`Editor::MovedTargets` plus
+`Editor::TrackIdsForTargets`). It is not a clip, is not on the frame axis and is never saved.
+
+`TrackIdsForTargets` never returns an empty list: when no track row matches it returns the
+single marker `Editor::kOptionBandRow`, and the overlay then draws on the OPTION'S OWN header
+row inside the band (`Ctx::options_top` plus the option index times the row height, published by
+`DrawTracks` before it draws the band). Without that fallback a running transition was
+INVISIBLE for any choice whose targets have no row of their own - a camera-only choice on a
+document with no `camera` track, or a choice that carries no values at all - and the only
+feedback that anything was happening was the viewport itself. A transition is always visible
+somewhere. `options_model_tests.cpp` pins the marker for a camera-only choice on a
+document with a single model track.
+
+`Add option` in the palette's Document section (`###tl_palette_add_option`) appends an
+`OptionSpec` and opens the option properties modal (`gui_tl_option_modal.cpp`, window
+`Option properties`): id, label, default choice, the choices table with per-choice label,
+`up###tl_option_choice_up_<index>` / `down###tl_option_choice_down_<index>` reorder and remove,
+plus the selected choice's target values (targets picked from
+`Editor::ChoiceValueTargets`, never typed), and the transition block `###tl_option_frames`,
+`###tl_option_step`, `###tl_option_ease` (restricted to hold / linear / ease_in / ease_out /
+ease_in_out) and `###tl_option_kick`. Renaming a choice goes through `Editor::RenameChoice`,
+which rewrites every `when` gate that named the old label in the same undo entry and refuses a
+duplicate. Reordering goes through `Editor::MoveChoice`, which swaps the two entries and carries
+`default_choice` with them, because that field is an INDEX while the gates address labels: without
+that the default would silently point at a different choice after a reorder. The modal edits a
+working copy and commits through `EditorState::Apply` exactly like the clip modal, so Cancel
+unwinds to the pre-modal undo depth.
 
 #### Inspector "Clip" tab
 

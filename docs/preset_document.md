@@ -351,6 +351,25 @@ sprite_split_priority
 `option` and `choice`. Triggers the runtime option transition on the frame equal
 to `start`, during playback and export alike. No converted preset has one.
 
+It runs through the SAME code as clicking the choice on the options track
+(`Evaluator::SetOption`), so an `option.select` at frame N is exactly a click made
+while the playhead sits ON N. `Evaluator::AdvanceFrame` drops the transition
+counter by `step` FIRST (that drop belongs to the frame that is ending), then
+resolves frame N, sees the event clip in `FrameState::selects` and calls
+`SetOption`, which captures the start values, arms the signed kick and loads the
+counter with `transition.frames`; frame N is then re-resolved so `when` gates on
+the new choice already match on it, and the choice values are blended with the
+full counter, so frame N shows the OLD pose and frame N+1 is the first blended
+one. That is the order a click produces, and it is the order of the frame walk
+below: the counter drop belongs to the previous frame, the select and the blend to
+this one. Because the change is skipped when the option already holds that choice,
+an event clip fires once and only on its own frame, and because `Seek` replays the
+frames from a checkpoint, it fires again every time the playhead crosses it,
+including the loop wrap (which is a `Seek(0)`).
+`tests/game/preset_option_tests.cpp` asserts the clip and the click produce the
+same choices, counter and resolved position on every frame of the blend, and that
+seeking backwards past the clip restores the previous choice.
+
 ### Options (top level, not clips)
 
 ```json
@@ -368,6 +387,17 @@ to `start`, during playback and export alike. No converted preset has one.
 `sine_deg` and `bezier` are validation errors. Choice `values` keys use the
 parameter id grammar above and nothing else, and choice labels are unique within
 an option because gates, `--preset-option` and the states gate address them.
+
+`frames` and `step` are the game's counter, not a duration in frames: the count
+starts at `frames` and drops by `step` every frame, so the blend lasts
+`ceil(frames / step)` frames and the blend factor is `1 - count / frames`. The
+game's own step was a hardcoded 4 against a count of 100, which is why the length
+reads in quarter frames (`docs/preset_params.md`, "States are chosen, not
+edited"); the document makes the step authorable per option instead of leaving it
+a runtime-only parameter, and every converted default carries the game's 4.
+`spin_kick` is the game's per-choice-change kick, re-armed to `max(1, spin_kick)`
+on every change and negated when the choice index decreases; it decays by the
+model's `model.motion.spin_kick_decay`, the only decay (above).
 
 ## Tween semantics and the ease formulas
 
@@ -394,6 +424,14 @@ held afterwards is `A + (B - A) * sin(seg_len * rate_deg)`, which equals B only
 when `seg_len * rate_deg` is 90 degrees. RED music select's 35 frame fly-in at 3
 degrees per frame therefore rises past its key at frame 30 and settles at
 `sin(105 deg) = 0.9659` of the way. Every other ease reaches B exactly.
+`hold`, `linear` and `sine_deg` are the three the game itself has; where they come
+from and how to re-find them after a build changes is the "Ramps: a phase can move
+a value per frame" section of `docs/preset_states.md`, which derives `linear` from
+mode select's `A -= max(60-2n, 4) * k` wind-up and `sine_deg` from music select's
+`sin(rate * t deg)` fly-in (its per-screen table row names the routine to look at).
+`ease_in`, `ease_out`, `ease_in_out` and `bezier` are editor conveniences no
+converted default uses; the Tween tab prints the reached fraction beside a
+`sine_deg` key so the overshoot is visible rather than surprising.
 
 Before, between and after keys: a value named by key 0 holds key 0's value before
 key 0; a value FIRST named at a later key `k` interpolates, on every frame from the
@@ -411,8 +449,50 @@ Key JSON per ease kind:
 { "at": 35, "values": { "position": [-0.1, 0.0, -0.25] } }
 ```
 
-The formulas themselves arrive with `eval_tween.cpp` in M2; this table is what that
-code has to implement.
+`eval_tween.cpp` implements this table, and the curve editor draws its curves by
+sampling `SampleKeys` rather than re-deriving the formulas, so the picture and the
+render cannot drift apart.
+
+## Editing keys and the add-transition rule
+
+The pure key edits live in `src/editor/tween_edits.h/.cpp` and are what both the
+timeline diamonds, the Tween tab and the curve editor call:
+
+| Edit | Rule |
+|------|------|
+| `AddKeyAt(document, clip, at)` | `at` is clip-relative and must lie in `[0, duration]`; anything else is refused. The new key COPIES the previous key's ease, `rate_deg` and `cp`, and captures, for every value id any key of the clip already names, the value the clip RESOLVES at that frame. Adding a key therefore changes nothing that is drawn: on a linear segment the captured value is on the line and the two halves reproduce it exactly. A key already sitting on `at` is returned unchanged. |
+| `MoveKey(document, clip, index, at)` | Clamped to `[previous.at + 1, next.at - 1]`, and to `[0, duration]` at the ends, so keys never reorder and never leave the clip. |
+| `DeleteKey`, `SetKeyValue`, `UnsetKeyValue` | A value may only be set for a field that `KeyFieldsFor(type)` marks tweenable, which is what makes "non-tweenable value in a key" impossible to author from the UI. |
+| `SetKeyEase` | Sets the ease and carries ONLY the extra field the kind needs: switching to `sine_deg` fills a default `rate_deg` of 3, switching to `bezier` fills `cp` `[0.42, 0, 0.58, 1]`, and switching away drops them. That is what keeps the "rate_deg without sine_deg / cp without bezier" validation errors unreachable from the editor. |
+| `SetKeyRate`, `SetKeyBezier` | Refused unless the key's ease is `sine_deg` / `bezier`; `cp[0]` and `cp[2]` are clamped to 0..1 as the CSS cubic-bezier definition requires. |
+
+`ResolvedFieldValue(document, clip, field, frame)` is the capture used by both
+`AddKeyAt` and the Tween tab's "+ add" button. It resolves the frame through
+`ResolveFrame` and reads the field through the same `ReadTarget` id grammar the
+option choice values use (`model[<target>].position`, `camera.eye`, ...), falling
+back to the command's own field value when the target grammar does not name it.
+
+`AddTransition(document, a, b, n)` is the NLE-style cross transition of the
+timeline's "Add transition to next clip" (and "Add transition between selected"
+for two selected draw clips of one target). `a` and `b` are `model.draw` clips on
+tracks with the same `target`, `b` starts at or after `a.end`, and `n` defaults to
+30 frames:
+
+- Abutting (`a.end == b.start`): the inserted `model.tween` spans
+  `[a.end - n, b.start + n)`.
+- With a gap: it spans the whole gap plus `n` frames into `b`, `[a.end, b.start + n)`,
+  and a COPY of `a`'s draw clip is inserted on `a`'s own track covering
+  `[a.end, b.start)`. A tween never makes a model visible (every model starts
+  hidden and only `model.draw` shows it), so without that copy the transition
+  would play on a model nobody can see. The copy is an ordinary clip the user can
+  delete to keep the gap.
+- Key 0 (`at 0`) is `a`'s RESOLVED pose at its last frame `a.end - 1`
+  (`position`, `rotation`, `scale`, `alpha`, `anim_speed`), key 1 (`at duration`)
+  is `b`'s params, and the ease is `linear`, so the mid frame is the midpoint.
+- The tween goes on a model track of the same target that sits BELOW `a`'s draw
+  track and holds only `model.tween` clips; if there is none, one is created and
+  inserted directly below the draw track, because track order is evaluation order
+  and a modifier above its draw track would be overwritten by the primary.
 
 ## Canonical serialization
 
@@ -573,11 +653,14 @@ the upper clamp to the evaluator when the document has no length of its own.
    above the split, `RenderFrame(dt)`, `DrawSprites(INT_MIN, split - 1)`, the
    particles below the split, `AdvanceSprites(dt)`.
 2. Advance the model 3D ticks by the `anim_speed` bound for the frame being left
-   and the sprite clocks by their `speed`, then resolve the next frame from the
-   document: tracks in order, muted tracks and clips skipped, non-solo tracks
-   skipped while any track is solo, clips whose `when` gate does not match the
-   selected choice skipped, the primary of a family first and its modifiers after
-   it in clip order.
+   and the sprite clocks by their `speed`, drop the option transition counter by
+   its `step` (that drop belongs to the frame being left), then resolve the next
+   frame from the document: tracks in order, muted tracks and clips skipped,
+   non-solo tracks skipped while any track is solo, clips whose `when` gate does
+   not match the selected choice skipped, the primary of a family first and its
+   modifiers after it in clip order. An `option.select` event clip on the resolved
+   frame fires here, after the drop, and the frame is resolved again so its gates
+   see the new choice.
 3. Reset the per model spin accumulator of every model whose winning `model.draw`
    primary now has a different `start`, and arm the kick multiplier of every model
    whose `model.motion` clip starts on this frame to `max(1, spin_kick)`.
@@ -590,9 +673,9 @@ the upper clamp to the evaluator when the document has no length of its own.
 5. Age the particle pool, push one `SetSpriteScale` per visible sprite in draw
    order, spawn the emitters active on this frame from the beat state of the
    PREVIOUS frame, and draw the single `rhythm.jitter` random value.
-6. Motion: drop the option transition counter by its `step`, apply the choice
-   values (blended from the captured start values while a transition is in
-   flight), push the choice camera when the selected choice names `camera.eye`,
+6. Motion: apply the choice values (blended from the captured start values while a
+   transition is in flight, by the counter step 2 already dropped), push the choice
+   camera when the selected choice names `camera.eye`,
    then per model decay the kick multiplier toward 1, integrate the resolved
    `spin_per_frame` times that multiplier into the accumulator, and push the
    transform. Position priority is jitter, then orbit, then the resolved

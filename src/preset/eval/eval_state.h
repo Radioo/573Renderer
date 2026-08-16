@@ -37,6 +37,8 @@ struct EvalState {
     std::vector<float> sprite_clock;
     std::vector<int> sprite_start;
     int transition = 0;
+    int transition_option = -1;
+    int transition_from = -1;
     std::vector<int> choices;
     std::vector<CapturedValue> captured;
 };

@@ -4,6 +4,7 @@
 #include "editor/timeline_drag.h"
 #include "editor/timeline_edits.h"
 #include "editor/timeline_view.h"
+#include "editor/tween_edits.h"
 #include "imgui.h"
 #include "preset/doc/preset_document.h"
 
@@ -157,8 +158,32 @@ void ToggleTracksOfSelection(Ctx& ctx, bool lock) {
     });
 }
 
+void DeleteKeyOrSelection(Ctx& ctx) {
+    const Editor::KeyRef key = ctx.editor->SelectedKey();
+    if (!key.Valid()) {
+        DeleteSelection(ctx);
+        return;
+    }
+    const std::string id = key.clip_id;
+    const int index = key.index;
+    ApplyEdit(ctx, [id, index](Doc::Document& document) {
+        return Editor::DeleteKey(document, id, index);
+    });
+    ctx.editor->ClearKeySelection();
+}
+
+void HandleTweenKeys(Ctx& ctx) {
+    if (ctx.editor->Selection().empty()) return;
+    const std::string selected = ctx.editor->Selection().front();
+    if (ImGui::IsKeyPressed(ImGuiKey_K, false)) AddKeyHere(ctx, selected);
+    if (!ImGui::IsKeyPressed(ImGuiKey_C, false)) return;
+    ctx.editor->PostRequest(
+        Editor::Request{.kind = Editor::RequestKind::CurveEditor, .clip_id = selected});
+}
+
 void HandleClipKeys(Ctx& ctx) {
-    if (ImGui::IsKeyPressed(ImGuiKey_Delete, false)) DeleteSelection(ctx);
+    HandleTweenKeys(ctx);
+    if (ImGui::IsKeyPressed(ImGuiKey_Delete, false)) DeleteKeyOrSelection(ctx);
     if (ImGui::IsKeyPressed(ImGuiKey_Escape, false)) {
         CancelDrag();
         ctx.editor->ClearSelection();

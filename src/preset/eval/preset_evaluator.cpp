@@ -112,7 +112,8 @@ void Evaluator::ApplyChoiceValues(FrameState& state) const {
         const Doc::OptionSpec& option = document.options[i];
         const int index = SelectedChoice(option, state_.choices, i);
         if (index < 0) continue;
-        const bool blending = option.transition.frames > 0 && state_.transition > 0;
+        const bool blending = std::cmp_equal(i, state_.transition_option) &&
+                              option.transition.frames > 0 && state_.transition > 0;
         const float factor =
             blending ? 1.0F - ((float)state_.transition / (float)option.transition.frames) : 1.0F;
         for (const Doc::ChoiceValue& value : option.choices[(std::size_t)index].values) {
@@ -151,6 +152,35 @@ void Evaluator::ResetRuntime() {
         state_.sprite_start[i] = current_.sprites[i].draw_start;
         state_.sprite_clock[i] = (float)current_.sprites[i].offset;
     }
+    if (!FireSelects(current_)) return;
+    current_ = Resolve(state_.frame);
+    ApplyChoiceValues(current_);
+}
+
+bool Evaluator::FireSelects(const FrameState& state) {
+    if (document_ == nullptr) return false;
+    bool fired = false;
+    for (const Doc::Clip* clip : state.selects) {
+        const auto& select = std::get<Doc::OptionSelect>(clip->command);
+        for (std::size_t i = 0; i < document_->options.size(); i++) {
+            const Doc::OptionSpec& option = document_->options[i];
+            if (option.id != select.option) continue;
+            for (std::size_t choice = 0; choice < option.choices.size(); choice++) {
+                if (option.choices[choice].label != select.choice) continue;
+                if (SelectedChoice(option, state_.choices, i) == (int)choice) continue;
+                SetOption((int)i, (int)choice);
+                fired = true;
+            }
+        }
+    }
+    return fired;
+}
+
+int Evaluator::TransitionStep() const {
+    if (document_ == nullptr || document_->options.empty()) return 1;
+    const auto index =
+        (std::size_t)std::clamp(state_.transition_option, 0, (int)document_->options.size() - 1);
+    return std::max(1, document_->options[index].transition.step);
 }
 
 void Evaluator::Reset() {
@@ -252,6 +282,8 @@ void Evaluator::SetOption(int option, int choice) {
     }
     state_.choices[(std::size_t)option] = clamped;
     state_.transition = spec.transition.frames;
+    state_.transition_option = option;
+    state_.transition_from = previous;
 
     const float kick = std::max(1.0F, (float)spec.transition.spin_kick);
     const float signed_kick = (clamped > previous) ? kick : -kick;
@@ -397,7 +429,9 @@ std::vector<Push> Evaluator::AdvanceFrame() {
     const BeatSnapshot snapshot{.index = state_.beat, .since = state_.beat_since};
     AdvanceClocks(current_);
 
+    if (state_.transition > 0 && !document_->options.empty()) state_.transition -= TransitionStep();
     FrameState state = Resolve(next);
+    if (FireSelects(state)) state = Resolve(next);
     state.boundary = boundaries_.contains(next);
     std::vector<char> first_frame(state.models.size(), 0);
     ArmRuntime(state, first_frame);
@@ -409,8 +443,6 @@ std::vector<Push> Evaluator::AdvanceFrame() {
                    state_.rng, state_.particles);
     state_.jitter = DrawJitter(state.jitter, state_.rng);
 
-    if (state_.transition > 0 && !document_->options.empty())
-        state_.transition -= std::max(1, document_->options.front().transition.step);
     ApplyChoiceValues(state);
     EmitChoiceCamera(state, out);
     EmitTransforms(state, first_frame, out);

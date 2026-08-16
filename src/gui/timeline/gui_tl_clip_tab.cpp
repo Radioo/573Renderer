@@ -139,7 +139,7 @@ void RenderClipTab() {
     DrawHeading(track, clip);
     const FieldEvent event = DrawIdentity(clip, length, duration);
 
-    if (ImGui::Button("Properties...###insp_clip_props")) RequestClipModal(clip.id);
+    if (ImGui::Button("Properties...###insp_clip_props")) RequestClipModal(clip.id, false);
     if (ImGui::IsItemHovered()) {
         ImGui::SetTooltip("Open the full clip properties modal (Enter on the selected clip).");
     }

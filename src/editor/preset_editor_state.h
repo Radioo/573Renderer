@@ -18,6 +18,8 @@ enum class RequestKind : uint8_t {
     AddCommand,
     AddTrack,
     DocumentProperties,
+    CurveEditor,
+    OptionProperties,
 };
 
 struct Request {
@@ -25,6 +27,14 @@ struct Request {
     std::string clip_id = {};
     std::string track_id = {};
     int frame = 0;
+    int index = -1;
+};
+
+struct KeyRef {
+    std::string clip_id = {};
+    int index = -1;
+    [[nodiscard]] bool Valid() const { return index >= 0 && !clip_id.empty(); }
+    bool operator==(const KeyRef&) const = default;
 };
 
 using DocPtr = std::shared_ptr<const Preset::Doc::Document>;
@@ -65,6 +75,10 @@ public:
     void ClearSelection();
     void DropMissingSelection();
 
+    void SelectKey(std::string clip_id, int index);
+    void ClearKeySelection();
+    [[nodiscard]] const KeyRef& SelectedKey() const { return key_; }
+
     void PostRequest(Request request);
     [[nodiscard]] const Request& PendingRequest() const { return request_; }
     Request TakeRequest();
@@ -88,6 +102,7 @@ private:
     std::vector<Entry> past_;
     std::vector<Entry> future_;
     std::vector<std::string> selection_;
+    KeyRef key_;
     std::vector<ClipboardClip> clipboard_;
     Request request_;
     View view_;

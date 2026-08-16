@@ -43,6 +43,8 @@ private:
     [[nodiscard]] int DerivedLength() const;
     [[nodiscard]] FrameState ResolveWithout(int frame, bool tweens) const;
     void ResetRuntime();
+    bool FireSelects(const FrameState& state);
+    [[nodiscard]] int TransitionStep() const;
     void ApplyChoiceValues(FrameState& state) const;
     void ArmRuntime(const FrameState& next, std::vector<char>& first_frame);
     void EmitChoiceCamera(const FrameState& state, std::vector<Push>& out) const;

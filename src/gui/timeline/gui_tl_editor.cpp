@@ -64,7 +64,7 @@ void DrawHeaderSplitter(Ctx& ctx) {
 }
 
 float ContentHeight(const Ctx& ctx) {
-    float total = 0.0F;
+    float total = OptionsBandHeight(*ctx.document);
     for (const Doc::Track& track : ctx.document->tracks)
         total += TrackHeight(track);
     return total;
@@ -74,6 +74,11 @@ void DrawTracks(Ctx& ctx) {
     ImGui::PushClipRect(ImVec2(ctx.header_x, ctx.lanes_top),
                         ImVec2(ctx.lane_x + ctx.lane_w, ctx.lanes_bottom), true);
     float y = ctx.lanes_top - ctx.editor->GetView().track_scroll;
+    ctx.options_top = y;
+    if (!ctx.document->options.empty()) {
+        DrawOptionsBand(ctx, y);
+        y += OptionsBandHeight(*ctx.document);
+    }
     for (const Doc::Track& track : ctx.document->tracks) {
         const float height = TrackHeight(track);
         if (y > ctx.lanes_bottom) break;
@@ -84,6 +89,7 @@ void DrawTracks(Ctx& ctx) {
         }
         y += height;
     }
+    DrawOptionsOverlay(ctx);
     ImGui::PopClipRect();
     ctx.draw->AddLine(ImVec2(ctx.lane_x, ctx.lanes_top), ImVec2(ctx.lane_x, ctx.lanes_bottom),
                       ImGui::GetColorU32(ImGuiCol_Border), 1.0F);
@@ -154,12 +160,21 @@ void RenderModals() {
         ResetClipModal();
         ResetPalette();
         ResetDocumentModal();
+        ResetOptionModal();
         ResetProblems();
+        CloseCurveEditor();
     }
     const Editor::Request request = editor.TakeRequest();
     switch (request.kind) {
     case Editor::RequestKind::ClipProperties:
-        RequestClipModal(request.clip_id);
+        if (request.index >= 0) editor.SelectKey(request.clip_id, request.index);
+        RequestClipModal(request.clip_id, request.index >= 0);
+        break;
+    case Editor::RequestKind::CurveEditor:
+        RequestCurveEditor(request.clip_id);
+        break;
+    case Editor::RequestKind::OptionProperties:
+        RequestOptionModal(request.index);
         break;
     case Editor::RequestKind::AddCommand:
         RequestPalette(request.track_id, request.frame);
@@ -178,6 +193,7 @@ void RenderModals() {
     RenderTrackModal();
     RenderClipModal();
     RenderDocumentModal();
+    RenderOptionModal();
     RenderProblems();
 }
 
@@ -212,16 +228,20 @@ void Render(float height) {
     view.px_per_frame = Editor::ClampZoom(view.px_per_frame);
     view.scroll = Editor::ClampScroll(view.scroll, ctx.length, view.px_per_frame, ctx.lane_w);
 
-    DrawRuler(ctx);
-    view.track_scroll = Editor::ClampTrackScroll(view.track_scroll, ContentHeight(ctx),
-                                                 ctx.lanes_bottom - ctx.lanes_top);
-    DrawTracks(ctx);
-    DrawHeaderSplitter(ctx);
-    UpdateDrag(ctx);
-    UpdateBand(ctx);
-    DrawPlayhead(ctx);
-    DrawScrollBar(ctx);
-    HandleShortcuts(ctx);
+    if (CurveEditorOpen(ctx)) {
+        DrawCurveEditor(ctx);
+    } else {
+        DrawRuler(ctx);
+        view.track_scroll = Editor::ClampTrackScroll(view.track_scroll, ContentHeight(ctx),
+                                                     ctx.lanes_bottom - ctx.lanes_top);
+        DrawTracks(ctx);
+        DrawHeaderSplitter(ctx);
+        UpdateDrag(ctx);
+        UpdateBand(ctx);
+        DrawPlayhead(ctx);
+        DrawScrollBar(ctx);
+        HandleShortcuts(ctx);
+    }
     for (const Editor::Edit& edit : ctx.pending)
         editor.Apply(edit);
     PublishDocument(ctx);

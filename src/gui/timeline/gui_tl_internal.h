@@ -45,6 +45,7 @@ struct Ctx {
     float lanes_top = 0.0F;
     float lanes_bottom = 0.0F;
     int length = 1;
+    float options_top = 0.0F;
     bool any_solo = false;
     std::vector<Editor::Edit> pending = {};
     std::vector<TrackBand> bands = {};
@@ -107,6 +108,24 @@ bool DragActive();
 void CancelDrag();
 
 void ClipMenuItems(Ctx& ctx, const Preset::Doc::Clip& clip);
+
+void AddKeyHere(Ctx& ctx, const std::string& clip_id);
+
+void AddTransitionBetween(Ctx& ctx, const std::string& a_id, const std::string& b_id);
+
+float OptionsBandHeight(const Preset::Doc::Document& document);
+
+void DrawOptionsBand(Ctx& ctx, float y);
+
+void DrawOptionsOverlay(const Ctx& ctx);
+
+void RequestCurveEditor(std::string clip_id);
+
+void CloseCurveEditor();
+
+bool CurveEditorOpen(const Ctx& ctx);
+
+void DrawCurveEditor(Ctx& ctx);
 
 void HandleShortcuts(Ctx& ctx);
 

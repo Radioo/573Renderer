@@ -256,6 +256,13 @@ Status BuildStatus(const Doc::Document& document, const FrameState& frame, int p
     status.jitter = state.jitter;
     status.live_particles = (int)state.particles.size();
     status.option_choices = state.choices;
+    status.transition_left = state.transition;
+    if (state.transition > 0 && state.transition_option >= 0 &&
+        std::cmp_less(state.transition_option, state.choices.size())) {
+        status.transition_option = state.transition_option;
+        status.transition_from = state.transition_from;
+        status.transition_to = state.choices[(std::size_t)state.transition_option];
+    }
     return status;
 }
 

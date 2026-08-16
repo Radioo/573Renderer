@@ -12,6 +12,7 @@
 #include "preset/doc/preset_enum_names.h"
 #include "preset/doc/preset_fields.h"
 #include "preset/preset_preview.h"
+#include "state/app_state.h"
 
 #include <algorithm>
 #include <array>
@@ -38,6 +39,7 @@ int g_base_undo = 0;
 bool g_open_requested = false;
 bool g_gesture = false;
 bool g_release_preview = false;
+bool g_focus_tween = false;
 float g_body_h = 0.0F;
 
 Doc::Clip* MutableClip(Doc::Document& document, const std::string& clip_id) {
@@ -194,36 +196,6 @@ FieldEvent DrawGeneral(Doc::Document& document, Doc::Clip& clip, int length, int
     return event;
 }
 
-void DrawTween(const Doc::Clip& clip) {
-    ImGui::TextDisabled("%zu key(s). The curve editor and key editing arrive with the tween "
-                        "milestone; the list below is what the document holds today.",
-                        clip.keys.size());
-    if (clip.keys.empty()) {
-        ImGui::TextDisabled("This clip has no tween keys.");
-        return;
-    }
-    if (!ImGui::BeginTable("###tl_tween_keys", 3, ImGuiTableFlags_Borders)) return;
-    ImGui::TableSetupColumn("at");
-    ImGui::TableSetupColumn("ease");
-    ImGui::TableSetupColumn("values");
-    ImGui::TableHeadersRow();
-    for (const Doc::Key& key : clip.keys) {
-        ImGui::TableNextRow();
-        ImGui::TableNextColumn();
-        ImGui::Text("%d", key.at);
-        ImGui::TableNextColumn();
-        ImGui::TextUnformatted(std::string(Doc::kEaseNames[(std::size_t)key.ease]).c_str());
-        ImGui::TableNextColumn();
-        std::string values;
-        for (const Doc::KeyValue& value : key.values) {
-            if (!values.empty()) values += ", ";
-            values += value.id;
-        }
-        ImGui::TextUnformatted(values.empty() ? "-" : values.c_str());
-    }
-    ImGui::EndTable();
-}
-
 void DrawParams(const Doc::Document& document, Doc::Clip& clip, const std::string& target,
                 FieldEvent& event) {
     const FormContext context = MakeFormContext(document, clip.command, target);
@@ -261,8 +233,15 @@ FieldEvent DrawTabs(Doc::Document& working, Doc::CommandType type, const std::st
         ImGui::EndTabItem();
     }
     clip = MutableClip(working, g_clip_id);
-    if (clip != nullptr && HasTweenTab(type) && ImGui::BeginTabItem("Tween###tl_tab_tween")) {
-        DrawTween(*clip);
+    ImGuiTabItemFlags tween_flags = ImGuiTabItemFlags_None;
+    if (g_focus_tween) {
+        tween_flags = ImGuiTabItemFlags_SetSelected;
+        g_focus_tween = false;
+    }
+    if (clip != nullptr && HasTweenTab(type) &&
+        ImGui::BeginTabItem("Tween###tl_tab_tween", nullptr, tween_flags)) {
+        event = std::max(event,
+                         DrawTweenTab(working, g_clip_id, App::Global().GetPresetStatus().frame));
         ImGui::EndTabItem();
     }
     clip = MutableClip(working, g_clip_id);
@@ -358,11 +337,12 @@ void ResetClipModal() {
     ForgetPreview();
 }
 
-void RequestClipModal(std::string clip_id) {
+void RequestClipModal(std::string clip_id, bool focus_tween) {
     g_body_h = 0.0F;
     g_clip_id = std::move(clip_id);
     g_base_undo = Editor::Global().UndoDepth();
     g_open_requested = true;
+    g_focus_tween = focus_tween;
 }
 
 void RenderClipModal() {
@@ -407,6 +387,12 @@ void RenderClipModal() {
     ImGui::Separator();
 
     Commit(editor, working, DrawBody(working, type, target));
+    if (editor.PendingRequest().kind == Editor::RequestKind::CurveEditor) {
+        editor.CollapseUndo(g_base_undo);
+        Close();
+        ImGui::EndPopup();
+        return;
+    }
     DrawFooter(editor);
     ImGui::EndPopup();
 }

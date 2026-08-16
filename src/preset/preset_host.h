@@ -28,6 +28,10 @@ struct Status {
     float pulse_scale = 1.0F;
     float jitter = 0.0F;
     int live_particles = 0;
+    int transition_option = -1;
+    int transition_from = -1;
+    int transition_to = -1;
+    int transition_left = 0;
     std::vector<int> option_choices;
 };
 

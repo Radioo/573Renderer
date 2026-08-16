@@ -227,6 +227,11 @@ public:
             preset.fps = status.fps;
             preset.playing = status.playing;
             preset.loop = status.loop;
+            preset.option_choices = status.option_choices;
+            preset.transition = App::PresetTransition{.option = status.transition_option,
+                                                      .from = status.transition_from,
+                                                      .to = status.transition_to,
+                                                      .frames_left = status.transition_left};
             preset.assets = PresetHost::GetAssetIndex();
         } else if (Gc2dHost::Active()) {
             playing = Gc2dHost::GetStatus().animation;
