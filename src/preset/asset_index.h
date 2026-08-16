@@ -10,6 +10,7 @@ namespace Preset {
 struct AssetAnimation {
     std::string name;
     int frames = 0;
+    std::vector<std::string> parts;
 };
 
 struct AssetEntry {

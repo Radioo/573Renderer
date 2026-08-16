@@ -9,7 +9,6 @@
 #include "preset/preset_host.h"
 #include "state/app_state.h"
 
-#include <cfloat>
 #include <memory>
 #include <string>
 #include <vector>
@@ -95,23 +94,6 @@ void DrawTimeline(const PresetHost::Status& status) {
     ImGui::TextDisabled("%d validation error(s) - those clips are skipped", status.problems);
 }
 
-void DrawCountdown(const PresetHost::Status& status) {
-    if (status.countdown_start <= 0) return;
-    int countdown = status.countdown;
-    ImGui::SetNextItemWidth(-FLT_MIN);
-    if (ImGui::SliderInt("##presetcountdown", &countdown, 0, status.countdown_start,
-                         "time remain %d frames")) {
-        PresetHost::SetCountdown(countdown);
-    }
-    if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip(
-            "The screen timer the game counts down once per frame. Drag it below the ramp "
-            "threshold to see the end-of-timer speed-up.");
-    }
-    ImGui::Text("model speed %.2f ticks/frame, alpha %.2f, blend %d", status.model_speed,
-                status.model_alpha, status.blend_mode);
-}
-
 }
 
 bool HasPresets() {
@@ -170,7 +152,6 @@ void Render() {
                           "instructions - is never part of a preset.");
     }
     DrawTimeline(status);
-    DrawCountdown(status);
     DrawSpriteFrames();
 }
 

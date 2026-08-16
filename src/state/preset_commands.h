@@ -4,8 +4,10 @@
 #include "state/commands.h"
 
 #include <memory>
+#include <string>
 #include <utility>
 #include <variant>
+#include <vector>
 
 namespace PresetCmd {
 
@@ -30,7 +32,14 @@ struct SetOption {
     int choice = 0;
 };
 
-using Any = std::variant<ReplaceDocument, Seek, SetPaused, SetLoop, SetOption>;
+struct PreviewLayer {
+    std::string asset;
+    std::string animation;
+    std::vector<std::string> hidden_parts;
+    int samples = 6;
+};
+
+using Any = std::variant<ReplaceDocument, Seek, SetPaused, SetLoop, SetOption, PreviewLayer>;
 
 inline App::Command Wrap(Any cmd) {
     return App::Cmd::BackendCommand{.payload = std::move(cmd)};

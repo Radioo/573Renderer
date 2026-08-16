@@ -48,10 +48,13 @@ public:
 
     bool Undo();
     bool Redo();
+    void CollapseUndo(int depth);
+    void ClearRedo();
     [[nodiscard]] int UndoDepth() const { return (int)past_.size(); }
     [[nodiscard]] int RedoDepth() const { return (int)future_.size(); }
     [[nodiscard]] bool Dirty() const { return dirty_; }
     [[nodiscard]] unsigned Revision() const { return revision_; }
+    [[nodiscard]] unsigned LoadId() const { return load_id_; }
 
     [[nodiscard]] const std::vector<std::string>& Selection() const { return selection_; }
     [[nodiscard]] bool IsSelected(const std::string& clip_id) const;
@@ -89,6 +92,7 @@ private:
     Request request_;
     View view_;
     unsigned revision_ = 0;
+    unsigned load_id_ = 0;
     int gesture_ = 0;
     bool gesture_pushed_ = false;
     bool dirty_ = false;

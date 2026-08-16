@@ -1,5 +1,14 @@
 # Scene preset parameters
 
+> RETIRED SURFACE. The "Screen parameters" pane and the tweak-set override model this
+> document describes are gone. A preset is a `Preset::Doc::Document` and every value in it is
+> edited in the timeline editor: the clip properties modal and the Inspector "Clip" tab build
+> their forms from `FieldsFor(command type)`, and the document-level keys (name, notes, fps,
+> length, rng_seed, render, camera, lights) are edited in the Document properties modal. See
+> docs/preset_document.md for the schema and docs/gui.md 3.5 for the editor. What survives of
+> this file is the parameter MEANINGS and the unit notes below, kept until they have all been
+> carried into docs/preset_document.md.
+
 Every value a scene preset transcribes from the game is a named parameter whose
 default IS the game's value, read out of the constexpr table at load. Nothing is
 typed twice: the schema declares what a parameter is, the table supplies what it

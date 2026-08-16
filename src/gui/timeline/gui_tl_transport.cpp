@@ -1,4 +1,5 @@
 #include "gui_tl_internal.h"
+#include "gui_tl_modals.h"
 
 #include "editor/preset_editor_state.h"
 #include "editor/timeline_edits.h"
@@ -129,7 +130,7 @@ void DrawToggles(Ctx& ctx) {
     }
     if (ImGui::IsItemHovered()) {
         ImGui::SetTooltip("Add a command clip on the selected track at the playhead.\n"
-                          "The command palette arrives with the clip properties modal.");
+                          "The palette also opens with the A key.");
     }
     ImGui::SameLine(0.0F, 4.0F);
     if (ImGui::Button("+ Track###tl_add_track")) {
@@ -137,7 +138,7 @@ void DrawToggles(Ctx& ctx) {
             Editor::Request{.kind = Editor::RequestKind::AddTrack, .track_id = SelectedTrack(ctx)});
     }
     if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("Add a track. The Add track modal arrives with the command palette.");
+        ImGui::SetTooltip("Add a track: kind, asset, target, name and where to insert it.");
     }
 }
 
@@ -161,6 +162,7 @@ float TailWidth(const Ctx& ctx) {
     width += kZoomSliderW;
     width += 4.0F + ImGui::CalcTextSize("fit").x + pad;
     width += 12.0F + ImGui::CalcTextSize("undo 000").x;
+    if (ErrorCount() > 0) width += 12.0F + ImGui::CalcTextSize("000 error").x + pad;
     width += 12.0F + ImGui::CalcTextSize(DocumentBadge(ctx).c_str()).x + pad;
     return width;
 }
@@ -174,6 +176,21 @@ void DrawTail(Ctx& ctx) {
     ImGui::TextDisabled("undo %d", ctx.editor->UndoDepth());
     if (ImGui::IsItemHovered()) {
         ImGui::SetTooltip("Undo entries held (Ctrl+Z / Ctrl+Y). One drag is one entry.");
+    }
+
+    const int errors = ErrorCount();
+    if (errors > 0) {
+        ImGui::SameLine(0.0F, 12.0F);
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0F, 0.45F, 0.45F, 1.0F));
+        const std::string label = std::to_string(errors) + " error###tl_problems";
+        const bool clicked = ImGui::SmallButton(label.c_str());
+        ImGui::PopStyleColor();
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("%d validation error(s) and %d problem(s) in all. The evaluator "
+                              "skips the offending clips. Click to list them.",
+                              errors, (int)CurrentProblems().size());
+        }
+        if (clicked) RequestProblems();
     }
 
     ImGui::SameLine(0.0F, 12.0F);

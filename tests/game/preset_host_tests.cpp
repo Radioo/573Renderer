@@ -228,20 +228,21 @@ TEST_CASE("the status snapshot carries an asset index with the asset names", "[p
     const auto document = std::make_shared<const Doc::Document>(MakeDocument(640, 480));
     REQUIRE(PresetHost::LoadDocument({}, document));
 
-    Preset::AssetIndex index = PresetHost::GetAssetIndex();
-    REQUIRE(index.assets.size() == 2);
-    CHECK(index.assets[0].id == "scene");
-    CHECK(index.assets[0].kind == Doc::AssetKind::Scene3d);
-    CHECK(index.assets[0].loaded);
-    CHECK(index.assets[0].models == std::vector<std::string>{"core"});
-    CHECK(index.assets[1].id == "pkg");
-    CHECK(index.assets[1].dir == kPackageDir);
-    CHECK(index.assets[1].loaded);
-    CHECK(index.assets[1].cells == std::vector<std::string>{"PTC"});
-    REQUIRE(index.assets[1].animations.size() == 2);
-    CHECK(index.assets[1].animations[0].name == "TITLE");
-    CHECK(index.assets[1].animations[0].frames == 1736);
-    CHECK(index.assets[1].animations[1].name == "TITLE_TAIKI");
+    std::shared_ptr<const Preset::AssetIndex> index = PresetHost::GetAssetIndex();
+    REQUIRE(index != nullptr);
+    REQUIRE(index->assets.size() == 2);
+    CHECK(index->assets[0].id == "scene");
+    CHECK(index->assets[0].kind == Doc::AssetKind::Scene3d);
+    CHECK(index->assets[0].loaded);
+    CHECK(index->assets[0].models == std::vector<std::string>{"core"});
+    CHECK(index->assets[1].id == "pkg");
+    CHECK(index->assets[1].dir == kPackageDir);
+    CHECK(index->assets[1].loaded);
+    CHECK(index->assets[1].cells == std::vector<std::string>{"PTC"});
+    REQUIRE(index->assets[1].animations.size() == 2);
+    CHECK(index->assets[1].animations[0].name == "TITLE");
+    CHECK(index->assets[1].animations[0].frames == 1736);
+    CHECK(index->assets[1].animations[1].name == "TITLE_TAIKI");
 
     Doc::Document replaced = MakeDocument(640, 480);
     replaced.assets.erase(replaced.assets.begin() + 1);
@@ -250,9 +251,32 @@ TEST_CASE("the status snapshot carries an asset index with the asset names", "[p
     PresetHost::RenderFrame(1.0F / 60.0F);
 
     index = PresetHost::GetAssetIndex();
-    REQUIRE(index.assets.size() == 1);
-    CHECK(index.assets[0].id == "scene");
-    CHECK(index.assets[0].models == std::vector<std::string>{"core"});
+    REQUIRE(index != nullptr);
+    REQUIRE(index->assets.size() == 1);
+    CHECK(index->assets[0].id == "scene");
+    CHECK(index->assets[0].models == std::vector<std::string>{"core"});
+    PresetHost::Unload();
+}
+
+TEST_CASE("the published asset index is one shared object, not a copy per frame",
+          "[preset][host]") {
+    PrepareStub();
+    const auto document = std::make_shared<const Doc::Document>(MakeDocument(640, 480));
+    REQUIRE(PresetHost::LoadDocument({}, document));
+
+    const std::shared_ptr<const Preset::AssetIndex> first = PresetHost::GetAssetIndex();
+    REQUIRE(first != nullptr);
+    for (int frame = 0; frame < 8; frame++) {
+        PresetHost::RenderFrame(1.0F / 60.0F);
+        CHECK(PresetHost::GetAssetIndex().get() == first.get());
+    }
+
+    Doc::Document replaced = MakeDocument(640, 480);
+    replaced.assets.erase(replaced.assets.begin() + 1);
+    replaced.tracks.pop_back();
+    PresetHost::ReplaceDocument(std::make_shared<const Doc::Document>(std::move(replaced)));
+    PresetHost::RenderFrame(1.0F / 60.0F);
+    CHECK(PresetHost::GetAssetIndex().get() != first.get());
     PresetHost::Unload();
 }
 

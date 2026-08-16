@@ -106,6 +106,9 @@ public:
     [[nodiscard]] PresetStatus GetPresetStatus() const;
     void SetPresetStatus(PresetStatus p);
 
+    [[nodiscard]] Preset::Preview::SnapshotPtr GetPresetPreview() const;
+    void SetPresetPreview(Preset::Preview::SnapshotPtr p);
+
     [[nodiscard]] CropRect GetCropRect() const;
     void SetCropRect(CropRect r);
     [[nodiscard]] bool GetCropPickMode() const;

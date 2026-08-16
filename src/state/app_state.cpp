@@ -1,4 +1,7 @@
 #include "state/app_state.h"
+
+#include "preset/preset_preview.h"
+
 #include "render/stretch.h"
 #include "state/commands.h"
 
@@ -280,6 +283,14 @@ PresetStatus State::GetPresetStatus() const {
 
 void State::SetPresetStatus(PresetStatus p) {
     telemetry_.SetPreset(std::move(p));
+}
+
+Preset::Preview::SnapshotPtr State::GetPresetPreview() const {
+    return telemetry_.GetPresetPreview();
+}
+
+void State::SetPresetPreview(Preset::Preview::SnapshotPtr p) {
+    telemetry_.SetPresetPreview(std::move(p));
 }
 
 void State::SetExport(ExportState e) {

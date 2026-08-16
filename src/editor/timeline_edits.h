@@ -39,6 +39,9 @@ bool Overlaps(const Preset::Doc::Document& document, std::string_view track_id,
 bool OverlapsSelfCopy(const Preset::Doc::Document& document, std::string_view track_id,
                       std::string_view clip_id, int start, std::optional<int> end);
 
+std::string PrimaryBlocker(const Preset::Doc::Document& document, std::string_view track_id,
+                           Preset::Doc::CommandType type, int start, std::optional<int> end);
+
 std::string UniqueClipId(const Preset::Doc::Document& document, std::string_view base);
 
 bool MoveClip(Preset::Doc::Document& document, std::string_view clip_id, int start);

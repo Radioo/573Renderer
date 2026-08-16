@@ -491,6 +491,7 @@ void RenderReadyView() {
 
     RenderStatusStripImpl(status);
     Export::RenderModal();
+    Timeline::RenderModals();
 
     ImGui::End();
     ImGui::PopStyleVar();

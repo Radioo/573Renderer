@@ -26,8 +26,16 @@ struct Report {
     std::vector<Problem> problems;
 
     void Add(Severity severity, std::string_view path, std::string message) {
-        problems.push_back(Problem{
-            .severity = severity, .path = std::string(path), .message = std::move(message)});
+        problems.push_back(Problem{.severity = severity,
+                                   .path = std::string(path),
+                                   .related = {},
+                                   .message = std::move(message)});
+    }
+    void ErrorBetween(std::string_view path, std::string_view related, std::string message) {
+        problems.push_back(Problem{.severity = Severity::Error,
+                                   .path = std::string(path),
+                                   .related = std::string(related),
+                                   .message = std::move(message)});
     }
     void Error(std::string_view path, std::string message) {
         Add(Severity::Error, path, std::move(message));
@@ -365,8 +373,9 @@ void CheckTrackPair(Family family, const Primary& first, const Primary& second, 
 void CheckClipPair(const Document& doc, const Primary& first, const Primary& second, Report& out) {
     if (!Overlaps(*first.clip, *second.clip, doc)) return;
     if (ExclusiveGates(first.clip->when, second.clip->when)) return;
-    out.Error(second.clip->id, "clip \"" + second.clip->id + "\" overlaps \"" + first.clip->id +
-                                   "\", which is a primary of the same family");
+    out.ErrorBetween(second.clip->id, first.clip->id,
+                     "clip \"" + second.clip->id + "\" overlaps \"" + first.clip->id +
+                         "\", which is a primary of the same family");
 }
 
 void CheckOverlaps(const Document& doc, Report& out) {

@@ -21,6 +21,21 @@ working tree with: `git rm --cached -r . && git reset --hard`.
 | `CMakePresets.json` | Single source of truth for configure/build knobs. `dev` = local, `ci` = same plus `CMAKE_COMPILE_WARNING_AS_ERROR=ON`. CI and build.bat both go through presets so the two can never drift. |
 | `CMakeLists.txt` | The gated libs (`r573_support`, `r573_formats`, ...), the `r573_app` static library holding everything the app is made of, the `renderer` executable (output name `573Renderer.exe`, just `src/main.cpp` linked against `r573_app`), the test targets, and the `r573::warnings` interface target. |
 
+## Generated sources (a Python interpreter is required to configure)
+
+`CMakeLists.txt` calls `find_package(Python3 COMPONENTS Interpreter REQUIRED)`, so a
+Python 3 interpreter on the machine is a hard CONFIGURE-time prerequisite, not just a
+quality-gate one. It drives one `add_custom_command`:
+
+| Generated | From | By |
+|---|---|---|
+| `${CMAKE_BINARY_DIR}/generated/preset_layer_verdicts.cpp`, compiled into `r573_app` | `docs/preset_layers.md` | `tools/ci/gen_layer_verdicts.py` |
+
+Both the markdown and the script are in the command's `DEPENDS`, so editing either one
+regenerates the file on the next build; the script creates the `generated/` directory
+itself, so a clean binary dir needs no extra setup. The output is never committed
+(`build/` is ignored) and never hand-edited. Rationale: docs/gates.md, docs/preset_document.md.
+
 ## Why the CMake project is `Renderer573` but the exe is `573Renderer.exe`
 
 CMake does not allow project/target names to start with a digit on every

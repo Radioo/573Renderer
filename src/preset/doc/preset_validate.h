@@ -18,6 +18,7 @@ enum class Severity : uint8_t {
 struct Problem {
     Severity severity = Severity::Error;
     std::string path;
+    std::string related;
     std::string message;
 };
 

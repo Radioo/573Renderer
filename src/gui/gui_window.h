@@ -27,4 +27,6 @@ bool PumpAndRender(Window& w);
 
 HWND GetHwnd();
 
+IDirect3DDevice9* GetDevice();
+
 }

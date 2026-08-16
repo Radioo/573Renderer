@@ -5,8 +5,8 @@
 #include "gc2d/gc_host.h"
 #include "gui_gc2d_panel.h"
 #include "gui_preset_panel.h"
-#include "gui_preset_workspace.h"
 #include "gui_scene3d_panel.h"
+#include "timeline/gui_timeline_editor.h"
 #include "scene3d/scene3d_host.h"
 
 #include <span>
@@ -31,10 +31,6 @@ bool Gc2dTabVisible() {
 
 bool PresetTabVisible() {
     return Panels::PresetPanel::HasPresets();
-}
-
-bool ScenePaneIdle() {
-    return !Panels::PresetWorkspace::Visible();
 }
 
 constexpr PanelDesc kModernPanels[] = {
@@ -104,21 +100,16 @@ constexpr PanelDesc kScene3dPanels[] = {
      .slot = PanelSlot::InspectorTab,
      .draw = &Panels::Scene3dPanel::Render,
      .visible = &Scene3dTabVisible},
+    {.id = "clip",
+     .tab_label = "Clip",
+     .slot = PanelSlot::InspectorTab,
+     .draw = &Panels::Timeline::RenderClipTab,
+     .visible = nullptr},
     {.id = "gc2d",
      .tab_label = "2D package",
      .slot = PanelSlot::InspectorTab,
      .draw = &Panels::Gc2dPanel::Render,
      .visible = &Gc2dTabVisible},
-    {.id = "preset_workspace",
-     .tab_label = "Parameters",
-     .slot = PanelSlot::CenterPane,
-     .draw = &Panels::PresetWorkspace::Render,
-     .visible = &Panels::PresetWorkspace::Visible},
-    {.id = "scene_tree",
-     .tab_label = "Scene",
-     .slot = PanelSlot::CenterPane,
-     .draw = &Panels::RenderScenePane,
-     .visible = &ScenePaneIdle},
 };
 
 struct PanelSet {

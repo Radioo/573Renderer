@@ -696,9 +696,10 @@ GUI-thread calls do not touch the evaluator. `Seek`, `SetPaused`, `SetLoop`,
 never calls any of them itself: it posts the matching `PresetCmd` through
 `App::State`, and `Backend::ApplyPresetCommand` (`src/backend/preset_command_apply.cpp`)
 is the one place that turns a queued payload into these calls on the render thread
-(docs/gui.md 3.5, gate `check_host_isolation.py`). `Restart()` is `Seek(0)` and
-`SetCountdown(n)` is `Seek(length - n)`, so the old "time remain" slider now moves
-the playhead instead of desynchronising a second clock.
+(docs/gui.md 3.5, gate `check_host_isolation.py`). `PresetCmd::PreviewLayer` takes the
+same route and reaches `PresetHost::RequestPreview`. `Restart()` is `Seek(0)`; there is
+no second clock left to desynchronise, because the old "time remain" slider and the
+`SetCountdown` entry point behind it are gone with the Parameters pane.
 
 `SetOption` re-pushes the whole rebind list the way `Seek` does, because a choice
 change can flip a `when` gate and therefore a model's VISIBILITY, blend, scale and
@@ -758,27 +759,19 @@ tick on every one of them.
 | One 3D clock | `Scene3dHost::SetTime` wrote one time into every model | `Scene3dHost::SetModelTime(name, ticks)` per model |
 | Conditional pushes | position and rotation only for models that passed `Moves()`; alpha, view and projection only on a rebind | every model's transform, alpha, speed, blend, scale and visibility, and the camera view and projection, are pushed every frame. This is tolerated difference (1) of `docs/preset_golden.md`, and it is what finally makes alpha and camera ramps reach the GPU |
 
-### Parameters while the editor does not exist yet
+### Parameters: the bridge is gone
 
-The Parameters pane still calls `ListParams` / `SetParam` / `ResetParam`, but the
-values are no longer `preset_effective`'s materialised copy. `ListParams`
-enumerates the document-addressable ids from the published `FrameState` (the
-surviving id grammar: `model[X].*`, `sprite[X].*`, `camera.*`, `light[i].*`,
-`shading`, `sprite_split_priority`), reads each value with
-`Preset::Eval::ReadTarget`, and reads the same id from the BASE document resolved
-at the same frame for the reset value. `SetParam` records an override and
-republishes the document with those overrides appended as `param.override` clips on
-one extra scene track, which is a real document edit and therefore a real
-`ReplaceDocument`. The tweak file is parsed into the same overrides.
+The Parameters pane was the temporary surface that edited a preset before the
+timeline editor could. M5 deleted it (`gui_preset_workspace.cpp`) together with the
+per-parameter entry points it was the only caller of: `PresetHost::ListParams`,
+`SetParam`, `ResetParam`, `ResetGroup`, `ResetAllParams`, `ChangedParamCount`,
+`ListStates`, `SetCountdown` and `preset_host_params.*`. `--preset-tweaks` was
+already retired in `src/cli/tool_command.cpp`, so no tweak file is loaded either.
 
-An override on an INTEGER target (a blend, a priority, `shading`) is stored as a
-JSON number, so `OverrideToTween` fills the integer channel of a double override
-with `lround`, exactly as the old `ApplyRamps` did.
-
-This is a bridge, not the destination: M4 to M7 replace the pane with the clip
-modal and the frame inspector, and M8 deletes `preset_effective` and the schema.
-The Screens panel's sprite frame and scroll sliders are already gone, because the
-evaluator pushes those clocks every frame and a slider could not hold.
+What survives is the `param.override` COMMAND, an ordinary document command with its
+own `FieldDesc` row (`preset_fields.cpp`) and clip summary, edited in the timeline
+editor like any other. Every other value is now edited through the clip properties
+modal, the Inspector "Clip" tab or the Document properties modal (docs/gui.md 3.5).
 
 ## Built-in documents and the registry
 
@@ -904,6 +897,48 @@ choice value key outside the grammar, a user id equal to a built-in id, a comman
 on the wrong track kind, an event clip carrying an end, a `render.settings` clip
 that leaves its optional enum absent, hard versus soft ranges, and duplicate clip
 ids with unsorted markers.
+
+## Layer verdicts and the layer preview at runtime
+
+`docs/preset_layers.md` stays the single source of truth for what a 2D layer is. The running
+renderer has no path to a repository markdown file, so a CMake custom command runs
+`tools/ci/gen_layer_verdicts.py docs/preset_layers.md` at build time and writes
+`preset_layer_verdicts.cpp` into the build tree (never edited, never committed). It defines
+`Preset::VerdictFor(package_dir, layer)` and `Preset::VerdictName`, declared in the tracked
+header `src/preset/preset_layer_verdicts.h`. The generator reads exactly the rows the CI gate
+reads: package, layer, kind, verdict. Adding a row to the markdown is all it takes for the
+editor to show the verdict beside a part.
+
+The verdict is a DISPLAY, not a rule: the hidden-parts checklist in the clip properties modal
+prints background / chrome / unclassified next to each child part so the user sees the
+classification while choosing. `Validate` does not read it, and nothing in the editor refuses a
+layer; the built-in documents stay gated by `tools/ci/check_preset_layers.py`.
+
+There is ONE vocabulary for a part name, and four places have to agree on it: the `hidden_parts`
+list a document stores, the `skip_parts` lookup the renderer performs, the `parts` list the
+`AssetIndex` publishes for the checklist, and the layer column of `docs/preset_layers.md`. All
+four use the BARE name (`OP_BG_U`, `TITLE_TAIKI`), which is exactly how `Gc2d::AppendNodes`
+addresses a part: it looks the string up in `SysIdx::Package::animation_names` and in
+`cell_names`, so a cell and a child animation of the same name are both hidden by one entry.
+`Gc2d::PartNames` therefore lives in `gc_sprite.cpp` beside that lookup and returns the same
+strings, and `tests/formats/gc_sprite_tests.cpp` pins the pair: a name PartNames lists must be a
+name `skip_parts` hides. A decorated form (`"cell OP_BG_U"`) is silently broken three ways at
+once - the checkbox never ticks for a part the document already hides, ticking it writes a string
+the renderer ignores, and the verdict lookup never matches a markdown row.
+
+`PresetCmd::PreviewLayer{asset, animation, hidden_parts, samples}` is the render-thread half of
+the preview strip. The GUI cannot render a 2D layer itself: the GUI window and the renderer
+window own two separate D3D9 devices. So the modal posts the command once per
+(asset, animation, hidden_parts) key, `Backend::ApplyPresetCommand` forwards it to
+`PresetHost::RequestPreview`, and `Preset::Preview` renders ONE sample per frame from
+`Scene3dBackend::AdvanceFrame` - which the render loop calls BEFORE `BeginScene`, the only
+place a render target can be swapped and read back safely. Each sample places the animation
+alone on `Gc2dHost`, draws it into a private render target, reads it back and downsamples it to
+a 160 px thumbnail; the live sprite placements are re-pushed straight afterwards because the
+evaluator pushes the whole placement list every frame anyway. The samples are published as BGRA
+buffers in `App::State::GetPresetPreview()` with a version counter, and the strip shows a
+determinate "sample k / N" cell for every sample that has not arrived. Sample frames are spread
+across the animation length the `AssetIndex` reports.
 
 ## Choices made where the plan is silent
 

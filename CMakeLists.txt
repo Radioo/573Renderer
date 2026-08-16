@@ -141,13 +141,31 @@ add_library(r573_render STATIC
 target_include_directories(r573_render PUBLIC src)
 target_link_libraries(r573_render PRIVATE r573::warnings)
 
+find_package(Python3 COMPONENTS Interpreter REQUIRED)
+
+set(R573_LAYER_VERDICTS "${CMAKE_BINARY_DIR}/generated/preset_layer_verdicts.cpp")
+add_custom_command(
+    OUTPUT "${R573_LAYER_VERDICTS}"
+    COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/tools/ci/gen_layer_verdicts.py"
+            "${CMAKE_SOURCE_DIR}/docs/preset_layers.md" "${R573_LAYER_VERDICTS}"
+    DEPENDS "${CMAKE_SOURCE_DIR}/tools/ci/gen_layer_verdicts.py"
+            "${CMAKE_SOURCE_DIR}/docs/preset_layers.md"
+    COMMENT "Generating preset layer verdicts from docs/preset_layers.md"
+    VERBATIM
+)
+
 add_library(r573_app STATIC
+    "${R573_LAYER_VERDICTS}"
     src/tool_commands.cpp
     src/boot.cpp
     src/backend/backend_registry.cpp
     src/backend/scene3d_backend.cpp
     src/backend/preset_command_apply.cpp
+    src/editor/clip_form.cpp
+    src/editor/clip_problems.cpp
     src/editor/clip_summary.cpp
+    src/editor/command_palette.cpp
+    src/editor/document_edits.cpp
     src/editor/preset_editor_state.cpp
     src/editor/timeline_drag.cpp
     src/editor/timeline_lanes.cpp
@@ -190,7 +208,6 @@ add_library(r573_app STATIC
     src/gui/gui_scene3d_panel.cpp
     src/gui/gui_gc2d_panel.cpp
     src/gui/gui_preset_panel.cpp
-    src/gui/gui_preset_workspace.cpp
     src/gui/panel_registry.cpp
     src/gui/gui_style.cpp
     src/gui/gui_widgets.cpp
@@ -204,6 +221,14 @@ add_library(r573_app STATIC
     src/gui/timeline/gui_tl_clips.cpp
     src/gui/timeline/gui_tl_drag.cpp
     src/gui/timeline/gui_tl_colors.cpp
+    src/gui/timeline/gui_tl_forms.cpp
+    src/gui/timeline/gui_tl_asset_picker.cpp
+    src/gui/timeline/gui_tl_preview.cpp
+    src/gui/timeline/gui_tl_palette.cpp
+    src/gui/timeline/gui_tl_clip_modal.cpp
+    src/gui/timeline/gui_tl_clip_tab.cpp
+    src/gui/timeline/gui_tl_doc_modal.cpp
+    src/gui/timeline/gui_tl_problems.cpp
     src/gui/gui_qpro_panel.cpp
     src/gui/gui_splitter.cpp
     src/gui/gui_export_panel.cpp
@@ -245,7 +270,7 @@ add_library(r573_app STATIC
     src/preset/scene_presets_iidx11.cpp
     src/preset/preset_host.cpp
     src/preset/preset_host_push.cpp
-    src/preset/preset_host_params.cpp
+    src/preset/preset_preview.cpp
     src/preset/preset_convert.cpp
     src/preset/preset_params.cpp
     src/preset/preset_schema.cpp
@@ -361,10 +386,17 @@ add_executable(game_tests
     tests/game/preset_registry_tests.cpp
     tests/game/eval_tween_tests.cpp
     tests/game/preset_host_tests.cpp
+    tests/game/preset_preview_tests.cpp
     tests/game/preset_host_stubs.cpp
+    tests/editor/clip_form_tests.cpp
+    tests/editor/clip_problems_tests.cpp
     tests/editor/timeline_editor_tests.cpp
     src/backend/preset_command_apply.cpp
+    src/editor/clip_form.cpp
+    src/editor/clip_problems.cpp
     src/editor/clip_summary.cpp
+    src/editor/command_palette.cpp
+    src/editor/document_edits.cpp
     src/editor/preset_editor_state.cpp
     src/editor/timeline_drag.cpp
     src/editor/timeline_lanes.cpp
@@ -372,7 +404,7 @@ add_executable(game_tests
     src/editor/timeline_view.cpp
     src/preset/preset_host.cpp
     src/preset/preset_host_push.cpp
-    src/preset/preset_host_params.cpp
+    src/preset/preset_preview.cpp
     src/gc2d/gc_sprite.cpp
     src/scene3d/scene3d_merge.cpp
     src/game_profile.cpp
@@ -559,6 +591,7 @@ add_executable(gui_tests
     tests/gui/qpro_panel_tests.cpp
     tests/gui/host_panel_tests.cpp
     tests/gui/preset_panel_tests.cpp
+    tests/gui/clip_modal_tests.cpp
     tests/gui/timeline_editor_tests.cpp
     tests/gui/host_live_tests.cpp
     tests/gui/gui_mock_assets.cpp

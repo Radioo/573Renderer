@@ -39,6 +39,8 @@ float ScrollOffset(const SpriteDraw& sprite);
 
 int SpriteLength(const SysIdx::Package& index, const SpriteDraw& sprite);
 
+std::vector<std::string> PartNames(const SysIdx::Package& index, const std::string& animation);
+
 void AppendNodes(const SysIdx::Package& index, const SpriteDraw& sprite, const Canvas& canvas,
                  std::vector<GcAnim::DrawNode>& out);
 

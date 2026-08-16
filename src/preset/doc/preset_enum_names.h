@@ -97,6 +97,9 @@ enum class GateKind : uint8_t {
     Not,
 };
 
+inline constexpr std::array<std::string_view, 3> kGateKindNames = {"is choice", "is one of",
+                                                                   "is not"};
+
 inline constexpr std::array<std::string_view, 6> kTrackKindNames = {"sprite", "model", "camera",
                                                                     "light",  "fx",    "scene"};
 

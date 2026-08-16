@@ -1,5 +1,7 @@
 #include "gui_tl_internal.h"
+#include "gui_tl_modals.h"
 
+#include "editor/clip_problems.h"
 #include "editor/clip_summary.h"
 #include "editor/preset_editor_state.h"
 #include "editor/timeline_drag.h"
@@ -20,7 +22,11 @@ namespace Doc = Preset::Doc;
 namespace {
 
 constexpr float kEventW = 4.0F;
+constexpr float kEventHitW = 12.0F;
 constexpr float kGateStripeH = 3.0F;
+constexpr float kProblemBarW = 4.0F;
+constexpr ImU32 kProblemError = IM_COL32(232, 96, 88, 255);
+constexpr ImU32 kProblemWarning = IM_COL32(232, 176, 72, 255);
 
 struct Box {
     float x0 = 0.0F;
@@ -53,6 +59,12 @@ void DrawBody(const Ctx& ctx, const Doc::Track& track, const Doc::Clip& clip, co
         ctx.draw->AddRectFilled(ImVec2(visible.x0, box.y0), ImVec2(visible.x0 + 3.0F, box.y1),
                                 ImGui::GetColorU32(ImGuiCol_TextDisabled));
     }
+    const Editor::ClipProblems problems = Editor::ProblemsForClip(CurrentProblems(), clip.id);
+    if (problems.Any()) {
+        ctx.draw->AddRectFilled(ImVec2(visible.x0, box.y0),
+                                ImVec2(visible.x0 + kProblemBarW, box.y1),
+                                problems.Failing() ? kProblemError : kProblemWarning);
+    }
     if (clip.when.has_value()) {
         ctx.draw->AddRectFilled(ImVec2(visible.x0, box.y0),
                                 ImVec2(visible.x1, box.y0 + kGateStripeH),
@@ -81,12 +93,21 @@ void DrawBody(const Ctx& ctx, const Doc::Track& track, const Doc::Clip& clip, co
                       ImGui::GetColorU32(ImGuiCol_Text), 0.0F, 0, 2.0F);
 }
 
+std::string ProblemLines(const Doc::Clip& clip) {
+    const Editor::ClipProblems problems = Editor::ProblemsForClip(CurrentProblems(), clip.id);
+    std::string out;
+    for (const std::string& message : problems.messages)
+        out += (problems.Failing() ? "\nerror: " : "\nwarning: ") + message;
+    return out;
+}
+
 void HandleClick(Ctx& ctx, const Doc::Track& track, const Doc::Clip& clip, const Box& visible) {
     const ImGuiIO& io = ImGui::GetIO();
     if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("%s\nframes %d..%d%s\nclick selects, double-click opens properties",
+        ImGui::SetTooltip("%s\nframes %d..%d%s%s\nclick selects, double-click opens properties",
                           Editor::ClipSummary(clip, track.target).c_str(), clip.start,
-                          Editor::ClipEnd(clip, ctx.length) - 1, clip.muted ? "\nmuted" : "");
+                          Editor::ClipEnd(clip, ctx.length) - 1, clip.muted ? "\nmuted" : "",
+                          ProblemLines(clip).c_str());
     }
     if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
         ctx.editor->Select(clip.id);
@@ -209,7 +230,8 @@ void DrawClip(Ctx& ctx, const Doc::Track& track, const Doc::Clip& clip, float y)
     ImGui::SetCursorScreenPos(ImVec2(visible.x0, box.y0));
     ImGui::SetNextItemAllowOverlap();
     const std::string clip_id = "###tl_clip_" + clip.id;
-    ImGui::InvisibleButton(clip_id.c_str(), ImVec2(visible.x1 - visible.x0, box.y1 - box.y0));
+    const float hit_w = Editor::IsEvent(clip) ? kEventHitW : (visible.x1 - visible.x0);
+    ImGui::InvisibleButton(clip_id.c_str(), ImVec2(hit_w, box.y1 - box.y0));
     HandleClick(ctx, track, clip, visible);
 
     if (!ImGui::BeginPopupContextItem(("##tl_clip_menu_" + clip.id).c_str())) return;

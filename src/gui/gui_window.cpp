@@ -33,6 +33,10 @@ namespace {
 Window* g_win = nullptr;
 }
 
+IDirect3DDevice9* GetDevice() {
+    return (g_win != nullptr) ? g_win->device : nullptr;
+}
+
 namespace {
 bool ResetDevice(Window& w);
 }

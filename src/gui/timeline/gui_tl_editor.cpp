@@ -1,5 +1,6 @@
 #include "gui_timeline_editor.h"
 #include "gui_tl_internal.h"
+#include "gui_tl_modals.h"
 
 #include "editor/preset_editor_state.h"
 #include "editor/timeline_edits.h"
@@ -12,6 +13,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <string>
 #include <vector>
 
 namespace Panels::Timeline {
@@ -142,6 +144,41 @@ bool Active() {
     const Editor::State& editor = Editor::Global();
     if (!editor.Loaded()) return false;
     return App::Global().GetPresetStatus().id == editor.Document().id;
+}
+
+void RenderModals() {
+    Editor::State& editor = Editor::Global();
+    static unsigned owner = 0;
+    if (editor.LoadId() != owner) {
+        owner = editor.LoadId();
+        ResetClipModal();
+        ResetPalette();
+        ResetDocumentModal();
+        ResetProblems();
+    }
+    const Editor::Request request = editor.TakeRequest();
+    switch (request.kind) {
+    case Editor::RequestKind::ClipProperties:
+        RequestClipModal(request.clip_id);
+        break;
+    case Editor::RequestKind::AddCommand:
+        RequestPalette(request.track_id, request.frame);
+        break;
+    case Editor::RequestKind::AddTrack:
+        RequestTrackModal(request.track_id);
+        break;
+    case Editor::RequestKind::DocumentProperties:
+        RequestDocumentModal();
+        break;
+    case Editor::RequestKind::None:
+    default:
+        break;
+    }
+    RenderPalette();
+    RenderTrackModal();
+    RenderClipModal();
+    RenderDocumentModal();
+    RenderProblems();
 }
 
 void Render(float height) {

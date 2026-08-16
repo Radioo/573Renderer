@@ -5,13 +5,12 @@
 #include "preset/doc/preset_enum_names.h"
 #include "preset/doc/preset_validate.h"
 #include "preset/eval/eval_push.h"
-#include "preset/eval/eval_resolve.h"
 #include "preset/eval/eval_state.h"
 #include "preset/eval/frame_state.h"
 #include "preset/eval/preset_evaluator.h"
 #include "preset/preset_asset_lengths.h"
-#include "preset/preset_host_params.h"
 #include "preset/preset_host_push.h"
+#include "preset/preset_preview.h"
 
 #include "gc2d/gc_host.h"
 #include "scene3d/scene3d_host.h"
@@ -19,7 +18,6 @@
 #include "support/log.h"
 
 #include <algorithm>
-#include <array>
 #include <atomic>
 #include <cstddef>
 #include <filesystem>
@@ -89,12 +87,8 @@ Command OptionCommand(int option, int choice) {
 }
 
 struct Shared {
-    std::shared_ptr<const Doc::Document> base;
-    std::shared_ptr<const Doc::Document> effective;
-    std::vector<Override> overrides;
-    Preset::AssetIndex assets;
+    std::shared_ptr<const Preset::AssetIndex> assets;
     Status status;
-    FrameState frame;
     std::vector<Command> queue;
 };
 
@@ -208,8 +202,8 @@ Preset::AssetIndex BuildIndex(const Doc::Document& document) {
             entry.loaded = info.loaded;
             entry.cells = info.cells;
             for (const Gc2dHost::AnimationInfo& animation : info.animations) {
-                entry.animations.push_back(
-                    Preset::AssetAnimation{.name = animation.name, .frames = animation.frames});
+                entry.animations.push_back(Preset::AssetAnimation{
+                    .name = animation.name, .frames = animation.frames, .parts = animation.parts});
             }
         }
         index.assets.push_back(std::move(entry));
@@ -249,8 +243,6 @@ Status BuildStatus(const Doc::Document& document, const FrameState& frame, int p
     status.playing = g_playing;
     status.loop = g_loop;
     status.problems = problems;
-    status.countdown_start = status.length;
-    status.countdown = std::max(0, status.length - state.frame);
     if (!frame.models.empty()) {
         const Preset::Eval::ModelSlot& lead = frame.models.front();
         status.model_speed = lead.anim_speed;
@@ -278,10 +270,8 @@ int ErrorCount(const Doc::Document& document) {
 void Publish() {
     if (g_active == nullptr) return;
     Status status = BuildStatus(*g_active, g_eval.Current(), g_problems);
-    FrameState frame = g_eval.Current();
     const std::scoped_lock guard(g_lock);
     g_shared.status = std::move(status);
-    g_shared.frame = std::move(frame);
 }
 
 void Post(const Command& command) {
@@ -302,8 +292,8 @@ void ApplyReplace(const std::shared_ptr<const Doc::Document>& document,
     if (!SameAssets(*g_active, *document)) {
         g_eval.Load(document, {});
         if (!LoadAssets(*document, g_eval.Current(), progress)) return;
-        Preset::AssetIndex index = BuildIndex(*document);
-        g_lengths = BuildLengths(index);
+        auto index = std::make_shared<const Preset::AssetIndex>(BuildIndex(*document));
+        g_lengths = BuildLengths(*index);
         const std::scoped_lock guard(g_lock);
         g_shared.assets = std::move(index);
     }
@@ -346,28 +336,6 @@ void Drain() {
     }
 }
 
-std::shared_ptr<const Doc::Document> EffectiveDocument() {
-    const std::scoped_lock guard(g_lock);
-    return g_shared.effective;
-}
-
-std::shared_ptr<const Doc::Document> BaseDocument() {
-    const std::scoped_lock guard(g_lock);
-    return g_shared.base;
-}
-
-void RebuildEffective() {
-    std::shared_ptr<const Doc::Document> next;
-    {
-        const std::scoped_lock guard(g_lock);
-        if (g_shared.base == nullptr) return;
-        next = std::make_shared<const Doc::Document>(
-            WithOverrides(*g_shared.base, g_shared.overrides));
-        g_shared.effective = next;
-    }
-    ReplaceDocument(next);
-}
-
 bool Prepare(const std::string& game_dir, const std::shared_ptr<const Doc::Document>& probe,
              const ProgressFn& progress) {
     Unload();
@@ -379,8 +347,8 @@ bool Prepare(const std::string& game_dir, const std::shared_ptr<const Doc::Docum
         Gc2dHost::Unload();
         return false;
     }
-    Preset::AssetIndex index = BuildIndex(*probe);
-    g_lengths = BuildLengths(index);
+    auto index = std::make_shared<const Preset::AssetIndex>(BuildIndex(*probe));
+    g_lengths = BuildLengths(*index);
     const std::scoped_lock guard(g_lock);
     g_shared.assets = std::move(index);
     return true;
@@ -397,9 +365,6 @@ void Finish(const std::shared_ptr<const Doc::Document>& document) {
     ApplyPushes(g_state_pushes);
     {
         const std::scoped_lock guard(g_lock);
-        g_shared.base = document;
-        g_shared.effective = document;
-        g_shared.overrides.clear();
         g_shared.queue.clear();
     }
     g_loaded = true;
@@ -432,6 +397,7 @@ void Unload() {
     g_state_pushes.clear();
     g_lengths = Preset::AssetLengths{};
     g_accum = 0.0F;
+    Preset::Preview::Reset();
     const std::scoped_lock guard(g_lock);
     g_shared = Shared{};
 }
@@ -478,9 +444,37 @@ Status GetStatus() {
     return g_shared.status;
 }
 
-Preset::AssetIndex GetAssetIndex() {
+std::shared_ptr<const Preset::AssetIndex> GetAssetIndex() {
     const std::scoped_lock guard(g_lock);
     return g_shared.assets;
+}
+
+void RequestPreview(const std::string& asset, const std::string& animation,
+                    const std::vector<std::string>& hidden_parts, int samples) {
+    if (!g_loaded || animation.empty()) return;
+    Preset::Preview::Request request;
+    request.key = Preset::Preview::KeyFor(asset, animation, hidden_parts);
+    request.asset = asset;
+    request.animation = animation;
+    request.hidden_parts = hidden_parts;
+    request.samples = std::max(1, samples);
+    const std::shared_ptr<const Preset::AssetIndex> index = GetAssetIndex();
+    if (index == nullptr) return;
+    for (const Preset::AssetEntry& entry : index->assets) {
+        if (entry.id != asset) continue;
+        for (const Preset::AssetAnimation& known : entry.animations) {
+            if (known.name == animation) request.length = known.frames;
+        }
+    }
+    Preset::Preview::Post(std::move(request));
+}
+
+void PumpPreview() {
+    if (Preset::Preview::Pump() && g_loaded) ApplyPushes(g_state_pushes);
+}
+
+Preset::Preview::SnapshotPtr GetPreview() {
+    return Preset::Preview::Get();
 }
 
 void Seek(int frame) {
@@ -500,12 +494,6 @@ void SetLoop(bool loop) {
     Post(LoopCommand(loop));
 }
 
-void SetCountdown(int frames) {
-    const Status status = GetStatus();
-    if (status.length <= 0) return;
-    Seek(std::clamp(status.length - frames, 0, status.length - 1));
-}
-
 void SetOption(int option, int choice) {
     if (!g_loaded) return;
     Post(OptionCommand(option, choice));
@@ -516,99 +504,11 @@ int NaturalFrames() {
 }
 
 bool OpaqueScreen() {
-    const std::shared_ptr<const Doc::Document> document = EffectiveDocument();
-    return document != nullptr && document->render.opaque;
+    return g_active != nullptr && g_active->render.opaque;
 }
 
 void Restart() {
     Seek(0);
-}
-
-std::vector<StateView> ListStates() {
-    std::vector<StateView> out;
-    const std::shared_ptr<const Doc::Document> document = EffectiveDocument();
-    if (document == nullptr) return out;
-    const std::vector<int> choices = GetStatus().option_choices;
-    for (std::size_t i = 0; i < document->options.size(); i++) {
-        const Doc::OptionSpec& option = document->options[i];
-        StateView view;
-        view.id = option.id;
-        view.label = option.label;
-        view.choice = (i < choices.size()) ? choices[i] : option.default_choice;
-        for (const Doc::ChoiceSpec& choice : option.choices) {
-            view.choices.push_back(choice.label);
-            for (const Doc::ChoiceValue& value : choice.values) {
-                if (value.id == "camera.eye") view.moves_camera = true;
-            }
-        }
-        out.push_back(std::move(view));
-    }
-    return out;
-}
-
-namespace {
-
-FrameState BaseFrame(const FrameState& effective, const std::vector<int>& choices) {
-    const std::shared_ptr<const Doc::Document> base = BaseDocument();
-    if (base == nullptr) return effective;
-    const Preset::Eval::ResolveInput input{
-        .document = base.get(), .choices = &choices, .tweens = true};
-    return Preset::Eval::ResolveFrame(input, effective.frame);
-}
-
-}
-
-std::vector<ParamView> ListParams() {
-    FrameState effective;
-    std::vector<Override> overrides;
-    std::vector<int> choices;
-    {
-        const std::scoped_lock guard(g_lock);
-        if (g_shared.base == nullptr) return {};
-        effective = g_shared.frame;
-        overrides = g_shared.overrides;
-        choices = g_shared.status.option_choices;
-    }
-    return ListParamViews(effective, BaseFrame(effective, choices), overrides);
-}
-
-void SetParam(const std::string& id, const std::array<float, 3>& value, int ivalue) {
-    bool changed = false;
-    {
-        const std::scoped_lock guard(g_lock);
-        if (g_shared.base == nullptr) return;
-        changed = WriteOverride(g_shared.overrides, id, value, ivalue, g_shared.frame);
-    }
-    if (changed) RebuildEffective();
-}
-
-void ResetParam(const std::string& id) {
-    {
-        const std::scoped_lock guard(g_lock);
-        ClearOverride(g_shared.overrides, id);
-    }
-    RebuildEffective();
-}
-
-void ResetGroup(const std::string& group) {
-    {
-        const std::scoped_lock guard(g_lock);
-        ClearOverrideGroup(g_shared.overrides, group, g_shared.frame);
-    }
-    RebuildEffective();
-}
-
-void ResetAllParams() {
-    {
-        const std::scoped_lock guard(g_lock);
-        g_shared.overrides.clear();
-    }
-    RebuildEffective();
-}
-
-int ChangedParamCount() {
-    const std::scoped_lock guard(g_lock);
-    return (int)g_shared.overrides.size();
 }
 
 }

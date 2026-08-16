@@ -1,5 +1,7 @@
 #include "state/telemetry.h"
 
+#include "preset/preset_preview.h"
+
 #include <mutex>
 #include <utility>
 
@@ -33,6 +35,16 @@ PresetStatus Telemetry::GetPreset() const {
 void Telemetry::SetPreset(PresetStatus p) {
     const std::scoped_lock lk(mu_);
     preset_ = std::move(p);
+}
+
+Preset::Preview::SnapshotPtr Telemetry::GetPresetPreview() const {
+    const std::scoped_lock lk(mu_);
+    return preview_;
+}
+
+void Telemetry::SetPresetPreview(Preset::Preview::SnapshotPtr p) {
+    const std::scoped_lock lk(mu_);
+    preview_ = std::move(p);
 }
 
 }

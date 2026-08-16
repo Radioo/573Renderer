@@ -101,37 +101,6 @@ void PickFirstAnimation() {
     if (it != g_active->pkg.index.animation_names.end()) g_start = it->second;
 }
 
-void CollectParts(const SysIdx::Package& index, size_t start, int depth,
-                  std::vector<std::string>& out) {
-    if (depth > 8) return;
-    for (size_t i = start; i < index.records.size(); i++) {
-        const SysIdx::Record& rec = index.records[i];
-        if (rec.type < 0) return;
-        if (rec.type == SysIdx::kRecDrawCell) {
-            for (const auto& [name, id] : index.cell_names) {
-                if (std::cmp_equal(id, rec.id)) out.push_back("cell " + name);
-            }
-            continue;
-        }
-        if (rec.type != SysIdx::kRecNested) continue;
-        for (const auto& [name, id] : index.animation_names) {
-            if (std::cmp_equal(id, rec.id)) out.push_back("child " + name);
-        }
-        if (rec.id >= 0) CollectParts(index, (size_t)rec.id, depth + 1, out);
-    }
-}
-
-std::vector<std::string> PartsOf(const SysIdx::Package& index, const std::string& animation) {
-    std::vector<std::string> out;
-    const auto it = index.animation_names.find(animation);
-    if (it == index.animation_names.end()) return out;
-    CollectParts(index, it->second, 0, out);
-    std::ranges::sort(out);
-    const auto dup = std::ranges::unique(out);
-    out.erase(dup.begin(), dup.end());
-    return out;
-}
-
 std::string ChildNames(const SysIdx::Package& index, size_t start) {
     std::string listed;
     for (size_t i = start; i < index.records.size(); i++) {
@@ -220,7 +189,8 @@ PackageInfo DescribePackage(const std::string& asset) {
         const int frames = (it == owner->pkg.index.animation_names.end())
                                ? 0
                                : SysIdx::AnimationLength(owner->pkg.index, it->second);
-        info.animations.push_back(AnimationInfo{.name = name, .frames = frames});
+        info.animations.push_back(AnimationInfo{
+            .name = name, .frames = frames, .parts = Gc2d::PartNames(owner->pkg.index, name)});
     }
     return info;
 }
@@ -396,7 +366,7 @@ std::vector<std::string> ListAnimations() {
 
 std::vector<std::string> ListParts(const std::string& animation) {
     if (g_active == nullptr) return {};
-    return PartsOf(g_active->pkg.index, animation);
+    return Gc2d::PartNames(g_active->pkg.index, animation);
 }
 
 int AnimationLength(const std::string& animation) {

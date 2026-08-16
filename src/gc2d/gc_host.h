@@ -10,6 +10,7 @@ namespace Gc2dHost {
 struct AnimationInfo {
     std::string name;
     int frames = 0;
+    std::vector<std::string> parts;
 };
 
 struct PackageInfo {

@@ -298,7 +298,7 @@ TEST_CASE("dragging a clip moves its start by the frame delta and publishes the 
     Editor::Global().Close();
 }
 
-TEST_CASE("a double click on a clip parks the properties request M5 consumes",
+TEST_CASE("a double click on a clip selects it and opens the properties modal",
           "[gui][timeline][editor]") {
     GuiTest::Harness harness;
     OpenEditor(0);
@@ -307,12 +307,14 @@ TEST_CASE("a double click on a clip parks the properties request M5 consumes",
     test->TestFunc = [](ImGuiTestContext* ctx) {
         FocusEditor(ctx);
         ctx->ItemDoubleClick("###tl_clip_core_b");
+        ctx->Yield(3);
+        IM_CHECK(ctx->WindowInfo("//Clip properties").Window != nullptr);
+        ctx->SetRef("Clip properties");
+        ctx->ItemClick("###tl_clip_cancel");
         ctx->Yield(2);
     };
     harness.Run(test);
 
-    CHECK(Editor::Global().PendingRequest().kind == Editor::RequestKind::ClipProperties);
-    CHECK(Editor::Global().PendingRequest().clip_id == "core_b");
     CHECK(Editor::Global().IsSelected("core_b"));
     Editor::Global().Close();
 }

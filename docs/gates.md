@@ -121,6 +121,15 @@ of the three hosts fails with the file, line and host named, a library file is i
 scope, and a panel outside the scope is ignored (`checked == 0`, so the test also
 proves the gate is not silently scanning nothing).
 
+### Generated layer verdicts (`gen_layer_verdicts.py`, build step, not a gate)
+
+`docs/preset_layers.md` is also read at BUILD time. A CMake custom command runs
+`tools/ci/gen_layer_verdicts.py docs/preset_layers.md <build>/generated/preset_layer_verdicts.cpp`
+and that generated file is compiled into `r573_app`, so the editor can print a layer's verdict
+beside a hidden part without shipping the markdown. It is not a gate and never fails a build on
+classification; it fails only when the markdown has no classification rows at all. The file
+lives in the build tree and is never committed. See docs/preset_document.md.
+
 ### Preset layers (`check_preset_layers.py`) and preset states (`check_preset_states.py`)
 
 Both gates read the SAME input: the JSON the renderer itself dumps with

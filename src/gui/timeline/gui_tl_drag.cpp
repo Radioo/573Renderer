@@ -177,6 +177,17 @@ void HandleClipKeys(Ctx& ctx) {
             return split;
         });
     }
+    if (ImGui::IsKeyPressed(ImGuiKey_A, false)) {
+        std::string track_id;
+        if (!ctx.editor->Selection().empty()) {
+            const Editor::ClipRef ref =
+                Editor::FindClip(*ctx.document, ctx.editor->Selection().front());
+            if (ref.Valid()) track_id = ctx.document->tracks[(std::size_t)ref.track].id;
+        }
+        ctx.editor->PostRequest(Editor::Request{.kind = Editor::RequestKind::AddCommand,
+                                                .track_id = track_id,
+                                                .frame = ctx.status.frame});
+    }
     if (ImGui::IsKeyPressed(ImGuiKey_M, false)) ToggleTracksOfSelection(ctx, false);
     if (ImGui::IsKeyPressed(ImGuiKey_L, false)) ToggleTracksOfSelection(ctx, true);
 }

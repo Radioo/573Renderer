@@ -3,10 +3,12 @@
 #include "formats/gcanim.h"
 #include "formats/sysidx.h"
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstddef>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace Gc2d {
@@ -52,6 +54,26 @@ void AppendAnimation(const SysIdx::Package& index, const SpriteDraw& sprite, flo
     out.insert(out.end(), scratch.begin(), scratch.end());
 }
 
+void CollectParts(const SysIdx::Package& index, std::size_t start, int depth,
+                  std::vector<std::string>& out) {
+    if (depth > 8) return;
+    for (std::size_t i = start; i < index.records.size(); i++) {
+        const SysIdx::Record& rec = index.records[i];
+        if (rec.type < 0) return;
+        if (rec.type == SysIdx::kRecDrawCell) {
+            for (const auto& [name, id] : index.cell_names) {
+                if (std::cmp_equal(id, rec.id)) out.push_back(name);
+            }
+            continue;
+        }
+        if (rec.type != SysIdx::kRecNested) continue;
+        for (const auto& [name, id] : index.animation_names) {
+            if (std::cmp_equal(id, rec.id)) out.push_back(name);
+        }
+        if (rec.id >= 0) CollectParts(index, (std::size_t)rec.id, depth + 1, out);
+    }
+}
+
 void FadeNodes(std::vector<GcAnim::DrawNode>& nodes, std::size_t from, float alpha) {
     for (std::size_t i = from; i < nodes.size(); i++)
         nodes[i].alpha *= alpha;
@@ -92,6 +114,17 @@ int SpriteLength(const SysIdx::Package& index, const SpriteDraw& sprite) {
     const auto it = index.animation_names.find(sprite.name);
     if (it == index.animation_names.end()) return 0;
     return SysIdx::AnimationLength(index, it->second);
+}
+
+std::vector<std::string> PartNames(const SysIdx::Package& index, const std::string& animation) {
+    std::vector<std::string> out;
+    const auto it = index.animation_names.find(animation);
+    if (it == index.animation_names.end()) return out;
+    CollectParts(index, (std::size_t)it->second, 0, out);
+    std::ranges::sort(out);
+    const auto dup = std::ranges::unique(out);
+    out.erase(dup.begin(), dup.end());
+    return out;
 }
 
 void AppendNodes(const SysIdx::Package& index, const SpriteDraw& sprite, const Canvas& canvas,

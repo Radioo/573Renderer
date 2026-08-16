@@ -3,6 +3,7 @@
 #include "preset/doc/preset_commands.h"
 #include "preset/doc/preset_document.h"
 #include "preset/doc/preset_enum_names.h"
+#include "preset/doc/preset_fields.h"
 
 #include <algorithm>
 #include <cstddef>
@@ -184,6 +185,24 @@ bool OverlapsSelfCopy(const Doc::Document& document, std::string_view track_id,
     const int length = DocumentLength(document);
     const int copy_end = IsEvent(source) ? start + 1 : end.value_or(std::max(length, start + 1));
     return Intersects(start, copy_end, source.start, ClipEnd(source, length));
+}
+
+std::string PrimaryBlocker(const Doc::Document& document, std::string_view track_id,
+                           Doc::CommandType type, int start, std::optional<int> end) {
+    const int home = FindTrack(document, track_id);
+    if (home < 0 || Doc::TraitsFor(type).family == Doc::Family::None) return {};
+    const Doc::Track& target = document.tracks[(std::size_t)home];
+    const int length = DocumentLength(document);
+    const int wanted_end =
+        Doc::IsEvent(type) ? start + 1 : end.value_or(std::max(length, start + 1));
+    for (const Doc::Track& track : document.tracks) {
+        if (track.id != target.id && !SharesTarget(track, target)) continue;
+        for (const Doc::Clip& other : track.clips) {
+            if (!SameSlot(other.command, Doc::DefaultCommand(type))) continue;
+            if (Intersects(start, wanted_end, other.start, ClipEnd(other, length))) return other.id;
+        }
+    }
+    return {};
 }
 
 std::string UniqueClipId(const Doc::Document& document, std::string_view base) {

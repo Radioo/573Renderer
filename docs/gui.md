@@ -265,6 +265,12 @@ document AND the `App::PresetStatus` snapshot published by the render thread nam
 `id`. Everything else (the AFP backends, the scene3d backend with a bare package loaded)
 keeps the dock.
 
+Two pieces of 4.6 are deliberately absent until M6 brings the options track: the palette has
+no "Add option" entry under its Document group, and no GUI control posts
+`PresetCmd::SetOption`, so a document's option choices cannot be switched from the editor yet.
+The `when` gate, the `option.select` clip and the gate badge all read `document.options`
+today, so they work the moment M6 adds the track that edits them.
+
 #### Layout and docking
 
 The editor is a FULL-WIDTH bottom dock, not a column (user decision, 2026-08-15). It takes
@@ -412,12 +418,13 @@ comparing each tail item's clipped rect with its full rect.
 | jump to last frame | `###tl_jump_end` | End |
 | loop toggle | `###tl_loop` | posts `SetLoop` |
 | snap toggle | `###tl_snap` | editor-side only; Alt suspends it per drag |
-| add command | `###tl_add_command` | M5 placeholder: posts `RequestKind::AddCommand` |
-| add track | `###tl_add_track` | M5 placeholder: posts `RequestKind::AddTrack` |
+| add command | `###tl_add_command` | opens the command palette for the selected track at the playhead (also the `A` key) |
+| add track | `###tl_add_track` | opens the Add track modal |
 | previous / next edge | `###tl_prev_edge`, `###tl_next_edge` | `[` / `]` |
 | zoom slider | `###tl_zoom` | 0.05..8 px per frame, logarithmic |
 | fit | `###tl_fit` | Ctrl+0 |
-| document badge | `###tl_doc_badge` | shows `*` when dirty; posts `RequestKind::DocumentProperties` |
+| document badge | `###tl_doc_badge` | shows `*` when dirty; opens the Document properties modal |
+| validation badge | `###tl_problems` | only present while `Validate` reports errors; opens the Problems modal |
 | ruler | `###tl_ruler` | click or drag seeks; double-click adds a marker; right-click on a marker triangle opens the marker popup |
 | marker name field | `###tl_marker_name` | inside the marker popup |
 | document end line | `###tl_end_line` | drag it to change `length`; the region beyond is dimmed and labelled `end N` |
@@ -426,7 +433,7 @@ comparing each tail item's clipped rect with its full rect.
 | track rename field | `###tl_rename_<track id>` | Enter commits |
 | track M / S / L | `###tl_mute_<id>`, `###tl_solo_<id>`, `###tl_lock_<id>` | square buttons, filled with the accent when on |
 | track lane | `###tl_lane_<track id>` | press starts the rubber band, right-click opens the empty-area menu |
-| clip bar | `###tl_clip_<clip id>` | click selects, double-click posts the properties request, drag moves, edge drag resizes, Ctrl+drag drops a duplicate |
+| clip bar | `###tl_clip_<clip id>` | click selects, double-click opens the clip properties modal, drag moves, edge drag resizes, Ctrl+drag drops a duplicate. An EVENT clip draws a 4 px tick but its hit rect is 12 px wide, because a 4 px click target cannot be hit reliably - the Test Engine could not hover one either |
 | range scroll bar | `###tl_scroll` | drag to pan |
 
 Clip bars are 22 px in the row's main lane, centred in it, and 16 px in a modifier sub-lane
@@ -446,12 +453,12 @@ did not reach. Esc clears.
 
 #### Menus
 
-Clip right-click: Properties (posts the request), Cut, Copy, Paste at playhead, Duplicate,
+Clip right-click: Properties (opens the modal), Cut, Copy, Paste at playhead, Duplicate,
 Split at playhead, Trim start / end to playhead, Make open-ended, Add key at playhead
 (registered DISABLED - key insertion is M6), Mute clip, Delete.
 
-Empty lane right-click: Add command here, Paste at this frame, Add track above / below. The
-three "add" entries post an M5 `Request` and change nothing yet.
+Empty lane right-click: Add command here (the palette anchored at the clicked frame), Paste at
+this frame, Add track above / below.
 
 Track header right-click: Rename, Move up, Move down, Duplicate track, Change target,
 Delete track.
@@ -468,8 +475,228 @@ Active when the editor is focused or hovered and `io.WantTextInput` is false.
 | `[` / `]` | previous / next clip edge, key or marker | Ctrl+0 | fit the whole document |
 | Delete | delete selection | S | split selection at playhead |
 | M | mute the selected clips' track | L | lock the selected clips' track |
-| Enter | properties of the selected clip (M5) | Esc | cancel a drag, clear the selection |
+| Enter | properties of the selected clip | Esc | cancel a drag, clear the selection |
+| A | command palette at the playhead on the selected track | | |
 | Ctrl+wheel | zoom about the cursor | Shift+wheel | scroll the tracks |
+
+#### Modals: palette, clip properties, document properties, problems
+
+Every editor modal is a centred `BeginPopupModal` drawn by `Panels::Timeline::RenderModals()`,
+which `RenderReadyView` calls next to `Export::RenderModal()` - OUTSIDE the editor child, so a
+modal is never clipped by it. `RenderModals` first drains `Editor::State::TakeRequest()` and
+turns the four `RequestKind`s into an open request, so a double-click, the Enter key, the
+context menu, the transport buttons and the Clip inspector tab all reach the same code.
+
+The clip and document modals are a FIXED size (660 and 640 px wide, capped at 640 / 560 px tall
+or the viewport minus 80) rather than auto-resizing, so a long form - the hidden-parts checklist
+of a 30-part animation - scrolls inside the popup instead of pushing Cancel and Done off the
+bottom of the screen, which is exactly what an auto-resized popup with a max-height constraint
+did before.
+
+Tab contents are nested under their tab bar in the Test Engine id path, so a field inside the
+clip modal's Params tab is `###tl_clip_tabs/###tl_tab_params/###tl_field_<json key>`, and a
+Vec2 / Vec3 row has NO item of its own (ImGui's `DragScalarN` pushes the label as an id scope):
+its axes are `.../###tl_field_position/$$0` and so on. `clip_modal_tests.cpp` accepts either.
+
+| modal | window | items |
+|---|---|---|
+| Command palette | `Add command` | `###tl_palette_filter`, one `###tl_palette_<command type>` per catalog entry, `###tl_palette_cancel` |
+| Add track | `Add track` | `###tl_track_kind`, `###tl_track_asset`, `###tl_track_target`, `###tl_track_name`, `###tl_track_below`, `###tl_track_add`, `###tl_track_cancel` |
+| Clip properties | `Clip properties` | tabs `###tl_tab_general` / `###tl_tab_params` / `###tl_tab_tween` / `###tl_tab_asset` under `###tl_clip_tabs`, `###tl_clip_cancel`, `###tl_clip_done` |
+| Document properties | `Document properties` | tabs `###tl_doc_tab_general` / `_render` / `_camera` / `_lights` under `###tl_doc_tabs`, `###tl_doc_done`, `###tl_doc_cancel`, `###tl_doc_convert_fps` |
+| Convert fps | `Convert fps` | `###tl_fps_target`, `###tl_fps_rounding`, `###tl_fps_convert` |
+| Problems | `Problems` | one `###tl_problem_<index>` per row, `###tl_problems_close` |
+
+Every one of these modals closes on Esc, and Esc is the Cancel button, not the Done button: the
+clip and document modals rewind the undo stack to the depth captured when they opened, exactly
+as their Cancel does. This has to be written by hand. `BeginPopupModal(title, nullptr, ...)`
+passes no `p_open`, and ImGui only closes a modal on Escape when one is supplied, so without the
+explicit `IsKeyPressed(ImGuiKey_Escape)` branch these modals swallow Escape and stay open. The
+branch is additionally gated on `IsWindowFocused(ImGuiFocusedFlags_ChildWindows)`, so a nested
+popup (the Convert fps modal, an open combo) consumes its own Escape first, and on
+`!io.WantTextInput`, so Escape cancels a text edit before it cancels the modal.
+
+The PALETTE is generated from the catalog: `Editor::PaletteEntries` (pure, in `src/editor`,
+unit tested) returns every command type with a display name, a one-line summary of its key
+params, and the section it belongs to - the clicked track's kind first, then "Other tracks
+(creates a track)", then "Document" for `option.select`. The filter matches the name and the
+summary, case-insensitively; the sort is section first, then catalog order, and nothing else,
+because with these names no other ranking ever changes the order. Up and Down move a highlight
+over the list and Enter inserts the highlighted entry; both arrows skip refused entries and wrap,
+typing in the filter resets the highlight to the first enabled entry, and Esc closes. The
+highlight is what `Selectable`'s selected flag draws, so the keyboard and the mouse agree on
+which entry Enter will take. An entry whose insertion
+would put a second PRIMARY of the same family over an existing one at that frame
+(`Editor::PrimaryBlocker`) is drawn disabled with the offending clip id as the reason. Enter
+in the filter box inserts the first ENABLED entry. Insertion uses `DefaultCommand(type)` plus
+the document's first asset of the matching kind, is open-ended for a primary with nothing
+after it on the track, ends at the next clip when there is one, and is 60 frames for a
+modifier; the new clip is selected and its properties modal opens. Choosing a command whose
+track kind differs from the clicked track creates that track first.
+
+FORMS are generated from `FieldsFor(command type)`: one row per `FieldDesc`, the widget chosen
+from the value the descriptor reads (`gui_tl_forms.cpp`). `asset`, `model`, `cell` and
+`animation` become combos filled from the `AssetIndex` in the status snapshot, with a warning
+beside a name the loaded asset does not carry; an optional field that is unset draws a
+checkbox that materialises it ("inherits the document value"). Hard ranges clamp on commit
+(`Editor::ClampField`), soft ranges only print "outside the usual range"
+(`Editor::OutsideSoftRange`), radian fields print a degree readout under them
+(`Editor::DegreesText`), and a field that differs from the catalog default grows a
+`###tl_reset_<key>` glyph in the right column whose tooltip names the default value. Field
+commits go through `Editor::State::Apply` inside a `BeginGesture`/`EndGesture` pair, so one
+field is one undo entry even while a drag is live; the whole edited document is published, so
+the viewport follows immediately. Ctrl+Z inside a modal undoes one field at a time down to the
+depth the modal opened at, Cancel undoes back to that depth and drops the redo stack, and Done
+collapses the entries into one (`Editor::State::CollapseUndo`).
+
+The clip modal's Params tab also carries, for `sprite.animate`, the HIDDEN PARTS checklist
+(one `###tl_hidden_<part>` per child part from the `AssetIndex`, with the
+`docs/preset_layers.md` verdict printed beside it) and the LAYER PREVIEW STRIP. The strip
+posts `PresetCmd::PreviewLayer` once per (asset, animation, hidden_parts) key, then draws
+`total` cells: each arrived sample as an image, the rest as a determinate "sample k / N" cell,
+with a "N / M sample(s) rendered on the render thread" line above them. The samples are
+rendered one per frame on the render thread (`Preset::Preview`, called from
+`Scene3dBackend::AdvanceFrame`, outside the scene) and published as small BGRA buffers; the
+GUI uploads them to its OWN device through `Gui::GetDevice()`, because the GUI and the
+renderer hold two separate D3D9 devices and a texture cannot cross them. They are
+`D3DPOOL_MANAGED`, so they survive the GUI device reset that a window resize triggers.
+
+The render thread publishes ONE snapshot object, not a copy per frame. `Preset::Preview::Get`
+returns a `shared_ptr<const Snapshot>` that is rebuilt only when a sample lands or a request is
+posted, and `Scene3dBackend::AdvanceFrame` calls `App::State::SetPresetPreview` only when the
+pointer differs from the one it published last. The same rule applies to the `AssetIndex` in
+`App::PresetStatus`: `PresetHost::GetAssetIndex` hands out a `shared_ptr<const AssetIndex>`
+rebuilt only when a document load changes the assets. Both used to be deep-copied on the way
+out of the host, again into the status struct, and again on every `GetPresetStatus()` in the
+GUI - for a real IIDX package that is thousands of strings and, while a preview is open, a few
+hundred KB of pixel buffers, several times per frame. `preset_host_tests.cpp` pins the
+invariant: eight `RenderFrame` calls in a row must return the SAME `AssetIndex` pointer, and a
+`ReplaceDocument` that changes the assets must return a different one.
+
+Finished previews are kept in `Preset::Preview::Cache`, an 8-entry LRU keyed by the same
+(asset, animation, hidden_parts) string the request uses. `Post` looks the key up first and, on
+a hit, republishes the cached snapshot complete and leaves `Pump` nothing to do, so switching
+the animation combo away and back is instant instead of six more render-thread samples. The
+cache is a plain class with `Find` / `Insert` / `Clear` so `preset_preview_tests.cpp` can pin
+the eviction order without a device.
+
+`Reset()` is reachable from the GUI thread (unloading a preset) while `Pump()` is running on
+the render thread, so it must not touch D3D. It clears the request, the published snapshot and
+the cache under the lock and raises a release flag; the NEXT `Pump` consumes the flag and frees
+the render target, on the render thread, under the lock. `PresetHost::PumpPreview` is therefore
+called on every frame rather than only while a preset is loaded, so the deferred release still
+happens after an unload.
+
+Closing the modal must NOT release those textures on the spot. `DrawPreviewStrip` records the
+raw `IDirect3DTexture9*` in the window draw list with `AddImage`, and the Cancel and Done buttons
+are drawn LATER IN THE SAME FRAME, so releasing there hands `ImGui_ImplDX9_RenderDrawData` a
+freed COM object when `ImGui::Render()` walks that draw list at the end of the frame. `Close()`
+therefore only raises a flag, and `RenderClipModal` calls `ForgetPreview()` at the TOP of the
+next frame, before anything is drawn. `gui_tests` cannot see this: with no `Gui::Window` there is
+no device, `Sync()` never uploads, and there is nothing to free.
+
+The Asset tab of the commands that have an `asset` field shows the asset combo, the resolved
+dir with a loaded / missing badge, the kind, the model / cell / animation combo, and an "add
+asset..." button that opens the existing `NativeDialog::BrowseForFolder`, stores the picked
+directory relative to the game dir, and points the clip at the new asset id.
+
+The Tween tab is read-only in this milestone: it lists the keys the document holds (at, ease,
+values). Key editing and the curve editor are M6. It is shown only for commands that can carry
+keys at all, which is `any_of(KeyFieldsFor(type), tweenable)` and NOT `!KeyFieldsFor(type).empty()`:
+`KeyFieldsFor` falls through to `FieldsFor` for every non-tween command, so the empty test is
+true for `rng.seed` and `rhythm.beat` too and would show all four tabs on a command that cannot
+hold a single key. `model.tween` and `camera.tween` have no fields of their own, so they show
+General and Tween only.
+
+Every form row states its unit twice: in the label (`position  world`) and in the row tooltip,
+which also carries the JSON key and the help. The unit comes from the `FieldDesc`, never from
+the widget, so the two cannot drift; the vec3 rows used to drop it because `DrawVec3Row` took no
+unit at all, and `position`, `scale`, the camera `eye` / `at` / `up` and the light vectors
+carried no unit in the descriptor either. The tooltip covers the WHOLE row: a vec3 is three
+`DragFloat`s and a reset button, so the row is wrapped in `BeginGroup`/`EndGroup` and hovered as
+one item - `IsItemHovered` after the widgets would only cover the last axis.
+
+An empty `model` on a `model.draw` is not a missing value: the evaluator falls back to the
+track's target (`eval_models.cpp`, `if (!command.model.empty()) slot.name = command.model`), so
+the combo shows `<target> (track target)` rather than `(none)`, and `hidden_parts` shows the
+`(none)` hint when the list is empty.
+
+The modal sizes to its content. It pins its width and constrains its height to the viewport
+rather than fixing both, so a short tab (General on a `model.draw`) is exactly as tall as its
+rows instead of leaving 200 px of dead space under the buttons. The preview strip sits between
+the param form and the checklist, which is what keeps it above the fold: putting the checklist
+first would push the strip past the cap and the user would have to scroll to see the layer they
+are classifying.
+
+Auto-resize alone is not enough, because a popup is ONE scrolling window: once the content
+passes the cap, everything below the fold scrolls out of reach INCLUDING the Cancel and Done
+buttons, and no cap fixes that because the content is what grows. So the tabs live in a
+`###tl_clip_body` child sized to the measured content height (last frame's `GetCursorPosY`)
+clamped to the viewport, and the footer is drawn after it, in the popup itself. Short tabs get a
+short child and no dead space, tall ones scroll inside the child, and the footer never moves.
+
+The child is a separate window as far as the Test Engine is concerned, so items inside it are
+NOT reachable as `Clip properties/###tl_clip_tabs/...`: a test must set its ref to the child
+(`GuiTest::FocusChild(ctx, "//Clip properties/###tl_clip_body")`, which `clip_modal_tests.cpp`
+wraps as `ClipBody`) for tab and field items, and address the footer buttons absolutely as
+`//Clip properties/###tl_clip_done`. That is the cost of the child, and it is worth paying.
+
+A real package animation also nests dozens of parts (`TITLE` on IIDX RED has about 80), so the
+hidden-parts checklist is a `CollapsingHeader` labelled with its count, open by default only
+when the animation has 8 parts or fewer: a wall of 80 checkboxes buries the preview strip above
+it even when scrolling works. `clip_modal_tests.cpp` pins the footer geometrically against an
+80-part stub: the item rect of `###tl_clip_done` must sit inside the modal's `InnerRect`.
+
+#### Inspector "Clip" tab
+
+`Panels::Timeline::RenderClipTab` (registered in `panel_registry.cpp` for the scene3d backend)
+is the non-modal view of the selected clip: the command type, the summary, the id, the track,
+the frame range and duration, a `###insp_clip_props` button that opens the modal, and the same
+descriptor-driven Params form with the same live apply. Per 4.7 it also carries the command's
+colour chip beside the type, the `when` gate as read-only text (`Editor::GateText`, the same
+three forms the modal edits), a muted checkbox, and inline label, start and end fields, so the
+common edits need no modal at all; `Properties...` opens the modal for everything else. With
+nothing selected it says "no clip selected". Because the form is live, this tab needs the SAME gesture bracket the clip modal uses:
+a `DragFloat` reports `FieldEvent::Changed` on every frame the mouse moves, and calling
+`EditorState::Apply` on each of those without `BeginGesture` records one undo entry per frame, so
+undoing a single drag takes dozens of Ctrl+Z. The tab opens the gesture on the first Changed,
+closes it on Committed (`IsItemDeactivatedAfterEdit`, i.e. mouse release), and also closes it on
+every early return, because the selection can vanish mid-drag and a gesture left open stops the
+undo stack recording for the rest of the session. `clip_modal_tests.cpp` pins it: a drag in this
+tab must raise `UndoDepth()` by exactly one. The "Screen parameters" centre pane is gone with `gui_preset_workspace.cpp`, so the
+centre pane is the scene tree again, and the per-parameter surface of `PresetHost` (ListParams,
+SetParam, ResetParam, ResetGroup, ResetAllParams, ChangedParamCount, ListStates, SetCountdown
+and `preset_host_params.*`) went with its only caller.
+
+#### Validation UI
+
+Every clip whose id a problem names gets a 4 px left bar in its lane, the error colour when
+any of its problems is an error and the warn colour when they are all warnings, and its hover
+tooltip lists the messages under the summary. The lookup is `Editor::ProblemsForClip`, a pure
+function over the problem list in `src/editor/clip_problems.cpp`, so the bar, the tooltip and
+the unit test all read the same thing.
+
+An overlap concerns TWO clips but is reported once, so `Problem` carries a `related` id beside
+its `path`: `CheckClipPair` files the message under the later clip and names the earlier one in
+`related`, and `ProblemsForClip` matches either. One row in the Problems list, a bar on both
+bars in the lane. Without `related` the earlier clip of an overlap would look clean, which is
+exactly the clip the user usually needs to move.
+
+`Panels::Timeline::CurrentProblems()` runs `Preset::Doc::Validate` on the working document and
+caches the result against `Editor::State::Revision()`, so it re-runs once per edit and not once
+per frame. The transport row grows a red `###tl_problems` badge with the error count whenever
+there is one; it opens the Problems modal, which lists every problem with its severity, path
+and message and selects the clip a row names when it is clicked. Warnings use the warn colour
+and never gate anything.
+
+A problem row is NOT a plain `Selectable` with the message as its label. Two clip ids and an
+explanation routinely run past the modal's pinned 720px, and a Selectable label is clipped at the
+window edge with no ellipsis and no wrap, which hides the half of the message that names the
+other clip. Each row is instead an id-only `Selectable` sized to the height the wrapped message
+needs, with the text drawn over it at the same cursor position under `PushTextWrapPos`. The
+Selectable is registered first so it still owns the hover and the click. `clip_modal_tests.cpp`
+guards this geometrically: with a message long enough to wrap, the item rect of
+`###tl_problem_0` must be taller than one `GetTextLineHeightWithSpacing()`.
 
 ## 4. Export modal + status tag (gui_export_panel)
 

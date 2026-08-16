@@ -410,6 +410,7 @@ constexpr auto kModelDrawFields = std::to_array<FieldDesc>({
     Field<ModelDraw, &ModelDraw::position>({.id = "position",
                                             .kind = FieldKind::Vec3,
                                             .range = kWorld,
+                                            .unit = "world",
                                             .help = "Model position.",
                                             .tweenable = true}),
     Field<ModelDraw, &ModelDraw::rotation>({.id = "rotation",
@@ -421,6 +422,7 @@ constexpr auto kModelDrawFields = std::to_array<FieldDesc>({
     Field<ModelDraw, &ModelDraw::scale>({.id = "scale",
                                          .kind = FieldKind::Vec3,
                                          .range = {.min = 0.001F, .max = 100.0F, .soft = true},
+                                         .unit = "x",
                                          .help = "Model scale.",
                                          .tweenable = true}),
     Field<ModelDraw, &ModelDraw::spin_per_frame>({.id = "spin_per_frame",
@@ -460,16 +462,19 @@ constexpr auto kCameraSetFields = std::to_array<FieldDesc>({
     Field<CameraSet, &CameraSet::eye>({.id = "eye",
                                        .kind = FieldKind::Vec3,
                                        .range = kWorld,
+                                       .unit = "world",
                                        .help = "Camera position.",
                                        .tweenable = true}),
     Field<CameraSet, &CameraSet::at>({.id = "at",
                                       .kind = FieldKind::Vec3,
                                       .range = kWorld,
+                                      .unit = "world",
                                       .help = "Point the camera faces.",
                                       .tweenable = true}),
     Field<CameraSet, &CameraSet::up>({.id = "up",
                                       .kind = FieldKind::Vec3,
                                       .range = {.min = -1.0F, .max = 1.0F, .soft = true},
+                                      .unit = "world",
                                       .help = "Camera up vector.",
                                       .tweenable = true}),
     Field<CameraSet, &CameraSet::fov_y>({.id = "fov_y",
@@ -503,16 +508,19 @@ constexpr auto kLightSetFields = std::to_array<FieldDesc>({
     Field<LightSet, &LightSet::direction>({.id = "direction",
                                            .kind = FieldKind::Vec3,
                                            .range = kUnitVector,
+                                           .unit = "world",
                                            .help = "Directional light direction.",
                                            .tweenable = true}),
     Field<LightSet, &LightSet::diffuse>({.id = "diffuse",
                                          .kind = FieldKind::Vec3,
                                          .range = kColor,
+                                         .unit = "rgb",
                                          .help = "Diffuse colour.",
                                          .tweenable = true}),
     Field<LightSet, &LightSet::specular>({.id = "specular",
                                           .kind = FieldKind::Vec3,
                                           .range = kColor,
+                                          .unit = "rgb",
                                           .help = "Specular colour.",
                                           .tweenable = true}),
     Field<LightSet, &LightSet::enabled>(
@@ -613,6 +621,10 @@ constexpr std::array<std::span<const FieldDesc>, 16> kTables = {
     kRngSeedFields,      kRhythmBeatFields,    kRhythmJitterFields,
     kOptionSelectFields,
 };
+
+static_assert(kTables.size() == std::variant_size_v<Command>);
+static_assert(kCommandTypeNames.size() == std::variant_size_v<Command>);
+static_assert(kCommandTraits.size() == std::variant_size_v<Command>);
 
 }
 

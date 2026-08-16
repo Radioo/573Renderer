@@ -1,5 +1,7 @@
 #include "gui_test_harness.h"
 
+#include "timeline/gui_tl_modals.h"
+
 #include "gui_panels.h"
 #include "gui_style.h"
 #include "imgui.h"
@@ -128,6 +130,10 @@ Harness::Harness() : ui_(CreateUiContext()), engine_(ImGuiTestEngine_CreateConte
     te_io.ConfigVerboseLevel = ImGuiTestVerboseLevel_Warning;
     te_io.ConfigVerboseLevelOnError = ImGuiTestVerboseLevel_Debug;
     ImGuiTestEngine_Start(engine_, ui_);
+    Panels::Timeline::ResetClipModal();
+    Panels::Timeline::ResetPalette();
+    Panels::Timeline::ResetDocumentModal();
+    Panels::Timeline::ResetProblems();
 }
 
 Harness::~Harness() {

@@ -1,7 +1,11 @@
 #pragma once
 
+#include "preset/asset_index.h"
+#include "preset/preset_preview.h"
+
 #include <chrono>
 #include <cstdint>
+#include <memory>
 #include <mutex>
 #include <string>
 #include <vector>
@@ -55,6 +59,7 @@ struct PresetStatus {
     int fps = 60;
     bool playing = false;
     bool loop = true;
+    std::shared_ptr<const Preset::AssetIndex> assets;
 };
 
 enum class ExportPhase : std::uint8_t {
@@ -92,11 +97,15 @@ public:
     [[nodiscard]] PresetStatus GetPreset() const;
     void SetPreset(PresetStatus p);
 
+    [[nodiscard]] Preset::Preview::SnapshotPtr GetPresetPreview() const;
+    void SetPresetPreview(Preset::Preview::SnapshotPtr p);
+
 private:
     mutable std::mutex mu_;
     Status status_;
     ExportState export_;
     PresetStatus preset_;
+    Preset::Preview::SnapshotPtr preview_;
 };
 
 }

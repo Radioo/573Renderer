@@ -47,7 +47,10 @@ std::vector<std::filesystem::path> UserFiles(const std::filesystem::path& root) 
 Problem ParseProblem(const ParseError& error) {
     std::string message = "parse error at line " + std::to_string(error.line) + ", column " +
                           std::to_string(error.column) + ": " + error.message;
-    return Problem{.severity = Severity::Error, .path = error.path, .message = std::move(message)};
+    return Problem{.severity = Severity::Error,
+                   .path = error.path,
+                   .related = {},
+                   .message = std::move(message)};
 }
 
 const Entry* Claiming(const std::vector<Entry>& known, const Document& document) {
@@ -73,6 +76,7 @@ const Entry* Examine(Entry& entry, const std::vector<Entry>& known,
     if (taken != nullptr && !taken->builtin) {
         entry.problems.push_back(Problem{.severity = Severity::Error,
                                          .path = entry.document.id,
+                                         .related = {},
                                          .message = "id \"" + entry.document.id +
                                                     "\" is already used by " + taken->path});
     }
@@ -80,6 +84,7 @@ const Entry* Examine(Entry& entry, const std::vector<Entry>& known,
     if (directory != entry.document.build) {
         entry.problems.push_back(Problem{.severity = Severity::Warning,
                                          .path = entry.document.id,
+                                         .related = {},
                                          .message = "the file sits under presets/" + directory +
                                                     " but the document's build is \"" +
                                                     entry.document.build + "\""});

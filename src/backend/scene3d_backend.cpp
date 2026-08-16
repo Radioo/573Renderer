@@ -12,6 +12,7 @@
 #include "gc2d/gc_package.h"
 #include "loop/cli_autopilot.h"
 #include "preset/preset_host.h"
+#include "preset/preset_preview.h"
 #include "render_backend.h"
 #include "scene3d/scene3d.h"
 #include "scene3d/scene3d_host.h"
@@ -226,8 +227,15 @@ public:
             preset.fps = status.fps;
             preset.playing = status.playing;
             preset.loop = status.loop;
+            preset.assets = PresetHost::GetAssetIndex();
         } else if (Gc2dHost::Active()) {
             playing = Gc2dHost::GetStatus().animation;
+        }
+        PresetHost::PumpPreview();
+        const Preset::Preview::SnapshotPtr preview = PresetHost::GetPreview();
+        if (preview != published_preview_) {
+            published_preview_ = preview;
+            App::Global().SetPresetPreview(preview);
         }
         App::Global().SetPresetStatus(std::move(preset));
         App::Status st = App::Global().GetStatus();
@@ -267,6 +275,7 @@ private:
     std::string game_dir_;
     const Cli::Options* cli_ = nullptr;
     Scene3dCaptureDriver capture_;
+    Preset::Preview::SnapshotPtr published_preview_;
 };
 
 }

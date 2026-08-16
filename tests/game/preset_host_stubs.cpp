@@ -333,7 +333,7 @@ PackageInfo DescribePackage(const std::string& asset) {
     info.cells.emplace_back("PTC");
     if (frames == g_package_frames.end()) return info;
     for (const auto& [name, count] : frames->second)
-        info.animations.emplace_back(AnimationInfo{.name = name, .frames = count});
+        info.animations.emplace_back(AnimationInfo{.name = name, .frames = count, .parts = {}});
     return info;
 }
 

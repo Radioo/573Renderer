@@ -6,6 +6,7 @@
 #include "gc2d/gc_sprite.h"
 
 #include <array>
+#include <string>
 #include <vector>
 
 namespace {
@@ -25,6 +26,51 @@ void FillOneCellPackage(SysIdx::Package& pkg) {
     pkg.animation_names["SPIN"] = 0;
 }
 
+}
+
+TEST_CASE("a listed part name is the same name skip_parts hides") {
+    SysIdx::Package pkg;
+    pkg.cells.push_back(SysIdx::Cell{.x = 0, .y = 0, .w = 32, .h = 16});
+    pkg.cell_names["OP_BG_U"] = 0;
+    SysIdx::Record child_cell;
+    child_cell.type = SysIdx::kRecDrawCell;
+    child_cell.id = 0;
+    child_cell.t_start = 0;
+    child_cell.t_end = 10;
+    pkg.records.push_back(child_cell);
+    SysIdx::Record child_end;
+    child_end.type = SysIdx::kRecEndAnimation;
+    pkg.records.push_back(child_end);
+    pkg.animation_names["TITLE_TAIKI"] = 0;
+
+    SysIdx::Record nested;
+    nested.type = SysIdx::kRecNested;
+    nested.id = 0;
+    nested.t_start = 0;
+    nested.t_end = 10;
+    pkg.records.push_back(nested);
+    SysIdx::Record end;
+    end.type = SysIdx::kRecEndAnimation;
+    pkg.records.push_back(end);
+    pkg.animation_names["TITLE"] = 2;
+
+    const std::vector<std::string> parts = Gc2d::PartNames(pkg, "TITLE");
+    REQUIRE(parts.size() == 2);
+    CHECK(parts[0] == "OP_BG_U");
+    CHECK(parts[1] == "TITLE_TAIKI");
+
+    const Gc2d::Canvas canvas{};
+    Gc2d::SpriteDraw sprite;
+    sprite.name = "TITLE";
+    sprite.animated = true;
+    std::vector<GcAnim::DrawNode> shown;
+    Gc2d::AppendNodes(pkg, sprite, canvas, shown);
+    REQUIRE_FALSE(shown.empty());
+
+    sprite.skip_parts = {parts[0]};
+    std::vector<GcAnim::DrawNode> hidden;
+    Gc2d::AppendNodes(pkg, sprite, canvas, hidden);
+    CHECK(hidden.size() < shown.size());
 }
 
 TEST_CASE("the 2D canvas decides the device scale and the sprite scale pivot") {

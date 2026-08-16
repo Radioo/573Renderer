@@ -4,6 +4,7 @@
 #include "preset/doc/preset_document.h"
 
 #include <algorithm>
+#include <cstddef>
 #include <memory>
 #include <string>
 #include <utility>
@@ -25,6 +26,7 @@ void State::LoadDocument(Doc::Document document) {
     gesture_pushed_ = false;
     dirty_ = false;
     revision_++;
+    load_id_++;
     view_ = View{};
 }
 
@@ -40,6 +42,7 @@ void State::Close() {
     gesture_pushed_ = false;
     dirty_ = false;
     revision_++;
+    load_id_++;
 }
 
 void State::Push() {
@@ -98,6 +101,15 @@ bool State::Redo() {
     revision_++;
     DropMissingSelection();
     return true;
+}
+
+void State::CollapseUndo(int depth) {
+    if (depth < 0 || (int)past_.size() <= depth + 1) return;
+    past_.resize((std::size_t)depth + 1);
+}
+
+void State::ClearRedo() {
+    future_.clear();
 }
 
 bool State::IsSelected(const std::string& clip_id) const {

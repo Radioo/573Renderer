@@ -1,9 +1,10 @@
 # tools/ci
 
-The quality gates. Every script here is run by `tools/checks.sh` and by the
-hosted `quality-gates` workflow, and each one exits non-zero with the offending
-paths on failure. Rationale for every rule lives in `docs/gates.md`; this file is
-how to run them.
+The quality gates. Every `check_*.py` / `run_*.py` script here is run by
+`tools/checks.sh` and by the hosted `quality-gates` workflow, and each one exits
+non-zero with the offending paths on failure. Rationale for every rule lives in
+`docs/gates.md`; this file is how to run them. The one script that is NOT a gate
+is `gen_layer_verdicts.py`, a build step, described at the bottom.
 
 This is a uv project: `uv run <script>` works with nothing to install. Commands
 below assume you are in this directory.
@@ -58,6 +59,23 @@ temporary dump and goes away with it instead of being left here, and when the du
 exits non-zero the gate prints the tail of that log with the exit code. The exe's
 own stdout is not it - `Log::Init` gives the process a fresh console, so a pipe
 placed on stdout captures nothing.
+
+## gen_layer_verdicts.py (a build step, not a gate)
+
+Compiles the classification table in `docs/preset_layers.md` into a C++ lookup
+(`Preset::VerdictFor` / `Preset::VerdictName`) so the editor can show a layer's
+verdict without shipping the markdown. CMake runs it for you; run it by hand only
+to inspect the output:
+
+```bash
+uv run gen_layer_verdicts.py ../../docs/preset_layers.md ../../build/generated/preset_layer_verdicts.cpp
+```
+
+Two positional arguments, no flags: the markdown to read and the `.cpp` to write.
+It reads the same rows the `check_preset_layers.py` gate reads (a table line whose
+fourth column is `background` or `chrome`), sorts them, and only rewrites the
+output when the text changes. It fails only when the markdown has no such rows.
+The output lives in the build tree and is never committed.
 
 ## Self-test
 
