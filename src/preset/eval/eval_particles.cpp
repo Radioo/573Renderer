@@ -6,9 +6,9 @@
 #include "preset/eval/eval_push.h"
 #include "preset/eval/frame_state.h"
 #include "preset/preset_rng.h"
+#include "support/math/float_trig.h"
 
 #include <algorithm>
-#include <cmath>
 #include <cstddef>
 #include <string>
 #include <utility>
@@ -52,8 +52,8 @@ void SpawnOne(const Doc::EmitterCmd& emitter, const std::string& source,
         particle.to_y = (rng.Next() % (int)scatter->span[1]) + (int)scatter->offset[1];
     } else {
         const float angle = (((float)index * (float)emitter.angle_step_deg) + phase) * kDegrees;
-        particle.to_x = (int)((std::sin(angle) * (float)reach) + center[0]);
-        particle.to_y = (int)((std::cos(angle) * (float)reach) + center[1]);
+        particle.to_x = (int)((Support::Sinf(angle) * (float)reach) + center[0]);
+        particle.to_y = (int)((Support::Cosf(angle) * (float)reach) + center[1]);
     }
     particle.life = (emitter.life_span > 0) ? ((rng.Next() % emitter.life_span) + emitter.life_base)
                                             : emitter.life;
@@ -73,7 +73,7 @@ int RingReach(const Doc::EmitterCmd& emitter, int elapsed) {
 }
 
 float RingPhase(const Doc::EmitterCmd& emitter, int frame) {
-    const float wobble = std::sin((float)frame * (float)emitter.phase_rate_deg * kDegrees) *
+    const float wobble = Support::Sinf((float)frame * (float)emitter.phase_rate_deg * kDegrees) *
                          (float)emitter.phase_amplitude_deg;
     return (float)(int)wobble;
 }

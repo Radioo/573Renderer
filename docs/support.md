@@ -148,3 +148,153 @@ target now links `r573::warnings`, which turns `getenv` into a warning.
   `DDR_AFPU_ATTR`, `DDR_LAYER_ATTR`) call `EnvVar` and keep their own
   `strtol` on `.c_str()`. Likewise `DDR_TIME_SCALE` (atof) and `DDR_NEARFAR`
   (`sscanf_s`) parse the `EnvVar` string themselves.
+
+## Deterministic float trigonometry (math/float_trig.h / .cpp)
+
+`Support::Sinf(float)` and `Support::Cosf(float)` are the project's `sinf` and
+`cosf`. Everything whose OUTPUT is compared bit for bit across machines calls
+them instead of `std::sin` / `std::cos`: the preset evaluator's orbit position
+(`eval_models.cpp`), its `sine_deg` ease (`eval_tween.cpp`) and its emitter ring
+phase and scatter angle (`eval_particles.cpp`).
+
+### Why the CRT could not stay
+
+`sinf` and `cosf` are not exactly specified: every libm is allowed its own
+last-bit answer, and Microsoft's is not the same answer on every machine. The
+golden preset recording is a per-frame hash of the push text, and the push text
+prints floats through `std::to_chars`'s shortest round-tripping form, so it is an
+exact picture of the float BITS. One ulp is therefore visible.
+
+The proof, taken on this repo's own numbers. The IIDX 10 class course select
+preset orbits `cube_x` at `rate = 0.033333335`, so frame 733 has
+`angle = 24.4333344`:
+
+| | `sinf(24.4333344)` | printed `y = 0.2 + sin * 0.2` |
+|---|---|---|
+| this machine's UCRT (VS 2026 / v14.51) | `0xbf24cdb7` | `0.071247205` |
+| the GitHub `windows-2022` runner | `0xbf24cdb6` | `0.07124722` |
+| correctly rounded | `0xbf24cdb6` | `0.07124722` |
+
+That single ulp is what failed CI at frame 732 (the transform pushed on frame N
+is the pose for frame N+1) while every local run passed. Sweeping all 1211 orbit
+angles of that preset, this machine's CRT differs from the correctly rounded
+result at four of them and the difference reaches the printed text at three; the
+first is exactly the frame CI reported. The cause is inside the CRT, not the
+build: the project passes no `/fp` or `/arch` flag, so both sides compile at
+`/fp:precise` with the x64 SSE2 baseline, and the object file for this
+translation unit contains no FMA instruction (checked with `dumpbin /disasm`).
+`/fp:precise` is pinned explicitly on this one source file in `CMakeLists.txt`
+so a future global `/fp:fast` cannot silently contract the argument reduction.
+
+### What it is
+
+A comment-free transcription of the FreeBSD `msun` float trigonometry, which is
+the same code musl carries:
+
+| Vendored here | Upstream |
+|---|---|
+| `Sinf`, `Cosf` | `lib/msun/src/s_sinf.c`, `s_cosf.c` |
+| `KernelSin`, `KernelCos` | `lib/msun/src/k_sinf.c`, `k_cosf.c` |
+| `Reduce` | `lib/msun/src/e_rem_pio2f.c` (`__ieee754_rem_pio2f`) |
+| `ReduceLarge` and its helpers | `lib/msun/src/k_rem_pio2.c` (`__kernel_rem_pio2`) |
+
+Provenance and licence, preserved here because the repo's sources carry no
+comments:
+
+> Copyright (C) 1993 by Sun Microsystems, Inc. All rights reserved.
+> Developed at SunPro, a Sun Microsystems, Inc. business.
+> Permission to use, copy, modify, and distribute this software is freely
+> granted, provided that this notice is preserved.
+
+with the float conversion by Ian Lance Taylor (Cygnus Support) and the
+optimisation by Bruce D. Evans, as the upstream headers state.
+
+Two deliberate specialisations of `__kernel_rem_pio2`, because `sinf`/`cosf` are
+its only callers: `nx` is always 1 (the input is one 24-bit chunk, so the inner
+convolution over `x[]` collapses to a single multiply) and `prec` is always 0
+(so `jk` is the constant 3, the `init_jk` table is gone, and only the `case 0`
+compression survives; the `PIo2` table keeps the first four of its eight terms,
+which is `jp + 1`). Anything else is a line-for-line transcription: the same
+polynomial coefficients, the same branch structure, the same evaluation ORDER,
+which is what makes the result reproducible. `std::scalbn` and `std::floor` stay
+CRT calls on purpose - both are exactly specified operations with no rounding
+freedom, so no implementation can disagree about them.
+
+The implementation is deterministic BY CONSTRUCTION, which is the property that
+matters and the one that cannot be tested from a single machine: it is pure C++
+with no runtime CPU dispatch, no ISA-specific path, and no fused multiply-add.
+What CAN be tested on one machine is that no codegen variable moves it, and none
+does. An FNV hash of `Sinf` and `Cosf` over the same 2000000 pseudo-random bit
+patterns (776307 of them through the large-argument path) is `e7abfead807e0b1a`
+for every one of: x64 `/O2`, x86 `/O2`, x64 `/O2 /arch:AVX2` (FMA-capable
+codegen), x64 `/Od`, and even x86 `/arch:IA32`, which puts the whole thing on the
+x87 stack with 80-bit intermediates. That is the same table the CRT could not
+produce.
+
+### It is also more correct than the 32-bit CRT
+
+Found while checking the x86 build: Microsoft's 32-bit `sinf` / `cosf` do NOT do
+full-range argument reduction. Above the `0x4dc90fdb` threshold (`|x| ~ 2^28 *
+pi/2`) they return values that are not merely a last bit out, they are wrong -
+about a third of random float bit patterns are that large, and the x86 CRT
+disagreed with a 140-digit reference on all of them, by up to 2.0 in a function
+whose range is `[-1, 1]`. The vendored code agrees with the reference. The x64
+CRT does the reduction properly, which is why this is invisible until the 32-bit
+build runs.
+
+This is why the fuzz test only compares against the CRT below that threshold:
+above it the CRT is not a valid oracle on every target. The large-argument path
+is covered by exact pins instead (`1e20`, `FLT_MAX` and three of the arguments
+the x86 CRT gets wrong), each one checked against a 140-digit `Decimal`
+computation of the true value.
+
+### Why not a library
+
+`vcpkg` was checked first, per the project rule.
+
+- `sleef` is the obvious candidate and was rejected: its scalar entry points are
+  bound at LIBRARY build time to either the `purec` or the `purecfma` variant, so
+  the bits it returns depend on how the port was configured on the machine that
+  built it. Build-time dispatch between an FMA and a non-FMA kernel is the exact
+  failure mode being removed. It also pulls in a host-tool build for what is two
+  functions.
+- `fdlibm` is double-only, so a float result would come from rounding a double
+  result rather than from the float algorithm; its port fetches from
+  `android.googlesource.com` with `vcpkg_from_git` at build time, and its header
+  exports bare `sin` / `cos` names that collide with `<cmath>`.
+
+Roughly 200 lines of transcription with a pinned upstream and a licence notice
+was the smaller risk than a dependency whose bit-level answer is a build-time
+property.
+
+### Tests
+
+`tests/support/float_trig_tests.cpp` (`support_tests`, `ci` label):
+
+- `the deterministic sine and cosine hold their exact float bits` pins twelve
+  arguments to exact `std::uint32_t` bit patterns, including `24.4333344` (the
+  frame that failed CI), zero, `+/-1`, pi, an argument in each of the four
+  reduction bands, `1e20` and `FLT_MAX` (both go through `ReduceLarge`). A CRT
+  change on any machine cannot move a result without failing here.
+- `the deterministic sine and cosine track the platform library` fuzzes random
+  bit patterns below the large-argument threshold against `std::sin` /
+  `std::cos` and requires the absolute gap to stay within `4 * FLT_EPSILON`.
+  That is the check that catches a transcription error, which would be wrong by
+  a whole number rather than a last bit. It is an absolute gap and not an ulp
+  distance in integer bit space on purpose: bit distance is meaningless across a
+  sign change, and the tolerance has to hold on whatever CRT the runner has.
+
+`tests/game/preset_eval_tests.cpp` pins the other end,
+`the orbit position carries the same float bits on every machine`: the IIDX 10
+class course select `cube_x` transform at frame 732 must be exactly
+`[0xbecb3db6 0x3d91ea10 0x3fb33333]`. That test fails on the CRT and passes on
+`Support::Sinf`, which is how the fix was reproduced before it was made.
+
+### The tidy exemption
+
+`src/support/math/.clang-tidy` disables
+`cppcoreguidelines-pro-bounds-constant-array-index` for this directory only. The
+reduction indexes its working arrays by loop counters, which the check cannot
+accept and which restructuring would obscure; every other `src/` directory
+already has that check off through `src/.clang-tidy`, and `src/support` is the
+one that re-enables it. Nothing else is relaxed.

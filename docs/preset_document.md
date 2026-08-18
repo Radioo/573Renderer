@@ -641,6 +641,28 @@ that turns a document into per-frame work. It is pure with respect to the
 document, the option choices and one explicit `EvalState`; nothing else carries
 state between frames.
 
+Determinism here means BIT determinism, and across machines, not only across runs:
+the same document and the same choice must give the same float bits on a developer
+box and on a CI runner, because the golden fixture compares an exact hash of the
+printed pushes and because an export must be reproducible. Nothing in the
+evaluator reads a pointer value, iterates an unordered container, or depends on a
+hash seed - every container it walks is a `std::vector` in document order or a
+`std::map` in key order, and the RNG is the game's own `Preset::Ran3` with an
+explicit seed.
+
+The one thing that WAS machine dependent is the trigonometry. `sinf` and `cosf`
+are not exactly specified, and Microsoft's CRT does not return the same last bit
+on every machine, which broke the golden test on CI while it passed locally. The
+evaluator therefore calls `Support::Sinf` / `Support::Cosf`
+(`src/support/math/float_trig.h`) and never `std::sin` / `std::cos`, at all four
+call sites that can reach a push: the orbit position in `eval_models.cpp`, the
+`sine_deg` ease in `eval_tween.cpp`, and the emitter ring phase and scatter angle
+in `eval_particles.cpp`. Those are the only transcendental calls in
+`src/preset/eval/`; everything else is add, multiply, compare, `std::clamp`,
+`std::lround` and integer work, all of which IEEE 754 pins exactly. See
+`docs/support.md` for the implementation, its provenance and the evidence, and
+`docs/preset_golden.md` for the one re-recording it caused.
+
 `Load(document, lengths)` binds a document and the asset length table (per
 scene3d asset its `max_time`, per package2d animation its frame count) and
 resets. `RenderFrame(dt)` returns the frame's ordered `Push` list: the draws for

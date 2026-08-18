@@ -5,9 +5,9 @@
 #include "preset/doc/preset_enum_names.h"
 #include "preset/eval/eval_tween.h"
 #include "preset/eval/frame_state.h"
+#include "support/math/float_trig.h"
 
 #include <algorithm>
-#include <cmath>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -162,8 +162,8 @@ void ApplyModelMotion(const Doc::Clip& clip, const Doc::ModelMotionCmd& command,
 Vec3f OrbitPosition(const OrbitState& orbit, int frame) {
     const auto t = (float)frame;
     const float angle = t * orbit.rate;
-    return {orbit.center_x + (std::cos(angle) * orbit.radius),
-            orbit.center_y + (std::sin(angle) * orbit.radius),
+    return {orbit.center_x + (Support::Cosf(angle) * orbit.radius),
+            orbit.center_y + (Support::Sinf(angle) * orbit.radius),
             std::max(orbit.z_min, orbit.z_start - (t * orbit.z_per_frame))};
 }
 

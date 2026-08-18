@@ -170,8 +170,9 @@ when it does. 40 files, 2.7 MB in total, largest 628 KB
   recorder and is frozen into the committed files; the reader does not re-derive it.
 
 A push is canonicalised to one line of text, `Namespace::Call(arg, arg, ...)`.
-Floats use `std::to_chars`'s shortest round-tripping form, so the text is exact and
-platform independent; strings are quoted with `'`; `std::array<float, 3>` prints as
+Floats use `std::to_chars`'s shortest round-tripping form, so the text is an exact
+picture of the float BITS and the FORMATTING is platform independent (nothing in it
+is locale dependent); strings are quoted with `'`; `std::array<float, 3>` prints as
 `[x y z]`; the compound arguments (`proj[...]`, `light[...]`, `model[...]`,
 `sprite[...]`, `timing[...]`, `parts[...]`, `cell[...]`) are spelled out in
 `tests/game/preset_host_stubs.cpp`. The hash is over that canonical text, joined by
@@ -179,6 +180,50 @@ newlines, so it is stable across runs, compilers and platforms: nothing in it is
 pointer, an address, an unordered container order or a locale-dependent number.
 
 Determinism was verified by recording twice into a copy and diffing: byte identical.
+
+The formatting being platform independent is not the same as the VALUES being
+platform independent, and for one release they were not. Because the text is exact
+to the last bit, a value produced by `sinf` or `cosf` carried whichever last bit the
+machine's CRT happened to return, and Microsoft's is not the same on every machine:
+see the proof table in `docs/support.md`. The recording and the evaluator now both
+call `Support::Sinf` / `Support::Cosf`, which is deterministic by construction, so
+the fixture is a property of the document and not of the machine that ran it.
+
+## The one re-recording, and why
+
+The fixture was re-recorded once, on 2026-08-18, for the deterministic-math change
+and for nothing else. It is the case the rule at the top of this file allows: the
+recording changed because the OLD HOST's own arithmetic changed in the worktree, in
+exactly the way the evaluator's did, and not to make a comparison pass.
+
+The procedure below was followed as written, with the deterministic functions
+applied to the old host's six transcendental call sites in the worktree
+(`OrbitPosition`, the `Curve::Sine` ramp, `RingPhase` and the two scatter angles in
+`SpawnParticles`, all in `src/preset/preset_host.cpp` at `61d22b7`). It was run
+TWICE, and the first run is the evidence:
+
+1. With the worktree's `preset_host.cpp` left exactly as `61d22b7` has it, the
+   rebuilt recorder reproduced all 40 committed fixtures BYTE FOR BYTE. That is
+   what proves the rebuilt stubs and recorder are the ones that made the committed
+   files, so any later difference can only come from the arithmetic.
+2. With `Support::Sinf` / `Support::Cosf` patched in, 38 of the 40 fixtures came
+   back byte identical and 2 changed, by 5 frame hashes in total:
+
+| Fixture | Frames | Changed `hashes` |
+|---|---|---|
+| `iidx10-dan-select.json` | 1200 | 121, 732, 919, 1153 |
+| `iidx10-new-player.json` | 1200 | 121 |
+
+`preset`, `build`, `choice`, `frames`, `setup` and every `detail` push list are
+unchanged, and so is every entry of `hashes_no_transform` - which is the
+independent confirmation that the difference lives only in `SetModelTransform`
+lines, the only pushes that carry an orbit position. Both presets are the two that
+orbit a model; nothing else in the 40 calls `sinf` or `cosf` on a value that
+reaches a push. Three of the four dan-select frames were predicted before the
+re-record by sweeping the preset's 1211 orbit angles for a printed difference
+between this machine's CRT and the correctly rounded result (frames 732, 919,
+1153); frame 121 is the remaining case, where the vendored implementation rather
+than the CRT is the one that is a last bit off the correctly rounded value.
 
 ## The fixture is frozen, and how to re-record it
 
@@ -201,7 +246,12 @@ M2. So:
    repo (a scratch directory, never a tracked path).
 2. Copy today's `tests/game/preset_golden_format.h/.cpp` into the worktree
    unchanged, so the canonical push text, the frame hash and
-   `WithoutModelTransforms` have ONE definition on both sides.
+   `WithoutModelTransforms` have ONE definition on both sides. Copy today's
+   `src/support/math/float_trig.h/.cpp` in as well, add it to the worktree's
+   `r573_support` sources, and replace every `std::sin` / `std::cos` in the
+   worktree's `src/preset/preset_host.cpp` with `Support::Sinf` / `Support::Cosf`
+   (six call sites) - otherwise the recording is taken with the recording
+   machine's CRT and the fixture goes back to being machine dependent.
 3. Write `tests/game/preset_host_stubs.h/.cpp` in the worktree against the OLD
    host signatures: `Gc2dHost::Load(dir)`, `LoadParticles(dir)`,
    `DrawParticles(cells)` and `Scene3dHost::LoadWithSetup` with the argument text
@@ -229,12 +279,16 @@ M2. So:
 6. Run `build/preset_golden_record.exe <fixtures-dir>` with a scratch fixtures
    directory holding a copy of `asset_lengths.json` and an empty `golden/`. It
    needs no game install, no GPU and no window.
-7. Diff the result against the committed fixtures field by field. `preset`,
-   `build`, `choice`, `frames`, `setup`, `hashes` and `detail` MUST be identical:
-   they were, for all 40 fixtures, 62401 frame hashes and 10016 detail push lines,
-   when `hashes_no_transform` was added. If any of them differs, STOP: the
-   difference is in the recorder or the stubs, not in the game, and overwriting the
-   fixture would destroy the reference.
+7. Diff the result against the committed fixtures field by field, TWICE. Record
+   once with the worktree's `preset_host.cpp` exactly as `61d22b7` has it: all 40
+   files MUST come back byte identical, which is what proves the rebuilt recorder
+   and stubs are the ones that made the committed files. Then record again with
+   step 2's deterministic math patched in and diff that. Whatever the run,
+   `preset`, `build`, `choice`, `frames` and `setup` MUST be identical - they were
+   for all 40 fixtures, 62401 frame hashes and 10016 detail push lines, when
+   `hashes_no_transform` was added. If one of them differs, STOP: the difference is
+   in the recorder or the stubs, not in the game, and overwriting the fixture would
+   destroy the reference.
 8. Copy the files into `tests/game/fixtures/golden/` and remove the worktree with
    `git worktree remove`, so no worktree metadata or build output can reach
    `git status`.

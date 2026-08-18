@@ -339,6 +339,14 @@ three-layer per-directory config chain:
   take reference captures. Every other check applies there, including the function
   size and cognitive-complexity thresholds, which is why the transport row, the track
   header and the shortcut table are each split into three functions.
+- `src/support/math/.clang-tidy` subtracts
+  `cppcoreguidelines-pro-bounds-constant-array-index` for that directory alone.
+  It holds `float_trig.cpp`, the deterministic `Support::Sinf` / `Support::Cosf`
+  transcription of FreeBSD msun (docs/support.md, "Deterministic float
+  trigonometry"),
+  whose Payne-Hanek reduction indexes constant tables with computed indices by
+  design; every other `src/` directory already has that check off and
+  `src/support` is the one that re-enables it. Every other check applies there.
 - `clang-analyzer-optin.core.EnumCastOutOfRange` (an OPT-IN analyzer
   check) is subtracted at the ROOT config, not per-layer: it only ever
   fires on system-header patterns we cannot change - the D3D9 SDK's own

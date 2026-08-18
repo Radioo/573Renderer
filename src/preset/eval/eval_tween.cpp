@@ -4,10 +4,10 @@
 #include "preset/doc/preset_document.h"
 #include "preset/doc/preset_enum_names.h"
 #include "preset/eval/frame_state.h"
+#include "support/math/float_trig.h"
 
 #include <algorithm>
 #include <array>
-#include <cmath>
 #include <cstddef>
 #include <string_view>
 #include <variant>
@@ -82,7 +82,7 @@ float EaseFactor(const Doc::Key& key, int frame, int from_at, int to_at) {
     case Doc::Ease::SineDeg: {
         const int elapsed = std::clamp(frame - from_at, 0, span);
         const auto degrees = (float)elapsed * (float)key.rate_deg.value_or(0.0);
-        return std::sin(degrees * kDegrees);
+        return Support::Sinf(degrees * kDegrees);
     }
     case Doc::Ease::EaseIn: {
         const float t = NormalisedTime(frame, from_at, span);

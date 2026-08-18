@@ -50,7 +50,12 @@ add_library(r573_support STATIC
     src/support/log.cpp
     src/support/dll_loader.cpp
     src/support/env.cpp
+    src/support/math/float_trig.cpp
 )
+if(MSVC)
+    set_source_files_properties(src/support/math/float_trig.cpp
+        PROPERTIES COMPILE_OPTIONS "/fp:precise")
+endif()
 target_include_directories(r573_support PUBLIC src)
 target_link_libraries(r573_support PUBLIC tl::expected PRIVATE r573::warnings)
 
@@ -490,6 +495,7 @@ catch_discover_tests(state_tests DISCOVERY_MODE POST_BUILD PROPERTIES LABELS ci)
 
 add_executable(support_tests
     tests/support/support_tests.cpp
+    tests/support/float_trig_tests.cpp
 )
 target_link_libraries(support_tests PRIVATE Catch2::Catch2WithMain r573_support r573::warnings)
 catch_discover_tests(support_tests DISCOVERY_MODE POST_BUILD PROPERTIES LABELS ci)

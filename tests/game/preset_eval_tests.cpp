@@ -14,8 +14,11 @@
 #include "preset/preset_rng.h"
 
 #include <algorithm>
+#include <array>
+#include <bit>
 #include <cmath>
 #include <cstddef>
+#include <cstdint>
 #include <memory>
 #include <optional>
 #include <string>
@@ -390,6 +393,21 @@ TEST_CASE("the intro speed keeps writing until the countdown ramp takes over") {
     REQUIRE(speed(22) == 0.5F);
     REQUIRE(speed(1200) == 0.5F);
     REQUIRE(speed(1201) == 0.5F + 0.0041666667F);
+}
+
+TEST_CASE("the orbit position carries the same float bits on every machine") {
+    PE::Evaluator evaluator;
+    evaluator.Load(DocumentFor("iidx10-dan-select"), Lengths());
+    std::array<float, 3> orbit{};
+    for (int frame = 0; frame <= 732; frame++) {
+        for (const PE::Push& push : evaluator.RenderFrame(kFrameSeconds)) {
+            if (push.call != PE::PushCall::SetModelTransform || push.name != "cube_x") continue;
+            orbit = push.vec_a;
+        }
+    }
+    CHECK(std::bit_cast<std::uint32_t>(orbit[0]) == 0xbecb3db6U);
+    CHECK(std::bit_cast<std::uint32_t>(orbit[1]) == 0x3d91ea10U);
+    CHECK(std::bit_cast<std::uint32_t>(orbit[2]) == 0x3fb33333U);
 }
 
 TEST_CASE("the game's subtractive generator reproduces its own stream") {
