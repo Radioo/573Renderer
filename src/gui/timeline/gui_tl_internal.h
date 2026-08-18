@@ -2,6 +2,7 @@
 
 #include "editor/preset_editor_state.h"
 #include "editor/timeline_drag.h"
+#include "editor/timeline_lanes.h"
 #include "imgui.h"
 #include "preset/doc/preset_document.h"
 #include "preset/doc/preset_enum_names.h"
@@ -27,9 +28,6 @@ struct ClipRect {
 };
 
 inline constexpr float kRulerH = 34.0F;
-inline constexpr float kTrackH = 26.0F;
-inline constexpr float kSubLaneH = 16.0F;
-inline constexpr float kClipH = 22.0F;
 inline constexpr float kScrollBarH = 12.0F;
 inline constexpr float kDashPitch = 8.0F;
 inline constexpr float kDashLength = 4.0F;
@@ -77,6 +75,8 @@ const char* KindBadge(Preset::Doc::TrackKind kind);
 std::string Ellipsized(const std::string& text, float width);
 
 float ToggleSide();
+
+Editor::LaneMetrics LaneSizes();
 
 float RowHeight();
 

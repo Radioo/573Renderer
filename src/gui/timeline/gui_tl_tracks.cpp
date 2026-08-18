@@ -2,6 +2,7 @@
 
 #include "editor/preset_editor_state.h"
 #include "editor/timeline_edits.h"
+#include "editor/timeline_lanes.h"
 #include "imgui.h"
 #include "preset/doc/preset_document.h"
 
@@ -191,8 +192,12 @@ float ToggleSide() {
     return std::max(ImGui::GetTextLineHeight() + (2.0F * pad.y), glyph + (2.0F * pad.x));
 }
 
+Editor::LaneMetrics LaneSizes() {
+    return Editor::LaneMetricsFor(ImGui::GetTextLineHeight(), ImGui::GetStyle().FramePadding.y);
+}
+
 float RowHeight() {
-    return std::max(kTrackH, ToggleSide() + 4.0F);
+    return std::max(LaneSizes().row, ToggleSide() + 4.0F);
 }
 
 void DrawTrackHeader(Ctx& ctx, const Doc::Track& track, float y, float height) {

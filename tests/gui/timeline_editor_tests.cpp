@@ -3,6 +3,7 @@
 #include "editor/export_range.h"
 #include "editor/preset_editor_state.h"
 #include "editor/timeline_edits.h"
+#include "editor/timeline_lanes.h"
 #include "editor/timeline_view.h"
 #include "imgui.h"
 #include "imgui_internal.h"
@@ -119,6 +120,32 @@ Doc::Document MakeLaneDocument() {
                                        {Modifier("clip_camera_tween", Doc::CameraTween{})}));
     document.tracks.push_back(
         OneTrack("fx", Doc::TrackKind::Fx, {Modifier("clip_fx", Doc::EmitterCmd{})}));
+    return document;
+}
+
+Doc::Document MakeSubLaneDocument() {
+    Doc::Document document = MakeDocument();
+    document.tracks.clear();
+    Doc::Clip sprite;
+    sprite.id = "bg_sky_animate";
+    sprite.start = 0;
+    sprite.end = 400;
+    sprite.command = Doc::SpriteAnimate{.asset = "scene", .animation = "BG_SKY", .priority = 30};
+    document.tracks.push_back(OneTrack(
+        "bg_sky", Doc::TrackKind::Sprite,
+        {std::move(sprite), Modifier("bg_sky_scroll", Doc::SpriteScroll{.scroll_x = 1.0,
+                                                                        .scroll_wrap = 640.0,
+                                                                        .scroll_offset = 0.0})}));
+
+    Doc::Clip keyed = Draw("core_draw", 0, 400, "core");
+    keyed.keys.push_back(Doc::Key{.at = 0});
+    keyed.keys.push_back(Doc::Key{.at = 200});
+    Doc::Clip motion = Modifier("core_motion", Doc::ModelMotionCmd{.spin_kick = 4.0});
+    motion.end = 400;
+    motion.keys.push_back(Doc::Key{.at = 0});
+    motion.keys.push_back(Doc::Key{.at = 300});
+    document.tracks.push_back(
+        OneTrack("core", Doc::TrackKind::Model, {std::move(keyed), std::move(motion)}));
     return document;
 }
 
@@ -403,6 +430,40 @@ TEST_CASE("the zoom slider and fit button drive the view", "[gui][timeline][edit
     CHECK(Editor::Global().GetView().px_per_frame < 2.0);
     CHECK(Editor::Global().GetView().px_per_frame > Editor::kZoomMin);
     CHECK(Editor::Global().GetView().scroll == 0.0);
+    Editor::Global().Close();
+}
+
+TEST_CASE("every clip bar holds its whole label, sub-lanes included", "[gui][timeline][editor]") {
+    GuiTest::Harness harness;
+    OpenDocument(MakeSubLaneDocument(), 0);
+
+    ImGuiTest* test = harness.NewTest("tl_label_fits");
+    test->TestFunc = [](ImGuiTestContext* ctx) {
+        FocusEditor(ctx);
+        const float text = ImGui::GetTextLineHeight();
+        const float pad = ImGui::GetStyle().FramePadding.y;
+        int checked = 0;
+        for (const Doc::Track& track : Editor::Global().Document().tracks) {
+            const ImGuiTestItemInfo head = ctx->ItemInfo(("###tl_head_" + track.id).c_str());
+            const ImGuiTestItemInfo lane = ctx->ItemInfo(("###tl_lane_" + track.id).c_str());
+            IM_CHECK_NE(head.ID, 0U);
+            IM_CHECK_EQ(head.RectFull.GetHeight(), lane.RectFull.GetHeight());
+
+            for (const Doc::Clip& clip : track.clips) {
+                const ImGuiTestItemInfo bar = ctx->ItemInfo(("###tl_clip_" + clip.id).c_str());
+                IM_CHECK_NE(bar.ID, 0U);
+                const float height = bar.RectFull.GetHeight();
+                IM_CHECK_GE(height, text + (2.0F * pad));
+                const float label =
+                    Editor::LaneLabelY(bar.RectFull.Min.y, height, text, !clip.keys.empty());
+                IM_CHECK_GE(label, bar.RectFull.Min.y);
+                IM_CHECK_LE(label + text, bar.RectFull.Max.y);
+                checked++;
+            }
+        }
+        IM_CHECK_EQ(checked, 4);
+    };
+    harness.Run(test);
     Editor::Global().Close();
 }
 

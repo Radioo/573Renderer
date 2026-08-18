@@ -223,6 +223,27 @@ TEST_CASE("a track grows a sub-lane only when a modifier sits over a primary", "
     CHECK(Editor::LaneOf(mixed, mixed.clips[2]) == 2);
 }
 
+TEST_CASE("every lane is tall enough for the clip label at any font size", "[editor][lanes]") {
+    for (const float text : {9.0F, 13.0F, 16.0F, 21.0F, 34.0F}) {
+        for (const float pad : {0.0F, 3.0F, 6.0F}) {
+            const Editor::LaneMetrics metrics = Editor::LaneMetricsFor(text, pad);
+            const float wanted = text + (2.0F * pad);
+            CHECK(metrics.sub_clip >= wanted);
+            CHECK(metrics.clip >= wanted);
+            CHECK(metrics.sub_lane > metrics.sub_clip);
+            CHECK(metrics.row >= metrics.clip);
+
+            for (const bool keyed : {false, true}) {
+                for (const float bar : {metrics.clip, metrics.sub_clip}) {
+                    const float y = Editor::LaneLabelY(100.0F, bar, text, keyed);
+                    CHECK(y >= 100.0F);
+                    CHECK(y + text <= 100.0F + bar);
+                }
+            }
+        }
+    }
+}
+
 TEST_CASE("the lanes never scroll past the last track", "[editor][view]") {
     CHECK(Editor::ClampTrackScroll(400.0F, 300.0F, 180.0F) == 120.0F);
     CHECK(Editor::ClampTrackScroll(-30.0F, 300.0F, 180.0F) == 0.0F);

@@ -33,7 +33,6 @@ constexpr ImU32 kProblemError = IM_COL32(232, 96, 88, 255);
 constexpr ImU32 kProblemWarning = IM_COL32(232, 176, 72, 255);
 constexpr float kKeyInset = 5.0F;
 constexpr float kKeyHalf = 3.0F;
-constexpr float kLabelDrop = 6.0F;
 
 struct Box {
     float x0 = 0.0F;
@@ -138,10 +137,11 @@ void KeyItems(Ctx& ctx, const Doc::Track& track, const Doc::Clip& clip, const Bo
 Box ClipBox(const Ctx& ctx, const Doc::Track& track, const Doc::Clip& clip, float y) {
     const int lane = Editor::LaneOf(track, clip);
     const float row = RowHeight();
+    const Editor::LaneMetrics metrics = LaneSizes();
     Box box;
-    box.y0 =
-        lane == 0 ? y + ((row - kClipH) * 0.5F) : y + row + ((float)(lane - 1) * kSubLaneH) + 1.0F;
-    box.y1 = box.y0 + (lane == 0 ? kClipH : kSubLaneH - 2.0F);
+    box.y0 = lane == 0 ? y + ((row - metrics.clip) * 0.5F)
+                       : y + row + ((float)(lane - 1) * metrics.sub_lane) + 1.0F;
+    box.y1 = box.y0 + (lane == 0 ? metrics.clip : metrics.sub_clip);
     box.x0 = FrameToX(ctx, clip.start);
     box.x1 =
         Editor::IsEvent(clip) ? box.x0 + kEventW : FrameToX(ctx, Editor::ClipEnd(clip, ctx.length));
@@ -180,8 +180,10 @@ void DrawBody(const Ctx& ctx, const Doc::Track& track, const Doc::Clip& clip, co
     const bool keyed = !clip.keys.empty();
     const std::string label =
         Ellipsized(Editor::ClipSummary(clip, track.target), visible.x1 - visible.x0 - 8.0F);
-    ctx.draw->AddText(ImVec2(visible.x0 + 5.0F, box.y0 + (keyed ? kLabelDrop : 3.0F)),
-                      ImGui::GetColorU32(ImGuiCol_WindowBg), label.c_str());
+    ctx.draw->AddText(
+        ImVec2(visible.x0 + 5.0F,
+               Editor::LaneLabelY(box.y0, box.y1 - box.y0, ImGui::GetTextLineHeight(), keyed)),
+        ImGui::GetColorU32(ImGuiCol_WindowBg), label.c_str());
 
     if (!ctx.editor->IsSelected(clip.id)) return;
     ctx.draw->AddRect(ImVec2(visible.x0, box.y0), ImVec2(visible.x1, box.y1),

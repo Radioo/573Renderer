@@ -310,12 +310,37 @@ last track's bottom edge lands exactly on the bottom of that region.
 
 Every track row is `TrackHeight(track)` tall, and the header column and the lane use that
 same function, so the two can never drift; `###tl_head_<id>` covers the whole row height for
-that reason. A track grows a 16 px SUB-LANE only when it holds a PRIMARY clip AND modifier
+that reason. A track grows a SUB-LANE only when it holds a PRIMARY clip AND modifier
 clips (`Editor::LaneCount` / `Editor::LaneOf` in `src/editor/timeline_lanes.cpp`, unit
 tested): one sub-lane per distinct modifier command type, the primary on top. A track whose
 clips are all one family - only draws, only tweens, only emitters - is a single lane and its
-clips fill it at the full 22 px, which is why a camera.tween track and an fx track are the
-same height as a plain model track.
+clips fill it at the full main-lane height, which is why a camera.tween track and an fx track
+are the same height as a plain model track.
+
+Every one of those heights comes from `Editor::LaneMetricsFor(text height, FramePadding.y)`
+(`src/editor/timeline_lanes.cpp`), a PURE function the renderer and the tests both call, and
+it is derived from the FONT, not fixed: `clip` and `sub_clip` are each at least
+`GetTextLineHeight() + 2 * FramePadding.y` - the same rule `ToggleSide` uses for the header
+toggles - over floors of 22 px and 14 px, `sub_lane` is `sub_clip` plus a 2 px gap and `row`
+is `clip` plus 4 px over a 26 px floor. `RowHeight` then takes the larger of that row and
+`ToggleSide() + 4`, so the header controls and the label rule can each only make the row
+taller. Bar heights were HARDCODED at 22 px and 14 px until 2026-08-18, and a 14 px modifier
+sub-lane is shorter than a 16 px line of Segoe UI: the label was drawn in `ImGuiCol_WindowBg`
+over the bar, so the part hanging below the bar landed dark on dark and the user saw
+"scroll x 1/f, wrap 640" with its bottom sheared off. A font or padding change would have
+re-broken it, which is why the rule is metric-derived rather than a bigger constant. The
+modifier lane stays visually secondary through its command COLOUR and its own clip range, not
+through a height too short to read.
+
+The label's own Y is `Editor::LaneLabelY(bar top, bar height, text height, keyed)` from the
+same file: a keyed clip drops the label below the key diamonds by up to 6 px, an unkeyed one
+centres it, and both clamp to the room the bar actually has, so the text is inside the bar by
+construction. `tl_label_fits` (`tests/gui/timeline_editor_tests.cpp`) walks EVERY clip of a
+document with `sprite.animate` + `sprite.scroll` and `model.draw` + `model.motion` sub-lanes
+and asserts the `###tl_clip_<id>` rect is at least `text + 2 * padding` tall and that
+`LaneLabelY` + text fits inside it, plus that each `###tl_head_<id>` is still exactly as tall
+as its `###tl_lane_<id>`; the pure counterpart sweeps text heights 9..34 px against paddings
+0..6 px.
 
 The header row is laid out from its RIGHT edge, so the controls can never be squeezed out:
 the M / S / L toggles are a group flush against the column edge, each a SQUARE of
@@ -445,8 +470,9 @@ comparing each tail item's clipped rect with its full rect.
 | curve editor | `###tl_curve_close`, `###tl_curve_channel`, `###tl_curve_ease_<ease name>`, `###tl_curve_key_<index>`, `###tl_curve_handle_<0\|1>` | the curve editor takes over the lane area, see below |
 | range scroll bar | `###tl_scroll` | drag to pan |
 
-Clip bars are 22 px in the row's main lane, centred in it, and 16 px in a modifier sub-lane
-(sub-lane rule above). The bar text is `Editor::ClipSummary`
+Clip bars fill `LaneMetrics::clip` in the row's main lane, centred in it, and
+`LaneMetrics::sub_clip` in a modifier sub-lane (sub-lane rule above). The bar text is
+`Editor::ClipSummary`
 shortened to the bar width with an ellipsis. The bar is filled with the command
 colour (the plan's twelve-colour legend, `gui_tl_colors.cpp`, with separate dark and light
 values chosen from `ImGuiCol_WindowBg` luminance - the only colours in the shell not derived

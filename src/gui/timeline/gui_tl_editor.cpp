@@ -158,7 +158,7 @@ void ApplyEdit(Ctx& ctx, const Editor::Edit& edit) {
 }
 
 float TrackHeight(const Doc::Track& track) {
-    return RowHeight() + (kSubLaneH * (float)(Editor::LaneCount(track) - 1));
+    return RowHeight() + (LaneSizes().sub_lane * (float)(Editor::LaneCount(track) - 1));
 }
 
 bool Active() {

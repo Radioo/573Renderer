@@ -13,6 +13,13 @@ namespace Doc = Preset::Doc;
 
 namespace {
 
+constexpr float kRowMinH = 26.0F;
+constexpr float kRowPad = 4.0F;
+constexpr float kClipMinH = 22.0F;
+constexpr float kSubClipMinH = 14.0F;
+constexpr float kSubLaneGap = 2.0F;
+constexpr float kKeyBandH = 6.0F;
+
 bool IsModifier(const Doc::Clip& clip) {
     return Doc::TraitsFor(Doc::TypeOf(clip.command)).family == Doc::Family::None;
 }
@@ -33,6 +40,21 @@ std::vector<Doc::CommandType> ModifierTypes(const Doc::Track& track) {
     return types;
 }
 
+}
+
+LaneMetrics LaneMetricsFor(float text_height, float pad_y) {
+    const float label = text_height + (2.0F * pad_y);
+    LaneMetrics metrics;
+    metrics.clip = std::max(kClipMinH, label);
+    metrics.sub_clip = std::max(kSubClipMinH, label);
+    metrics.sub_lane = metrics.sub_clip + kSubLaneGap;
+    metrics.row = std::max(kRowMinH, metrics.clip + kRowPad);
+    return metrics;
+}
+
+float LaneLabelY(float bar_y0, float bar_height, float text_height, bool keyed) {
+    const float room = std::max(0.0F, bar_height - text_height);
+    return bar_y0 + (keyed ? std::min(kKeyBandH, room) : room * 0.5F);
 }
 
 int LaneCount(const Doc::Track& track) {

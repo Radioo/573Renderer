@@ -210,7 +210,7 @@ void HandleWheel(Ctx& ctx) {
 
     Editor::View& view = ctx.editor->MutView();
     if (io.KeyShift) {
-        view.track_scroll -= io.MouseWheel * kTrackH;
+        view.track_scroll -= io.MouseWheel * RowHeight();
         return;
     }
     if (io.KeyCtrl) {
