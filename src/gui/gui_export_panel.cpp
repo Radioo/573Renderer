@@ -1,5 +1,7 @@
 #include "gui_export_panel.h"
 #include "../native_dialog.h"
+#include "editor/export_range.h"
+#include "editor/preset_editor_state.h"
 #include "../export.h"
 #include "../export_capture.h"
 #include "../state/app_state.h"
@@ -41,11 +43,59 @@ int g_blend_frames = kDefaults.blend_frames;
 int g_format_idx = kDefaults.format;
 bool g_prefer_hw = kDefaults.prefer_hardware;
 
+bool g_use_doc_range = true;
+
 int g_out_w = kDefaults.width;
 int g_out_h = kDefaults.height;
 
 bool g_bg_transparent = kDefaults.bg_transparent;
 std::array<float, 3> g_bg_rgb = {kDefaults.bg_r, kDefaults.bg_g, kDefaults.bg_b};
+
+struct DocumentPlan {
+    bool loaded = false;
+    bool range_active = false;
+    int start = 0;
+    int frames = 0;
+    int fps = 60;
+};
+
+DocumentPlan CurrentDocumentPlan() {
+    DocumentPlan plan;
+    const App::PresetStatus status = App::Global().GetPresetStatus();
+    const Editor::State& editor = Editor::Global();
+    if (status.id.empty() || !editor.Loaded() || editor.Document().id != status.id) return plan;
+    plan.loaded = true;
+    plan.fps = std::max(1, status.fps);
+    const Editor::ExportRange range =
+        Editor::ClampRange(editor.GetView().export_range, status.length);
+    plan.range_active = range.active;
+    plan.start = range.active ? range.start : 0;
+    plan.frames = Editor::RangeFrames(range, status.length);
+    return plan;
+}
+
+void ApplyDocumentDefaults() {
+    const DocumentPlan plan = CurrentDocumentPlan();
+    if (!plan.loaded) return;
+    g_fps = plan.fps;
+    g_use_doc_range = true;
+}
+
+void DrawDocumentRange(const DocumentPlan& plan) {
+    if (!plan.loaded) return;
+    ImGui::Checkbox("Document range##exp_preset_range", &g_use_doc_range);
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("Export the range the ruler shows (Shift+drag on the ruler sets it),\n"
+                          "else the whole document. Turn it off to use the frame limit above.");
+    }
+    ImGui::SameLine();
+    if (plan.range_active) {
+        ImGui::TextDisabled("frames %d..%d (%d frames)", plan.start, plan.start + plan.frames - 1,
+                            plan.frames);
+    } else {
+        ImGui::TextDisabled("whole document (%d frames)", plan.frames);
+    }
+}
 
 void MaybeRegenerateStem(App::State& state) {
     std::string active = state.ActiveIfs();
@@ -126,6 +176,12 @@ void DrawFpsQualitySliders() {
                           "(matches the internal tick rate, so no\n"
                           "frames are skipped); drop to 30/60 for a\n"
                           "smaller file.");
+    }
+    const DocumentPlan plan = CurrentDocumentPlan();
+    if (plan.loaded && !Editor::FpsRatioAllowed(plan.fps, g_fps)) {
+        ImGui::SameLine();
+        ImGui::TextColored(ImVec4(1.0F, 0.45F, 0.45F, 1.0F),
+                           "not an integer ratio of the document's %d fps", plan.fps);
     }
     ImGui::SameLine();
     ImGui::SetNextItemWidth(-FLT_MIN);
@@ -564,7 +620,13 @@ void PostStartRequest(App::State& state, MediaSink::Format current_format, bool 
     r.fps = g_fps;
     r.quality = g_quality;
     r.keyframe_interval = g_keyframe_interval;
-    r.max_frames = g_limit_frames ? g_max_frames : 0;
+    const DocumentPlan plan = CurrentDocumentPlan();
+    if (plan.loaded && g_use_doc_range) {
+        r.start_frame = plan.start;
+        r.max_frames = plan.frames;
+    } else {
+        r.max_frames = g_limit_frames ? g_max_frames : 0;
+    }
     r.loop_count = g_loop_count;
     r.blend_loop = g_blend_loop;
     r.blend_frames = g_blend_frames;
@@ -594,7 +656,10 @@ void DrawRevealButton(const std::string& path) {
 
 void DrawStartAndStatus(App::State& state, const App::ExportState& ex, bool busy,
                         MediaSink::Format current_format, bool hw_available) {
+    const DocumentPlan plan = CurrentDocumentPlan();
+    const bool ratio_ok = !plan.loaded || Editor::FpsRatioAllowed(plan.fps, g_fps);
     if (!busy) {
+        ImGui::BeginDisabled(!ratio_ok);
         if (ImGui::Button("Start export", ImVec2(120, 0))) {
             const bool format_can_use_hw = (current_format == MediaSink::Format::AVIF ||
                                             current_format == MediaSink::Format::WebM_AV1 ||
@@ -602,6 +667,12 @@ void DrawStartAndStatus(App::State& state, const App::ExportState& ex, bool busy
             const bool hw_applies = hw_available && format_can_use_hw;
             PostStartRequest(state, current_format, hw_applies);
             ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndDisabled();
+        if (!ratio_ok && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+            ImGui::SetTooltip("The export fps must be an integer multiple or divisor of the "
+                              "document's %d fps, else the screen would play at the wrong speed.",
+                              plan.fps);
         }
     } else {
         if (ImGui::Button("Cancel", ImVec2(120, 0))) {
@@ -661,6 +732,7 @@ void RenderModal() {
     }
     if (g_open_requested) {
         ImGui::OpenPopup("Export");
+        ApplyDocumentDefaults();
         g_open_requested = false;
     }
 
@@ -690,6 +762,7 @@ void RenderModal() {
     bool close_for_pick = false;
     if (ImGui::CollapsingHeader("Advanced")) {
         DrawKeyframeIntervalControl(current_format);
+        DrawDocumentRange(CurrentDocumentPlan());
         DrawFrameLimitControls(caps);
         DrawLoopControls(caps);
         close_for_pick = DrawCrop(state);

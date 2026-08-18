@@ -1,5 +1,7 @@
 #include "gui_test_harness.h"
 
+#include "editor/export_range.h"
+#include "editor/preset_editor_state.h"
 #include "imgui.h"
 #include "imgui_internal.h"
 #include "imgui_te_context.h"
@@ -7,6 +9,7 @@
 #include "media/media_format.h"
 #include "state/app_state.h"
 #include "state/commands.h"
+#include "preset/doc/preset_document.h"
 #include "state/live_controls.h"
 #include "state/telemetry.h"
 
@@ -14,6 +17,7 @@
 
 #include <optional>
 #include <string>
+#include <utility>
 #include <variant>
 
 namespace {
@@ -35,6 +39,22 @@ void OpenModal(ImGuiTestContext* ctx) {
 void OpenAdvanced(ImGuiTestContext* ctx) {
     ImGuiTestItemInfo const info = ctx->ItemInfo("Advanced");
     if ((info.StatusFlags & ImGuiItemStatusFlags_Opened) == 0) ctx->ItemClick("Advanced");
+}
+
+bool AnyStartExport() {
+    bool found = false;
+    while (const std::optional<App::Command> command = App::Global().TakeCommand()) {
+        if (std::get_if<App::Cmd::StartExport>(&*command) != nullptr) found = true;
+    }
+    return found;
+}
+
+const App::Cmd::StartExport* FindStart(std::optional<App::Command>& slot) {
+    while ((slot = App::Global().TakeCommand()).has_value()) {
+        const auto* start = std::get_if<App::Cmd::StartExport>(&*slot);
+        if (start != nullptr) return start;
+    }
+    return nullptr;
 }
 
 const App::Cmd::StartExport* TakeStart(std::optional<App::Command>& slot) {
@@ -585,4 +605,95 @@ TEST_CASE("export sizes follow the stretched frame, not the internal render size
     const auto* start = TakeStart(slot);
     REQUIRE(start != nullptr);
     App::Global().SetStretchWide(false);
+}
+
+TEST_CASE("export modal takes its range and fps from the loaded preset document",
+          "[gui][export][preset]") {
+    GuiTest::Harness harness;
+    GuiTest::EnterReadyView("scene3d", "iidx11");
+    App::Global().SetRenderSize(640, 480);
+    App::Global().SetStatus([] {
+        App::Status status = App::Global().GetStatus();
+        status.scene_loaded = true;
+        return status;
+    }());
+
+    Preset::Doc::Document document;
+    document.id = "export-range";
+    document.name = "Export range";
+    document.build = "iidx11";
+    document.fps = 30;
+    document.length = 600;
+    Editor::Global().LoadDocument(document);
+    Editor::Global().MutView().export_range =
+        Editor::ExportRange{.start = 100, .end = 400, .active = true};
+
+    App::PresetStatus preset;
+    preset.id = "export-range";
+    preset.fps = 30;
+    preset.length = 600;
+    App::Global().SetPresetStatus(std::move(preset));
+
+    while (App::Global().TakeCommand().has_value()) {
+    }
+
+    ImGuiTest* test = harness.NewTest("export_preset_range");
+    test->TestFunc = [](ImGuiTestContext* ctx) {
+        OpenModal(ctx);
+        OpenAdvanced(ctx);
+        IM_CHECK(ctx->ItemExists("Document range##exp_preset_range"));
+        ctx->ItemClick("Start export");
+    };
+    harness.Run(test);
+
+    std::optional<App::Command> slot;
+    const auto* start = FindStart(slot);
+    REQUIRE(start != nullptr);
+    CHECK(start->req.fps == 30);
+    CHECK(start->req.start_frame == 100);
+    CHECK(start->req.max_frames == 300);
+    Editor::Global().Close();
+}
+
+TEST_CASE("export modal refuses an fps that is not an integer ratio of the document fps",
+          "[gui][export][preset]") {
+    GuiTest::Harness harness;
+    GuiTest::EnterReadyView("scene3d", "iidx11");
+    App::Global().SetStatus([] {
+        App::Status status = App::Global().GetStatus();
+        status.scene_loaded = true;
+        return status;
+    }());
+
+    Preset::Doc::Document document;
+    document.id = "export-fps";
+    document.name = "Export fps";
+    document.build = "iidx11";
+    document.fps = 60;
+    document.length = 600;
+    Editor::Global().LoadDocument(document);
+
+    App::PresetStatus preset;
+    preset.id = "export-fps";
+    preset.fps = 60;
+    preset.length = 600;
+    App::Global().SetPresetStatus(std::move(preset));
+
+    while (App::Global().TakeCommand().has_value()) {
+    }
+
+    ImGuiTest* test = harness.NewTest("export_preset_fps_ratio");
+    test->TestFunc = [](ImGuiTestContext* ctx) {
+        OpenModal(ctx);
+        ctx->ItemInputValue("fps##exp_fps", 45);
+        ctx->Yield(2);
+        const std::string text = GuiTest::CaptureFrameText(ctx);
+        IM_CHECK(text.find("integer") != std::string::npos);
+        ctx->ItemClick("Start export");
+        ctx->Yield(2);
+    };
+    harness.Run(test);
+
+    CHECK_FALSE(AnyStartExport());
+    Editor::Global().Close();
 }

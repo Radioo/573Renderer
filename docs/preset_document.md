@@ -9,11 +9,12 @@ serialization rules and the validation rules.
 Status: milestones M1 to M3 of `docs/scene_preset_editor_plan.html` are in the
 tree. Documents now drive the app end to end: the host evaluates a document
 (`preset_host.cpp` on `src/preset/eval/`), the 18 shipped screens ARE documents
-built in code (`src/preset/defaults/`, below), and the Screens panel and the
+built in code (`src/preset/defaults/`, below), and the preset library and the
 preset CLI resolve them through the registry. What is left of the old world is the
 `Preset::Scene` tables plus `preset_convert.cpp`, kept only so the tests can prove
 the defaults still equal the converter output; nothing in the app reads a table
-any more. The timeline editor (M4 onward) is not here yet.
+any more. The timeline editor (M4 to M7) is in the tree: the library below is how a
+document is picked, created, saved and validated (docs/gui.md 3.6).
 
 The legacy behaviour of the old host is a committed fixture, so the evaluator was
 built against a frozen reference instead of against a host that had to survive the
@@ -207,7 +208,8 @@ offset is not re-applied: a scroll clip that abuts another on the same target
 scrolls on, exactly as the sprite frame does. With `scroll_wrap` at or below 0
 there is no scroll and the displacement is 0, offset included. The converted
 defaults all leave `scroll_offset` at 0, so the golden recording is unaffected;
-the field replaces the Screens panel's live "scroll offset" slider.
+the field replaces the old Screens panel's live "scroll offset" slider; the Frame
+inspector tab shows the resolved offset read-only.
 
 ### emitter (fx track, modifier)
 
@@ -230,6 +232,14 @@ the field replaces the Screens panel's live "scroll offset" slider.
 The ring phase is a function of the ABSOLUTE document frame, not the clip-relative
 one, because the game rotates the whole ring on its own frame counter. Life is
 clamped to at least 1 by the evaluator.
+
+`RingReach` and `RingPhase` are declared in `eval_particles.h` rather than kept
+private to the spawner, because the Frame tab reports both per emitter and must not
+recompute them from the parameters itself (docs/gui.md 3.7). Every spawned
+`Particle` records the id of the clip that made it in `Particle::emitter`, which is
+what lets that readout count one emitter's live particles when several are running;
+nothing in the evaluation depends on the field, so the RNG stream and the golden
+fixture are untouched.
 
 ### model.draw (model track, primary)
 
@@ -392,7 +402,7 @@ an option because gates, `--preset-option` and the states gate address them.
 starts at `frames` and drops by `step` every frame, so the blend lasts
 `ceil(frames / step)` frames and the blend factor is `1 - count / frames`. The
 game's own step was a hardcoded 4 against a count of 100, which is why the length
-reads in quarter frames (`docs/preset_params.md`, "States are chosen, not
+reads in quarter frames (`docs/preset_states.md`, "States are chosen, not
 edited"); the document makes the step authorable per option instead of leaving it
 a runtime-only parameter, and every converted default carries the game's 4.
 `spin_kick` is the game's per-choice-change kick, re-armed to `max(1, spin_kick)`
@@ -750,10 +760,12 @@ own length come from the assets:
    `AssetLengths` from that index, and bind the document again with it. The
    converter is re-run on the `Scene` path so `length` uses the real numbers.
 
-`progress` is a `ProgressFn(stage, fraction)`. The Screens panel wraps the call in
-`BeginLoad` / `UpdateLoadStage` / `EndLoad`, so the loading overlay names the asset
-being loaded and climbs a determinate bar; passing no callback is silent, which is
-what the CLI does.
+`progress` is a `ProgressFn(stage, fraction)`. The GUI never calls it directly: the
+library posts `PresetCmd::LoadDocument{document, game_dir}` and
+`Backend::ApplyPresetCommand` runs the load on the render thread with a
+`Backend::LoadReporter` wired to `BeginLoad` / `UpdateLoadStage` / `EndLoad`, so the
+loading overlay names the asset being loaded and climbs a determinate bar. Passing no
+callback is silent, which is what the CLI does.
 
 ### The published snapshot
 
@@ -780,9 +792,19 @@ never calls any of them itself: it posts the matching `PresetCmd` through
 `App::State`, and `Backend::ApplyPresetCommand` (`src/backend/preset_command_apply.cpp`)
 is the one place that turns a queued payload into these calls on the render thread
 (docs/gui.md 3.5, gate `check_host_isolation.py`). `PresetCmd::PreviewLayer` takes the
-same route and reaches `PresetHost::RequestPreview`. `Restart()` is `Seek(0)`; there is
-no second clock left to desynchronise, because the old "time remain" slider and the
-`SetCountdown` entry point behind it are gone with the Parameters pane.
+same route and reaches `PresetHost::RequestPreview`. There is no `Restart()` any more:
+everything that used to restart the screen is `Seek(0)`, and there is no second clock
+left to desynchronise, because the old "time remain" slider and the `SetCountdown`
+entry point behind it are gone with the Parameters pane.
+
+`GetFrameReport()` returns the last report the host BUILT, and the host builds one
+only while `SetFrameReportWanted(true)` is in force. The Frame tab
+(`gui_tl_frame_inspector.cpp`) calls `App::State::RequestPresetFrameReport()` on every
+GUI frame it draws; `Scene3dBackend::AdvanceFrame` consumes that request through
+`TakePresetFrameReportRequest()` (a countdown of `kPresetReportTtlFrames` render frames,
+so the request survives the one-frame gap between the two threads) and hands it to the
+host. With the tab closed the per-frame `Publish()` writes only `Status`, so none of the
+report's per-value strings are allocated on a frame nobody reads them on.
 
 `SetOption` re-pushes the whole rebind list the way `Seek` does, because a choice
 change can flip a `when` gate and therefore a model's VISIBILITY, blend, scale and
@@ -925,7 +947,9 @@ file from anywhere and copies it there.
 `Registry::Load` reports progress through a `ScanProgressFn` taking a
 `ScanStatus` (`done`, `total`, `current` path), called once per file before it is
 read, so a caller can print or publish "scanning user presets 2/5: <file>" while a
-directory is walked; nothing about the scan is silent or unbounded.
+directory is walked; nothing about the scan is silent or unbounded. `Registry::All()`
+returns every accepted entry regardless of build, which is what the library's "Other
+builds" group lists.
 
 Rules the registry applies:
 
@@ -947,6 +971,62 @@ Rules the registry applies:
   the offending clips, see Validation above) and is listed by `Problems()` too.
 - `Find(build, id)` and `ForBuild(build)` never mix builds: a document for another
   build is invisible to this build's list.
+
+### The library: what the GUI does with the registry
+
+The preset library (the left pane section, docs/gui.md 3.6) owns a `Registry` on the
+GUI thread and is the only surface that creates, names, saves, reverts, imports and
+exports a document. The rules it applies, and where they come from:
+
+- **Grouping.** Built-in, User and Other builds. A document whose `build` differs
+  from the game directory's fingerprint is listed under Other builds and opens
+  read-only in the sense that its assets cannot resolve against this install; it is
+  never silently loaded as if it were for this build.
+- **Id generation.** `New` opens the Document properties modal with the name focused
+  and the id read as "made from the name when you press Done"; on Done the id is
+  `Editor::UniqueId(Editor::Slug(name), taken)`. `Slug` lowercases, keeps
+  alphanumerics, turns every other run of characters into a single `-`, trims the
+  ends and falls back to `preset` for a name with nothing usable in it. `UniqueId`
+  appends `-2`, `-3`, ... against every id already loaded for that build (built-ins
+  and user files), so a generated id never collides. `Duplicate` uses
+  `Editor::CopyId`, which is `UniqueId(id + "-copy", taken)`.
+- **Save.** A user document is written to `presets/<build>/<id>.json`, folders
+  created, in the canonical form of `Save` above. Because a user id equal to a
+  built-in id of the same build is a validation error (below), Save on a built-in
+  does not write in place: it asks for a new id, prefilled with `<id>-copy`, applies
+  it to the document and writes that. Saving clears the modified mark
+  (`Editor::State::MarkSaved`) and rescans, so the file shows up under User.
+- **Revert and Reset.** Revert re-reads the document from the entry it came from
+  (its file, or the built-in function); Reset does the same but only from a
+  built-in, which is what puts a shipped screen back to what the renderer builds.
+  Both replace the editor document with a clean undo stack.
+- **Import and Export.** Import reads a file from ANYWHERE through the native open
+  dialog and, when it is for this build and its id is free, copies it into
+  `presets/<build>/`. A parse error blocks the import and is reported with the line
+  and column; a validation error does not (the load rule above). Export writes the
+  loaded document anywhere through the native save dialog, in canonical form, so
+  export followed by import is byte-identical.
+- **Modified prompt.** Switching document, New, Import, Revert and Reset while the
+  loaded document is dirty ask Save / Discard / Cancel first.
+
+### The export range and the export fps rule
+
+The export range (in and out points) is EDITOR SESSION state, not a document key:
+`Editor::View::export_range`, set by Shift+dragging the ruler and cleared by a
+right-click on it, reset with the view whenever a document is loaded. It is not
+serialized, because it says what a user wants to capture right now, not what the
+screen is. The export modal turns it into `ExportRequest::start_frame` and
+`max_frames`; with no range set the export plans the whole document, as before.
+
+The export modal defaults its fps to `document.fps` and refuses an fps that is not
+an integer multiple or divisor of it (`Editor::FpsRatioAllowed`). The reason is the
+capture clock: `PresetHost::RenderFrame` accumulates wall time and advances as many
+document frames as the accumulator holds, so an export at 30 fps out of a 60 fps
+document advances 2 document frames per captured frame and stays in real time, while
+45 fps would alternate 1 and 2 and judder. The accumulator DRAINS in a loop (up to
+16 document frames per host frame) rather than stepping once, which is what makes
+the integer ratio exact; live playback at 60 or 120 Hz is unaffected because it
+never has more than one step pending.
 
 ## Fixtures and tests
 

@@ -28,6 +28,7 @@ void Ran3::Seed(int seed) {
     Refill();
     Refill();
     index_ = 55;
+    draws_ = 0;
 }
 
 void Ran3::Refill() {
@@ -38,6 +39,7 @@ void Ran3::Refill() {
 }
 
 int Ran3::Next() {
+    draws_++;
     index_++;
     if (index_ > 55) {
         Refill();

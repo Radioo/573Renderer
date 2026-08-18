@@ -83,6 +83,7 @@ LoadProgress BootLifecycle::GetLoadProgress() const {
 void BootLifecycle::SetLoadProgress(LoadProgress p) {
     const std::scoped_lock lk(mu_);
     progress_ = std::move(p);
+    load_ended_at_ = {};
 }
 
 void BootLifecycle::BeginLoad(std::string target) {

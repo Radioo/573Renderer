@@ -30,6 +30,8 @@ void RenderTrackModal();
 
 void RequestDocumentModal();
 
+void RequestNewDocumentModal(std::vector<std::string> taken_ids);
+
 void RenderDocumentModal();
 
 void ResetOptionModal();

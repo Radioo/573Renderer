@@ -18,7 +18,8 @@ float PulseFactor(const BeatState& beat, const PulseState& pulse, const std::arr
 
 bool ReadTarget(std::string_view id, const FrameState& state, TweenValue& out);
 
-bool WriteTarget(std::string_view id, const TweenValue& value, FrameState& state);
+bool WriteTarget(std::string_view id, const TweenValue& value, FrameState& state,
+                 const Doc::Clip* origin);
 
 TweenValue OverrideToTween(const Doc::OverrideValue& value);
 

@@ -1,6 +1,7 @@
 #include "gui_tl_internal.h"
 
 #include "editor/preset_editor_state.h"
+#include "editor/export_range.h"
 #include "editor/timeline_edits.h"
 #include "editor/timeline_view.h"
 #include "gui/gui_style.h"
@@ -25,6 +26,7 @@ constexpr float kMarkerHalf = 6.0F;
 
 char g_marker_name[96] = {};
 int g_marker_menu = -1;
+int g_range_anchor = -1;
 
 void DrawTicks(const Ctx& ctx, float top) {
     const Editor::View& view = ctx.editor->GetView();
@@ -129,6 +131,38 @@ void DragMarker(Ctx& ctx, int index) {
     }
 }
 
+void DrawExportRange(const Ctx& ctx, float top) {
+    const Editor::ExportRange range = ctx.editor->GetView().export_range;
+    if (!range.active) return;
+    const float x0 = std::max(FrameToX(ctx, range.start), ctx.lane_x);
+    const float x1 = std::min(FrameToX(ctx, range.end), ctx.lane_x + ctx.lane_w);
+    if (x1 <= ctx.lane_x || x0 >= ctx.lane_x + ctx.lane_w) return;
+    const ImU32 accent = ImGui::GetColorU32(ImGuiCol_CheckMark);
+    const float y = top + kRulerH - 3.0F;
+    ctx.draw->AddRectFilled(ImVec2(x0, y - 1.0F), ImVec2(x1, y + 1.0F), accent);
+    ctx.draw->AddRectFilled(ImVec2(x0, y - 6.0F), ImVec2(x0 + 2.0F, y + 2.0F), accent);
+    ctx.draw->AddRectFilled(ImVec2(x1 - 2.0F, y - 6.0F), ImVec2(x1, y + 2.0F), accent);
+    char label[48];
+    snprintf(label, sizeof(label), "export %d..%d", range.start, range.end - 1);
+    const ImVec2 size = ImGui::CalcTextSize(label);
+    const float text_x = ctx.lane_x - size.x - 8.0F;
+    if (text_x < ctx.header_x + 4.0F) return;
+    ctx.draw->AddText(ImVec2(text_x, y - size.y - 2.0F), accent, label);
+}
+
+bool UpdateExportRange(Ctx& ctx, bool hovered) {
+    const ImGuiIO& io = ImGui::GetIO();
+    if (ImGui::IsItemActivated() && io.KeyShift && hovered) g_range_anchor = CursorFrame(ctx);
+    if (!ImGui::IsItemActive()) {
+        if (!ImGui::IsMouseDown(ImGuiMouseButton_Left)) g_range_anchor = -1;
+        return false;
+    }
+    if (g_range_anchor < 0) return false;
+    ctx.editor->MutView().export_range =
+        Editor::RangeFromDrag(g_range_anchor, CursorFrame(ctx), ctx.length);
+    return true;
+}
+
 void RulerInput(Ctx& ctx, float top) {
     ImGui::SetCursorScreenPos(ImVec2(ctx.lane_x, top));
     ImGui::SetNextItemAllowOverlap();
@@ -149,6 +183,11 @@ void RulerInput(Ctx& ctx, float top) {
     }
     MarkerPopup(ctx);
 
+    if (marker < 0 && ImGui::IsItemClicked(ImGuiMouseButton_Right) &&
+        ctx.editor->GetView().export_range.active) {
+        ctx.editor->MutView().export_range = Editor::ExportRange{};
+    }
+    if (UpdateExportRange(ctx, hovered)) return;
     if (hovered && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left) && marker < 0) {
         const int frame = CursorFrame(ctx);
         ApplyEdit(ctx, [frame](Doc::Document& document) {
@@ -196,6 +235,7 @@ void DrawRuler(Ctx& ctx) {
     DrawEndLine(ctx, top);
     ImGui::PopFont();
     DrawMarkers(ctx, top);
+    DrawExportRange(ctx, top);
     RulerInput(ctx, top);
     HandleWheel(ctx);
 }

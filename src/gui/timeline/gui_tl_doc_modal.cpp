@@ -1,6 +1,7 @@
 #include "gui_tl_modals.h"
 
 #include "editor/document_edits.h"
+#include "editor/library_model.h"
 #include "editor/preset_editor_state.h"
 #include "gui_tl_forms.h"
 #include "imgui.h"
@@ -11,6 +12,7 @@
 #include <cstddef>
 #include <optional>
 #include <string>
+#include <utility>
 #include <string_view>
 #include <vector>
 
@@ -24,6 +26,9 @@ constexpr const char* kTitle = "Document properties";
 constexpr const char* kFpsTitle = "Convert fps";
 
 bool g_requested = false;
+bool g_fresh = false;
+bool g_focus_name = false;
+std::vector<std::string> g_taken;
 int g_base_undo = 0;
 bool g_gesture = false;
 int g_target_fps = 60;
@@ -42,10 +47,18 @@ FieldEvent TextRow(const char* id, const char* label, std::string& value, std::s
 }
 
 FieldEvent DrawGeneral(Doc::Document& document) {
+    if (g_focus_name) {
+        ImGui::SetKeyboardFocusHere();
+        g_focus_name = false;
+    }
     FieldEvent event = TextRow("###tl_doc_name", "name", document.name, 96);
 
     RowLabel("id");
-    ImGui::TextDisabled("%s (read-only)", document.id.c_str());
+    if (g_fresh) {
+        ImGui::TextDisabled("made from the name when you press Done");
+    } else {
+        ImGui::TextDisabled("%s (read-only)", document.id.c_str());
+    }
     RowLabel("build");
     ImGui::TextDisabled("%s (read-only)", document.build.c_str());
 
@@ -241,10 +254,22 @@ void ResetDocumentModal() {
     }
     g_requested = false;
     g_fps_requested = false;
+    g_fresh = false;
+    g_focus_name = false;
+    g_taken.clear();
 }
 
 void RequestDocumentModal() {
     g_requested = true;
+    g_fresh = false;
+    g_base_undo = Editor::Global().UndoDepth();
+}
+
+void RequestNewDocumentModal(std::vector<std::string> taken_ids) {
+    g_requested = true;
+    g_fresh = true;
+    g_focus_name = true;
+    g_taken = std::move(taken_ids);
     g_base_undo = Editor::Global().UndoDepth();
 }
 
@@ -291,6 +316,14 @@ void RenderDocumentModal() {
     }
     ImGui::SameLine();
     if (ImGui::Button("Done###tl_doc_done")) {
+        if (g_fresh) {
+            const std::vector<std::string> taken = g_taken;
+            editor.Apply([&taken](Doc::Document& document) {
+                document.id = Editor::UniqueId(Editor::Slug(document.name), taken);
+                return true;
+            });
+            g_fresh = false;
+        }
         editor.CollapseUndo(g_base_undo);
         EndGesture(editor);
         ImGui::CloseCurrentPopup();

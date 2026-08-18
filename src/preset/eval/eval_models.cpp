@@ -69,26 +69,37 @@ void SampleModelKeys(const Doc::Clip& clip, int frame, ModelSlot& slot, int mode
     TweenValue sampled;
     if (SampleKeys(clip.keys, "anim_speed", clip_frame, ScalarOf(slot.anim_speed), sampled)) {
         slot.anim_speed = sampled.scalar;
+        slot.from.anim_speed = &clip;
         RecordScalar(writes, WriteKind::AnimSpeed, model_index, true, slot.anim_speed);
     }
     if (SampleKeys(clip.keys, "blend_mode", clip_frame, IntegerOf(slot.blend_mode), sampled)) {
         slot.blend_mode = sampled.integer;
+        slot.from.blend_mode = &clip;
         RecordInteger(writes, WriteKind::BlendMode, model_index, true, slot.blend_mode);
     }
     if (SampleKeys(clip.keys, "alpha", clip_frame, ScalarOf(slot.alpha), sampled)) {
         slot.alpha = sampled.scalar;
+        slot.from.alpha = &clip;
         RecordScalar(writes, WriteKind::Alpha, model_index, false, slot.alpha);
     }
     if (SampleKeys(clip.keys, "scale", clip_frame, VectorOf(slot.scale), sampled)) {
         slot.scale = sampled.vector;
+        slot.from.scale = &clip;
         RecordVector(writes, WriteKind::ModelScale, model_index, false, slot.scale);
     }
-    if (SampleKeys(clip.keys, "position", clip_frame, VectorOf(slot.position), sampled))
+    if (SampleKeys(clip.keys, "position", clip_frame, VectorOf(slot.position), sampled)) {
         slot.position = sampled.vector;
-    if (SampleKeys(clip.keys, "rotation", clip_frame, VectorOf(slot.rotation), sampled))
+        slot.from.position = &clip;
+    }
+    if (SampleKeys(clip.keys, "rotation", clip_frame, VectorOf(slot.rotation), sampled)) {
         slot.rotation = sampled.vector;
-    if (SampleKeys(clip.keys, "spin_per_frame", clip_frame, VectorOf(slot.spin_per_frame), sampled))
+        slot.from.rotation = &clip;
+    }
+    if (SampleKeys(clip.keys, "spin_per_frame", clip_frame, VectorOf(slot.spin_per_frame),
+                   sampled)) {
         slot.spin_per_frame = sampled.vector;
+        slot.from.spin_per_frame = &clip;
+    }
 }
 
 }
@@ -107,6 +118,15 @@ void ApplyModelDraw(const Doc::Clip& clip, const Doc::ModelDraw& command, int fr
     slot.scale = ToVec3f(command.scale);
     slot.spin_per_frame = ToVec3f(command.spin_per_frame);
     slot.draw_start = clip.start;
+    slot.from = ModelOrigin{.visible = &clip,
+                            .position = &clip,
+                            .rotation = &clip,
+                            .scale = &clip,
+                            .alpha = &clip,
+                            .anim_speed = &clip,
+                            .blend_mode = &clip,
+                            .spin_per_frame = &clip,
+                            .motion = slot.from.motion};
     if (with_keys) SampleModelKeys(clip, frame, slot, model_index, writes);
 }
 
@@ -136,6 +156,7 @@ void ApplyModelMotion(const Doc::Clip& clip, const Doc::ModelMotionCmd& command,
                                 .frames = command.pulse->frames};
     }
     slot.motion_start = clip.start;
+    slot.from.motion = &clip;
 }
 
 Vec3f OrbitPosition(const OrbitState& orbit, int frame) {

@@ -2,6 +2,7 @@
 
 #include "preset/asset_index.h"
 #include "preset/doc/preset_document.h"
+#include "preset/eval/frame_report.h"
 #include "preset/preset_preview.h"
 
 #include <functional>
@@ -54,6 +55,10 @@ Status GetStatus();
 
 std::shared_ptr<const Preset::AssetIndex> GetAssetIndex();
 
+std::shared_ptr<const Preset::Eval::FrameReport> GetFrameReport();
+
+void SetFrameReportWanted(bool wanted);
+
 void RequestPreview(const std::string& asset, const std::string& animation,
                     const std::vector<std::string>& hidden_parts, int samples);
 
@@ -72,7 +77,5 @@ void SetOption(int option, int choice);
 int NaturalFrames();
 
 bool OpaqueScreen();
-
-void Restart();
 
 }

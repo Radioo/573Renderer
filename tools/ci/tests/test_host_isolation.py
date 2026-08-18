@@ -56,6 +56,18 @@ def test_gate_covers_the_preset_library(repo):
     assert len(problems) == 1
 
 
+def test_gate_covers_every_preset_library_file(repo):
+    write(repo, "src/gui/gui_preset_library_actions.cpp",
+          "void Save() { PresetHost::Unload(); }\n")
+    write(repo, "src/gui/gui_preset_library_internal.h",
+          "inline bool A() { return Gc2dHost::Active(); }\n")
+    problems, checked = check_host_isolation.check(repo)
+    assert checked == 2
+    assert len(problems) == 2
+    assert "gui_preset_library_actions.cpp:1" in problems[0]
+    assert "gui_preset_library_internal.h:1" in problems[1]
+
+
 def test_gate_ignores_panels_outside_the_editor(repo):
     write(repo, "src/gui/other/gui_scene3d_panel.cpp", "void Draw() { Scene3dHost::Unload(); }\n")
     problems, checked = check_host_isolation.check(repo)

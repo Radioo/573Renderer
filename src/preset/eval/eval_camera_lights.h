@@ -15,6 +15,7 @@ void ApplyCameraSet(const Doc::Clip& clip, const Doc::CameraSet& command, int fr
 void ApplyCameraTween(const Doc::Clip& clip, int frame, CameraState& camera,
                       std::vector<MaterialWrite>& writes);
 
-void ApplyLightSet(const Doc::LightSet& command, std::vector<LightState>& lights);
+void ApplyLightSet(const Doc::Clip& clip, const Doc::LightSet& command,
+                   std::vector<LightState>& lights);
 
 }

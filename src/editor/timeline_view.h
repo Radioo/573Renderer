@@ -1,5 +1,7 @@
 #pragma once
 
+#include "editor/export_range.h"
+
 namespace Editor {
 
 inline constexpr double kZoomMin = 0.05;
@@ -13,6 +15,7 @@ inline constexpr float kHeaderWidthMin = 120.0F;
 inline constexpr float kHeaderWidthMax = 320.0F;
 
 struct View {
+    ExportRange export_range = {};
     double px_per_frame = kZoomDefault;
     double scroll = 0.0;
     float track_scroll = 0.0F;

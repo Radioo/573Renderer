@@ -44,8 +44,8 @@ public:
         int package_frames = 0;
         if (PresetHost::Active()) {
             ResumeForCapture();
-            PresetHost::Restart();
-            preset_frames = PresetHost::NaturalFrames();
+            PresetHost::Seek(sess.start_frame);
+            preset_frames = PresetHost::NaturalFrames() - sess.start_frame;
         } else if (Gc2dHost::Active()) {
             ResumeForCapture();
             Gc2dHost::SetFrame(0);
@@ -218,6 +218,7 @@ public:
         const bool live = Scene3dHost::Active() || Gc2dHost::Active();
         std::string playing;
         App::PresetStatus preset;
+        PresetHost::SetFrameReportWanted(App::Global().TakePresetFrameReportRequest());
         if (PresetHost::Active()) {
             const PresetHost::Status status = PresetHost::GetStatus();
             playing = status.id;
@@ -233,6 +234,7 @@ public:
                                                       .to = status.transition_to,
                                                       .frames_left = status.transition_left};
             preset.assets = PresetHost::GetAssetIndex();
+            preset.frame_report = PresetHost::GetFrameReport();
         } else if (Gc2dHost::Active()) {
             playing = Gc2dHost::GetStatus().animation;
         }
@@ -272,7 +274,14 @@ public:
 
     void BindSubmonitor() override {}
 
-    bool HandleCommand(const std::any& payload) override { return ApplyPresetCommand(payload); }
+    bool HandleCommand(const std::any& payload) override {
+        const LoadReporter reporter{
+            .begin = [](const std::string& what) { App::Global().BeginLoad(what); },
+            .stage = [](const std::string& stage,
+                        float fraction) { App::Global().UpdateLoadStage(stage, fraction); },
+            .end = []() { App::Global().EndLoad(); }};
+        return ApplyPresetCommand(payload, reporter);
+    }
 
     Export::ICaptureDriver& ExportDriver() override { return capture_; }
 

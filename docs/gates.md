@@ -109,10 +109,12 @@ Those files run on the GUI thread while the render thread is inside
 `App::PresetStatus` back, and `Backend::ApplyPresetCommand` applies them on the
 render thread at a frame boundary (docs/gui.md 3.5).
 
-The claim is deliberately SCOPED. `gui_scene3d_panel.cpp`, `gui_gc2d_panel.cpp`,
-`gui_preset_panel.cpp` and the visibility predicates in `panel_registry.cpp` still
-call the hosts directly and keep that convention until a separate change; the gate
-covers only the editor, so it starts clean and any hit inside that scope fails CI.
+The claim is deliberately SCOPED. `gui_scene3d_panel.cpp`, `gui_gc2d_panel.cpp` and
+the visibility predicates in `panel_registry.cpp` still call the hosts directly and
+keep that convention until a separate change; the gate covers only the editor and the
+library, so it starts clean and any hit inside that scope fails CI. The old Screens
+panel (`gui_preset_panel.cpp`), which did call `PresetHost::` from the GUI thread, was
+deleted in M7 and the library that replaced it is inside the scope.
 Adding a file to the scope means adding it to `SCOPES` in the script.
 
 Self-tested by `tools/ci/tests/test_host_isolation.py`, which builds throwaway git

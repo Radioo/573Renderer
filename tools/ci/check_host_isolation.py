@@ -4,7 +4,7 @@ import subprocess
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
-SCOPES = ("src/gui/timeline/", "src/gui/gui_preset_library.")
+SCOPES = ("src/gui/timeline/", "src/gui/gui_preset_library")
 SOURCE_SUFFIXES = (".cpp", ".h", ".hpp", ".inl")
 HOSTS = ("PresetHost", "Scene3dHost", "Gc2dHost")
 PATTERNS = [(host, re.compile((r"\b" + host + r"::").encode())) for host in HOSTS]

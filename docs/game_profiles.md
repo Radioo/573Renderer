@@ -1173,8 +1173,8 @@ somewhere different for every entry in the mode menu - so a single fixed
 placement would only ever be one sixth of that screen. `PresetHost::SetOption`
 runs the game's own transition when the choice changes (mode select lerps over 25
 frames and kicks the spin in the direction of the turntable move), the GUI draws
-one combo per option in the Screens tab, and the CLI names the option and the
-choice (a label or an index, repeatable per option):
+one segmented control per option on the timeline editor's options track, and the CLI
+names the option and the choice (a label or an index, repeatable per option):
 
 ```bash
 573Renderer.exe --preset-test <iidx10-install-dir> iidx10-mode-select out.png 120 --preset-option mode=EXPERT
@@ -1229,9 +1229,9 @@ anywhere in the record tree, nested children included.
 
 Every placed 2D layer runs on its OWN playhead rather than a shared clock, which
 is what the game does - each registered animation gets its own frame counter. The
-Screens tab lists them and exposes one frame slider per layer, so a single layer
-can be scrubbed without disturbing the others; static cells are listed but have
-no timeline to scrub.
+Inspector's Frame tab lists them with the clock each one has reached; they are shown
+read-only, because the document's clips own those clocks and the playhead is what
+moves them (docs/gui.md 3.5).
 
 That counter FREE-RUNS past the animation's length, exactly like the game's: the
 playback mode, not the counter, decides what gets drawn (`GcAnim::ResolveFrame`
@@ -1249,12 +1249,12 @@ the `BG_SKY` band as ONE static cell blitted twice at `640 - frame % 640` and
 `-(frame % 640)`, so it slides a pixel per frame and wraps at 640 without having
 any animation records at all. `SpritePlacement::scroll_x` / `scroll_wrap` model
 that, and `SpriteStatus` reports the resulting `scroll` offset alongside its
-`scroll_wrap`, so the panel gives a scrolling layer a SCROLL slider in pixels
-instead of a frame slider it has no timeline for. A layer that both scrolls and
-animates gets both sliders. Only a layer with neither is listed as a static cell
-with no control.
+`scroll_wrap`, so a scrolling layer's displacement is a resolved value like any
+other. A `sprite.scroll` clip authors it and the Frame tab reports it.
 
-In the GUI the same presets appear as a **Screens** tab in the inspector,
-which is visible whenever the loaded directory fingerprints to a build that has
-presets. It lists the build's screens, loads one on click, and exposes the
-countdown as a slider so the end-of-timer ramp can be scrubbed.
+In the GUI the same presets appear in the **preset library** in the left pane, under
+Browse, which is drawn whenever the scene3d backend is active. It groups the build's
+screens as Built-in, User and Other builds, loads one on click, and is where New,
+Duplicate, Import, Export, Save, Revert, Reset and Document properties live
+(docs/gui.md 3.6). The countdown slider is gone with the countdown: the end-of-timer
+ramp is a `model.tween` clip on the timeline and scrubbing the playhead shows it.

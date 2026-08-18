@@ -14,9 +14,10 @@ namespace Editor {
 
 namespace Doc = Preset::Doc;
 
-void State::LoadDocument(Doc::Document document) {
+void State::LoadDocument(Doc::Document document, bool read_only) {
     document_ = std::make_shared<const Doc::Document>(std::move(document));
     saved_ = document_;
+    read_only_ = read_only;
     past_.clear();
     future_.clear();
     selection_.clear();
@@ -43,6 +44,7 @@ void State::Close() {
     gesture_ = 0;
     gesture_pushed_ = false;
     dirty_ = false;
+    read_only_ = false;
     revision_++;
     load_id_++;
 }
@@ -54,7 +56,7 @@ void State::Push() {
 }
 
 bool State::Apply(const Edit& edit) {
-    if (document_ == nullptr || !edit) return false;
+    if (document_ == nullptr || read_only_ || !edit) return false;
     Doc::Document working = *document_;
     if (!edit(working)) return false;
 
@@ -69,6 +71,12 @@ bool State::Apply(const Edit& edit) {
     return true;
 }
 
+void State::MarkSaved() {
+    saved_ = document_;
+    dirty_ = false;
+    revision_++;
+}
+
 void State::BeginGesture() {
     gesture_++;
 }
@@ -80,7 +88,7 @@ void State::EndGesture() {
 }
 
 bool State::Undo() {
-    if (past_.empty() || document_ == nullptr) return false;
+    if (past_.empty() || document_ == nullptr || read_only_) return false;
     future_.push_back(Entry{.document = document_, .selection = selection_});
     const Entry entry = past_.back();
     past_.pop_back();
@@ -93,7 +101,7 @@ bool State::Undo() {
 }
 
 bool State::Redo() {
-    if (future_.empty() || document_ == nullptr) return false;
+    if (future_.empty() || document_ == nullptr || read_only_) return false;
     past_.push_back(Entry{.document = document_, .selection = selection_});
     const Entry entry = future_.back();
     future_.pop_back();

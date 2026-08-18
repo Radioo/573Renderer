@@ -47,4 +47,16 @@ void Telemetry::SetPresetPreview(Preset::Preview::SnapshotPtr p) {
     preview_ = std::move(p);
 }
 
+void Telemetry::RequestPresetReport() {
+    const std::scoped_lock lk(mu_);
+    report_ttl_ = kPresetReportTtlFrames;
+}
+
+bool Telemetry::TakePresetReportRequest() {
+    const std::scoped_lock lk(mu_);
+    if (report_ttl_ <= 0) return false;
+    report_ttl_--;
+    return true;
+}
+
 }

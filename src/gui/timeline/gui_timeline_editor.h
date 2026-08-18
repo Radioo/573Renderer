@@ -10,4 +10,6 @@ void RenderModals();
 
 void RenderClipTab();
 
+void RenderFrameTab();
+
 }

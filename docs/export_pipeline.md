@@ -743,10 +743,10 @@ disabled line explaining why, rather than showing dead controls.
 
 ## Screen presets and 2D packages
 
-`Scene3dCaptureDriver` exports whatever preset is live. It rewinds the preset
-(`PresetHost::Restart`) so a capture always starts at frame 0, then captures a
-fixed number of frames and finalises - there is no loop detector because a preset
-has none to detect: it composites layers with different periods (a 240-tick model
+`Scene3dCaptureDriver` exports whatever preset is live. It seeks the preset to
+`sess.start_frame` (0 unless an export range is set, below) so a capture always
+starts where the request says, then captures a fixed number of frames and finalises
+- there is no loop detector because a preset has none to detect: it composites layers with different periods (a 240-tick model
 loop, a 640-frame sprite scroll, per-sprite animation lengths) under a screen
 timer that changes the model's speed partway through, so the composite has no
 single repeat boundary.
@@ -800,7 +800,8 @@ off in the middle of the boot animation's genre list and never reached the
 warp-in at 502, let alone the attract loop at 902. A phased preset's length is
 its TIMELINE, and the 3D clip length has nothing to do with it.
 
-`Restart()` is what the exporter calls before capturing, and it is now `Seek(0)`:
+There is no `Restart()` entry point any more: `BeginCapture` calls
+`PresetHost::Seek(sess.start_frame)` (0 unless an export range is set), which is the
 one code path that restores the whole `EvalState` (RNG, particle pool, beat grids,
 per model spin accumulators, kick multipliers and 3D ticks, per sprite clocks, the
 option transition) and re-pushes the resolved frame into both hosts. The two reset
@@ -814,13 +815,34 @@ hosts: with `EvalState` owning time, `Gc2dHost::SetPaused` and
 
 ### The document tick, and what the display fps no longer does
 
-The export driver still advances exactly one document frame per captured frame,
-because it calls `RenderFrame(1 / TargetFps)` and the host delivers whole document
-frames at the document's `fps`. Live playback now does the same, which is a
+The export driver calls `RenderFrame(1 / TargetFps)` and the host delivers whole
+document frames at the document's `fps`. Live playback does the same, which is a
 behaviour change on high refresh rate setups: a preset used to run at ONE DOCUMENT
 FRAME PER RENDER FRAME, so a 120 fps display played every screen at double speed
 while its exports stayed correct. It now accumulates wall time and renders each
-document frame twice instead. Export output is unaffected.
+document frame twice instead.
+
+The accumulator DRAINS in a loop, not one step per call (capped at 16 document
+frames per host frame so a stalled thread cannot fast-forward a screen). That is
+what makes an export at a lower fps than the document run in real time: at 30 fps
+out of a 60 fps document each captured frame advances two document frames. A
+`preset_host_tests` case pins it (`RenderFrame(1/30)` x 10 leaves frame 20).
+
+### Export range and the export fps rule
+
+An export can capture a SUB-RANGE. The in and out points live in the editor's view
+state (`Editor::View::export_range`, set by Shift+dragging the ruler, drawn as a
+bracket on it) and are session state, never a document key: they say what a user
+wants to capture now, not what the screen is. The export modal turns the range into
+`ExportRequest::start_frame` plus `max_frames`, and `BeginCapture` seeks there and
+plans `length - start_frame` frames.
+
+The export fps must be an integer multiple or divisor of `document.fps`
+(`Editor::FpsRatioAllowed`, used by the export modal to disable Start with a reason).
+With a ratio of 2 the driver advances two document frames per captured frame and the
+file plays at real speed; with 45 out of 60 the accumulator would alternate one and
+two frames and the result would judder. The modal also DEFAULTS its fps to
+`document.fps` when a document is loaded, so the common case needs no thought.
 
 ## Export defaults have exactly ONE definition
 

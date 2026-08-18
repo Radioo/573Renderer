@@ -1,6 +1,7 @@
 #pragma once
 
 #include "preset/asset_index.h"
+#include "preset/eval/frame_report.h"
 #include "preset/preset_preview.h"
 
 #include <chrono>
@@ -13,6 +14,8 @@
 namespace App {
 
 inline constexpr uint32_t kNoActiveStream = 0xFFFFFFFC;
+
+inline constexpr int kPresetReportTtlFrames = 8;
 
 struct SubLayerNode {
     std::string name;
@@ -69,6 +72,7 @@ struct PresetStatus {
     std::vector<int> option_choices;
     PresetTransition transition;
     std::shared_ptr<const Preset::AssetIndex> assets;
+    std::shared_ptr<const Preset::Eval::FrameReport> frame_report;
 };
 
 enum class ExportPhase : std::uint8_t {
@@ -109,12 +113,16 @@ public:
     [[nodiscard]] Preset::Preview::SnapshotPtr GetPresetPreview() const;
     void SetPresetPreview(Preset::Preview::SnapshotPtr p);
 
+    void RequestPresetReport();
+    bool TakePresetReportRequest();
+
 private:
     mutable std::mutex mu_;
     Status status_;
     ExportState export_;
     PresetStatus preset_;
     Preset::Preview::SnapshotPtr preview_;
+    int report_ttl_ = 0;
 };
 
 }

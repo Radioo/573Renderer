@@ -45,12 +45,8 @@ std::vector<std::filesystem::path> UserFiles(const std::filesystem::path& root) 
 }
 
 Problem ParseProblem(const ParseError& error) {
-    std::string message = "parse error at line " + std::to_string(error.line) + ", column " +
-                          std::to_string(error.column) + ": " + error.message;
-    return Problem{.severity = Severity::Error,
-                   .path = error.path,
-                   .related = {},
-                   .message = std::move(message)};
+    return Problem{
+        .severity = Severity::Error, .path = error.path, .related = {}, .message = error.message};
 }
 
 const Entry* Claiming(const std::vector<Entry>& known, const Document& document) {
@@ -144,6 +140,14 @@ void Registry::Load(const std::filesystem::path& user_root, const ScanProgressFn
     if (progress && files.empty()) progress(status);
 }
 
+std::vector<const Entry*> Registry::All() const {
+    std::vector<const Entry*> listed;
+    listed.reserve(entries_.size());
+    for (const Entry& entry : entries_)
+        listed.push_back(&entry);
+    return listed;
+}
+
 std::vector<const Entry*> Registry::ForBuild(std::string_view build) const {
     std::vector<const Entry*> matched;
     for (const Entry& entry : entries_) {
@@ -157,6 +161,14 @@ const Entry* Registry::Find(std::string_view build, std::string_view id) const {
         if (entry.document.build == build && entry.document.id == id) return &entry;
     }
     return nullptr;
+}
+
+std::vector<const Entry*> Registry::Rejected() const {
+    std::vector<const Entry*> listed;
+    listed.reserve(rejected_.size());
+    for (const Entry& entry : rejected_)
+        listed.push_back(&entry);
+    return listed;
 }
 
 std::vector<const Entry*> Registry::Problems() const {

@@ -163,6 +163,8 @@ publishes no afplist names, no mc_tree, no slots, so those tree features simply 
   basename - installs have same-named IFSes across subdirs.
 - The .ifs directory scan runs on a background thread; the pane shows the scan's live status
   line instead of "none found" while running.
+- On the scene3d backend the pane is the TOP half of the left column and the preset library
+  (3.6) is the bottom half; both are separate child windows, so each scrolls alone.
 - File leaves post `load_new_ifs` requests carrying `from_arc` for DDR .arc-wrapped IFSes.
 
 ### 3.2 Scene pane (gui_scene_panel) - the clip hierarchy
@@ -265,11 +267,9 @@ document AND the `App::PresetStatus` snapshot published by the render thread nam
 `id`. Everything else (the AFP backends, the scene3d backend with a bare package loaded)
 keeps the dock.
 
-Two pieces of 4.6 are deliberately absent until M6 brings the options track: the palette has
-no "Add option" entry under its Document group, and no GUI control posts
-`PresetCmd::SetOption`, so a document's option choices cannot be switched from the editor yet.
-The `when` gate, the `option.select` clip and the gate badge all read `document.options`
-today, so they work the moment M6 adds the track that edits them.
+The editor covers the whole command catalog: the palette inserts every command, the options
+track edits and switches `document.options`, and the library (3.6) is where a document is
+picked, created, saved and validated.
 
 #### Layout and docking
 
@@ -425,7 +425,7 @@ comparing each tail item's clipped rect with its full rect.
 | fit | `###tl_fit` | Ctrl+0 |
 | document badge | `###tl_doc_badge` | shows `*` when dirty; opens the Document properties modal |
 | validation badge | `###tl_problems` | only present while `Validate` reports errors; opens the Problems modal |
-| ruler | `###tl_ruler` | click or drag seeks; double-click adds a marker; right-click on a marker triangle opens the marker popup |
+| ruler | `###tl_ruler` | click or drag seeks; SHIFT+drag sets the export range; double-click adds a marker; right-click on a marker triangle opens the marker popup, and elsewhere clears the export range |
 | marker name field | `###tl_marker_name` | inside the marker popup |
 | document end line | `###tl_end_line` | drag it to change `length`; the region beyond is dimmed and labelled `end N` |
 | header column edge | `###tl_header_split` | drag to resize the header column, clamped to 120..320 px |
@@ -486,6 +486,8 @@ Active when the editor is focused or hovered and `io.WantTextInput` is false.
 | Enter | properties of the selected clip | Esc | cancel a drag, clear the selection |
 | A | command palette at the playhead on the selected track | K | add a tween key at the playhead on the selected clip |
 | C | curve editor for the selected clip | | |
+| Ctrl+S / Ctrl+Shift+S | save / save as (3.6) | Ctrl+O / Ctrl+N | import / new document (3.6) |
+| Ctrl+E | export video | | |
 | Ctrl+wheel | zoom about the cursor | Shift+wheel | scroll the tracks |
 
 #### Modals: palette, clip properties, document properties, problems
@@ -776,6 +778,57 @@ centre pane is the scene tree again, and the per-parameter surface of `PresetHos
 SetParam, ResetParam, ResetGroup, ResetAllParams, ChangedParamCount, ListStates, SetCountdown
 and `preset_host_params.*`) went with its only caller.
 
+#### Inspector "Frame" tab
+
+`Panels::Timeline::RenderFrameTab` is the read-only view of what the evaluator resolved for
+the frame under the playhead, and of WHICH CLIP wrote each value (plan 4.7). It absorbs the
+Screens panel's status line and its sprite frame and scroll sliders: a live nudge would be
+state outside the document that the next seek or edit throws away, so the sprite clocks are
+shown and the clip's `offset` / `scroll_offset` params are what a user edits.
+
+The data path avoids both a second evaluation and a dangling pointer. `FrameState` carries the
+provenance itself: every slot has a small `from` struct of `const Doc::Clip*` (model:
+visible, position, rotation, scale, alpha, anim_speed, blend_mode, spin_per_frame, motion;
+sprite: the same per field plus source and scroll; camera: one per field; light, shading,
+split, beat and jitter one each), written next to the value it belongs to in `eval_models`,
+`eval_sprites`, `eval_camera_lights` and `WriteTarget`, so a pointer store is the whole cost
+and it cannot drift from the value. Because those pointers are only valid while the render
+thread's document is alive, `PresetHost::Publish` turns them into a self-contained
+`Preset::Eval::FrameReport` (`BuildFrameReport`) once per frame and publishes it in
+`App::PresetStatus::frame_report`; the GUI reads it out of the status snapshot like every
+other live value.
+
+The report holds entities (one per model, per sprite, per active emitter, camera, per light,
+scene, options, markers), each a list of typed values with the winning clip id. `Editor::FrameRows` turns it
+into the flat header / value rows the tab draws, and is unit-tested without ImGui. Numbers
+mirror what is pushed: the position runs through `PlacedPosition` (jitter, orbit) and the
+rotation adds the runtime spin, as `Evaluator::Rebind` does, and the model tick, sprite clock,
+particle count, beat, pulse, jitter and RNG draw count come from `EvalState` (`Ran3::Draws()`
+counts draws since the last seed).
+
+Each value row's third column is a `###frame_win_<entity>_<field>` button naming the clip that
+won; clicking it selects that clip in the timeline. A value no clip wrote (a document default,
+an option choice value, a runtime counter) shows `-`. ALL THREE columns are `WidthFixed`, each
+measured against the widest cell the report actually holds (the value column measured inside the
+mono font it is drawn in, the clip column plus one button's frame padding), and the table carries
+`ScrollX`, so nothing is ever truncated mid-text and the pane's width only decides how far you
+scroll. A proportional layout cut `sprite_split_priority` in half against the value beside it and,
+worse, printed the position `0, 0, -0.15` as `0, 0, -0`, which reads as a different number; a
+stretch column cannot help either, because ImGui treats stretch columns as fixed once `ScrollX`
+is on. The Inspector pane is narrow by default, so the third column usually starts off screen and
+is reached by scrolling the table (or by widening the pane).
+
+Emitter rows. One entity per `FrameState::emitters` clip (every Fx clip live at this frame,
+whether or not it spawns on it), carrying `reach` in pixels from `RingReach`, `ring phase` in
+degrees from `RingPhase` and `live`, the number of its particles currently DRAWN. Reach and
+phase are the same two pure functions the spawner calls, so the readout cannot drift from what
+the screen does. `live` counts `age >= 0`, which is what is on screen: a particle is created at
+age -1 and is first drawn on the next frame (`docs/preset_document.md`), so the attract's
+`fx_warp_in_rotating_and_zooming` reads 960 at frame 640 (60 frames of 16) while the scene row's
+`particle pool` reads 976, the 61 batches the pool holds. Attribution is a `Particle::emitter`
+field set to the spawning clip's id; the scene row is labelled `particle pool` precisely so the
+two counts are not read as contradicting each other.
+
 #### Validation UI
 
 Every clip whose id a problem names gets a 4 px left bar in its lane, the error colour when
@@ -805,6 +858,162 @@ needs, with the text drawn over it at the same cursor position under `PushTextWr
 Selectable is registered first so it still owns the hover and the click. `clip_modal_tests.cpp`
 guards this geometrically: with a message long enough to wrap, the item rect of
 `###tl_problem_0` must be taller than one `GetTextLineHeightWithSpacing()`.
+
+### 3.6 Preset library (gui_preset_library)
+
+The library is the ONLY way to pick, create, import, export, save or revert a scene preset
+document; it replaces the Screens tab (`gui_preset_panel.cpp`, deleted in M7) and its
+countdown and per-sprite sliders, which the Frame tab now shows read-only.
+
+It is a section of the LEFT pane, under Browse (plan 4.1, user decision 2026-08-15). While
+`Panels::PresetLibrary::Active()` (the scene3d backend) `RenderLeftPane` splits the pane:
+Browse gets the top, the library the bottom `Gui::kLibraryShare` (55 percent, at least
+`Gui::kLibraryMinH` and never leaving Browse less than `Gui::kBrowseMinH`), each in its own
+child so both scroll on their own. On the AFP backends the pane is the IFS tree alone, as
+before.
+
+Registry ownership. The library OWNS a `Preset::Doc::Registry` on the GUI thread. That does
+not break the host-isolation rule (docs/gates.md): the registry only reads built-in documents
+and JSON files, and it names no host. LOADING a document into the renderer is the part that
+touches the engine, and it goes through `PresetCmd::LoadDocument{document, game_dir}`, which
+`Backend::ApplyPresetCommand` runs on the render thread with a `Backend::LoadReporter` wired
+to `BeginLoad` / `UpdateLoadStage` / `EndLoad`, so asset loading reports progress through the
+loading overlay. The GUI-side `Editor::State` takes the same document with a clean undo stack.
+The DISCOVERY scan itself also reports progress (file name, done / total) through the same
+overlay, because a user preset folder is walked file by file.
+
+Scan trigger: the fingerprint (`GameFingerprint::Identify`) plus the registry scan run when
+the game directory changes and after every Save or Import; with no known build the library
+says so and never scans, so nothing raises the overlay for a directory that has no presets.
+Only the discovery scan raises the overlay (`Rescan(true)`). The refresh after a Save or an
+Import is `Rescan(false)`: it re-reads the same folder in a millisecond, and the overlay's
+600 ms minimum hold (`BootLifecycle::kLoadMinHoldMs`) would otherwise park a "Loading scene
+presets" panel over the app every time a user pressed Save.
+
+Rows are grouped by `Editor::GroupLibrary` (a pure model, `src/editor/library_model.cpp`):
+Built-in, User (`presets/<build>/*.json` next to `573Renderer.exe`), Other builds. A row shows
+the name, and beside it "modified" when it is the loaded document with unsaved edits, else the
+error or warning count, else its id; the tooltip carries the id, the build, the length, the
+marker and track counts and the file path. The filter box matches the name and the id, and a
+group with no match is not drawn. Single click selects and loads, per the 2026-08-15 decision.
+
+| item | id | behaviour |
+|---|---|---|
+| filter | `###lib_filter` | matches name and id, case-insensitive |
+| group headers | `###lib_group_builtin`, `###lib_group_user`, `###lib_group_other` | `CollapsingHeader`, open by default |
+| row | `###lib_row_<document id>` | loads the document (prompting first when the loaded one is dirty) |
+| New | `###lib_new` | Ctrl+N; makes an empty document for this build and opens Document properties with the name focused |
+| Duplicate | `###lib_duplicate` | copies the loaded document under `<id>-copy` (`Editor::CopyId`) and marks it modified |
+| Import | `###lib_import` | Ctrl+O; `NativeDialog::OpenFile` from anywhere |
+| Export | `###lib_export` | `NativeDialog::SaveFile`; writes `Preset::Doc::Save` (canonical form) |
+| Save | `###lib_save` | Ctrl+S; writes `presets/<build>/<id>.json`, creating the folders |
+| Revert | `###lib_revert` | reads the document back from its file or built-in |
+| Reset | `###lib_reset` | only for a built-in: back to the document the renderer ships |
+| Properties | `###lib_properties` | opens the Document properties modal for the loaded document |
+| problem row | `###lib_problem_<n>` | live `Validate` output for the loaded document; clicking one selects the clip it names |
+| did-not-load row | `###lib_rejected_<n>` | one per `Registry::Rejected()` entry: the file name and why it was refused; hover shows the full path |
+
+Files that did not load. A user file the registry REFUSED is not in `Registry::All()`, so it has no
+library row and would otherwise be invisible: an unparseable file and a file whose id is already
+owned by another user file of the same build both land in `rejected_`. `Registry::Rejected()`
+returns exactly those (unlike `Problems()`, which the CLI uses and which also reports loaded
+documents that merely carry validation errors), and the problem list prints them above the loaded
+document's own validation rows under a "Files that did not load" heading. The rows are not
+clickable to a clip, because no clip of theirs exists. Their message is the parser's or the
+registry's own text with nothing prefixed, for the same reason the import modal prefixes nothing.
+
+Vertical layout of the section. The row list and the problem list are two children that SHARE
+whatever the section has left after its header, build line, filter and action rows; the problems
+child takes 30 percent of it, clamped between one and three text lines PLUS one `ScrollbarSize`,
+and the row list takes the rest with a one-line floor. The scrollbar allowance is not cosmetic:
+a rejected-file message carries an absolute path, so that child always shows a horizontal
+scrollbar, and a bound of exactly three lines spent one of them on the bar and cut the last
+"Files that did not load" row in half. Neither is given a fixed pixel height: a fixed floor on the row list
+pushed the problems child past the bottom of the section on a short window and the problem list
+then could not be reached at all, since a section is not itself scrollable. Both children scroll,
+so a long list of rows or of problems stays reachable at any pane height, and the HSplitter over
+the section is how a user trades Browse height for library height.
+
+Save rules. Built-in ids are reserved (a user document that claims one is a validation error,
+docs/preset_document.md), so Save on a built-in does not write in place: it opens "Save as user
+copy" (`###lib_saveas_id`, `###lib_saveas_ok`, `###lib_saveas_cancel`) prefilled with
+`<id>-copy`, applies the new id to the document and writes that. Ctrl+Shift+S opens the same
+modal for any document. A successful write calls `Editor::State::MarkSaved()`, so the row's
+"modified" mark and the transport badge's `*` clear together, and rescans so the new file
+appears under User.
+
+Import rules (the load rule of docs/preset_document.md). A file that does not PARSE blocks:
+the "Import problems" modal shows the path, `ParseError::message` as it stands, a Copy report
+button (`###lib_import_copy`) and Close (`###lib_import_close`), and nothing is loaded. The line
+and column are NOT prefixed to it: nlohmann already opens its own text with "parse error at line
+L, column C", and prefixing produced "line 4, column 9: [json.exception...] parse error at line 4,
+column 9: ..." on screen. `ParseError::line` and `::column` stay on the struct for callers that
+want the numbers on their own. A file that parses but fails VALIDATION loads
+anyway: the editor and the renderer take it, the evaluator skips the offending clips, and the
+problem list under the row list names them. An imported document for this build whose id is
+not a built-in one is also copied into `presets/<build>/`, which is what makes it a User row.
+An id that ALREADY belongs to a different user file is renamed on the way in
+(`Editor::UniqueId`, so `remix` becomes `remix-2`) and the same modal reports the rename with
+its "the document is loaded and saved under the free id" note: without that step the copy into
+`presets/<build>/<id>.json` would overwrite the file that owns the id. Re-importing the very
+file that owns it (`std::filesystem::equivalent`) is not a clash and keeps the id, which is
+what makes an Export followed by an Import a round trip. A built-in id still loads unrenamed
+and is simply not copied, so the validation error stays visible until the user renames it.
+
+Other builds open READ-ONLY. Selecting a row whose `build` is not the current fingerprint calls
+`Editor::State::LoadDocument(document, true)` and posts NO `PresetCmd::LoadDocument`, so the
+renderer keeps whatever it was showing: the document's assets cannot be resolved against this game
+directory, and plan 3.1 requires that it is never silently loaded as if it were for this build.
+`Editor::State::Apply`, `Undo` and `Redo` all refuse while `ReadOnly()`, which is the single hard
+guarantee (every edit in the editor funnels through `Apply`); on top of that the request pump in
+`gui_tl_editor.cpp` drops every modal request, the transport disables `+ Command` / `+ Track`, and
+the library disables Save, Revert, Reset and Properties. All of them carry the same reason string,
+`read-only: built for <build>`, which the library also shows in place of the build name and the
+transport shows beside the add buttons.
+
+The editor is still DRAWN for it, which is the whole point of opening it: `Panels::Timeline::Active()`
+normally requires the render thread to be playing the same document id, and a read-only document is
+by construction never sent to the render thread, so the plain id test hid the editor completely and
+left the reason string, the disabled add buttons and the tracks themselves unreachable. `Active()`
+therefore returns true whenever the editor holds a read-only document. Because the renderer is
+meanwhile showing something ELSE, nothing in the editor may command it or hand it this document:
+`PostSeek`, `PostPaused` and `PublishDocument` are no-ops while `ReadOnly()` (one choke point that
+covers the ruler drag, the playhead, the transport keys and the buttons alike), the transport
+disables the jump / step / play buttons, the loop checkbox, the edge jumps and the document badge,
+and `Ctx::status` is not the live `App::PresetStatus` at all but a stand-in built from the document
+itself (frame 0, its own `length` and `fps`, not playing), so the ruler and the playhead show this
+document's axis instead of the playing one's.
+
+Duplicate and Export stay live on a read-only document. Duplicate RETARGETS the copy to the current
+build (`document.build` becomes the current fingerprint, and the id is deduped against this build's
+ids), because that is the only outcome that is both editable and loadable here: a copy that kept the
+foreign build would open read-only again and Save would write it into another build's folder. The
+Duplicate tooltip says so whenever the loaded document is foreign.
+
+Modified prompt. Switching to another row, New, Import, Revert, Reset and a window close request
+while the loaded document is dirty open "Unsaved changes" (`###lib_prompt_save`,
+`###lib_prompt_discard`, `###lib_prompt_cancel`) instead of acting; Save writes first and then acts,
+Discard acts, and Cancel drops the pending action.
+
+Closing the window. The GUI window's `WM_CLOSE` is not passed to `DefWindowProc` while
+`App::State::CloseNeedsPrompt()` is set (the library publishes `Loaded() && Dirty()` into it every
+frame): it calls `PostCloseRequest()` and returns 0, so nothing is destroyed. `PumpCloseRequest()`,
+run from `RenderModals()` every GUI frame, turns that request into the same prompt, and Discard or
+Save calls `ConfirmClose()`, which is what `Gui::PumpAndRender` reports as "stop" so the GUI thread
+shuts the window down exactly as before. Cancel calls `ClearCloseRequest()` and the app keeps
+running. With nothing unsaved the request is confirmed on the spot, so a clean close is unchanged.
+A SECOND `WM_CLOSE` while a request is already pending always falls through to `DefWindowProc`, so
+the window can never be trapped by a prompt that no one is drawing. Actions are deferred by one frame through
+`Library::pending_action`, so a modal is never opened from inside the child window that asked
+for it.
+
+Shortcuts owned by the library (active whenever it is drawn, no popup is open and
+`io.WantTextInput` is false): Ctrl+S save, Ctrl+Shift+S save as, Ctrl+O import, Ctrl+N new,
+Ctrl+E export video. Ctrl+E lives here as well as in the old dock because the dock is not
+drawn while the timeline editor is up, and the export modal must stay reachable.
+
+`Panels::PresetLibrary::SetUserRoot` overrides the scan root; the app never calls it and
+`gui_tests` does, so a test scans a temp folder instead of the folder next to the exe.
 
 ## 4. Export modal + status tag (gui_export_panel)
 
@@ -837,6 +1046,19 @@ guards this geometrically: with a message long enough to wrap, the item rect of
   sharing one id with nothing on screen to explain it. Found by `gui_tests`.
 - Crop pick handshake: arming "Pick region" CLOSES the modal (the drag happens on the render
   window), and the modal auto-reopens when pick mode ends (`g_reopen_after_pick`).
+- With a preset DOCUMENT loaded (the `App::PresetStatus` id matches the editor's document) the
+  modal takes its defaults from it, because a document already says how long the screen is and
+  at what rate it is authored: opening the modal sets fps to `document.fps`, and the Advanced
+  block grows "Document range" (`Document range##exp_preset_range`) which exports the ruler's
+  export range (Shift+drag, `Editor::View::export_range`) or the whole document. It fills
+  `ExportRequest::start_frame` and `max_frames`, and `Scene3dCaptureDriver::BeginCapture` seeks
+  the host to `start_frame` and plans `length - start_frame` frames. Turning it off falls back
+  to the plain frame limit.
+- The export fps must be an integer multiple or divisor of `document.fps`
+  (`Editor::FpsRatioAllowed`): the capture advances the document clock by wall time, so 45 fps
+  out of a 60 fps document would advance one document frame on some captured frames and two on
+  others. A bad ratio prints a red note beside the fps field and disables Start with a tooltip
+  saying why (rule and rationale in docs/export_pipeline.md).
 - Form state is file-scope statics so choices survive modal close and IFS reloads. The whole
   form is disabled during capture so a mid-capture click cannot mutate values already
   snapshotted into the export session; the crop rect is snapshotted at start for the same

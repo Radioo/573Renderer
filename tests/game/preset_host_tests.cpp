@@ -13,6 +13,7 @@
 #include "preset/doc/preset_commands.h"
 #include "preset/doc/preset_document.h"
 #include "preset/doc/preset_enum_names.h"
+#include "preset/eval/frame_report.h"
 #include "preset/eval/preset_evaluator.h"
 #include "preset/preset_asset_lengths.h"
 #include "preset/preset_convert.h"
@@ -517,4 +518,39 @@ TEST_CASE("merging two scene dirs offsets the second one's tile indices", "[pres
     CHECK(first.camera_frame == 7);
     CHECK(first.bounds_min[0] == Catch::Approx(-4.0F));
     CHECK(first.bounds_max[1] == Catch::Approx(2.0F));
+}
+
+TEST_CASE("a capture at half the document fps advances two document frames per host frame",
+          "[preset][host][export]") {
+    PrepareStub();
+    const auto document = std::make_shared<const Doc::Document>(MakeDocument(640, 480));
+    REQUIRE(PresetHost::LoadDocument({}, document));
+    PresetStub::Take();
+
+    for (int i = 0; i < 10; i++) {
+        PresetHost::RenderFrame(1.0F / 30.0F);
+        INFO("host frame " << i);
+        CHECK(PresetHost::GetStatus().frame == (i + 1) * 2);
+    }
+    PresetHost::Unload();
+}
+
+TEST_CASE("the frame report is built only while the frame inspector asks for it",
+          "[preset][host][frame_inspector]") {
+    PrepareStub();
+    const auto document = std::make_shared<const Doc::Document>(MakeDocument(640, 480));
+    PresetHost::SetFrameReportWanted(false);
+    REQUIRE(PresetHost::LoadDocument({}, document));
+
+    PresetHost::RenderFrame(1.0F / 60.0F);
+    CHECK(PresetHost::GetFrameReport() == nullptr);
+
+    PresetHost::SetFrameReportWanted(true);
+    PresetHost::RenderFrame(1.0F / 60.0F);
+    const std::shared_ptr<const Preset::Eval::FrameReport> report = PresetHost::GetFrameReport();
+    REQUIRE(report != nullptr);
+    CHECK(report->frame == PresetHost::GetStatus().frame);
+
+    PresetHost::SetFrameReportWanted(false);
+    PresetHost::Unload();
 }

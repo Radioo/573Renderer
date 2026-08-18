@@ -65,6 +65,10 @@ void SeedHiddenMaterial(const Doc::Document& document, const Slots& slots, Frame
             slot.alpha = (float)draw->alpha;
             slot.anim_speed = (float)draw->anim_speed;
             slot.scale = {(float)draw->scale[0], (float)draw->scale[1], (float)draw->scale[2]};
+            slot.from.blend_mode = &clip;
+            slot.from.alpha = &clip;
+            slot.from.anim_speed = &clip;
+            slot.from.scale = &clip;
         }
         slot.draw_start = -1;
     }
@@ -119,14 +123,20 @@ void ApplySceneClip(const Doc::Clip& clip, FrameState& state) {
     switch (Doc::TypeOf(clip.command)) {
     case Doc::CommandType::RenderSettings: {
         const auto& command = std::get<Doc::RenderSettingsCmd>(clip.command);
-        if (command.shading.has_value()) state.shading = *command.shading;
-        if (command.sprite_split_priority.has_value())
+        if (command.shading.has_value()) {
+            state.shading = *command.shading;
+            state.shading_from = &clip;
+        }
+        if (command.sprite_split_priority.has_value()) {
             state.sprite_split_priority = *command.sprite_split_priority;
+            state.split_from = &clip;
+        }
         break;
     }
     case Doc::CommandType::RhythmBeat: {
         const auto& command = std::get<Doc::RhythmBeat>(clip.command);
-        state.beat = BeatState{.rate = command.rate,
+        state.beat = BeatState{.from = &clip,
+                               .rate = command.rate,
                                .span = command.span,
                                .offset_a = command.offset_a,
                                .offset_b = command.offset_b};
@@ -134,7 +144,8 @@ void ApplySceneClip(const Doc::Clip& clip, FrameState& state) {
     }
     case Doc::CommandType::RhythmJitter: {
         const auto& command = std::get<Doc::RhythmJitter>(clip.command);
-        state.jitter = JitterState{.active = command.span > 0,
+        state.jitter = JitterState{.from = &clip,
+                                   .active = command.span > 0,
                                    .span = command.span,
                                    .scale = (float)command.scale,
                                    .mode = command.mode,
@@ -143,7 +154,7 @@ void ApplySceneClip(const Doc::Clip& clip, FrameState& state) {
     }
     case Doc::CommandType::ParamOverride: {
         const auto& command = std::get<Doc::ParamOverrideCmd>(clip.command);
-        WriteTarget(command.id, OverrideToTween(command.value), state);
+        WriteTarget(command.id, OverrideToTween(command.value), state, &clip);
         break;
     }
     case Doc::CommandType::RngSeed:
@@ -176,7 +187,7 @@ void ApplyClip(const Doc::Track& track, const Doc::Clip& clip, int frame, bool t
         }
         break;
     case Doc::TrackKind::Light:
-        ApplyLightSet(std::get<Doc::LightSet>(clip.command), state.lights);
+        ApplyLightSet(clip, std::get<Doc::LightSet>(clip.command), state.lights);
         break;
     case Doc::TrackKind::Fx:
         state.emitters.push_back(&clip);

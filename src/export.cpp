@@ -100,6 +100,7 @@ void InitSessionFromRequest(Session& sess, const App::ExportRequest& req, D3D9St
     sess.quality = req.quality >= 0 && req.quality <= 100 ? req.quality : 60;
     sess.keyframe_interval = req.keyframe_interval > 0 ? req.keyframe_interval : 0;
     sess.max_frames = req.max_frames > 0 ? req.max_frames : 0;
+    sess.start_frame = req.start_frame > 0 ? req.start_frame : 0;
     sess.loop_count = req.loop_count > 0 ? req.loop_count : 1;
     sess.blend_loop = req.blend_loop;
     sess.blend_frames = req.blend_frames > 0 ? req.blend_frames : 15;

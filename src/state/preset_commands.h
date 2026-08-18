@@ -15,6 +15,11 @@ struct ReplaceDocument {
     std::shared_ptr<const Preset::Doc::Document> document;
 };
 
+struct LoadDocument {
+    std::shared_ptr<const Preset::Doc::Document> document;
+    std::string game_dir;
+};
+
 struct Seek {
     int frame = 0;
 };
@@ -39,7 +44,8 @@ struct PreviewLayer {
     int samples = 6;
 };
 
-using Any = std::variant<ReplaceDocument, Seek, SetPaused, SetLoop, SetOption, PreviewLayer>;
+using Any =
+    std::variant<ReplaceDocument, LoadDocument, Seek, SetPaused, SetLoop, SetOption, PreviewLayer>;
 
 inline App::Command Wrap(Any cmd) {
     return App::Cmd::BackendCommand{.payload = std::move(cmd)};

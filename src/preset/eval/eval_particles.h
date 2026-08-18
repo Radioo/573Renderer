@@ -12,6 +12,7 @@
 namespace Preset::Eval {
 
 struct Particle {
+    std::string emitter;
     std::string asset;
     std::string cell;
     int from_x = 320;
@@ -29,6 +30,10 @@ struct BeatSnapshot {
     std::array<int, 2> index = {0, 0};
     std::array<int, 2> since = {0, 0};
 };
+
+int RingReach(const Doc::EmitterCmd& emitter, int elapsed);
+
+float RingPhase(const Doc::EmitterCmd& emitter, int frame);
 
 void AgeParticles(std::vector<Particle>& particles);
 

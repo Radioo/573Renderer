@@ -153,8 +153,8 @@ a DIFFERENT package from the screen's own, exactly as the game does it, so the
 The 18 phases carry each phase's yaw rate, camera eye, alpha ramp and particle
 work, read out of `sub_42F030`'s switch. The beat pulses and the position jitter
 used to be listed here as not reproduced. They are reproduced now, exactly, and
-this is where the mechanism is written down. `docs/preset_params.md` lists the
-parameters, `IIDX/red_3d_screens.md` in the notes repo carries the full RE trail.
+this is where the mechanism is written down. `docs/preset_document.md` lists the
+rhythm commands and their parameters, `IIDX/red_3d_screens.md` in the notes repo carries the full RE trail.
 
 **The beat grid is arithmetic, not audio.** `sub_430300` returns
 `155 * (frame - 70) / 3600` and `sub_430330` returns `155 * (frame - 59) / 3600`,

@@ -6,6 +6,7 @@
 #include "preset/doc/preset_validate.h"
 #include "preset/eval/eval_push.h"
 #include "preset/eval/eval_state.h"
+#include "preset/eval/frame_report.h"
 #include "preset/eval/frame_state.h"
 #include "preset/eval/preset_evaluator.h"
 #include "preset/preset_asset_lengths.h"
@@ -36,6 +37,7 @@ using Preset::Eval::FrameState;
 using Preset::Eval::Push;
 
 constexpr float kPresetTicksPerSecond = 60.0F;
+constexpr int kMaxCatchUpFrames = 16;
 
 enum class CommandKind : unsigned char { Replace, Seek, Paused, Loop, Option };
 
@@ -88,6 +90,7 @@ Command OptionCommand(int option, int choice) {
 
 struct Shared {
     std::shared_ptr<const Preset::AssetIndex> assets;
+    std::shared_ptr<const Preset::Eval::FrameReport> report;
     Status status;
     std::vector<Command> queue;
 };
@@ -104,6 +107,7 @@ std::vector<Push> g_state_pushes;
 float g_accum = 0.0F;
 bool g_playing = true;
 bool g_loop = true;
+bool g_report_wanted = false;
 int g_problems = 0;
 
 std::string Resolve(const std::string& game_dir, const std::string& relative) {
@@ -277,8 +281,14 @@ int ErrorCount(const Doc::Document& document) {
 void Publish() {
     if (g_active == nullptr) return;
     Status status = BuildStatus(*g_active, g_eval.Current(), g_problems);
+    std::shared_ptr<const Preset::Eval::FrameReport> report;
+    if (g_report_wanted) {
+        report = std::make_shared<const Preset::Eval::FrameReport>(
+            Preset::Eval::BuildFrameReport(*g_active, g_eval.Current(), g_eval.State()));
+    }
     const std::scoped_lock guard(g_lock);
     g_shared.status = std::move(status);
+    if (report != nullptr) g_shared.report = std::move(report);
 }
 
 void Post(const Command& command) {
@@ -420,16 +430,16 @@ void RenderFrame(float dt) {
 
     const int fps = std::max(1, g_active->fps);
     const float step = 1.0F / (float)fps;
-    bool advance = false;
+    int steps = 0;
     if (g_playing) {
         g_accum += dt;
-        if (g_accum + 1.0e-6F >= step) {
+        while (g_accum + 1.0e-6F >= step && steps < kMaxCatchUpFrames) {
             g_accum -= step;
-            advance = true;
+            steps++;
         }
     }
     ApplyPushes(g_eval.DrawFrame(0.0F));
-    if (advance) {
+    for (int i = 0; i < steps && g_playing; i++) {
         const int length = LengthOf(*g_active);
         const bool at_last = length > 0 && g_eval.State().frame + 1 >= length;
         if (at_last && g_loop) {
@@ -454,6 +464,15 @@ Status GetStatus() {
 std::shared_ptr<const Preset::AssetIndex> GetAssetIndex() {
     const std::scoped_lock guard(g_lock);
     return g_shared.assets;
+}
+
+std::shared_ptr<const Preset::Eval::FrameReport> GetFrameReport() {
+    const std::scoped_lock guard(g_lock);
+    return g_shared.report;
+}
+
+void SetFrameReportWanted(bool wanted) {
+    g_report_wanted = wanted;
 }
 
 void RequestPreview(const std::string& asset, const std::string& animation,
@@ -512,10 +531,6 @@ int NaturalFrames() {
 
 bool OpaqueScreen() {
     return g_active != nullptr && g_active->render.opaque;
-}
-
-void Restart() {
-    Seek(0);
 }
 
 }

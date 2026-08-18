@@ -38,21 +38,11 @@ bool Spawns(const Doc::EmitterCmd& emitter, const Doc::Clip& clip, int frame, co
     return false;
 }
 
-int RingReach(const Doc::EmitterCmd& emitter, int elapsed) {
-    const int span = std::max(1, emitter.reach_frames);
-    return emitter.radius_from +
-           (((emitter.radius_to - emitter.radius_from) * std::min(elapsed, span)) / span);
-}
-
-float RingPhase(const Doc::EmitterCmd& emitter, int frame) {
-    const float wobble = std::sin((float)frame * (float)emitter.phase_rate_deg * kDegrees) *
-                         (float)emitter.phase_amplitude_deg;
-    return (float)(int)wobble;
-}
-
-void SpawnOne(const Doc::EmitterCmd& emitter, const Doc::Scatter* scatter, int reach, float phase,
-              int index, const Vec2f& center, Preset::Ran3& rng, std::vector<Particle>& particles) {
+void SpawnOne(const Doc::EmitterCmd& emitter, const std::string& source,
+              const Doc::Scatter* scatter, int reach, float phase, int index, const Vec2f& center,
+              Preset::Ran3& rng, std::vector<Particle>& particles) {
     Particle particle;
+    particle.emitter = source;
     particle.asset = emitter.asset;
     particle.cell = emitter.cell;
     particle.from_x = (int)center[0];
@@ -74,6 +64,18 @@ void SpawnOne(const Doc::EmitterCmd& emitter, const Doc::Scatter* scatter, int r
     particles.push_back(std::move(particle));
 }
 
+}
+
+int RingReach(const Doc::EmitterCmd& emitter, int elapsed) {
+    const int span = std::max(1, emitter.reach_frames);
+    return emitter.radius_from +
+           (((emitter.radius_to - emitter.radius_from) * std::min(elapsed, span)) / span);
+}
+
+float RingPhase(const Doc::EmitterCmd& emitter, int frame) {
+    const float wobble = std::sin((float)frame * (float)emitter.phase_rate_deg * kDegrees) *
+                         (float)emitter.phase_amplitude_deg;
+    return (float)(int)wobble;
 }
 
 void AgeParticles(std::vector<Particle>& particles) {
@@ -100,7 +102,7 @@ void SpawnParticles(const FrameState& state, int frame, const BeatSnapshot& beat
             emitter->center.has_value() ? (float)(*emitter->center)[0] : (float)canvas_w * 0.5F,
             emitter->center.has_value() ? (float)(*emitter->center)[1] : (float)canvas_h * 0.5F};
         for (int i = 0; i < emitter->count; i++)
-            SpawnOne(*emitter, scatter, reach, phase, i, center, rng, particles);
+            SpawnOne(*emitter, clip->id, scatter, reach, phase, i, center, rng, particles);
     }
 }
 

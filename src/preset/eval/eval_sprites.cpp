@@ -25,12 +25,34 @@ void SamplePlacementKeys(const Doc::Clip& clip, int frame, SpriteSlot& slot) {
     if (clip.keys.empty()) return;
     const int clip_frame = frame - clip.start;
     TweenValue sampled;
-    if (SampleKeys(clip.keys, "x", clip_frame, ScalarOf(slot.x), sampled)) slot.x = sampled.scalar;
-    if (SampleKeys(clip.keys, "y", clip_frame, ScalarOf(slot.y), sampled)) slot.y = sampled.scalar;
-    if (SampleKeys(clip.keys, "alpha", clip_frame, ScalarOf(slot.alpha), sampled))
+    if (SampleKeys(clip.keys, "x", clip_frame, ScalarOf(slot.x), sampled)) {
+        slot.x = sampled.scalar;
+        slot.from.x = &clip;
+    }
+    if (SampleKeys(clip.keys, "y", clip_frame, ScalarOf(slot.y), sampled)) {
+        slot.y = sampled.scalar;
+        slot.from.y = &clip;
+    }
+    if (SampleKeys(clip.keys, "alpha", clip_frame, ScalarOf(slot.alpha), sampled)) {
         slot.alpha = sampled.scalar;
-    if (SampleKeys(clip.keys, "scale", clip_frame, ScalarOf(slot.scale), sampled))
+        slot.from.alpha = &clip;
+    }
+    if (SampleKeys(clip.keys, "scale", clip_frame, ScalarOf(slot.scale), sampled)) {
         slot.scale = sampled.scalar;
+        slot.from.scale = &clip;
+    }
+}
+
+void RecordPlacement(const Doc::Clip& clip, SpriteSlot& slot) {
+    slot.from = SpriteOrigin{.visible = &clip,
+                             .source = &clip,
+                             .x = &clip,
+                             .y = &clip,
+                             .alpha = &clip,
+                             .scale = &clip,
+                             .blend = &clip,
+                             .priority = &clip,
+                             .scroll = slot.from.scroll};
 }
 
 }
@@ -53,6 +75,7 @@ void ApplySpriteDraw(const Doc::Clip& clip, const Doc::SpriteDraw& command, int 
     slot.offset = 0;
     slot.restart_clock = false;
     slot.draw_start = clip.start;
+    RecordPlacement(clip, slot);
     if (with_keys) SamplePlacementKeys(clip, frame, slot);
 }
 
@@ -78,6 +101,7 @@ void ApplySpriteAnimate(const Doc::Clip& clip, const Doc::SpriteAnimate& command
         command.clock.value_or(abuts_previous ? Doc::ClipClock::Continue : Doc::ClipClock::Restart);
     slot.restart_clock = clock == Doc::ClipClock::Restart;
     slot.draw_start = clip.start;
+    RecordPlacement(clip, slot);
     if (with_keys) SamplePlacementKeys(clip, frame, slot);
 }
 
@@ -86,6 +110,7 @@ void ApplySpriteScroll(const Doc::Clip& clip, const Doc::SpriteScroll& command, 
     slot.scroll_x = (float)command.scroll_x;
     slot.scroll_wrap = (float)command.scroll_wrap;
     slot.scroll_offset = (float)command.scroll_offset;
+    slot.from.scroll = &clip;
     if (!with_keys || clip.keys.empty()) return;
     const int clip_frame = frame - clip.start;
     TweenValue sampled;

@@ -74,6 +74,7 @@ void DrawZoom(Ctx& ctx) {
 
 void DrawButtons(Ctx& ctx) {
     const int last = std::max(0, ctx.length - 1);
+    ImGui::BeginDisabled(ctx.editor->ReadOnly());
 
     if (TransportButton(ICON_JUMP_BACK "###tl_jump_start", "Jump to frame 0 (Home).")) PostSeek(0);
     ImGui::SameLine(0.0F, 3.0F);
@@ -92,6 +93,7 @@ void DrawButtons(Ctx& ctx) {
     if (TransportButton(ICON_JUMP_FWD "###tl_jump_end", "Jump to the last frame (End).")) {
         PostSeek(last);
     }
+    ImGui::EndDisabled();
 
     ImGui::SameLine(0.0F, 14.0F);
     Gui::PushMonoFont();
@@ -106,10 +108,12 @@ void DrawButtons(Ctx& ctx) {
 void DrawToggles(Ctx& ctx) {
     ImGui::SameLine(0.0F, 12.0F);
     bool loop = ctx.status.loop;
+    ImGui::BeginDisabled(ctx.editor->ReadOnly());
     if (ImGui::Checkbox("loop###tl_loop", &loop)) {
         App::Global().PostCommand(PresetCmd::Wrap(PresetCmd::SetLoop{.loop = loop}));
     }
-    if (ImGui::IsItemHovered()) {
+    ImGui::EndDisabled();
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
         ImGui::SetTooltip("On: the frame after the last one is 0.\nOff: playback pauses on the "
                           "last frame and stays there.");
     }
@@ -122,32 +126,46 @@ void DrawToggles(Ctx& ctx) {
                           "the document bounds and the ruler ticks. Hold Alt to drag freely.");
     }
 
+    const bool read_only = ctx.editor->ReadOnly();
+    const std::string reason = "read-only: built for " + ctx.document->build;
+
     ImGui::SameLine(0.0F, 12.0F);
+    ImGui::BeginDisabled(read_only);
     if (ImGui::Button("+ Command###tl_add_command")) {
         ctx.editor->PostRequest(Editor::Request{.kind = Editor::RequestKind::AddCommand,
                                                 .track_id = SelectedTrack(ctx),
                                                 .frame = ctx.status.frame});
     }
-    if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("Add a command clip on the selected track at the playhead.\n"
-                          "The palette also opens with the A key.");
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+        ImGui::SetTooltip("%s", read_only
+                                    ? reason.c_str()
+                                    : "Add a command clip on the selected track at the playhead.\n"
+                                      "The palette also opens with the A key.");
     }
     ImGui::SameLine(0.0F, 4.0F);
     if (ImGui::Button("+ Track###tl_add_track")) {
         ctx.editor->PostRequest(
             Editor::Request{.kind = Editor::RequestKind::AddTrack, .track_id = SelectedTrack(ctx)});
     }
-    if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("Add a track: kind, asset, target, name and where to insert it.");
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+        ImGui::SetTooltip("%s", read_only ? reason.c_str()
+                                          : "Add a track: kind, asset, target, name and where to "
+                                            "insert it.");
     }
+    ImGui::EndDisabled();
+    if (!read_only) return;
+    ImGui::SameLine(0.0F, 12.0F);
+    ImGui::TextColored(ImVec4(1.0F, 0.85F, 0.3F, 1.0F), "%s", reason.c_str());
 }
 
 void DrawEdgeJumps(Ctx& ctx) {
+    ImGui::BeginDisabled(ctx.editor->ReadOnly());
     if (ImGui::Button("[###tl_prev_edge")) JumpEdge(ctx, -1);
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("Jump to the previous clip edge, key or marker.");
     ImGui::SameLine(0.0F, 3.0F);
     if (ImGui::Button("]###tl_next_edge")) JumpEdge(ctx, 1);
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("Jump to the next clip edge, key or marker.");
+    ImGui::EndDisabled();
     ImGui::SameLine(0.0F, 12.0F);
 }
 
@@ -193,13 +211,17 @@ void DrawTail(Ctx& ctx) {
         if (clicked) RequestProblems();
     }
 
+    const bool read_only = ctx.editor->ReadOnly();
     ImGui::SameLine(0.0F, 12.0F);
+    ImGui::BeginDisabled(read_only);
     if (ImGui::SmallButton((DocumentBadge(ctx) + "###tl_doc_badge").c_str())) {
         ctx.editor->PostRequest(Editor::Request{.kind = Editor::RequestKind::DocumentProperties});
     }
-    if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("%s - the loaded document.%s", ctx.document->id.c_str(),
-                          ctx.editor->Dirty() ? "\nIt has unsaved changes." : "");
+    ImGui::EndDisabled();
+    const char* dirty_note = ctx.editor->Dirty() ? "\nIt has unsaved changes." : "";
+    const char* note = read_only ? "\nread-only: built for another game build." : dirty_note;
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+        ImGui::SetTooltip("%s - the loaded document.%s", ctx.document->id.c_str(), note);
     }
 }
 

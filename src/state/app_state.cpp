@@ -293,6 +293,24 @@ void State::SetPresetPreview(Preset::Preview::SnapshotPtr p) {
     telemetry_.SetPresetPreview(std::move(p));
 }
 
+void State::ClearCloseRequest() {
+    close_requested_ = false;
+    close_confirmed_ = false;
+}
+
+void State::ConfirmClose() {
+    close_requested_ = false;
+    close_confirmed_ = true;
+}
+
+void State::RequestPresetFrameReport() {
+    telemetry_.RequestPresetReport();
+}
+
+bool State::TakePresetFrameReportRequest() {
+    return telemetry_.TakePresetReportRequest();
+}
+
 void State::SetExport(ExportState e) {
     telemetry_.SetExport(std::move(e));
 }

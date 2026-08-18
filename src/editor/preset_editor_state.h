@@ -45,14 +45,16 @@ inline constexpr int kUndoDepth = 200;
 
 class State {
 public:
-    void LoadDocument(Preset::Doc::Document document);
+    void LoadDocument(Preset::Doc::Document document, bool read_only = false);
     void Close();
 
     [[nodiscard]] bool Loaded() const { return document_ != nullptr; }
+    [[nodiscard]] bool ReadOnly() const { return read_only_; }
     [[nodiscard]] const Preset::Doc::Document& Document() const { return *document_; }
     [[nodiscard]] const DocPtr& Snapshot() const { return document_; }
 
     bool Apply(const Edit& edit);
+    void MarkSaved();
     void BeginGesture();
     void EndGesture();
 
@@ -111,6 +113,7 @@ private:
     int gesture_ = 0;
     bool gesture_pushed_ = false;
     bool dirty_ = false;
+    bool read_only_ = false;
 };
 
 State& Global();

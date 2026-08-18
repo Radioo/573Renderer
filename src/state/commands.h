@@ -15,6 +15,7 @@ struct ExportRequest {
     int quality = 60;
     int keyframe_interval = 0;
     int max_frames = 0;
+    int start_frame = 0;
     int loop_count = 1;
     int blend_frames = 15;
     int format = MediaSink::ToIndex(MediaSink::kDefaultFormat);

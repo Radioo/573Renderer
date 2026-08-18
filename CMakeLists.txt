@@ -174,6 +174,9 @@ add_library(r573_app STATIC
     src/editor/tween_edits.cpp
     src/editor/curve_geometry.cpp
     src/editor/options_model.cpp
+    src/editor/library_model.cpp
+    src/editor/export_range.cpp
+    src/editor/frame_inspector_model.cpp
     src/gc2d/gc_package.cpp
     src/gc2d/gc_host.cpp
     src/gc2d/gc_sheet.cpp
@@ -210,7 +213,9 @@ add_library(r573_app STATIC
     src/gui/gui_panels.cpp
     src/gui/gui_scene3d_panel.cpp
     src/gui/gui_gc2d_panel.cpp
-    src/gui/gui_preset_panel.cpp
+    src/gui/gui_preset_library.cpp
+    src/gui/gui_preset_library_actions.cpp
+    src/gui/timeline/gui_tl_frame_inspector.cpp
     src/gui/panel_registry.cpp
     src/gui/gui_style.cpp
     src/gui/gui_widgets.cpp
@@ -292,6 +297,7 @@ add_library(r573_app STATIC
     src/preset/eval/eval_scene.cpp
     src/preset/eval/eval_particles.cpp
     src/preset/eval/eval_resolve.cpp
+    src/preset/eval/frame_report.cpp
     src/preset/eval/eval_emit.cpp
     src/preset/eval/preset_evaluator.cpp
     src/preset/defaults/defaults.cpp
@@ -402,6 +408,9 @@ add_executable(game_tests
     tests/editor/tween_edits_tests.cpp
     tests/editor/curve_geometry_tests.cpp
     tests/editor/options_model_tests.cpp
+    tests/editor/library_model_tests.cpp
+    tests/editor/export_range_tests.cpp
+    tests/editor/frame_inspector_model_tests.cpp
     src/backend/preset_command_apply.cpp
     src/editor/clip_form.cpp
     src/editor/clip_problems.cpp
@@ -416,6 +425,9 @@ add_executable(game_tests
     src/editor/tween_edits.cpp
     src/editor/curve_geometry.cpp
     src/editor/options_model.cpp
+    src/editor/library_model.cpp
+    src/editor/export_range.cpp
+    src/editor/frame_inspector_model.cpp
     src/preset/preset_host.cpp
     src/preset/preset_host_push.cpp
     src/preset/preset_preview.cpp
@@ -440,6 +452,7 @@ add_executable(game_tests
     src/preset/eval/eval_scene.cpp
     src/preset/eval/eval_particles.cpp
     src/preset/eval/eval_resolve.cpp
+    src/preset/eval/frame_report.cpp
     src/preset/eval/eval_emit.cpp
     src/preset/eval/preset_evaluator.cpp
     src/preset/defaults/defaults.cpp
@@ -604,7 +617,8 @@ add_executable(gui_tests
     tests/gui/timeline_tests.cpp
     tests/gui/qpro_panel_tests.cpp
     tests/gui/host_panel_tests.cpp
-    tests/gui/preset_panel_tests.cpp
+    tests/gui/library_tests.cpp
+    tests/gui/frame_inspector_tests.cpp
     tests/gui/clip_modal_tests.cpp
     tests/gui/timeline_editor_tests.cpp
     tests/gui/tween_ui_tests.cpp

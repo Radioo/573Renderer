@@ -10,6 +10,7 @@
 #include "preset/doc/preset_document.h"
 #include "state/app_state.h"
 #include "state/preset_commands.h"
+#include "state/telemetry.h"
 
 #include <algorithm>
 #include <cmath>
@@ -61,6 +62,17 @@ void DrawHeaderSplitter(Ctx& ctx) {
     Editor::View& view = ctx.editor->MutView();
     view.header_w = std::clamp(view.header_w + ImGui::GetIO().MouseDelta.x, Editor::kHeaderWidthMin,
                                Editor::kHeaderWidthMax);
+}
+
+App::PresetStatus StatusFor(const Editor::State& editor, const Doc::Document& document,
+                            int length) {
+    if (!editor.ReadOnly()) return App::Global().GetPresetStatus();
+    App::PresetStatus status;
+    status.id = document.id;
+    status.length = length;
+    status.fps = document.fps;
+    status.loop = false;
+    return status;
 }
 
 float ContentHeight(const Ctx& ctx) {
@@ -123,15 +135,18 @@ void DashedVertical(const Ctx& ctx, float x, float y0, float y1, ImU32 color) {
 }
 
 void PostSeek(int frame) {
+    if (Editor::Global().ReadOnly()) return;
     App::Global().PostCommand(PresetCmd::Wrap(PresetCmd::Seek{.frame = std::max(0, frame)}));
     App::Global().PostCommand(PresetCmd::Wrap(PresetCmd::SetPaused{.paused = true}));
 }
 
 void PostPaused(bool paused) {
+    if (Editor::Global().ReadOnly()) return;
     App::Global().PostCommand(PresetCmd::Wrap(PresetCmd::SetPaused{.paused = paused}));
 }
 
 void PublishDocument(const Ctx& ctx) {
+    if (ctx.editor->ReadOnly()) return;
     if (ctx.editor->Revision() == g_published) return;
     g_published = ctx.editor->Revision();
     App::Global().PostCommand(
@@ -149,6 +164,7 @@ float TrackHeight(const Doc::Track& track) {
 bool Active() {
     const Editor::State& editor = Editor::Global();
     if (!editor.Loaded()) return false;
+    if (editor.ReadOnly()) return true;
     return App::Global().GetPresetStatus().id == editor.Document().id;
 }
 
@@ -165,7 +181,7 @@ void RenderModals() {
         CloseCurveEditor();
     }
     const Editor::Request request = editor.TakeRequest();
-    switch (request.kind) {
+    switch (editor.ReadOnly() ? Editor::RequestKind::None : request.kind) {
     case Editor::RequestKind::ClipProperties:
         if (request.index >= 0) editor.SelectKey(request.clip_id, request.index);
         RequestClipModal(request.clip_id, request.index >= 0);
@@ -207,9 +223,9 @@ void Render(float height) {
     Ctx ctx;
     ctx.editor = &editor;
     ctx.document = alive.get();
-    ctx.status = App::Global().GetPresetStatus();
     ctx.draw = ImGui::GetWindowDrawList();
     ctx.length = Editor::DocumentLength(*ctx.document);
+    ctx.status = StatusFor(editor, *ctx.document, ctx.length);
     ctx.any_solo = std::ranges::any_of(ctx.document->tracks,
                                        [](const Doc::Track& track) { return track.solo; });
 

@@ -1,6 +1,7 @@
 #include "preset/eval/eval_scene.h"
 
 #include "preset/doc/preset_commands.h"
+#include "preset/doc/preset_document.h"
 #include "preset/doc/preset_enum_names.h"
 #include "preset/eval/eval_tween.h"
 #include "preset/eval/frame_state.h"
@@ -110,21 +111,29 @@ bool ReadModel(const ModelSlot& slot, std::string_view field, TweenValue& out) {
     return true;
 }
 
-bool WriteModel(ModelSlot& slot, std::string_view field, const TweenValue& value) {
+bool WriteModel(ModelSlot& slot, std::string_view field, const TweenValue& value,
+                const Doc::Clip* origin) {
     if (field == "alpha") {
         slot.alpha = value.scalar;
+        slot.from.alpha = origin;
     } else if (field == "anim_speed") {
         slot.anim_speed = value.scalar;
+        slot.from.anim_speed = origin;
     } else if (field == "blend_mode") {
         slot.blend_mode = value.integer;
+        slot.from.blend_mode = origin;
     } else if (field == "position") {
         slot.position = value.vector;
+        slot.from.position = origin;
     } else if (field == "rotation") {
         slot.rotation = value.vector;
+        slot.from.rotation = origin;
     } else if (field == "scale") {
         slot.scale = value.vector;
+        slot.from.scale = origin;
     } else if (field == "spin_per_frame") {
         slot.spin_per_frame = value.vector;
+        slot.from.spin_per_frame = origin;
     } else {
         return false;
     }
@@ -150,19 +159,26 @@ bool ReadSprite(const SpriteSlot& slot, std::string_view field, TweenValue& out)
     return true;
 }
 
-bool WriteSprite(SpriteSlot& slot, std::string_view field, const TweenValue& value) {
+bool WriteSprite(SpriteSlot& slot, std::string_view field, const TweenValue& value,
+                 const Doc::Clip* origin) {
     if (field == "x") {
         slot.x = value.scalar;
+        slot.from.x = origin;
     } else if (field == "y") {
         slot.y = value.scalar;
+        slot.from.y = origin;
     } else if (field == "alpha") {
         slot.alpha = value.scalar;
+        slot.from.alpha = origin;
     } else if (field == "scale") {
         slot.scale = value.scalar;
+        slot.from.scale = origin;
     } else if (field == "blend") {
         slot.blend = value.integer;
+        slot.from.blend = origin;
     } else if (field == "priority") {
         slot.priority = value.integer;
+        slot.from.priority = origin;
     } else {
         return false;
     }
@@ -188,19 +204,26 @@ bool ReadCamera(const CameraState& camera, std::string_view field, TweenValue& o
     return true;
 }
 
-bool WriteCamera(CameraState& camera, std::string_view field, const TweenValue& value) {
+bool WriteCamera(CameraState& camera, std::string_view field, const TweenValue& value,
+                 const Doc::Clip* origin) {
     if (field == "eye") {
         camera.eye = value.vector;
+        camera.from.eye = origin;
     } else if (field == "at") {
         camera.at = value.vector;
+        camera.from.at = origin;
     } else if (field == "up") {
         camera.up = value.vector;
+        camera.from.up = origin;
     } else if (field == "fov_y") {
         camera.fov_y = value.scalar;
+        camera.from.fov_y = origin;
     } else if (field == "near_z") {
         camera.near_z = value.scalar;
+        camera.from.near_z = origin;
     } else if (field == "far_z") {
         camera.far_z = value.scalar;
+        camera.from.far_z = origin;
     } else {
         return false;
     }
@@ -220,7 +243,9 @@ bool ReadLight(const LightState& light, std::string_view field, TweenValue& out)
     return true;
 }
 
-bool WriteLight(LightState& light, std::string_view field, const TweenValue& value) {
+bool WriteLight(LightState& light, std::string_view field, const TweenValue& value,
+                const Doc::Clip* origin) {
+    light.from = origin;
     if (field == "direction") {
         light.direction = value.vector;
     } else if (field == "diffuse") {
@@ -281,28 +306,31 @@ bool ReadTarget(std::string_view id, const FrameState& state, TweenValue& out) {
     return false;
 }
 
-bool WriteTarget(std::string_view id, const TweenValue& value, FrameState& state) {
+bool WriteTarget(std::string_view id, const TweenValue& value, FrameState& state,
+                 const Doc::Clip* origin) {
     TargetPath path;
     if (!SplitTarget(id, path)) return false;
     if (path.scope == "model") {
         ModelSlot* slot = FindModel(state, path.name);
-        return slot != nullptr && WriteModel(*slot, path.field, value);
+        return slot != nullptr && WriteModel(*slot, path.field, value, origin);
     }
     if (path.scope == "sprite") {
         SpriteSlot* slot = FindSprite(state, path.name);
-        return slot != nullptr && WriteSprite(*slot, path.field, value);
+        return slot != nullptr && WriteSprite(*slot, path.field, value, origin);
     }
-    if (path.scope == "camera") return WriteCamera(state.camera, path.field, value);
+    if (path.scope == "camera") return WriteCamera(state.camera, path.field, value, origin);
     if (path.scope == "light") {
         if (path.index < 0 || (std::size_t)path.index >= state.lights.size()) return false;
-        return WriteLight(state.lights[(std::size_t)path.index], path.field, value);
+        return WriteLight(state.lights[(std::size_t)path.index], path.field, value, origin);
     }
     if (path.scope == "sprite_split_priority") {
         state.sprite_split_priority = value.integer;
+        state.split_from = origin;
         return true;
     }
     if (path.scope == "shading") {
         state.shading = (Doc::Shading)value.integer;
+        state.shading_from = origin;
         return true;
     }
     return false;

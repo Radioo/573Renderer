@@ -43,27 +43,33 @@ void SampleCameraKeys(const Doc::Clip& clip, int frame, CameraState& camera,
     TweenValue sampled;
     if (SampleKeys(clip.keys, "fov_y", clip_frame, ScalarOf(camera.fov_y), sampled)) {
         camera.fov_y = sampled.scalar;
+        camera.from.fov_y = &clip;
         RecordWrite(writes, WriteKind::CameraProjection, true, camera);
     }
     if (SampleKeys(clip.keys, "near_z", clip_frame, ScalarOf(camera.near_z), sampled)) {
         camera.near_z = sampled.scalar;
+        camera.from.near_z = &clip;
         RecordWrite(writes, WriteKind::CameraProjection, false, camera);
     }
     if (SampleKeys(clip.keys, "far_z", clip_frame, ScalarOf(camera.far_z), sampled)) {
         camera.far_z = sampled.scalar;
+        camera.from.far_z = &clip;
         RecordWrite(writes, WriteKind::CameraProjection, false, camera);
     }
     bool moved = false;
     if (SampleKeys(clip.keys, "eye", clip_frame, VectorOf(camera.eye), sampled)) {
         camera.eye = sampled.vector;
+        camera.from.eye = &clip;
         moved = true;
     }
     if (SampleKeys(clip.keys, "at", clip_frame, VectorOf(camera.at), sampled)) {
         camera.at = sampled.vector;
+        camera.from.at = &clip;
         moved = true;
     }
     if (SampleKeys(clip.keys, "up", clip_frame, VectorOf(camera.up), sampled)) {
         camera.up = sampled.vector;
+        camera.from.up = &clip;
         moved = true;
     }
     if (moved) RecordWrite(writes, WriteKind::CameraView, false, camera);
@@ -87,15 +93,34 @@ CameraState CameraFrom(const Doc::CameraSpec& spec, int render_w, int render_h) 
 
 void ApplyCameraSet(const Doc::Clip& clip, const Doc::CameraSet& command, int frame,
                     CameraState& camera, std::vector<MaterialWrite>& writes, bool with_keys) {
-    if (command.eye.has_value()) camera.eye = ToVec3f(*command.eye);
-    if (command.at.has_value()) camera.at = ToVec3f(*command.at);
-    if (command.up.has_value()) camera.up = ToVec3f(*command.up);
-    if (command.fov_y.has_value()) camera.fov_y = (float)*command.fov_y;
-    if (command.near_z.has_value()) camera.near_z = (float)*command.near_z;
-    if (command.far_z.has_value()) camera.far_z = (float)*command.far_z;
+    if (command.eye.has_value()) {
+        camera.eye = ToVec3f(*command.eye);
+        camera.from.eye = &clip;
+    }
+    if (command.at.has_value()) {
+        camera.at = ToVec3f(*command.at);
+        camera.from.at = &clip;
+    }
+    if (command.up.has_value()) {
+        camera.up = ToVec3f(*command.up);
+        camera.from.up = &clip;
+    }
+    if (command.fov_y.has_value()) {
+        camera.fov_y = (float)*command.fov_y;
+        camera.from.fov_y = &clip;
+    }
+    if (command.near_z.has_value()) {
+        camera.near_z = (float)*command.near_z;
+        camera.from.near_z = &clip;
+    }
+    if (command.far_z.has_value()) {
+        camera.far_z = (float)*command.far_z;
+        camera.from.far_z = &clip;
+    }
     if (command.aspect.has_value()) {
         camera.aspect_auto = command.aspect->automatic;
         if (!camera.aspect_auto) camera.aspect_value = (float)command.aspect->value;
+        camera.from.aspect = &clip;
     }
     if (with_keys) SampleCameraKeys(clip, frame, camera, writes);
 }
@@ -105,7 +130,8 @@ void ApplyCameraTween(const Doc::Clip& clip, int frame, CameraState& camera,
     SampleCameraKeys(clip, frame, camera, writes);
 }
 
-void ApplyLightSet(const Doc::LightSet& command, std::vector<LightState>& lights) {
+void ApplyLightSet(const Doc::Clip& clip, const Doc::LightSet& command,
+                   std::vector<LightState>& lights) {
     const auto index = (std::size_t)std::max(0, command.index);
     if (index >= lights.size()) lights.resize(index + 1);
     LightState& light = lights[index];
@@ -113,6 +139,7 @@ void ApplyLightSet(const Doc::LightSet& command, std::vector<LightState>& lights
     if (command.diffuse.has_value()) light.diffuse = ToVec3f(*command.diffuse);
     if (command.specular.has_value()) light.specular = ToVec3f(*command.specular);
     light.enabled = command.enabled;
+    light.from = &clip;
 }
 
 }

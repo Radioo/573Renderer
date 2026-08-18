@@ -124,7 +124,8 @@ void Evaluator::ApplyChoiceValues(FrameState& state) const {
                     if (captured.id == value.id) from = captured.value;
                 }
             }
-            WriteTarget(value.id, blending ? BlendValues(from, target, factor) : target, state);
+            WriteTarget(value.id, blending ? BlendValues(from, target, factor) : target, state,
+                        nullptr);
         }
     }
 }

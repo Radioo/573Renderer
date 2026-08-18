@@ -1,5 +1,6 @@
 #include "gui_test_harness.h"
 
+#include "editor/export_range.h"
 #include "editor/preset_editor_state.h"
 #include "editor/timeline_edits.h"
 #include "editor/timeline_view.h"
@@ -734,4 +735,32 @@ TEST_CASE("the fixed 76 px dock still serves the AFP backends", "[gui][timeline]
         IM_CHECK(ctx->ItemExists("###tl_ruler") == false);
     };
     harness.Run(test);
+}
+
+TEST_CASE("shift dragging the ruler sets the export range", "[gui][timeline][editor]") {
+    GuiTest::Harness harness;
+    OpenEditor(0);
+
+    ImGuiTest* test = harness.NewTest("tl_export_range");
+    test->TestFunc = [](ImGuiTestContext* ctx) {
+        FocusEditor(ctx);
+        const ImGuiTestItemInfo info = ctx->ItemInfo("###tl_ruler");
+        IM_CHECK_NE(info.ID, 0U);
+        const float y = (info.RectFull.Min.y + info.RectFull.Max.y) * 0.5F;
+        ctx->MouseMoveToPos(ImVec2(info.RectFull.Min.x + 100.0F, y));
+        ctx->KeyDown(ImGuiKey_LeftShift);
+        ctx->MouseDown(0);
+        ctx->MouseMoveToPos(ImVec2(info.RectFull.Min.x + 260.0F, y));
+        ctx->Yield(2);
+        ctx->MouseUp(0);
+        ctx->KeyUp(ImGuiKey_LeftShift);
+        ctx->Yield(2);
+    };
+    harness.Run(test);
+
+    const Editor::ExportRange range = Editor::Global().GetView().export_range;
+    CHECK(range.active);
+    CHECK(range.start == 100);
+    CHECK(range.end == 261);
+    Editor::Global().Close();
 }
