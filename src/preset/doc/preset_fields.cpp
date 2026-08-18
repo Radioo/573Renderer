@@ -2,7 +2,6 @@
 
 #include "preset/doc/preset_commands.h"
 #include "preset/doc/preset_enum_names.h"
-#include "preset/preset_params.h"
 
 #include <array>
 #include <cstddef>
@@ -144,18 +143,18 @@ template <class C, auto Member> constexpr FieldDesc Field(FieldDesc desc) {
     return desc;
 }
 
-constexpr Preset::Range kPixels = {.min = -4096.0F, .max = 4096.0F, .step = 1.0F, .soft = true};
-constexpr Preset::Range kUnitInterval = {.min = 0.0F, .max = 1.0F, .step = 0.005F};
-constexpr Preset::Range kSpriteScale = {.min = 0.05F, .max = 16.0F, .step = 0.005F, .soft = true};
-constexpr Preset::Range kPriority = {.min = 0.0F, .max = 64.0F, .step = 1.0F};
-constexpr Preset::Range kFrameCount = {.min = 0.0F, .max = 36000.0F, .step = 1.0F, .soft = true};
-constexpr Preset::Range kSpeed = {.min = 0.0F, .max = 8.0F, .step = 0.005F, .soft = true};
-constexpr Preset::Range kDegrees = {.min = -360.0F, .max = 360.0F, .soft = true};
-constexpr Preset::Range kRadius = {.min = 0.0F, .max = 8192.0F, .step = 1.0F, .soft = true};
-constexpr Preset::Range kWorld = {.min = -1000.0F, .max = 1000.0F, .soft = true};
-constexpr Preset::Range kSpin = {.min = -0.5F, .max = 0.5F, .step = 0.0005F};
-constexpr Preset::Range kUnitVector = {.min = -1.0F, .max = 1.0F};
-constexpr Preset::Range kColor = {.min = 0.0F, .max = 4.0F, .soft = true};
+constexpr Range kPixels = {.min = -4096.0F, .max = 4096.0F, .step = 1.0F, .soft = true};
+constexpr Range kUnitInterval = {.min = 0.0F, .max = 1.0F, .step = 0.005F};
+constexpr Range kSpriteScale = {.min = 0.05F, .max = 16.0F, .step = 0.005F, .soft = true};
+constexpr Range kPriority = {.min = 0.0F, .max = 64.0F, .step = 1.0F};
+constexpr Range kFrameCount = {.min = 0.0F, .max = 36000.0F, .step = 1.0F, .soft = true};
+constexpr Range kSpeed = {.min = 0.0F, .max = 8.0F, .step = 0.005F, .soft = true};
+constexpr Range kDegrees = {.min = -360.0F, .max = 360.0F, .soft = true};
+constexpr Range kRadius = {.min = 0.0F, .max = 8192.0F, .step = 1.0F, .soft = true};
+constexpr Range kWorld = {.min = -1000.0F, .max = 1000.0F, .soft = true};
+constexpr Range kSpin = {.min = -0.5F, .max = 0.5F, .step = 0.0005F};
+constexpr Range kUnitVector = {.min = -1.0F, .max = 1.0F};
+constexpr Range kColor = {.min = 0.0F, .max = 4.0F, .soft = true};
 
 constexpr auto kSpriteDrawFields = std::to_array<FieldDesc>({
     Field<SpriteDraw, &SpriteDraw::asset>({.id = "asset",

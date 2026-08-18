@@ -6,15 +6,15 @@ document-wide render, camera, light, asset, option and marker blocks. This file 
 the single source of truth for the schema, the command catalog, the canonical
 serialization rules and the validation rules.
 
-Status: milestones M1 to M3 of `docs/scene_preset_editor_plan.html` are in the
-tree. Documents now drive the app end to end: the host evaluates a document
+Status: every milestone of `docs/scene_preset_editor_plan.html` is in the tree.
+Documents drive the app end to end: the host evaluates a document
 (`preset_host.cpp` on `src/preset/eval/`), the 18 shipped screens ARE documents
 built in code (`src/preset/defaults/`, below), and the preset library and the
-preset CLI resolve them through the registry. What is left of the old world is the
-`Preset::Scene` tables plus `preset_convert.cpp`, kept only so the tests can prove
-the defaults still equal the converter output; nothing in the app reads a table
-any more. The timeline editor (M4 to M7) is in the tree: the library below is how a
-document is picked, created, saved and validated (docs/gui.md 3.6).
+preset CLI resolve them through the registry. The old world is gone: M8 deleted
+the `Preset::Scene` tables, the registry over them, `preset_effective`,
+`preset_schema`, `preset_params` and the one-shot converter `preset_convert`
+(`FromScene`). The timeline editor (M4 to M7) is in the tree: the library below is
+how a document is picked, created, saved and validated (docs/gui.md 3.6).
 
 The legacy behaviour of the old host is a committed fixture, so the evaluator was
 built against a frozen reference instead of against a host that had to survive the
@@ -37,15 +37,15 @@ allowed to have.
 | The stateful part | `src/preset/eval/eval_particles.h/.cpp`, `eval_state.h` | `SpawnParticles`, `AgeParticles`, `DrawJitter`, `EvalState` |
 | The frame the evaluator resolves and what it pushes | `src/preset/eval/frame_state.h`, `eval_push.h` | `FrameState`, `ModelSlot`, `SpriteSlot`, `Push`, `PushCall` |
 | The evaluator | `src/preset/eval/preset_evaluator.h/.cpp` | `Evaluator::Load`, `Reset`, `Seek`, `SetOption`, `RenderFrame`, `Resolve` |
-| The one-shot converter from the old tables | `src/preset/preset_convert.h/.cpp` | `FromScene` |
-| Asset lengths the evaluator and the converter need | `src/preset/preset_asset_lengths.h` | `AssetLengths::MaxTime`, `AnimationLength` |
-| Tests | `tests/game/preset_json_tests.cpp`, `preset_validate_tests.cpp`, `eval_tween_tests.cpp`, `preset_eval_tests.cpp`, `preset_convert_tests.cpp`, `preset_defaults_tests.cpp`, `preset_registry_tests.cpp`, `preset_golden_tests.cpp` | fixtures in `tests/game/fixtures/` |
+| Asset lengths the evaluator needs | `src/preset/preset_asset_lengths.h` | `AssetLengths::MaxTime`, `AnimationLength` |
+| Tests | `tests/game/preset_json_tests.cpp`, `preset_validate_tests.cpp`, `eval_tween_tests.cpp`, `preset_eval_tests.cpp`, `preset_defaults_tests.cpp`, `preset_registry_tests.cpp`, `preset_defaults_golden_tests.cpp` | fixtures in `tests/game/fixtures/` |
 
-Everything lives in `namespace Preset::Doc`. The nested namespace is deliberate:
-the old table structs (`Preset::ParamOverride`, `Preset::ModelMotion`,
-`Preset::Camera`, `Preset::Option`, ...) keep their names in `namespace Preset`
-until the last milestone deletes them, and the converter of M2 has to include both
-headers at once.
+Everything lives in `namespace Preset::Doc`. The nested namespace was deliberate
+while the old table structs (`Preset::ParamOverride`, `Preset::ModelMotion`,
+`Preset::Camera`, `Preset::Option`, ...) still held those names in
+`namespace Preset` and the converter had to include both headers at once; the
+tables are gone, the nesting stays because the file names and the include paths
+would otherwise all move.
 
 JSON is `nlohmann-json` (vcpkg port `nlohmann-json`, header only), used through
 `nlohmann::ordered_json` so key order is what the writer wrote. It is a header-only
@@ -149,8 +149,10 @@ having exactly the two negated choices.
 parameter is optional in the file and takes the catalog default when absent; the
 default is the member initializer of the command struct, and `DefaultCommand`
 hands the JSON writer the same value so "equal to the default" is decided in one
-place. Ranges come from the rows of `preset_schema.cpp` where one exists; a soft
-range is a UI hint that validation never enforces, a hard range is an error.
+place. Ranges are the `Range` of the parameter's `FieldDesc`
+(`src/preset/doc/preset_fields.cpp`), carried over from the rows of the deleted
+`preset_schema.cpp` where one existed; a soft range is a UI hint that validation
+never enforces, a hard range is an error.
 
 ### sprite.draw (sprite track, primary)
 
@@ -291,8 +293,9 @@ ONLY decay, for the motion kick and for the option transition kick alike.
 | `near_z`, `far_z` | float | absent | T |
 | `aspect` | positive float or `"auto"` | absent | |
 
-The soft `fov_y` range is a deliberate difference from `preset_schema.cpp`, whose
-`camera.fov_y` row is a hard 0.05..3.05: the RED intro passes raw fov numbers of
+The soft `fov_y` range is a deliberate difference from the deleted
+`preset_schema.cpp`, whose `camera.fov_y` row was a hard 0.05..3.05: the RED intro
+passes raw fov numbers of
 22.5 to 25.1 through what becomes a `camera.tween`, and a hard range would either
 clamp them or reject the converted attract document. `aspect` is not tweenable at
 all, so an `aspect` key is rejected as a non-tweenable value.
@@ -651,9 +654,10 @@ has one; a document whose `length` is `"auto"` (an absent `Document::length`) ha
 it DERIVED, by `Evaluator::DerivedLength`, as the largest finite clip `end`, and
 when no clip has one, as the longest content tail: per clip, `start` plus the
 `sprite.animate` animation's frame count, or plus `max_time / anim_speed` for a
-`model.draw`, both read from the asset length table. That is the rule the
-converter writes out as a number (`Converter::NaturalLength`), so an auto document
-and its converted twin clamp to the same frame. `PresetHost::Seek` clamps the same
+`model.draw`, both read from the asset length table. That is the rule the deleted
+converter evaluated once (`Converter::NaturalLength`) and wrote out as a number, so
+every built-in states its length and an auto document written by hand clamps to the
+same frame the same content would give it. `PresetHost::Seek` clamps the same
 way before it posts the command, from the published `Status::length`, and leaves
 the upper clamp to the evaluator when the document has no length of its own.
 
@@ -740,14 +744,12 @@ finished sum would not reproduce the old host's value for a ramped rate.
 `PresetHost` (`src/preset/preset_host.h`) is the only thing that turns the
 evaluator's `Push` list into engine calls. It is thin on purpose: it owns an
 `Evaluator`, the assets a document names, a command queue, and one published
-snapshot. It has no countdown, no phases, no `Materialize`.
+snapshot. It has no countdown, no phases, no materialized parameter copy.
 
 ### Loading
 
-`Load(game_dir, scene, progress)` is the temporary bridge for the compiled
-`Preset::Scene` tables: it converts with `Preset::FromScene` and evaluates the
-document. `LoadDocument(game_dir, document, progress)` is the real entry point and
-is what the registry will call in M3.
+`LoadDocument(game_dir, document, progress)` is the only entry point; the registry
+resolves a document and hands it over.
 
 Loading runs in two passes, because both the asset length table and the document's
 own length come from the assets:
@@ -757,8 +759,8 @@ own length come from the assets:
    `Scene3dHost::Setup` is built from: style, camera, lights, and every model a
    `model.draw` clip names with its frame-0 material.
 2. Load the assets, build the `AssetIndex` from what the hosts report, derive
-   `AssetLengths` from that index, and bind the document again with it. The
-   converter is re-run on the `Scene` path so `length` uses the real numbers.
+   `AssetLengths` from that index, and bind the document again with it, so a
+   document whose `length` is `"auto"` derives it from the real numbers.
 
 `progress` is a `ProgressFn(stage, fraction)`. The GUI never calls it directly: the
 library posts `PresetCmd::LoadDocument{document, game_dir}` and
@@ -899,18 +901,18 @@ of a later milestone can duplicate one without a parse step.
 
 ### How the defaults were produced
 
-They were generated once, mechanically, from the converter, then tidied; they are
-not hand-transcribed a second time from the game. The run was: dump
-`FromScene(scene, asset_lengths)` for all 18 registered scenes as canonical JSON,
-emit C++ from that JSON with a throwaway script (one function per document,
-designated initializers in declaration order, the shared builders above for the
-shapes that repeat), and run clang-format over the result. The generator was
-deleted after the run, because the guarantee does not come from it: the test
-`every old scene has a built-in document equal to the converter output`
-(`tests/game/preset_defaults_tests.cpp`) compares each built-in with
-`FromScene(scene, lengths)` field by field and byte for byte through `Save`, so
-the defaults cannot drift from the tables while both exist, and the golden test
-keeps holding the behaviour afterwards.
+They were generated once, mechanically, from the converter that M2 built over the
+old `Preset::Scene` tables; they are not hand-transcribed a second time from the
+game. The run was: dump `FromScene(scene, asset_lengths)` for all 18 registered
+scenes as canonical JSON, emit C++ from that JSON with a throwaway script (one
+function per document, designated initializers in declaration order, the shared
+builders above for the shapes that repeat), and run clang-format over the result.
+The generator was deleted after the run, and M8 deleted the converter and the
+tables too, because the guarantee never came from them: the golden test
+(`tests/game/preset_defaults_golden_tests.cpp`) replays these documents through
+the evaluator and compares every push against the fixture recorded from the LEGACY
+host, so the behaviour is pinned by a frozen recording rather than by a second
+copy of the tables. See `docs/preset_golden.md`.
 
 Two conventions in the generated files are worth knowing before editing one:
 

@@ -117,28 +117,29 @@ bracket the 3D pass and all agree the split belongs between 24 and 31: title 2D
 at 15 and the ending's bursts at 24 draw in front of the models, while the title
 warp particles at 31 and the ending backdrop at 31 draw behind them.
 
-## Ramps: a phase can move a value per frame
+## Ramps: a clip can move a value per frame
 
-A phase holds constants. A fly-in is a curve, so a phase can also carry `Ramp`
-entries: a parameter id, a from and to value, a length in frames, and the curve
-the game uses. Two curves cover every fly-in found so far, and both are the shape
-the game's own arithmetic has:
+A clip holds constants. A fly-in is a curve, so a clip also carries tween keys: a
+parameter, a value per key, the key frames, and the ease the game uses. Two eases
+cover every fly-in found so far, and both are the shape the game's own arithmetic
+has:
 
-- `Linear` for an accumulator whose per-frame step changes linearly. Mode select's
+- `linear` for an accumulator whose per-frame step changes linearly. Mode select's
   wind-up is `A -= max(60-2n, 4) * k`, so the STEP is linear in n even though the
-  angle is quadratic; ramping `motion.spin_per_frame` reproduces it exactly.
-- `Sine` for `value = from + (to - from) * sin(rate * t degrees)`. Music select's
-  z and expert select's position are both this, which is why music select
+  angle is quadratic; tweening `spin_per_frame` reproduces it exactly.
+- `sine_deg` for `value = from + (to - from) * sin(rate * t degrees)`. Music
+  select's z and expert select's position are both this, which is why music select
   overshoots: `sin` passes 1.0 at frame 30 and comes back down before the clamp.
 
-A ramp writes straight into the effective copy each frame, so it costs no
-re-materialize, and the parameter still reports the game's value as its default.
+The keys are resolved into the frame the evaluator hands the host, so a ramped
+value costs nothing beyond the resolve and the parameter still reports the game's
+value as its default (docs/preset_document.md).
 
 ## Emitters: particles the screen blits per frame
 
 Some screens draw particles through `sub_438480`, a per-frame blit QUEUE rather
-than a registered layer, which is why they cannot be a `SpriteLayer`. A phase can
-carry `Emitter` entries instead, and the host keeps the same pool of live
+than a registered layer, which is why they cannot be a `sprite.animate` clip. An
+`emitter` clip carries them instead, and the host keeps the same pool of live
 particles the game's queue does, ageing and freeing them on the same schedule.
 
 The attract warp's ring is fully deterministic and is reproduced exactly: 16
@@ -205,8 +206,8 @@ before the jitter draw, as in the switch.
 spawned on frame N first draw on frame N + 1, because the pass that draws them
 already ran. The host keeps live particles with those integer semantics.
 
-The three spawn triggers are the game's three: `PhaseStart` for `if (v1 == 0)`,
-`EveryFrame` for phase 13's unconditional 32 per frame, and `Beat` for phase 14's
+The three spawn triggers are the game's three: `clip_start` for `if (v1 == 0)`,
+`every_frame` for phase 13's unconditional 32 per frame, and `beat` for phase 14's
 128 on `since == 0` with an odd beat index.
 
 ### Swapping layers without making identity editable
@@ -216,8 +217,9 @@ animation ids the screen was already using, which is a layer SWAP. Layer identit
 is deliberately not a parameter, because identity is exactly what the layer gate
 parses out of source and matches against a background verdict.
 
-The swap therefore needs no new mechanism: the scene declares both layers, so the
-gate vets both, and the phases toggle `sprite[NAME].visible`. The observable
+The swap therefore needs no new mechanism: the document declares both layers, so
+the gate vets both, and `param.override` clips toggle `sprite[NAME].visible`. The
+observable
 result is the game's, and identity stays uneditable at runtime.
 
 `DECIDE_BG` is excluded even so. Its only backdrop cell, `EXDECIDE`, has YOUR

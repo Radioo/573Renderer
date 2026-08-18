@@ -2,6 +2,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "backend/afp_profiles.h"
+#include "game_fingerprint.h"
 #include "game_profile.h"
 #include "game_revision.h"
 
@@ -44,6 +45,14 @@ struct TempDir {
         std::ofstream f(root / rel, std::ios::binary);
         f << "x";
     }
+
+    void Sized(const char* rel, std::size_t size, char fill) const {
+        std::error_code ec;
+        std::filesystem::create_directories((root / rel).parent_path(), ec);
+        std::ofstream f(root / rel, std::ios::binary);
+        const std::vector<char> bytes(size, fill);
+        f.write(bytes.data(), (std::streamsize)bytes.size());
+    }
 };
 
 }
@@ -60,6 +69,25 @@ TEST_CASE("Every profile carries a slug, backend and sane default render size") 
         CHECK(p.default_render_h > 0);
         CHECK(GameProfile::BySlug(p.slug) == &p);
     }
+}
+
+TEST_CASE("fingerprint accepts a size match as a patched copy and rejects a size mismatch") {
+    const TempDir patched("fp_patched");
+    patched.Sized("JAE/bm2dx.exe", 860160, 'A');
+    const GameFingerprint::Match hit = GameFingerprint::Identify(patched.root.string());
+    REQUIRE(hit.build != nullptr);
+    CHECK(std::string(hit.build->id) == "iidx10");
+    CHECK(hit.file.find("bm2dx.exe") != std::string::npos);
+
+    const TempDir wrong("fp_wrongsize");
+    wrong.Sized("JAE/bm2dx.exe", 4096, 'A');
+    CHECK(GameFingerprint::Identify(wrong.root.string()).build == nullptr);
+}
+
+TEST_CASE("fingerprint finds nothing in an empty directory") {
+    const TempDir empty("fp_empty");
+    CHECK(GameFingerprint::Identify(empty.root.string()).build == nullptr);
+    CHECK(GameFingerprint::Identify("").build == nullptr);
 }
 
 TEST_CASE("BySlug rejects an unknown or empty slug") {

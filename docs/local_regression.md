@@ -70,10 +70,17 @@ R573_SDVX_DIR / R573_DDR_DIR / R573_IIDX10_DIR) set.
 
 Contracts covered:
 - IIDX 10 screen presets (tests/local/iidx10_screen_data_tests.cpp, R573_IIDX10_DIR):
-  every animation a preset names exists in its package, and the two frame
-  counts the presets bake in - the game-over countdown and the card-in prompt
-  loop ranges - equal the real animations' lengths. The game reads those at
-  runtime, so this is what keeps the static table honest.
+  every animation a `sprite.animate` clip of a built-in IIDX 10 document names
+  exists in its package, and the one frame count the documents bake in - the game
+  over document's `length` of 180 - equals the real animation's length. The game
+  reads that at runtime, so this is what keeps the built-in documents
+  (`src/preset/defaults/`) honest. The game over test names
+  `data/graph/sys/gameover` / `GAMEOVER` as a literal because the document cannot:
+  that banner is classified chrome in docs/preset_layers.md, so no clip draws it,
+  yet its length is where the screen's 180 frames come from. No built-in declares a
+  `loop_start` / `loop_end` range, so there is no loop range to check against the
+  data; the M8 rewrite of this file dropped a loop over card-in loop ranges that
+  had always iterated zero times.
 - bm2dx qpro pattern-scan: `QproDll::Read` on the real bm2dx.dll - parses ok,
   >= 447 heads, first head is qp_kihon, every head is a `qp_*.ifs` name.
 - game profile auto-detection on the real installs (slug + legacy_afp).

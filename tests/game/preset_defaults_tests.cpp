@@ -5,13 +5,7 @@
 #include "preset/doc/preset_document.h"
 #include "preset/doc/preset_json.h"
 #include "preset/doc/preset_validate.h"
-#include "preset/preset_asset_lengths.h"
-#include "preset/preset_convert.h"
 #include "preset/preset_tools.h"
-#include "preset/scene_preset.h"
-
-#include <nlohmann/json.hpp>
-#include <nlohmann/json_fwd.hpp>
 
 #include <cstddef>
 #include <filesystem>
@@ -26,35 +20,6 @@
 namespace {
 
 namespace PD = Preset::Doc;
-
-std::string ReadFixture(const std::string& name) {
-    const std::ifstream file(std::string(R573_FIXTURE_DIR) + "/" + name, std::ios::binary);
-    REQUIRE(file.good());
-    std::ostringstream text;
-    text << file.rdbuf();
-    return text.str();
-}
-
-Preset::AssetLengths Lengths() {
-    const nlohmann::json doc = nlohmann::json::parse(ReadFixture("asset_lengths.json"));
-    Preset::AssetLengths lengths;
-    for (const auto& [dir, ticks] : doc["scene3d"].items())
-        lengths.scene_ticks[dir] = ticks.get<float>();
-    for (const auto& [dir, animations] : doc["package2d"].items()) {
-        for (const auto& [name, frames] : animations.items())
-            lengths.animation_frames[dir][name] = frames.get<int>();
-    }
-    return lengths;
-}
-
-std::vector<const Preset::Scene*> AllScenes() {
-    std::vector<const Preset::Scene*> scenes;
-    for (const std::string_view build : {"iidx10", "iidx11"}) {
-        for (const Preset::Scene* scene : Preset::ForBuild(build))
-            scenes.push_back(scene);
-    }
-    return scenes;
-}
 
 const PD::Document* Find(const std::vector<PD::Document>& documents, std::string_view id) {
     for (const PD::Document& document : documents) {
@@ -74,30 +39,29 @@ std::string Describe(const std::vector<PD::Problem>& problems) {
 
 }
 
-TEST_CASE("every old scene has a built-in document equal to the converter output") {
-    const std::vector<PD::Document> built_ins = PD::BuiltIns();
-    const Preset::AssetLengths lengths = Lengths();
-    const std::vector<const Preset::Scene*> scenes = AllScenes();
-    REQUIRE(built_ins.size() == scenes.size());
-    for (const Preset::Scene* scene : scenes) {
-        INFO(scene->id);
-        const PD::Document* document = Find(built_ins, scene->id);
-        REQUIRE(document != nullptr);
-        const PD::Document converted = Preset::FromScene(*scene, lengths);
-        CHECK(document->build == converted.build);
-        CHECK(document->name == converted.name);
-        CHECK(document->length == converted.length);
-        CHECK(document->markers == converted.markers);
-        CHECK(document->assets == converted.assets);
-        CHECK(document->options == converted.options);
-        REQUIRE(document->tracks.size() == converted.tracks.size());
-        for (std::size_t i = 0; i < converted.tracks.size(); i++) {
-            INFO("track " << converted.tracks[i].id);
-            REQUIRE(document->tracks[i] == converted.tracks[i]);
-        }
-        REQUIRE(*document == converted);
-        REQUIRE(PD::Save(*document) == PD::Save(converted));
+TEST_CASE("every built-in document round trips through JSON byte for byte") {
+    for (const PD::Document& document : PD::BuiltIns()) {
+        const std::string text = PD::Save(document);
+        const PD::Loaded loaded = PD::Load(text);
+        INFO(document.id);
+        REQUIRE(loaded.has_value());
+        REQUIRE(*loaded == document);
+        REQUIRE(PD::Save(*loaded) == text);
     }
+}
+
+TEST_CASE("the attract built-in carries the five phase markers") {
+    const std::vector<PD::Document> built_ins = PD::BuiltIns();
+    const PD::Document* attract = Find(built_ins, "iidx11-attract");
+    REQUIRE(attract != nullptr);
+    REQUIRE(attract->markers.size() == 5);
+    CHECK(attract->markers[0].frame == 0);
+    CHECK(attract->markers[1].frame == 502);
+    CHECK(attract->markers[2].frame == 793);
+    CHECK(attract->markers[3].frame == 902);
+    CHECK(attract->markers[4].frame == 1736);
+    REQUIRE(attract->length.has_value());
+    CHECK(*attract->length == 2456);
 }
 
 TEST_CASE("built-in documents carry unique ids and validate without an error") {

@@ -1,12 +1,30 @@
 #pragma once
 
 #include "preset/eval/eval_push.h"
-#include "preset/scene_preset.h"
 
+#include <map>
 #include <string>
 #include <vector>
 
 namespace PresetLegacy {
+
+struct Countdown {
+    int start_frames = 0;
+    int ramp_below = 0;
+    float speed_base = 1.0F;
+    float speed_per_frame = 0.0F;
+    float fade_from = 1.0F;
+    float fade_per_frame = 0.0F;
+};
+
+struct Compat {
+    std::string lead = {};
+    Countdown countdown = {};
+    std::vector<int> phase_starts = {};
+    std::vector<std::vector<std::string>> hidden_movers = {};
+};
+
+std::map<std::string, Compat> LoadCompat(const std::string& text, std::string& err);
 
 struct FrameCalls {
     std::vector<std::string> calls;
@@ -15,7 +33,7 @@ struct FrameCalls {
 
 class Adapter {
 public:
-    explicit Adapter(const Preset::Scene& scene);
+    explicit Adapter(Compat compat);
 
     FrameCalls Filter(const std::vector<Preset::Eval::Push>& pushes, int record_frame) const;
 
@@ -27,9 +45,7 @@ public:
 private:
     int PhaseAt(int frame) const;
 
-    const Preset::Scene& scene_;
-    std::vector<std::vector<std::string>> hidden_movers_;
-    std::string lead_;
+    Compat compat_;
 };
 
 }

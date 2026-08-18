@@ -2,13 +2,19 @@
 
 #include "preset/doc/preset_commands.h"
 #include "preset/doc/preset_enum_names.h"
-#include "preset/preset_params.h"
 
 #include <cstdint>
 #include <span>
 #include <string_view>
 
 namespace Preset::Doc {
+
+struct Range {
+    float min = 0.0F;
+    float max = 0.0F;
+    float step = 0.0F;
+    bool soft = false;
+};
 
 enum class FieldKind : uint8_t {
     Bool,
@@ -31,7 +37,7 @@ enum class FieldKind : uint8_t {
 struct FieldDesc {
     std::string_view id;
     FieldKind kind = FieldKind::Float;
-    Preset::Range range = {};
+    Range range = {};
     std::string_view unit = {};
     std::string_view help = {};
     bool tweenable = false;

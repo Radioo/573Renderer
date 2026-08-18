@@ -277,16 +277,9 @@ add_library(r573_app STATIC
     src/afp_ddr_txp2.cpp
     src/afp_ddr_test.cpp
     src/game_fingerprint.cpp
-    src/preset/scene_presets.cpp
-    src/preset/scene_presets_iidx10.cpp
-    src/preset/scene_presets_iidx11.cpp
     src/preset/preset_host.cpp
     src/preset/preset_host_push.cpp
     src/preset/preset_preview.cpp
-    src/preset/preset_convert.cpp
-    src/preset/preset_params.cpp
-    src/preset/preset_schema.cpp
-    src/preset/preset_effective.cpp
     src/preset/preset_rng.cpp
     src/preset/preset_test.cpp
     src/preset/preset_tools.cpp
@@ -386,16 +379,14 @@ catch_discover_tests(formats_tests DISCOVERY_MODE POST_BUILD PROPERTIES LABELS c
 add_executable(game_tests
     tests/game/game_profile_tests.cpp
     tests/game/mc_control_tests.cpp
-    tests/game/scene_preset_tests.cpp
     tests/game/preset_json_tests.cpp
     tests/game/preset_validate_tests.cpp
-    tests/game/preset_golden_tests.cpp
+    tests/game/preset_defaults_golden_tests.cpp
     tests/game/preset_golden_format.cpp
     tests/game/preset_push_text.cpp
     tests/game/preset_legacy_view.cpp
     tests/game/preset_eval_tests.cpp
     tests/game/preset_option_tests.cpp
-    tests/game/preset_convert_tests.cpp
     tests/game/preset_defaults_tests.cpp
     tests/game/preset_registry_tests.cpp
     tests/game/eval_tween_tests.cpp
@@ -437,14 +428,7 @@ add_executable(game_tests
     src/game_revision.cpp
     src/game_fingerprint.cpp
     src/backend/afp_profiles.cpp
-    src/preset/scene_presets.cpp
-    src/preset/scene_presets_iidx10.cpp
-    src/preset/scene_presets_iidx11.cpp
-    src/preset/preset_params.cpp
-    src/preset/preset_schema.cpp
-    src/preset/preset_effective.cpp
     src/preset/preset_rng.cpp
-    src/preset/preset_convert.cpp
     src/preset/eval/eval_tween.cpp
     src/preset/eval/eval_models.cpp
     src/preset/eval/eval_sprites.cpp
@@ -572,13 +556,13 @@ add_executable(local_dll_tests
     src/ifs_inspect.cpp
     src/qpro/qpro_dll.cpp
     src/gc2d/gc_package.cpp
-    src/preset/scene_presets.cpp
-    src/preset/scene_presets_iidx10.cpp
-    src/preset/scene_presets_iidx11.cpp
-    src/preset/preset_params.cpp
-    src/preset/preset_schema.cpp
-    src/preset/preset_effective.cpp
-    src/preset/preset_rng.cpp
+    src/preset/defaults/defaults.cpp
+    src/preset/defaults/defaults_build.cpp
+    src/preset/defaults/iidx10_defaults.cpp
+    src/preset/defaults/iidx11_defaults.cpp
+    src/preset/defaults/iidx11_select_defaults.cpp
+    src/preset/defaults/iidx11_ending_a_defaults.cpp
+    src/preset/defaults/iidx11_ending_b_defaults.cpp
 )
 target_include_directories(local_dll_tests PRIVATE src)
 target_link_libraries(local_dll_tests PRIVATE Catch2::Catch2WithMain r573_support r573_state

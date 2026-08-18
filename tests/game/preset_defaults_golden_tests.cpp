@@ -4,13 +4,13 @@
 #include "preset_golden_format.h"
 #include "preset_legacy_view.h"
 
+#include "preset/defaults/defaults.h"
+#include "preset/doc/preset_commands.h"
 #include "preset/doc/preset_document.h"
 #include "preset/doc/preset_validate.h"
 #include "preset/eval/eval_push.h"
 #include "preset/eval/preset_evaluator.h"
 #include "preset/preset_asset_lengths.h"
-#include "preset/preset_convert.h"
-#include "preset/scene_preset.h"
 
 #include <nlohmann/json.hpp>
 #include <nlohmann/json_fwd.hpp>
@@ -20,14 +20,17 @@
 #include <cstddef>
 #include <fstream>
 #include <ios>
+#include <map>
 #include <memory>
 #include <set>
 #include <sstream>
 #include <string>
-#include <string_view>
+#include <variant>
 #include <vector>
 
 namespace {
+
+namespace PD = Preset::Doc;
 
 constexpr int kAttractFrames = 2456;
 constexpr int kEndingFrames = 4385;
@@ -62,36 +65,70 @@ Preset::AssetLengths AssetLengths() {
     return lengths;
 }
 
-int ClipFrames(const Preset::Scene& scene, const nlohmann::json& assets) {
-    REQUIRE_FALSE(scene.models.empty());
-    const std::string dir(scene.models.front().scene_dir);
+const std::map<std::string, PresetLegacy::Compat>& Compat() {
+    static const std::map<std::string, PresetLegacy::Compat> loaded = [] {
+        const std::string text = ReadFile(std::string(R573_FIXTURE_DIR) + "/legacy_compat.json");
+        std::string err;
+        std::map<std::string, PresetLegacy::Compat> map = PresetLegacy::LoadCompat(text, err);
+        return map;
+    }();
+    return loaded;
+}
+
+const PresetLegacy::Compat& CompatFor(const std::string& id) {
+    const auto found = Compat().find(id);
+    INFO("legacy compat for " << id);
+    REQUIRE(found != Compat().end());
+    return found->second;
+}
+
+std::vector<PD::Document> AllDocuments() {
+    return PD::BuiltIns();
+}
+
+const PD::ModelDraw* LeadDraw(const PD::Document& document, const std::string& model) {
+    for (const PD::Track& track : document.tracks) {
+        for (const PD::Clip& clip : track.clips) {
+            const auto* draw = std::get_if<PD::ModelDraw>(&clip.command);
+            if (draw == nullptr) continue;
+            const std::string& name = draw->model.empty() ? track.target : draw->model;
+            if (name == model) return draw;
+        }
+    }
+    return nullptr;
+}
+
+std::string AssetDir(const PD::Document& document, const std::string& id) {
+    for (const PD::Asset& asset : document.assets) {
+        if (asset.id == id) return asset.dir;
+    }
+    return {};
+}
+
+int ClipFrames(const PD::Document& document, const PresetLegacy::Compat& compat,
+               const nlohmann::json& assets) {
+    const PD::ModelDraw* draw = LeadDraw(document, compat.lead);
+    REQUIRE(draw != nullptr);
+    const std::string dir = AssetDir(document, draw->asset);
     INFO("scene3d asset " << dir);
     REQUIRE(assets["scene3d"].contains(dir));
     const auto ticks = assets["scene3d"][dir].get<float>();
-    const float speed = scene.models.front().anim_speed;
+    const auto speed = (float)draw->anim_speed;
     REQUIRE(speed > 0.0F);
     return (int)std::lround(ticks / speed);
 }
 
-int ExpectedFrames(const Preset::Scene& scene, const nlohmann::json& assets) {
-    if (scene.countdown.start_frames > 0) return scene.countdown.start_frames;
-    if (scene.id == "iidx11-attract") return kAttractFrames;
-    if (scene.id == "iidx11-ending") return kEndingFrames;
-    return ClipFrames(scene, assets);
+int ExpectedFrames(const PD::Document& document, const PresetLegacy::Compat& compat,
+                   const nlohmann::json& assets) {
+    if (compat.countdown.start_frames > 0) return compat.countdown.start_frames;
+    if (document.id == "iidx11-attract") return kAttractFrames;
+    if (document.id == "iidx11-ending") return kEndingFrames;
+    return ClipFrames(document, compat, assets);
 }
 
-std::vector<const Preset::Scene*> AllScenes() {
-    std::vector<const Preset::Scene*> scenes;
-    for (const std::string_view build : {"iidx10", "iidx11"}) {
-        for (const Preset::Scene* scene : Preset::ForBuild(build))
-            scenes.push_back(scene);
-    }
-    return scenes;
-}
-
-std::vector<int> ChoicesOf(const Preset::Scene& scene) {
-    if (scene.options.empty()) return {-1};
-    const std::size_t count = scene.options.front().choices.size();
+std::vector<int> ChoicesOf(const PD::Document& document) {
+    if (document.options.empty()) return {-1};
+    const std::size_t count = document.options.front().choices.size();
     std::vector<int> choices;
     choices.reserve(count);
     for (std::size_t i = 0; i < count; i++)
@@ -99,8 +136,8 @@ std::vector<int> ChoicesOf(const Preset::Scene& scene) {
     return choices;
 }
 
-int HiddenModelFrames(const Preset::Scene& scene) {
-    return scene.id == "iidx11-attract" ? 610 : 0;
+int HiddenModelFrames(const PD::Document& document) {
+    return document.id == "iidx11-attract" ? 610 : 0;
 }
 
 PresetGolden::Recording LoadFixture(const std::string& preset, int choice) {
@@ -158,14 +195,14 @@ bool CompareDetail(const PresetLegacy::Adapter& adapter, const PresetGolden::Rec
     return HashOf(detail->second, true) == HashAt(fixture.hashes_no_transform, frame);
 }
 
-Replay ReplayOne(const Preset::Scene& scene, int choice, const PresetGolden::Recording& fixture,
+Replay ReplayOne(const PD::Document& source, int choice, const PresetGolden::Recording& fixture,
                  const Preset::AssetLengths& lengths) {
     Replay result;
-    auto document = std::make_shared<Preset::Doc::Document>(Preset::FromScene(scene, lengths));
+    auto document = std::make_shared<PD::Document>(source);
     Preset::Eval::Evaluator evaluator;
     evaluator.Load(document, lengths);
     if (choice >= 0) evaluator.SetOption(0, choice);
-    const PresetLegacy::Adapter adapter(scene);
+    const PresetLegacy::Adapter adapter(CompatFor(source.id));
 
     for (int frame = 0; frame < fixture.frames; frame++) {
         const std::vector<Preset::Eval::Push> pushes = evaluator.RenderFrame(kFrameSeconds);
@@ -189,22 +226,46 @@ Replay ReplayOne(const Preset::Scene& scene, int choice, const PresetGolden::Rec
 
 }
 
+TEST_CASE("the frozen legacy view covers every built-in preset", "[golden]") {
+    std::string err;
+    const std::string text = ReadFile(std::string(R573_FIXTURE_DIR) + "/legacy_compat.json");
+    const std::map<std::string, PresetLegacy::Compat> compat = PresetLegacy::LoadCompat(text, err);
+    INFO(err);
+    REQUIRE(err.empty());
+    REQUIRE(compat.size() == 18);
+    for (const PD::Document& document : AllDocuments()) {
+        INFO(document.id);
+        const auto found = compat.find(document.id);
+        REQUIRE(found != compat.end());
+        CHECK_FALSE(found->second.lead.empty());
+        REQUIRE_FALSE(found->second.phase_starts.empty());
+        REQUIRE(LeadDraw(document, found->second.lead) != nullptr);
+        if (document.markers.empty()) {
+            CHECK(found->second.phase_starts == std::vector<int>{0});
+            continue;
+        }
+        REQUIRE(found->second.phase_starts.size() == document.markers.size());
+        for (std::size_t i = 0; i < document.markers.size(); i++)
+            CHECK(found->second.phase_starts[i] == document.markers[i].frame);
+    }
+}
+
 TEST_CASE("the legacy golden fixture set covers every built-in preset", "[golden]") {
     const nlohmann::json assets = AssetLengthsJson();
-    const std::vector<const Preset::Scene*> scenes = AllScenes();
-    REQUIRE(scenes.size() == 18);
+    const std::vector<PD::Document> documents = AllDocuments();
+    REQUIRE(documents.size() == 18);
 
     std::set<std::string> presets;
     int fixtures = 0;
-    for (const Preset::Scene* scene : scenes) {
-        presets.insert(std::string(scene->id));
-        for (const int choice : ChoicesOf(*scene)) {
-            const PresetGolden::Recording record = LoadFixture(std::string(scene->id), choice);
-            INFO(scene->id << " choice " << choice);
-            CHECK(record.preset == scene->id);
-            CHECK(record.build == scene->build);
+    for (const PD::Document& document : documents) {
+        presets.insert(document.id);
+        for (const int choice : ChoicesOf(document)) {
+            const PresetGolden::Recording record = LoadFixture(document.id, choice);
+            INFO(document.id << " choice " << choice);
+            CHECK(record.preset == document.id);
+            CHECK(record.build == document.build);
             CHECK(record.choice == choice);
-            CHECK(record.frames == ExpectedFrames(*scene, assets));
+            CHECK(record.frames == ExpectedFrames(document, CompatFor(document.id), assets));
             CHECK(record.hashes.size() == (std::size_t)record.frames);
             CHECK(record.hashes_no_transform.size() == (std::size_t)record.frames);
             CHECK_FALSE(record.setup.empty());
@@ -225,30 +286,29 @@ TEST_CASE("the golden frame hash is stable and order sensitive", "[golden]") {
     CHECK(PresetGolden::HashFrame({}) != PresetGolden::HashFrame(calls));
 }
 
-TEST_CASE("the new evaluator reproduces the legacy golden recording", "[golden]") {
+TEST_CASE("the default documents reproduce the legacy golden recording", "[golden]") {
     const Preset::AssetLengths lengths = AssetLengths();
-    for (const Preset::Scene* scene : AllScenes()) {
-        for (const int choice : ChoicesOf(*scene)) {
-            const PresetGolden::Recording fixture = LoadFixture(std::string(scene->id), choice);
-            const Preset::Doc::Document document = Preset::FromScene(*scene, lengths);
-            INFO(scene->id << " choice " << choice);
-            const std::vector<Preset::Doc::Problem> problems = Preset::Doc::Validate(document);
-            for (const Preset::Doc::Problem& problem : problems) {
-                if (problem.severity != Preset::Doc::Severity::Error) continue;
-                FAIL(scene->id << ": converted document error on " << problem.path << ": "
-                               << problem.message);
+    for (const PD::Document& document : AllDocuments()) {
+        for (const int choice : ChoicesOf(document)) {
+            const PresetGolden::Recording fixture = LoadFixture(document.id, choice);
+            INFO(document.id << " choice " << choice);
+            const std::vector<PD::Problem> problems = PD::Validate(document);
+            for (const PD::Problem& problem : problems) {
+                if (problem.severity != PD::Severity::Error) continue;
+                FAIL(document.id << ": built-in document error on " << problem.path << ": "
+                                 << problem.message);
             }
             REQUIRE(document.length.has_value());
             CHECK(*document.length == fixture.frames);
 
-            const Replay replay = ReplayOne(*scene, choice, fixture, lengths);
+            const Replay replay = ReplayOne(document, choice, fixture, lengths);
             CHECK(replay.drift <= kDriftTolerance);
-            CHECK(replay.excluded == HiddenModelFrames(*scene));
+            CHECK(replay.excluded == HiddenModelFrames(document));
             if (replay.first_bad < 0) continue;
-            FAIL_CHECK(scene->id << " choice " << choice << ": first difference at frame "
-                                 << replay.first_bad << ", first full push list at frame "
-                                 << replay.detail_bad << "\n  legacy:" << Join(replay.expected)
-                                 << "\n  evaluator:" << Join(replay.got));
+            FAIL_CHECK(document.id << " choice " << choice << ": first difference at frame "
+                                   << replay.first_bad << ", first full push list at frame "
+                                   << replay.detail_bad << "\n  legacy:" << Join(replay.expected)
+                                   << "\n  evaluator:" << Join(replay.got));
         }
     }
 }

@@ -10,15 +10,14 @@
 #include "gc2d/gc_host.h"
 #include "gc2d/gc_sprite.h"
 #include "preset/asset_index.h"
+#include "preset/defaults/defaults.h"
 #include "preset/doc/preset_commands.h"
 #include "preset/doc/preset_document.h"
 #include "preset/doc/preset_enum_names.h"
 #include "preset/eval/frame_report.h"
 #include "preset/eval/preset_evaluator.h"
 #include "preset/preset_asset_lengths.h"
-#include "preset/preset_convert.h"
 #include "preset/preset_host.h"
-#include "preset/scene_preset.h"
 #include "scene3d/scene3d.h"
 #include "scene3d/scene3d_merge.h"
 #include "scene3d/scene3d_render.h"
@@ -127,15 +126,6 @@ float LastModelTime(const std::vector<std::string>& calls, const std::string& mo
     return found;
 }
 
-std::vector<const Preset::Scene*> AllScenes() {
-    std::vector<const Preset::Scene*> scenes;
-    for (const std::string_view build : {"iidx10", "iidx11"}) {
-        for (const Preset::Scene* scene : Preset::ForBuild(build))
-            scenes.push_back(scene);
-    }
-    return scenes;
-}
-
 }
 
 TEST_CASE("the host pushes the document canvas into the 2D renderer", "[preset][host]") {
@@ -166,13 +156,11 @@ TEST_CASE("the host pushes the document canvas into the 2D renderer", "[preset][
     PresetHost::Unload();
 }
 
-TEST_CASE("every converted built-in keeps the 640x480 canvas", "[preset][host]") {
-    const Preset::AssetLengths lengths = AssetLengths();
-    const std::vector<const Preset::Scene*> scenes = AllScenes();
-    REQUIRE(scenes.size() == 18);
-    for (const Preset::Scene* scene : scenes) {
-        const Doc::Document document = Preset::FromScene(*scene, lengths);
-        INFO(scene->id);
+TEST_CASE("every built-in keeps the 640x480 canvas", "[preset][host]") {
+    const std::vector<Doc::Document> documents = Doc::BuiltIns();
+    REQUIRE(documents.size() == 18);
+    for (const Doc::Document& document : documents) {
+        INFO(document.id);
         CHECK(document.render.width == 640);
         CHECK(document.render.height == 480);
     }

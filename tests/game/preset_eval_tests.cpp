@@ -1,6 +1,7 @@
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include "preset/defaults/defaults.h"
 #include "preset/doc/preset_commands.h"
 #include "preset/doc/preset_document.h"
 #include "preset/doc/preset_enum_names.h"
@@ -10,9 +11,7 @@
 #include "preset/eval/frame_state.h"
 #include "preset/eval/preset_evaluator.h"
 #include "preset/preset_asset_lengths.h"
-#include "preset/preset_convert.h"
 #include "preset/preset_rng.h"
-#include "preset/scene_preset.h"
 
 #include <algorithm>
 #include <cmath>
@@ -45,18 +44,12 @@ Preset::AssetLengths Lengths() {
     return lengths;
 }
 
-const Preset::Scene& SceneById(std::string_view id) {
-    for (const std::string_view build : {"iidx10", "iidx11"}) {
-        for (const Preset::Scene* scene : Preset::ForBuild(build)) {
-            if (scene->id == id) return *scene;
-        }
+std::shared_ptr<PD::Document> DocumentFor(std::string_view id) {
+    for (PD::Document& document : PD::BuiltIns()) {
+        if (document.id == id) return std::make_shared<PD::Document>(std::move(document));
     }
     FAIL("no preset " << id);
-    return *Preset::ForBuild("iidx10").front();
-}
-
-std::shared_ptr<PD::Document> DocumentFor(std::string_view id) {
-    return std::make_shared<PD::Document>(Preset::FromScene(SceneById(id), Lengths()));
+    return std::make_shared<PD::Document>();
 }
 
 struct Yaw {
@@ -397,4 +390,27 @@ TEST_CASE("the intro speed keeps writing until the countdown ramp takes over") {
     REQUIRE(speed(22) == 0.5F);
     REQUIRE(speed(1200) == 0.5F);
     REQUIRE(speed(1201) == 0.5F + 0.0041666667F);
+}
+
+TEST_CASE("the game's subtractive generator reproduces its own stream") {
+    Preset::Ran3 rng;
+    rng.Seed(1);
+    std::vector<int> first;
+    for (int i = 0; i < 512; i++) {
+        const int draw = rng.Next();
+        REQUIRE(draw >= 0);
+        REQUIRE(draw < 1000000000);
+        first.push_back(draw);
+    }
+
+    rng.Seed(1);
+    for (const int expected : first)
+        REQUIRE(rng.Next() == expected);
+
+    rng.Seed(2);
+    int same = 0;
+    for (const int expected : first) {
+        if (rng.Next() == expected) same++;
+    }
+    REQUIRE(same < 8);
 }

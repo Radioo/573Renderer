@@ -2,16 +2,31 @@
 
 This file describes the reference recording of the OLD preset host, taken before
 milestone M2 of `docs/scene_preset_editor_plan.html` changes anything about it. It
-is the acceptance criterion for the new evaluator: M2 part B replays every fixture
-and compares the pushes, and M8 re-points the same comparison at the built-in
-default documents. A recorded VALUE is never re-recorded to make a comparison pass;
-the fixture is only ever re-recorded to ADD to the format, from the old host, and
-only when every value it already holds comes back identical.
+is the acceptance criterion for the new evaluator: M2 part B replayed every fixture
+against documents the converter produced, and M8 re-pointed the same comparison at
+the built-in default documents of `src/preset/defaults/`. A recorded VALUE is never
+re-recorded to make a comparison pass; the fixture is only ever re-recorded to ADD
+to the format, from the old host, and only when every value it already holds comes
+back identical.
 
-Status: the asset table and the fixtures are in the tree, and both the coverage
-test and the evaluator comparison run in the `ci` label. The recorder is not in the
-tree; "The fixture is frozen, and how to re-record it" below is the whole
-procedure, including the commit the old host lives at.
+Status: the asset table, the frozen legacy view and the fixtures are in the tree,
+and both the coverage test and the evaluator comparison run in the `ci` label. The
+recorder is not in the tree; "The fixture is frozen, and how to re-record it" below
+is the whole procedure, including the commit the old host lives at.
+
+M8 deleted the `Preset::Scene` tables, so the comparison no longer has a table to
+read the old host's own constants from. The three things it needed are frozen next
+to the recording in `tests/game/fixtures/legacy_compat.json`, one entry per preset:
+the lead model name (`models.front().model`), the `Preset::Countdown` fields
+(`start_frames`, `ramp_below`, `speed_base`, `speed_per_frame`, `fade_from`,
+`fade_per_frame`) and, per phase, the phase's `start_frame` and the models that
+phase materializes hidden while they still pass `Moves()`. It was written by a
+throwaway test case run against the tables in the same change that deleted them,
+and it is a frozen legacy artefact exactly like the recording: no reference value
+changed, and nothing about the recording was re-recorded. The coverage test
+cross-checks it against the documents (every entry's phase starts are the
+document's marker frames, or the single phase 0 of a document with no markers, and
+the lead model is a model a `model.draw` clip names).
 
 ## What is recorded
 
@@ -205,7 +220,8 @@ M2. So:
    `nlohmann::ordered_json` and `dump(1)` plus a trailing newline, keys in the order
    of the block above.
 5. Add a `preset_golden_record` target to the worktree's `CMakeLists.txt` with
-   `preset_host.cpp`, `scene_presets*.cpp`, `preset_params/schema/effective/rng`,
+   `preset_host.cpp`, `scene_presets*.cpp`, `preset_params/schema/effective/rng`
+   (all of which exist at 61d22b7 and were deleted by M8),
    the three test files, `r573_support`, `r573_formats` and `nlohmann_json`.
    Configure it with the main checkout's vcpkg toolchain and
    `-DVCPKG_MANIFEST_MODE=OFF -DVCPKG_INSTALLED_DIR=<main>/build/vcpkg_installed`,
@@ -225,14 +241,18 @@ M2. So:
 
 ## Tests
 
-`tests/game/preset_golden_tests.cpp`, in `game_tests`:
+`tests/game/preset_defaults_golden_tests.cpp`, in `game_tests`:
 
+- `the frozen legacy view covers every built-in preset` (`[golden]`, `ci`): the 18
+  `legacy_compat.json` entries name a lead model each built-in really draws, and
+  their phase starts are the document's markers.
 - `the legacy golden fixture set covers every built-in preset` (`[golden]`, `ci`):
   18 presets, 40 fixtures, each one's `preset`, `build` and `choice` match the
-  table it came from, `hashes.size() == frames`, `setup` is not empty, `detail`
+  document it came from, `hashes.size() == frames`, `setup` is not empty, `detail`
   holds frame 0, and `frames` equals the end rule above. The expectation is
-  re-derived from the `Preset::Scene` tables and `asset_lengths.json`, not from the
-  recorder, so a recorder that silently produced 0 frames cannot pass.
+  re-derived from the frozen countdown of `legacy_compat.json` and, for the two
+  logins, from the document's own lead `anim_speed` against `asset_lengths.json`,
+  not from the recorder, so a recorder that silently produced 0 frames cannot pass.
 - `the golden frame hash is stable and order sensitive` (`[golden]`, `ci`): the
   hash is reproducible, changes when two pushes swap order, and an empty frame does
   not collide with a non-empty one.
@@ -246,9 +266,9 @@ are now really compared.
 
 ### The comparison test
 
-`the new evaluator reproduces the legacy golden recording` (`[golden]`, `ci`) is
-the acceptance criterion. For every one of the 40 (preset, choice) pairs it
-converts the `Preset::Scene` with `Preset::FromScene`, asserts the document
+`the default documents reproduce the legacy golden recording` (`[golden]`, `ci`)
+is the acceptance criterion. For every one of the 40 (preset, choice) pairs it
+takes the built-in document from `Preset::Doc::BuiltIns()`, asserts the document
 validates with no error and that its `length` equals the recorded frame count,
 then runs `Preset::Eval::Evaluator::RenderFrame(1/60)` once per recorded frame
 and compares:
@@ -301,8 +321,8 @@ never made, and the comparison drops exactly those.
    are the same function of the frame and differ only in float rounding, by at
    most two ulp. No key placement or evaluation order removes that: the values are
    not representable as the same sequence of float operations. The comparison
-   therefore recomputes the old host's value from the `Preset::Countdown` of the
-   scene it is replaying, requires the evaluator's value to agree within 1e-6 (the
+   therefore recomputes the old host's value from the frozen countdown of
+   `legacy_compat.json`, requires the evaluator's value to agree within 1e-6 (the
    tolerance plan 3.9 states) and then uses the old value, so every other push on
    those frames is still compared exactly. The same substitution supplies the old
    host's `SetModelAlpha` on a ramped frame, which is the one alpha push the
@@ -337,7 +357,9 @@ reintroducing the "invisible model with a pose" concept the format deliberately
 drops. They have no visual effect, because the model is not drawn.
 
 The comparison marks a frame excluded when the phase the frame's advance lands in
-materializes a model that is hidden AND passes `Moves()`. That is only the two
+is one whose `hidden_movers` entry in `legacy_compat.json` is not empty, which is
+the frozen answer to "materializes a model that is hidden AND passes `Moves()`" for
+that phase. That is only the two
 attract spans: the ending's hidden phase sets the spin to zero, so it is compared
 against the primary hash like everything else. 610 of the attract preset's 2456
 frames are excluded this way. The count is asserted per preset, so the exclusion
@@ -379,8 +401,9 @@ tolerated, because the document can express them:
 |------|------|
 | Fixture format, canonical push text, frame hash | `tests/game/preset_golden_format.h/.cpp` |
 | Link-time `Scene3dHost` / `Gc2dHost` stubs and the asset table reader | `tests/game/preset_host_stubs.h/.cpp` |
-| Coverage test and the evaluator comparison | `tests/game/preset_golden_tests.cpp` |
+| Coverage test and the evaluator comparison | `tests/game/preset_defaults_golden_tests.cpp` |
 | Push text identical to the stubs' | `tests/game/preset_push_text.h/.cpp` |
-| The tolerated list, applied | `tests/game/preset_legacy_view.h/.cpp` |
+| The tolerated list, applied, and the frozen legacy view reader | `tests/game/preset_legacy_view.h/.cpp` |
 | Asset lengths | `tests/game/fixtures/asset_lengths.json` |
+| The frozen legacy view of the deleted tables | `tests/game/fixtures/legacy_compat.json` |
 | Fixtures | `tests/game/fixtures/golden/*.json` |

@@ -72,7 +72,7 @@ bool Bounded(const Doc::FieldDesc& field) {
     return field.range.max > field.range.min;
 }
 
-double Clamped(double value, const Preset::Range& range) {
+double Clamped(double value, const Doc::Range& range) {
     return std::clamp(value, (double)range.min, (double)range.max);
 }
 

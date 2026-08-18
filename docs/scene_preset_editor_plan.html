@@ -255,7 +255,8 @@ hr.sep { border: 0; border-top: 1px solid var(--line); margin: 40px 0; }
   <h1>Scene Preset Editor Plan</h1>
   <p class="lede">Turning 573Renderer's scene presets from compiled tables with a countdown into a fully user-editable, JSON round-trippable timeline: tracks, clips, tweens, and an editor that looks and works like a video editor.</p>
   <p>Repository <code>573Renderer</code>, branch <code>feature/fixes</code> at commit <code>9675261</code>. Every claim about current code cites <code>path:line</code> so it can be checked. Nothing in this document modifies source; it is the plan.</p>
-  <div class="meta"><span>Written 2026-08-15</span><span>Prime example: IIDX RED attract screen (<code>iidx11-attract</code>)</span><span>Status: proposal, not started</span></div>
+  <div class="meta"><span>Written 2026-08-15</span><span>Prime example: IIDX RED attract screen (<code>iidx11-attract</code>)</span><span>Status: implemented, M1 to M8</span></div>
+  <p>Status note: every milestone below is in the tree, so every <code>path:line</code> citation describes the tree as it was at <code>9675261</code>, not as it is now. M8 deleted the files section 2 describes: <code>scene_preset.h</code>, <code>scene_registry.h</code>, <code>scene_presets*.cpp</code>, <code>preset_effective.*</code>, <code>preset_params.*</code>, <code>preset_schema.cpp</code>, <code>preset_convert.*</code> and <code>gui_preset_panel.*</code>. For what the code does today read <code>docs/preset_document.md</code> (schema, catalog, evaluator, host, defaults), <code>docs/gui.md</code> (the editor and the library), <code>docs/preset_golden.md</code> (the frozen legacy reference) and <code>docs/gates.md</code> (the CI gates).</p>
 </header>
 
 <section id="summary">

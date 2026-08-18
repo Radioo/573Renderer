@@ -781,8 +781,9 @@ a frame limit, rather than capturing forever.
 `NaturalFrames()` is now the DOCUMENT's `length` and nothing else. The evaluator
 has one clock and the document states how many frames it has, so the exporter reads
 a number instead of deriving one from a countdown, a phase table and an asset. The
-converter (`Preset::FromScene`) is what applies the old derivation ONCE, when it
-turns a compiled table into a document, in this order:
+converter M8 deleted (`Preset::FromScene`) applied the old derivation ONCE, when it
+turned a compiled table into a document, and the built-in documents carry the
+result as a plain number. The derivation was, in this order:
 
 1. The countdown length, when the screen has one. IIDX 10 music select is 1800
    frames, a full 30 s including the end-of-timer speed-up.

@@ -138,8 +138,8 @@ Both gates read the SAME input: the JSON the renderer itself dumps with
 `573Renderer.exe --preset-dump-defaults <tmp>` (`tools/ci/preset_dump.py` runs it
 into a temporary directory and loads `*/*.json`; `--dump <dir>` reuses an existing
 dump instead). They stopped regex-parsing `scene_presets_*.cpp` when the built-in
-presets became documents: the C++ these gates used to scrape no longer describes
-what a preset draws.
+presets became documents: the C++ these gates used to scrape no longer described
+what a preset draws, and M8 deleted those files outright.
 
 This is why both gates run in `tools/checks.sh` (which builds first) and NOT in
 the hosted `quality-gates` job, which has no C++ toolchain. What the hosted job
@@ -319,7 +319,8 @@ three-layer per-directory config chain:
 - `src/preset/defaults/.clang-tidy` subtracts `readability-function-size` for
   that directory alone. Those files are the 18 built-in preset documents
   (docs/preset_document.md): one function per screen, whose whole body is a
-  single `return Document{...}` data literal generated from the converter. The
+  single `return Document{...}` data literal, generated once from the converter M8
+  deleted (docs/preset_document.md, "How the defaults were produced"). The
   line threshold measures control-flow complexity a human has to hold in their
   head, and a data literal has none; splitting one into 60-line pieces would add
   call indirection to a table. Every other check, including the 1000-line file

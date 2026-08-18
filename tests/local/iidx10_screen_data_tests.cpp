@@ -4,16 +4,30 @@
 #include "formats/gcanim.h"
 #include "formats/sysidx.h"
 #include "gc2d/gc_package.h"
-#include "preset/scene_preset.h"
+#include "preset/defaults/defaults.h"
+#include "preset/doc/preset_commands.h"
+#include "preset/doc/preset_document.h"
 #include "support/env.h"
 
 #include <filesystem>
 #include <stdexcept>
 #include <string>
+#include <utility>
+#include <variant>
 #include <vector>
 #include <string_view>
 
 namespace {
+
+namespace PD = Preset::Doc;
+
+constexpr std::string_view kGameOverPackage = "data/graph/sys/gameover";
+constexpr std::string_view kGameOverAnimation = "GAMEOVER";
+
+struct Animation {
+    std::string dir;
+    std::string name;
+};
 
 std::string Iidx10Dir() {
     return Support::EnvVar("R573_IIDX10_DIR").value_or("");
@@ -30,42 +44,62 @@ int LengthOf(const std::string& game_dir, std::string_view package_dir, std::str
     return SysIdx::AnimationLength(pkg.index, it->second);
 }
 
-const Preset::Scene& PresetById(std::string_view id) {
-    for (const auto* scene : Preset::ForBuild("iidx10")) {
-        if (scene->id == id) return *scene;
+std::vector<PD::Document> Iidx10Documents() {
+    std::vector<PD::Document> out;
+    for (PD::Document& document : PD::BuiltIns()) {
+        if (document.build == "iidx10") out.push_back(std::move(document));
+    }
+    return out;
+}
+
+const PD::Document& DocumentById(const std::vector<PD::Document>& documents, std::string_view id) {
+    for (const PD::Document& document : documents) {
+        if (document.id == id) return document;
     }
     throw std::runtime_error("unknown preset");
 }
 
+std::string AssetDir(const PD::Document& document, const std::string& id) {
+    for (const PD::Asset& asset : document.assets) {
+        if (asset.id == id) return asset.dir;
+    }
+    return {};
 }
 
-TEST_CASE("the frame counts baked into the IIDX 10 presets match the game data") {
+std::vector<Animation> AnimationsOf(const PD::Document& document) {
+    std::vector<Animation> out;
+    for (const PD::Track& track : document.tracks) {
+        for (const PD::Clip& clip : track.clips) {
+            const auto* animate = std::get_if<PD::SpriteAnimate>(&clip.command);
+            if (animate == nullptr) continue;
+            out.push_back(
+                Animation{.dir = AssetDir(document, animate->asset), .name = animate->animation});
+        }
+    }
+    return out;
+}
+
+}
+
+TEST_CASE("the game over document is exactly as long as the GAMEOVER animation") {
     const std::string dir = Iidx10Dir();
     if (dir.empty()) SKIP("R573_IIDX10_DIR not set");
 
-    const Preset::Scene& game_over = PresetById("iidx10-game-over");
-    const int gameover_frames =
-        LengthOf(dir, game_over.sprites[0].package_dir, game_over.sprites[0].sprite);
+    const std::vector<PD::Document> documents = Iidx10Documents();
+    const PD::Document& game_over = DocumentById(documents, "iidx10-game-over");
     INFO("GAMEOVER animation length");
-    REQUIRE(gameover_frames == game_over.countdown.start_frames);
-
-    const Preset::Scene& card_in = PresetById("iidx10-card-in");
-    for (const auto& sprite : card_in.sprites) {
-        if (sprite.timing.loop_end <= 0) continue;
-        INFO("loop range of " << sprite.sprite);
-        REQUIRE(LengthOf(dir, sprite.package_dir, sprite.sprite) == sprite.timing.loop_end);
-    }
+    REQUIRE(game_over.length.has_value());
+    REQUIRE(LengthOf(dir, kGameOverPackage, kGameOverAnimation) == *game_over.length);
 }
 
 TEST_CASE("every sprite an IIDX 10 preset names exists in its package") {
     const std::string dir = Iidx10Dir();
     if (dir.empty()) SKIP("R573_IIDX10_DIR not set");
 
-    for (const auto* scene : Preset::ForBuild("iidx10")) {
-        for (const auto& sprite : scene->sprites) {
-            if (!sprite.animated) continue;
-            INFO(scene->id << " / " << sprite.sprite);
-            REQUIRE(LengthOf(dir, sprite.package_dir, sprite.sprite) > 0);
+    for (const PD::Document& document : Iidx10Documents()) {
+        for (const Animation& animation : AnimationsOf(document)) {
+            INFO(document.id << " / " << animation.name);
+            REQUIRE(LengthOf(dir, animation.dir, animation.name) > 0);
         }
     }
 }

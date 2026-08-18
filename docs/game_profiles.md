@@ -1078,13 +1078,13 @@ resolves, because hooks and patch tools rewrite bytes in the executable. This is
 independent of the folder name, which the directory-substring detection in
 `game_profile.cpp` relies on and which users rename freely.
 
-`Preset::Scene` carries what the data files cannot: which model of which scene
-directory is visible, its blend mode, tint alpha, animation speed and transform,
-the fixed camera and projection, the directional lights, the shading style, an
-optional 2D sprite layer, and an optional frame countdown. `PresetHost::Load`
-resolves the relative paths against the game root, drives `Scene3dHost` through
-`LoadWithSetup` and `Gc2dHost` for the 2D layer, and `PresetHost::Advance` ticks
-the countdown once per rendered frame.
+A scene preset document (docs/preset_document.md) carries what the data files
+cannot: which model of which scene directory is drawn, its blend mode, tint alpha,
+animation speed and transform, the fixed camera and projection, the directional
+lights, the shading style and the 2D sprite layers, all of it on a frame axis with
+an explicit length. `PresetHost::LoadDocument` resolves the relative asset paths
+against the game root and drives `Scene3dHost` and `Gc2dHost` from the evaluator's
+per-frame push list.
 
 Two shading styles exist because the fixed-function setup is per engine build:
 
@@ -1156,17 +1156,19 @@ from every `SetVisible(slot, non-zero)` call in the binary, which is the only wa
 a model becomes visible. The derivation is in `IIDX/tenth_style_3d_screens.md`.
 
 Per-frame behaviours the game recomputes are carried as data rather than baked
-into a screenshot-matching constant. `Preset::ModelMotion` holds the orbit +
-fly-in the class-course and new-player screens apply to their slot transform, plus
-a per-axis `spin_per_frame` with an optional decaying `spin_kick` - that is how
-mode select's cube keeps turning and how it lurches when the selection changes.
-`Preset::Intro` is a speed ramp over the first N frames (expert select spins its
-model backwards for 22 frames before settling). All of them are transcriptions of
-the game's own formulas.
+into a screenshot-matching constant. A `model.motion` clip holds the orbit +
+fly-in the class-course and new-player screens apply to their slot transform, with
+a decaying `spin_kick`, next to the per-axis `spin_per_frame` of the `model.draw`
+clip - that is how mode select's cube keeps turning and how it lurches when the
+selection changes. The old intro block, a speed ramp over the first N frames
+(expert select spins its model backwards for 22 frames before settling), is now a
+`model.tween` on `anim_speed` plus a `camera.tween` on `fov_y`
+(docs/preset_document.md). All of them are transcriptions of the game's own
+formulas.
 
 ### Preset options
 
-A preset can expose `Preset::Option`s: a named list of choices the viewer can
+A document can expose `Preset::Doc::OptionSpec`s: a named list of choices the viewer can
 switch between, each supplying a model position. They exist because the game
 itself moves the model in response to the player - mode select places its cube
 somewhere different for every entry in the mode menu - so a single fixed
@@ -1209,13 +1211,14 @@ resolves a build's list out of those plus the user documents in
 
 RED needs one thing IIDX 10 did not: its music select calls the projection setter
 with an EXPLICIT aspect (850/480) that does not match the 640x480 framebuffer, so
-`Preset::Camera::aspect` (and `Scene3d::Projection::aspect`) override the
-derived-from-render-size default when non-zero.
+the document's `camera.aspect` (`Preset::Doc::CameraSpec::aspect`, and
+`Scene3d::Projection::aspect`) overrides the derived-from-render-size default when
+it is a number rather than `"auto"`.
 
 Two more RED-only differences: it inherits TWO directional lights from the title
 update rather than one, and its attract and ending screens spin several models at
-DIFFERENT rates, so `Preset::ModelMotion` is applied per model layer instead of to
-the lead model only.
+DIFFERENT rates, so the spin and the motion are per `model.draw` clip instead of
+applying to the lead model only.
 
 A preset carries ONLY background layers. What each screen's chrome is, and how
 that was decided, is `docs/preset_layers.md`; the classification is machine
@@ -1223,9 +1226,9 @@ checked by `tools/ci/check_preset_layers.py`. RED music select is the extreme
 case: it registers three animations and all three are UI, so its preset has no
 2D layer at all and the background IS the five-model emblem.
 
-Chrome that is BAKED INTO a background animation is removed per part with
-`SpriteLayer::hidden_parts`, which names an animation or a cell and drops it
-anywhere in the record tree, nested children included.
+Chrome that is BAKED INTO a background animation is removed per part with the
+`hidden_parts` of the `sprite.animate` clip, which names an animation or a cell
+and drops it anywhere in the record tree, nested children included.
 
 Every placed 2D layer runs on its OWN playhead rather than a shared clock, which
 is what the game does - each registered animation gets its own frame counter. The
