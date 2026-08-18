@@ -534,6 +534,36 @@ of a 30-part animation - scrolls inside the popup instead of pushing Cancel and 
 bottom of the screen, which is exactly what an auto-resized popup with a max-height constraint
 did before.
 
+A form row is LABEL + FIELD, and the field is sized `-kResetColumn` (30 px), so it already runs
+to within 30 px of the modal's right edge - the room that column leaves is for the per-field
+reset button `###tl_reset_<field id>` and nothing else. A badge, hint or warning therefore can
+NEVER be appended with `SameLine` after a field: the modals pin their width
+(`SetNextWindowSizeConstraints` with equal min and max), so `AlwaysAutoResize` cannot grow to
+take it and the text is simply cut at the window edge. That is what happened to the Add track
+target row, where "asset not loaded" sat past the edge and read as "asset r" (fixed 2026-08-18).
+
+The rule is a shared helper in `gui_tl_forms.cpp`: `RowNote` (dim) and `RowWarning` (amber) draw
+the note on its OWN line, indented by `kLabelWidth` so it lines up under the field, and under
+`PushTextWrapPos(0)` so a note of any length wraps inside the content region instead of running
+off it. Both the Add track "asset not loaded" warning and the Params/Asset "not in the loaded
+asset" warning go through it, as do the per-field "outside the usual range" and degrees notes
+that already used this shape by hand. A hint that follows a CHECKBOX (`insert` /
+"below the selected track", the Document properties hints) still uses `SameLine`: a checkbox is
+~20 px, so those rows have the whole field column left and the audit found none of them
+overflowing.
+
+`modal_layout_tests.cpp` is the guard, and it is deliberately id-free so it catches text with no
+item id too: for each modal it compares the window's `ContentSize.x` against its `WorkRect`
+width, which is the union of every item submitted that frame, and additionally pins the id'd
+widgets of the warning rows inside `InnerRect`. It covers Add track, Clip properties (Params and
+Asset, against a stubbed `AssetIndex` whose model list does not contain the clip's model),
+Document properties on all four tabs, and Option properties. Before the fix it read
+"//Add track draws 566.0 px of content into 500.0 px of room" and
+"//Clip properties/###tl_clip_body draws 770.0 px of content into 640.0 px of room".
+
+`ResetPalette` also resets the Add track kind and asset index, not just the target and name.
+They are file-static, so without it the modal opens against the PREVIOUS document's kind.
+
 Tab contents are nested under their tab bar in the Test Engine id path, so a field inside the
 clip modal's Params tab is `###tl_clip_tabs/###tl_tab_params/###tl_field_<json key>`, and a
 Vec2 / Vec3 row has NO item of its own (ImGui's `DragScalarN` pushes the label as an id scope):

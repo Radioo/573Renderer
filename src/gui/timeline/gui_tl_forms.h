@@ -44,6 +44,10 @@ FieldEvent DrawEnumRow(const char* id, const char* label, int& value,
 
 void RowLabel(const char* label);
 
+void RowNote(const char* text);
+
+void RowWarning(const char* text);
+
 const Preset::AssetEntry* FindAsset(const FormContext& context, const std::string& asset_id);
 
 }

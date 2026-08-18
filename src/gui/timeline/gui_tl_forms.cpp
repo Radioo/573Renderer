@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cstdio>
 #include <cstddef>
 #include <optional>
 #include <string>
@@ -25,6 +26,17 @@ namespace {
 
 constexpr float kLabelWidth = 150.0F;
 constexpr float kResetColumn = 30.0F;
+constexpr ImVec4 kNoteWarning(1.0F, 0.75F, 0.35F, 1.0F);
+
+void DrawRowNote(ImGuiCol color, const char* text) {
+    ImGui::Indent(kLabelWidth);
+    ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(color));
+    ImGui::PushTextWrapPos(0.0F);
+    ImGui::TextUnformatted(text);
+    ImGui::PopTextWrapPos();
+    ImGui::PopStyleColor();
+    ImGui::Unindent(kLabelWidth);
+}
 
 FieldEvent Merge(FieldEvent a, FieldEvent b) {
     return (a > b) ? a : b;
@@ -69,10 +81,7 @@ FieldEvent DrawNameCombo(const char* id, std::string& value, const std::vector<s
         ImGui::EndCombo();
     }
     if (!loaded || value.empty()) return changed ? FieldEvent::Committed : FieldEvent::None;
-    if (std::ranges::find(names, value) == names.end()) {
-        ImGui::SameLine();
-        ImGui::TextColored(ImVec4(1.0F, 0.75F, 0.35F, 1.0F), "not in the loaded asset");
-    }
+    if (std::ranges::find(names, value) == names.end()) RowWarning("not in the loaded asset");
     return changed ? FieldEvent::Committed : FieldEvent::None;
 }
 
@@ -281,6 +290,16 @@ std::vector<std::string> EnumNames(const Doc::FieldDesc& field) {
     return names;
 }
 
+}
+
+void RowNote(const char* text) {
+    DrawRowNote(ImGuiCol_TextDisabled, text);
+}
+
+void RowWarning(const char* text) {
+    ImGui::PushStyleColor(ImGuiCol_TextDisabled, kNoteWarning);
+    DrawRowNote(ImGuiCol_TextDisabled, text);
+    ImGui::PopStyleColor();
 }
 
 void RowLabel(const char* label) {
@@ -509,17 +528,12 @@ FieldEvent DrawParamForm(const FormContext& context, Doc::Command& command) {
         }
         const Doc::ParamValue current = field.get(command);
         const std::string degrees = Editor::DegreesText(field, current);
-        if (!degrees.empty()) {
-            ImGui::Indent(kLabelWidth);
-            ImGui::TextDisabled("%s", degrees.c_str());
-            ImGui::Unindent(kLabelWidth);
-        }
+        if (!degrees.empty()) RowNote(degrees.c_str());
         if (Editor::OutsideSoftRange(field, current)) {
-            ImGui::Indent(kLabelWidth);
-            ImGui::TextColored(ImVec4(1.0F, 0.75F, 0.35F, 1.0F),
-                               "outside the usual range %.3f..%.3f", (double)field.range.min,
-                               (double)field.range.max);
-            ImGui::Unindent(kLabelWidth);
+            std::array<char, 96> range = {};
+            snprintf(range.data(), range.size(), "outside the usual range %.3f..%.3f",
+                     (double)field.range.min, (double)field.range.max);
+            RowWarning(range.data());
         }
     }
     return event;

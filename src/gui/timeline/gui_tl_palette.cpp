@@ -170,8 +170,7 @@ void DrawFreeTargetRow() {
     if (ImGui::InputText("###tl_track_target", buffer.data(), buffer.size())) {
         g_track_target = buffer.data();
     }
-    ImGui::SameLine();
-    ImGui::TextColored(ImVec4(1.0F, 0.75F, 0.35F, 1.0F), "asset not loaded");
+    RowWarning("asset not loaded");
 }
 
 std::vector<std::string> AssetIds(const Doc::Document& document) {
@@ -219,6 +218,8 @@ void ResetPalette() {
     g_palette_requested = false;
     g_track_requested = false;
     g_track_target.clear();
+    g_track_kind = (int)Doc::TrackKind::Model;
+    g_track_asset = 0;
 }
 
 void RequestPalette(std::string track_id, int frame) {
