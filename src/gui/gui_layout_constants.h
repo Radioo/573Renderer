@@ -16,10 +16,6 @@ constexpr float kTimelineH = 76.0f;
 constexpr float kPaneRowMinH = 120.0f;
 constexpr float kStatusStripH = 28.0f;
 
-constexpr float kLibraryShare = 0.7f;
-constexpr float kLibraryMinH = 140.0f;
-constexpr float kBrowseMinH = 110.0f;
-
 constexpr int kMinClientW =
     (int)(kPaneLeftMin + kPaneCenterMin + kPaneRightMin + 2.0f * kSplitterW) + 80;
 constexpr int kMinClientH = 600;

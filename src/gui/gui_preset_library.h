@@ -19,8 +19,6 @@ enum class Action : std::uint8_t {
     Quit,
 };
 
-bool Active();
-
 void Render();
 
 void RenderModals();

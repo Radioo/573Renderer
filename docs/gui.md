@@ -108,7 +108,11 @@ Ready view = fixed shell, top to bottom:
 1. **Top bar**: brand (header font, accent), main-view switch (only when >1 view: Renderer /
    qpro), active IFS path (mono), then right-aligned Export button + measured-fps readout.
 2. **Three panes** split by two draggable `Gui::VSplitter`s:
-   - left = Browse (IFS tree), center = Scene (clip hierarchy), right = Inspector (tabs).
+   - left = Browse (IFS tree), center = the backend's main view, right = Inspector (tabs).
+   - The left pane is Browse ALONE on every backend. The CENTER pane is chosen by the panel
+     registry (`PanelSlot::CenterPane`): the AFP backends register nothing there and get the
+     Scene layers view (clip hierarchy, `RenderScenePane`); the scene3d backend registers the
+     Preset library (3.6), which then owns the whole center column. See 3.6 for why.
    - Side-pane widths are session-only; the CENTER pane absorbs the remainder; when the
      window shrinks below fit, the center steals from the right pane first, then the left.
    - `VSplitter` is built on `ImGui::InvisibleButton` only (no imgui_internal); a drag moves
@@ -774,7 +778,7 @@ closes it on Committed (`IsItemDeactivatedAfterEdit`, i.e. mouse release), and a
 every early return, because the selection can vanish mid-drag and a gesture left open stops the
 undo stack recording for the rest of the session. `clip_modal_tests.cpp` pins it: a drag in this
 tab must raise `UndoDepth()` by exactly one. The "Screen parameters" centre pane is gone with `gui_preset_workspace.cpp`, so the
-centre pane is the scene tree again, and the per-parameter surface of `PresetHost` (ListParams,
+centre pane is the preset library on this backend (3.6), and the per-parameter surface of `PresetHost` (ListParams,
 SetParam, ResetParam, ResetGroup, ResetAllParams, ChangedParamCount, ListStates, SetCountdown
 and `preset_host_params.*`) went with its only caller.
 
@@ -865,12 +869,24 @@ The library is the ONLY way to pick, create, import, export, save or revert a sc
 document; it replaces the Screens tab (`gui_preset_panel.cpp`, deleted in M7) and its
 countdown and per-sprite sliders, which the Frame tab now shows read-only.
 
-It is a section of the LEFT pane, under Browse (plan 4.1, user decision 2026-08-15). While
-`Panels::PresetLibrary::Active()` (the scene3d backend) `RenderLeftPane` splits the pane:
-Browse gets the top, the library the bottom `Gui::kLibraryShare` (55 percent, at least
-`Gui::kLibraryMinH` and never leaving Browse less than `Gui::kBrowseMinH`), each in its own
-child so both scroll on their own. On the AFP backends the pane is the IFS tree alone, as
-before.
+It is the CENTER pane, in place of the Scene layers view (user decision 2026-08-18). It got
+there through the panel registry, not a backend name test in the layout code: the scene3d
+panel set registers `preset_library` in `PanelSlot::CenterPane`, and `RenderViewportPane`
+draws the one CenterPane panel a backend registers, falling back to `RenderScenePane` when a
+backend registers none. So the AFP backends keep the Scene layers view exactly as before and
+never draw a library item, and the scene3d backend gets the library over the full height of
+the center column. The switch is a BACKEND CAPABILITY, never a game title: the same registry
+already decides the Clip / Frame / 2D package inspector tabs.
+
+Why it moved. The library started as a section of the left pane under Browse, split off it by
+a `Gui::HSplitter` (plan 4.1, decision 2026-08-15). Two things were wrong with that. It left
+the library about 120 px tall, so the groups, the action buttons, the did-not-load list and
+the validation list all fought over one column; and the Scene layers view it now replaces
+lists `afplist.xml` layers, which the scene3d games do not have at all, so that pane read
+"Scene 0 layers, 0 bitmaps, 0 slots / No layers listed in afplist.xml" on every IIDX 10th
+style or RED session. The left pane is Browse alone again, `RenderLeftPane` and the
+`Gui::kLibraryShare` / `kLibraryMinH` / `kBrowseMinH` constants are gone, and with the whole
+column the action buttons fit on ONE row.
 
 Registry ownership. The library OWNS a `Preset::Doc::Registry` on the GUI thread. That does
 not break the host-isolation rule (docs/gates.md): the registry only reads built-in documents
@@ -896,6 +912,17 @@ the name, and beside it "modified" when it is the loaded document with unsaved e
 error or warning count, else its id; the tooltip carries the id, the build, the length, the
 marker and track counts and the file path. The filter box matches the name and the id, and a
 group with no match is not drawn. Single click selects and loads, per the 2026-08-15 decision.
+
+Item paths for tests: the library is under `main_view/pane_center` (it was
+`main_view/pane_left/library_area` while it lived under Browse), its rows in the `lib_scroll`
+child and the did-not-load plus validation lists in `lib_problems`; Browse keeps
+`main_view/pane_left/ifs_scroll`. A child window is not addressable through a slash path from
+an item ref, so a test reaches a row with `GuiTest::FocusChild` on the child first. Three tests
+pin the split: `library_center_pane` (library items under pane_center, none under pane_left,
+no Scene view in the centre), `library_afp_center` (an AFP backend keeps `##scene_filter` and
+`scene_scroll` in the centre and has no `###lib_*` item anywhere) and `library_center_height`
+(the `lib_scroll` child is more than 40 percent of the pane height, so the old squeeze cannot
+come back).
 
 | item | id | behaviour |
 |---|---|---|

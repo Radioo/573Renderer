@@ -12,6 +12,7 @@
 #include "preset/doc/preset_json.h"
 #include "state/app_state.h"
 #include "state/commands.h"
+#include "state/ifs_catalog.h"
 #include "state/preset_commands.h"
 
 #include <catch2/catch_test_macros.hpp>
@@ -122,6 +123,97 @@ std::vector<PresetCmd::Any> DrainPresetCommands() {
     return out;
 }
 
+}
+
+TEST_CASE("the preset library is the center pane on the scene3d backend", "[gui][library]") {
+    GuiTest::Harness harness;
+    const Fixture fixture = MakeFixture("r573_lib_center_pane");
+    WriteText(fixture.presets / "iidx10" / "remix.json",
+              Doc::Save(UserDocument("remix", "my remix")));
+    App::Global().SetAvailableIfs({{.name = "bg/bg_0001.ifs",
+                                    .full_path = (fixture.install / "bg_0001.ifs").string(),
+                                    .from_arc = false}});
+
+    ImGuiTest* test = harness.NewTest("library_center_pane");
+    test->TestFunc = [](ImGuiTestContext* ctx) {
+        ctx->SetRef("##main");
+        ctx->Yield(2);
+
+        GuiTest::FocusChild(ctx, "main_view/pane_center");
+        IM_CHECK(ctx->ItemExists("###lib_new"));
+        IM_CHECK(ctx->ItemExists("###lib_import"));
+        IM_CHECK(ctx->ItemExists("###lib_filter"));
+        IM_CHECK(ctx->ItemExists("##scene_filter") == false);
+
+        ctx->SetRef("##main");
+        GuiTest::FocusChild(ctx, "main_view/pane_center/lib_scroll");
+        IM_CHECK(ctx->ItemExists("###lib_group_builtin"));
+        IM_CHECK(ctx->ItemExists("###lib_group_user"));
+        IM_CHECK(ctx->ItemExists("**/###lib_row_remix"));
+
+        ctx->SetRef("##main");
+        GuiTest::FocusChild(ctx, "main_view/pane_left");
+        IM_CHECK(ctx->ItemExists("##ifsfilter"));
+        IM_CHECK(ctx->ItemExists("###lib_new") == false);
+        IM_CHECK(ctx->ItemExists("###lib_filter") == false);
+
+        ctx->SetRef("##main");
+        IM_CHECK(ctx->WindowInfo("main_view/pane_center/lib_problems").Window != nullptr);
+        IM_CHECK(
+            ctx->WindowInfo("main_view/pane_left/library_area", ImGuiTestOpFlags_NoError).Window ==
+            nullptr);
+        IM_CHECK(ctx->WindowInfo("main_view/pane_center/scene_scroll", ImGuiTestOpFlags_NoError)
+                     .Window == nullptr);
+    };
+    harness.Run(test);
+}
+
+TEST_CASE("an AFP backend keeps the scene layers view and shows no library", "[gui][library]") {
+    GuiTest::Harness harness;
+    const Fixture fixture = MakeFixture("r573_lib_afp_center");
+    WriteText(fixture.presets / "iidx10" / "remix.json",
+              Doc::Save(UserDocument("remix", "my remix")));
+    GuiTest::EnterReadyView("afp_modern", "sdvx7");
+    GuiTest::LoadScene("bg_0001.ifs", 0, 300);
+    App::IfsConfig& cfg = App::Global().MutConfig("bg_0001.ifs");
+    cfg.filename = "bg_0001.ifs";
+    cfg.anim_names = {"bg_main"};
+
+    ImGuiTest* test = harness.NewTest("library_afp_center");
+    test->TestFunc = [](ImGuiTestContext* ctx) {
+        ctx->SetRef("##main");
+        ctx->Yield(2);
+
+        GuiTest::FocusChild(ctx, "main_view/pane_center");
+        IM_CHECK(ctx->ItemExists("##scene_filter"));
+        IM_CHECK(ctx->ItemExists("###lib_new") == false);
+
+        ctx->SetRef("##main");
+        IM_CHECK(ctx->WindowInfo("main_view/pane_center/scene_scroll").Window != nullptr);
+        IM_CHECK_EQ(ctx->ItemInfo("**/###lib_new", ImGuiTestOpFlags_NoError).ID, 0U);
+        IM_CHECK_EQ(ctx->ItemInfo("**/###lib_group_builtin", ImGuiTestOpFlags_NoError).ID, 0U);
+        IM_CHECK_EQ(ctx->ItemInfo("**/###lib_row_remix", ImGuiTestOpFlags_NoError).ID, 0U);
+    };
+    harness.Run(test);
+}
+
+TEST_CASE("the preset library list gets the height of the center pane", "[gui][library]") {
+    GuiTest::Harness harness;
+    MakeFixture("r573_lib_center_height");
+
+    ImGuiTest* test = harness.NewTest("library_center_height");
+    test->TestFunc = [](ImGuiTestContext* ctx) {
+        ctx->SetRef("##main");
+        ctx->Yield(2);
+        const ImGuiWindow* pane = ctx->WindowInfo("main_view/pane_center").Window;
+        const ImGuiWindow* list =
+            ctx->WindowInfo("main_view/pane_center/lib_scroll", ImGuiTestOpFlags_NoError).Window;
+        IM_CHECK(pane != nullptr);
+        IM_CHECK(list != nullptr);
+        IM_CHECK_GT(pane->Size.y, 400.0F);
+        IM_CHECK_GT(list->Size.y, pane->Size.y * 0.4F);
+    };
+    harness.Run(test);
 }
 
 TEST_CASE("the library lists the built-in and user documents of this build", "[gui][library]") {

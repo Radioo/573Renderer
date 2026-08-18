@@ -340,30 +340,6 @@ void DrawExportStatusTag(App::State& state) {
     }
 }
 
-void RenderLeftPane(float height) {
-    if (!PresetLibrary::Active()) {
-        RenderIfsPicker();
-        return;
-    }
-    static float library_share = Gui::kLibraryShare;
-    const float spacing = ImGui::GetStyle().ItemSpacing.y;
-    const float room = std::max(1.0F, height - Gui::kSplitterW - (2.0F * spacing));
-    const float library_min = std::min(Gui::kLibraryMinH, room);
-    const float library_max = std::max(library_min, room - Gui::kBrowseMinH);
-    float library_h = std::clamp(room * library_share, library_min, library_max);
-    float browse_h = std::max(1.0F, room - library_h);
-
-    ImGui::BeginChild("browse_area", ImVec2(0, browse_h), 0);
-    RenderIfsPicker();
-    ImGui::EndChild();
-    Gui::HSplitter("##split_library", ImGui::GetContentRegionAvail().x, Gui::kSplitterW, &browse_h,
-                   &library_h, Gui::kBrowseMinH, library_min, room * Gui::kLibraryShare);
-    library_share = std::clamp(library_h / room, 0.1F, 0.9F);
-    ImGui::BeginChild("library_area", ImVec2(0, 0), 0);
-    PresetLibrary::Render();
-    ImGui::EndChild();
-}
-
 void RenderViewportPane() {
     static std::vector<const Gui::PanelDesc*> center;
     Gui::CollectActivePanels(Gui::PanelSlot::CenterPane, center);
@@ -455,7 +431,7 @@ void RenderRendererView() {
     ClampPaneWidths(avail_w, sw, left_w, right_w, center_w);
 
     ImGui::BeginChild("pane_left", ImVec2(left_w, row_h), 0);
-    RenderLeftPane(row_h);
+    RenderIfsPicker();
     ImGui::EndChild();
 
     ImGui::SameLine(0.0F, 0.0F);

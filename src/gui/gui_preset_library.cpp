@@ -31,6 +31,10 @@ namespace {
 
 char g_filter[128] = {};
 
+bool Active() {
+    return App::Global().ActiveBackendId() == "scene3d";
+}
+
 std::string Summary(const Doc::Document& document) {
     char buffer[96];
     snprintf(buffer, sizeof(buffer), "%d f, %d marker(s), %d track(s)", document.length.value_or(0),
@@ -295,10 +299,6 @@ void SelectEntry(const std::string& id) {
     const Doc::Entry* entry = FindEntry(id);
     if (entry == nullptr) return;
     OpenDocument(entry->document, entry->builtin);
-}
-
-bool Active() {
-    return App::Global().ActiveBackendId() == "scene3d";
 }
 
 void Render() {

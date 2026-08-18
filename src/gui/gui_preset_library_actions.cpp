@@ -403,6 +403,7 @@ void DrawFileActions(bool editable, bool built_in, const std::string& read_only)
     }
     ImGui::EndDisabled();
 
+    ImGui::SameLine();
     ImGui::BeginDisabled(!built_in);
     if (ImGui::Button("Reset###lib_reset")) RequestAction(Action::Reset);
     ImGui::EndDisabled();
@@ -478,6 +479,7 @@ void DrawActions() {
                           "reported with its line and column and nothing is loaded.");
     }
 
+    ImGui::SameLine();
     ImGui::BeginDisabled(!loaded);
     if (ImGui::Button("Export...###lib_export")) RequestAction(Action::Export);
     if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {

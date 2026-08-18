@@ -4,6 +4,7 @@
 #include "gui_panels_internal.h"
 #include "gc2d/gc_host.h"
 #include "gui_gc2d_panel.h"
+#include "gui_preset_library.h"
 #include "gui_scene3d_panel.h"
 #include "timeline/gui_timeline_editor.h"
 #include "scene3d/scene3d_host.h"
@@ -84,6 +85,11 @@ constexpr PanelDesc kScene3dPanels[] = {
      .tab_label = "Renderer",
      .slot = PanelSlot::MainTab,
      .draw = &Panels::RenderRendererView,
+     .visible = nullptr},
+    {.id = "preset_library",
+     .tab_label = "Preset library",
+     .slot = PanelSlot::CenterPane,
+     .draw = &Panels::PresetLibrary::Render,
      .visible = nullptr},
     {.id = "scene3d",
      .tab_label = "3D scene",
