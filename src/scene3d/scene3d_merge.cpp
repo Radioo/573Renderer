@@ -1,5 +1,6 @@
 #include "scene3d/scene3d_merge.h"
 
+#include "scene3d/atlas.h"
 #include "scene3d/scene3d.h"
 
 #include <algorithm>

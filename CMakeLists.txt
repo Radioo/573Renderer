@@ -311,6 +311,7 @@ add_library(r573_app STATIC
     src/preset/doc/preset_registry.cpp
     src/preset/doc/preset_validate.cpp
     src/scene3d/anim.cpp
+    src/scene3d/atlas.cpp
     src/scene3d/camera.cpp
     src/scene3d/scene3d_host.cpp
     src/scene3d/scene3d_input.cpp
@@ -377,6 +378,8 @@ add_executable(formats_tests
     tests/formats/bgra_crop_tests.cpp
     tests/formats/hsl_adjust_tests.cpp
     tests/formats/gcanim_tests.cpp
+    tests/formats/scene3d_atlas_tests.cpp
+    src/scene3d/atlas.cpp
 )
 target_link_libraries(formats_tests PRIVATE Catch2::Catch2WithMain r573_formats r573_support r573::warnings)
 catch_discover_tests(formats_tests DISCOVERY_MODE POST_BUILD PROPERTIES LABELS ci)

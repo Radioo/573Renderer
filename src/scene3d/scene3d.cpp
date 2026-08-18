@@ -5,6 +5,7 @@
 #include "formats/lzss.h"
 #include "formats/xfile.h"
 #include "scene3d/anim.h"
+#include "scene3d/atlas.h"
 #include "support/log.h"
 
 #include <algorithm>
@@ -44,27 +45,6 @@ bool Inflate(const std::filesystem::path& p, std::vector<uint8_t>& out, std::str
     return Lzss::Decompress(raw, out, err);
 }
 
-void ScatterSlice(const Gcz::Tile& src, int atlas_x, int atlas_y, std::vector<Tile>& tiles) {
-    std::vector<uint8_t> bgra;
-    Gcz::ExpandToBgra(src, bgra);
-    for (int row = 0; row < src.height; row++) {
-        const int ay = atlas_y + row;
-        const auto tile_row = (size_t)(ay / kAtlasGrid.tile_height);
-        const int in_y = ay % kAtlasGrid.tile_height;
-        for (int col = 0; col < src.width; col++) {
-            const int ax = atlas_x + col;
-            const size_t index =
-                (tile_row * kAtlasGrid.tiles_per_row) + (size_t)(ax / kAtlasGrid.tile_width);
-            if (index >= tiles.size()) continue;
-            const size_t dst =
-                (((size_t)in_y * kAtlasGrid.tile_width) + (size_t)(ax % kAtlasGrid.tile_width)) * 4;
-            const size_t from = ((((size_t)row * (size_t)src.width) + (size_t)col)) * 4;
-            std::copy_n(bgra.begin() + (ptrdiff_t)from, 4,
-                        tiles[index].bgra.begin() + (ptrdiff_t)dst);
-        }
-    }
-}
-
 bool LoadTiles(const std::filesystem::path& dir, Scene& out, std::string& err) {
     out.tiles.assign(out.manifest.slices.size(), Tile{});
     for (auto& tile : out.tiles) {
@@ -79,7 +59,8 @@ bool LoadTiles(const std::filesystem::path& dir, Scene& out, std::string& err) {
         Gcz::Tile parsed;
         if (!Gcz::Parse(raw, parsed, err)) return false;
         out.tiles[i].name = slice.name;
-        ScatterSlice(parsed, kAtlasGrid.tile_width * (int)(i % kAtlasGrid.tiles_per_row),
+        ScatterSlice(parsed, kAtlasGrid,
+                     kAtlasGrid.tile_width * (int)(i % kAtlasGrid.tiles_per_row),
                      kAtlasGrid.tile_height * (int)(i / kAtlasGrid.tiles_per_row), out.tiles);
     }
     return true;

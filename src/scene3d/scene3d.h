@@ -2,6 +2,7 @@
 
 #include "formats/inz.h"
 #include "formats/xfile.h"
+#include "scene3d/atlas.h"
 
 #include <array>
 #include <cstdint>
@@ -9,13 +10,6 @@
 #include <vector>
 
 namespace Scene3d {
-
-struct Tile {
-    std::string name;
-    int width = 0;
-    int height = 0;
-    std::vector<uint8_t> bgra;
-};
 
 struct DrawChunk {
     int frame = 0;

@@ -18,6 +18,7 @@
 #include "preset/eval/preset_evaluator.h"
 #include "preset/preset_asset_lengths.h"
 #include "preset/preset_host.h"
+#include "scene3d/atlas.h"
 #include "scene3d/scene3d.h"
 #include "scene3d/scene3d_merge.h"
 #include "scene3d/scene3d_render.h"

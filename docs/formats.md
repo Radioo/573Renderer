@@ -229,6 +229,39 @@ does the arithmetic. Slice `i` becomes the whole tile at grid cell
 `(i % tiles_per_row, i / tiles_per_row)`; a `.gcz` smaller than the tile
 occupies its top-left corner and the rest of the tile stays transparent black.
 
+### The packer's green filler is colour keyed away
+
+`Scene3d::ScatterSlice` (`src/scene3d/atlas.cpp`) expands a `.gcz` slice and
+then replaces every texel whose ARGB is exactly `0x0000FF00` with transparent
+black before writing it into the tile. That is the game's own step, not a
+cosmetic clean-up: IIDX 10 blits each slice with
+
+```c
+D3DXLoadSurfaceFromMemory(
+    tile_surface, NULL, &dst_rect,
+    gcz_payload, 25 /* D3DFMT_A1R5G5B5 */, 2 * span_width, NULL, &src_rect,
+    0xFFFFFFFF /* D3DX_DEFAULT filter */, 0x0000FF00 /* ColorKey */);
+```
+
+and D3DX replaces colour-key matches with `0x00000000`. A1R5G5B5 `0x03E0`
+expands to `A=0, R=0, G=0xFF, B=0`, which is the packer's fill colour, so the
+unused space around the packed patterns becomes black rather than green. An
+OPAQUE green texel expands to `0xFF00FF00`, does not match, and is left alone.
+The game's only other `D3DXLoadSurfaceFromMemory` call (the GDI font upload)
+passes `ColorKey = 0`, so the key belongs to the model-scene atlas alone and
+`Gc2d` must not copy it.
+
+This is load-bearing because mesh UVs are NOT clamped to their pattern rect.
+IIDX 10's `samurai` maps the torii crossbeam undersides with the 8x8 `red.bmp`
+swatch at `v` up to `1.13`, so the baked `v'` runs past the swatch into the
+filler. Keyed, the sampler blends red toward black and the beams get the dark
+shadow the game shows; unkeyed, it blends red toward `(0,255,0)` and the gates
+grow bright green bands. `samurai` is the only 3D scene in the IIDX 10 and 11
+installs whose atlas contains any such texel, so no other scene changed by a
+single pixel. RE detail and how to re-find the blit in a new build:
+`IIDX/model_scene_texture_atlas.md` in the notes repo. Covered by
+`tests/formats/scene3d_atlas_tests.cpp`.
+
 `Inz::ResolveRegion` turns a material's `TextureFilename` into the tile index
 plus the scale/bias that maps the mesh's own `0..1` UVs onto the pattern's
 sub-rect of that tile:
