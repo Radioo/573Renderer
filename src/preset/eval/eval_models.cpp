@@ -109,7 +109,7 @@ void ApplyModelDraw(const Doc::Clip& clip, const Doc::ModelDraw& command, int fr
                     bool with_keys) {
     slot.visible = true;
     slot.asset = command.asset;
-    if (!command.model.empty()) slot.name = command.model;
+    slot.mesh = command.model.empty() ? slot.name : command.model;
     slot.blend_mode = (int)command.blend_mode;
     slot.alpha = (float)command.alpha;
     slot.anim_speed = (float)command.anim_speed;
@@ -126,7 +126,8 @@ void ApplyModelDraw(const Doc::Clip& clip, const Doc::ModelDraw& command, int fr
                             .anim_speed = &clip,
                             .blend_mode = &clip,
                             .spin_per_frame = &clip,
-                            .motion = slot.from.motion};
+                            .motion = slot.from.motion,
+                            .ease = slot.from.ease};
     if (with_keys) SampleModelKeys(clip, frame, slot, model_index, writes);
 }
 
@@ -181,7 +182,7 @@ Vec3f PlacedPosition(const ModelSlot& slot, const JitterState& jitter, float sha
 }
 
 bool ModelMoves(const ModelSlot& slot, bool jitter_active, bool choice_driven) {
-    if (jitter_active || choice_driven) return true;
+    if (jitter_active || choice_driven || slot.from.ease != nullptr) return true;
     if (slot.has_orbit && slot.orbit.radius > 0.0F) return true;
     if (slot.spin_kick > 0.0F) return true;
     return slot.spin_per_frame != Vec3f{0.0F, 0.0F, 0.0F};

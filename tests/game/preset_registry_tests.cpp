@@ -62,7 +62,9 @@ TEST_CASE("the registry lists every built-in document under its own build") {
 
     const std::vector<const PD::Entry*> iidx10 = registry.ForBuild("iidx10");
     const std::vector<const PD::Entry*> iidx11 = registry.ForBuild("iidx11");
-    CHECK(iidx10.size() + iidx11.size() == PD::BuiltIns().size());
+    const std::vector<const PD::Entry*> iidx12 = registry.ForBuild("iidx12");
+    CHECK(iidx10.size() + iidx11.size() + iidx12.size() == PD::BuiltIns().size());
+    CHECK(iidx12.size() == 7);
     CHECK(registry.ForBuild("iidx13").empty());
     for (const PD::Entry* entry : iidx10) {
         INFO(entry->document.id);

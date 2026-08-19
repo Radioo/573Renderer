@@ -2,6 +2,7 @@
 
 #include "formats/gcanim.h"
 #include "preset/doc/preset_document.h"
+#include "preset/eval/eval_poly.h"
 
 #include <array>
 #include <cstdint>
@@ -40,6 +41,7 @@ struct ModelOrigin {
     const Doc::Clip* blend_mode = nullptr;
     const Doc::Clip* spin_per_frame = nullptr;
     const Doc::Clip* motion = nullptr;
+    const Doc::Clip* ease = nullptr;
 };
 
 struct SpriteOrigin {
@@ -62,10 +64,13 @@ struct CameraOrigin {
     const Doc::Clip* near_z = nullptr;
     const Doc::Clip* far_z = nullptr;
     const Doc::Clip* aspect = nullptr;
+    const Doc::Clip* ease = nullptr;
+    const Doc::Clip* motion = nullptr;
 };
 
 struct ModelSlot {
     std::string name;
+    std::string mesh;
     std::string asset;
     ModelOrigin from = {};
     bool visible = false;
@@ -127,7 +132,17 @@ struct LightState {
     Vec3f direction = {0.0F, 0.0F, -1.0F};
     Vec3f diffuse = {1.0F, 1.0F, 1.0F};
     Vec3f specular = {1.0F, 1.0F, 1.0F};
+    Vec3f ambient = {0.0F, 0.0F, 0.0F};
     bool enabled = true;
+};
+
+struct FogState {
+    const Doc::Clip* from = nullptr;
+    bool enabled = false;
+    Vec3f color = {1.0F, 1.0F, 1.0F};
+    float start = 0.0F;
+    float end = 1.0F;
+    float density = 0.5F;
 };
 
 struct JitterState {
@@ -170,12 +185,17 @@ struct FrameState {
     int frame = 0;
     const Doc::Clip* shading_from = nullptr;
     const Doc::Clip* split_from = nullptr;
+    const Doc::Clip* clear_from = nullptr;
+    const Doc::Clip* clear_cycle = nullptr;
     Doc::Shading shading = Doc::Shading::LitMaterial;
     int sprite_split_priority = 30;
+    Vec3f clear_color = {0.0F, 0.0F, 0.0F};
     CameraState camera = {};
     std::vector<LightState> lights;
     std::vector<ModelSlot> models;
     std::vector<SpriteSlot> sprites;
+    FogState fog = {};
+    PolyGridState poly = {};
     JitterState jitter = {};
     BeatState beat = {};
     std::vector<const Doc::Clip*> emitters;

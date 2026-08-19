@@ -27,6 +27,7 @@ enum class Legend : std::uint8_t {
     Render,
     Rhythm,
     Option,
+    Poly,
     Count,
 };
 
@@ -36,7 +37,8 @@ constexpr std::array<ImU32, (std::size_t)Legend::Count> kLight = {
     IM_COL32(0x8C, 0x3F, 0x86, 0xFF), IM_COL32(0xA3, 0x46, 0x5C, 0xFF),
     IM_COL32(0x2C, 0x7A, 0x5E, 0xFF), IM_COL32(0x8A, 0x77, 0x22, 0xFF),
     IM_COL32(0x55, 0x5F, 0x6B, 0xFF), IM_COL32(0x40, 0x5A, 0x80, 0xFF),
-    IM_COL32(0x9A, 0x5B, 0x1E, 0xFF), IM_COL32(0x6E, 0x6A, 0x2E, 0xFF)};
+    IM_COL32(0x9A, 0x5B, 0x1E, 0xFF), IM_COL32(0x6E, 0x6A, 0x2E, 0xFF),
+    IM_COL32(0x7A, 0x3A, 0x9E, 0xFF)};
 
 constexpr std::array<ImU32, (std::size_t)Legend::Count> kDark = {
     IM_COL32(0x64, 0xA6, 0xE8, 0xFF), IM_COL32(0x64, 0xC4, 0xCC, 0xFF),
@@ -44,12 +46,14 @@ constexpr std::array<ImU32, (std::size_t)Legend::Count> kDark = {
     IM_COL32(0xDD, 0x82, 0xD2, 0xFF), IM_COL32(0xE8, 0x86, 0x9C, 0xFF),
     IM_COL32(0x5C, 0xC4, 0x9A, 0xFF), IM_COL32(0xD8, 0xC0, 0x54, 0xFF),
     IM_COL32(0xA6, 0xB0, 0xBE, 0xFF), IM_COL32(0x86, 0xA4, 0xD8, 0xFF),
-    IM_COL32(0xE8, 0xA4, 0x5C, 0xFF), IM_COL32(0xC6, 0xC0, 0x70, 0xFF)};
+    IM_COL32(0xE8, 0xA4, 0x5C, 0xFF), IM_COL32(0xC6, 0xC0, 0x70, 0xFF),
+    IM_COL32(0xC0, 0x86, 0xEE, 0xFF)};
 
-constexpr std::array<Legend, 16> kByCommand = {
-    Legend::Sprite, Legend::Sprite, Legend::Scroll, Legend::Emitter, Legend::Model, Legend::Tween,
-    Legend::Motion, Legend::Camera, Legend::Camera, Legend::Light,   Legend::Param, Legend::Render,
-    Legend::Rhythm, Legend::Rhythm, Legend::Rhythm, Legend::Option};
+constexpr std::array<Legend, Doc::kCommandTypeNames.size()> kByCommand = {
+    Legend::Sprite, Legend::Sprite, Legend::Scroll, Legend::Emitter, Legend::Model,  Legend::Tween,
+    Legend::Motion, Legend::Camera, Legend::Camera, Legend::Light,   Legend::Param,  Legend::Render,
+    Legend::Rhythm, Legend::Rhythm, Legend::Rhythm, Legend::Option,  Legend::Render, Legend::Render,
+    Legend::Camera, Legend::Motion, Legend::Camera, Legend::Poly};
 
 bool DarkTheme() {
     const ImVec4 background = ImGui::GetStyleColorVec4(ImGuiCol_WindowBg);
@@ -79,6 +83,8 @@ ImU32 TrackKindColor(Doc::TrackKind kind) {
         return Pick(Legend::Light);
     case Doc::TrackKind::Fx:
         return Pick(Legend::Emitter);
+    case Doc::TrackKind::Poly:
+        return Pick(Legend::Poly);
     case Doc::TrackKind::Scene:
         break;
     }
@@ -97,6 +103,8 @@ const char* KindBadge(Doc::TrackKind kind) {
         return "LIGHT";
     case Doc::TrackKind::Fx:
         return "FX";
+    case Doc::TrackKind::Poly:
+        return "POLY";
     case Doc::TrackKind::Scene:
         break;
     }

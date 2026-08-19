@@ -2,6 +2,8 @@
 
 #include "backend/afp_commands.h"
 #include "gui_icons.h"
+#include "preset/doc/preset_enum_names.h"
+#include "timeline/gui_tl_internal.h"
 #include "imgui.h"
 #include "imgui_te_context.h"
 #include "imgui_te_engine.h"
@@ -10,9 +12,12 @@
 #include "state/telemetry.h"
 
 #include <any>
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include <cstddef>
 #include <optional>
+#include <set>
 #include <variant>
 
 namespace {
@@ -301,4 +306,23 @@ TEST_CASE("timeline scrub seeks through a label tick instead of stalling", "[gui
     }
     CHECK(seeks > 1);
     CHECK(last_frame > 120);
+}
+
+TEST_CASE("every command type has its own clip colour entry", "[gui][timeline]") {
+    const GuiTest::Harness harness;
+    std::set<ImU32> seen;
+    for (std::size_t i = 0; i < Preset::Doc::kCommandTypeNames.size(); i++) {
+        const auto type = (Preset::Doc::CommandType)i;
+        INFO(Preset::Doc::kCommandTypeNames[i]);
+        const ImU32 colour = Panels::Timeline::CommandColor(type);
+        CHECK((colour & IM_COL32_A_MASK) == IM_COL32_A_MASK);
+        seen.insert(colour);
+    }
+    CHECK(seen.size() > 1);
+    CHECK(Panels::Timeline::CommandColor(Preset::Doc::CommandType::CameraEase) ==
+          Panels::Timeline::CommandColor(Preset::Doc::CommandType::CameraSet));
+    CHECK(Panels::Timeline::CommandColor(Preset::Doc::CommandType::ModelEase) ==
+          Panels::Timeline::CommandColor(Preset::Doc::CommandType::ModelMotion));
+    CHECK(Panels::Timeline::CommandColor(Preset::Doc::CommandType::ClearCycle) ==
+          Panels::Timeline::CommandColor(Preset::Doc::CommandType::RenderSettings));
 }

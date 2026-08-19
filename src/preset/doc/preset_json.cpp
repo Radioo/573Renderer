@@ -174,6 +174,45 @@ Json WriteScatter(const Scatter& scatter) {
     return out;
 }
 
+Burst ReadBurst(const Json& value, std::string_view path) {
+    Burst burst;
+    burst.period_base = ReadInt(Required(value, "period_base", path), path, "burst.period_base");
+    burst.period_span = ReadInt(Required(value, "period_span", path), path, "burst.period_span");
+    burst.life_drift = ReadInt(Required(value, "life_drift", path), path, "burst.life_drift");
+    burst.rise_base = ReadInt(Required(value, "rise_base", path), path, "burst.rise_base");
+    burst.rise_step = ReadInt(Required(value, "rise_step", path), path, "burst.rise_step");
+    burst.rise_period = ReadInt(Required(value, "rise_period", path), path, "burst.rise_period");
+    burst.span_x = ReadInt(Required(value, "span_x", path), path, "burst.span_x");
+    burst.from_y = ReadInt(Required(value, "from_y", path), path, "burst.from_y");
+    burst.to_y = ReadInt(Required(value, "to_y", path), path, "burst.to_y");
+    return burst;
+}
+
+Json WriteBurst(const Burst& burst) {
+    Json out = Json::object();
+    out["period_base"] = burst.period_base;
+    out["period_span"] = burst.period_span;
+    out["life_drift"] = burst.life_drift;
+    out["rise_base"] = burst.rise_base;
+    out["rise_step"] = burst.rise_step;
+    out["rise_period"] = burst.rise_period;
+    out["span_x"] = burst.span_x;
+    out["from_y"] = burst.from_y;
+    out["to_y"] = burst.to_y;
+    return out;
+}
+
+MovieTexture ReadMovie(const Json& value, std::string_view path) {
+    if (!value.is_object()) Fail(path, "texture must be null or an object with a movie key");
+    return MovieTexture{.path = ReadString(Required(value, "movie", path), path, "texture.movie")};
+}
+
+Json WriteMovie(const MovieTexture& movie) {
+    Json out = Json::object();
+    out["movie"] = movie.path;
+    return out;
+}
+
 OverrideValue ReadOverride(const Json& value, std::string_view path, std::string_view what) {
     if (value.is_boolean()) return value.get<bool>();
     if (value.is_number()) return value.get<double>();
@@ -239,6 +278,12 @@ ParamValue ReadParam(const FieldDesc& field, const Json& value, std::string_view
     case FieldKind::ScatterField:
         if (value.is_null()) return std::optional<Scatter>{};
         return std::optional<Scatter>{ReadScatter(value, path)};
+    case FieldKind::BurstField:
+        if (value.is_null()) return std::optional<Burst>{};
+        return std::optional<Burst>{ReadBurst(value, path)};
+    case FieldKind::MovieField:
+        if (value.is_null()) return std::optional<MovieTexture>{};
+        return std::optional<MovieTexture>{ReadMovie(value, path)};
     case FieldKind::OverrideField:
         return AsParam(ReadOverride(value, path, field.id));
     }
@@ -290,6 +335,16 @@ Json WriteParam(const FieldDesc& field, const ParamValue& value) {
         const auto scatter = std::get<std::optional<Scatter>>(value);
         if (!scatter.has_value()) return {};
         return WriteScatter(*scatter);
+    }
+    case FieldKind::BurstField: {
+        const auto burst = std::get<std::optional<Burst>>(value);
+        if (!burst.has_value()) return {};
+        return WriteBurst(*burst);
+    }
+    case FieldKind::MovieField: {
+        const auto movie = std::get<std::optional<MovieTexture>>(value);
+        if (!movie.has_value()) return {};
+        return WriteMovie(*movie);
     }
     default:
         return WriteLooseValue(value);
@@ -588,6 +643,14 @@ RenderSpec ReadRender(const Json& value, std::string_view path) {
         (Shading)ReadEnum(Required(value, "shading", path), kShadingNames, path, "render.shading");
     render.sprite_split_priority = ReadInt(Required(value, "sprite_split_priority", path), path,
                                            "render.sprite_split_priority");
+    if (const Json* clear = Member(value, "clear_color")) {
+        render.clear_color = ReadArray<3>(*clear, path, "render.clear_color");
+        for (const double channel : render.clear_color) {
+            if (channel < 0.0 || channel > 1.0) {
+                Fail(path, "render.clear_color channels run from 0 to 1");
+            }
+        }
+    }
     return render;
 }
 
@@ -598,6 +661,9 @@ Json WriteRender(const RenderSpec& render) {
     out["opaque"] = render.opaque;
     out["shading"] = std::string(NameForIndex(kShadingNames, (int)render.shading));
     out["sprite_split_priority"] = render.sprite_split_priority;
+    if (render.clear_color != RenderSpec{}.clear_color) {
+        out["clear_color"] = WriteArray(render.clear_color);
+    }
     return out;
 }
 
@@ -640,10 +706,13 @@ Json WriteCamera(const CameraSpec& camera) {
 void ReadLists(const Json& root, Document& doc) {
     const std::string_view path = doc.id;
     for (const Json& light : Required(root, "lights", path)) {
-        doc.lights.push_back(
-            LightSpec{.direction = ReadArray<3>(Required(light, "direction", path), path, "light"),
-                      .diffuse = ReadArray<3>(Required(light, "diffuse", path), path, "light"),
-                      .specular = ReadArray<3>(Required(light, "specular", path), path, "light")});
+        LightSpec spec{.direction = ReadArray<3>(Required(light, "direction", path), path, "light"),
+                       .diffuse = ReadArray<3>(Required(light, "diffuse", path), path, "light"),
+                       .specular = ReadArray<3>(Required(light, "specular", path), path, "light")};
+        if (const Json* ambient = Member(light, "ambient")) {
+            spec.ambient = ReadArray<3>(*ambient, path, "light ambient");
+        }
+        doc.lights.push_back(spec);
     }
     for (const auto& item : Required(root, "assets", path).items()) {
         doc.assets.push_back(
@@ -672,6 +741,7 @@ void WriteLists(const Document& doc, Json& root) {
         entry["direction"] = WriteArray(light.direction);
         entry["diffuse"] = WriteArray(light.diffuse);
         entry["specular"] = WriteArray(light.specular);
+        if (light.ambient != LightSpec{}.ambient) entry["ambient"] = WriteArray(light.ambient);
         lights.push_back(entry);
     }
     root["lights"] = lights;

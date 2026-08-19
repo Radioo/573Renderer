@@ -1,3 +1,4 @@
+#include "scene3d/scene3d_fog.h"
 #include "scene3d/scene3d_host.h"
 
 #include "app_globals.h"
@@ -5,6 +6,7 @@
 #include "formats/xfile.h"
 #include "render_backend.h"
 #include "scene3d/camera.h"
+#include "scene3d/poly_grid.h"
 #include "scene3d/scene3d.h"
 #include "scene3d/scene3d_input.h"
 #include "scene3d/scene3d_merge.h"
@@ -103,11 +105,32 @@ bool LoadOne(const std::string& dir) {
     return true;
 }
 
+std::string TargetOf(const ModelSetup& want) {
+    return want.target.empty() ? want.model : want.target;
+}
+
+void MakeInstances(const Setup& setup, const std::string& where) {
+    std::vector<Scene3d::Instance> want;
+    want.reserve(setup.models.size());
+    for (const ModelSetup& model : setup.models)
+        want.push_back(Scene3d::Instance{.target = TargetOf(model), .model = model.model});
+    for (const Scene3d::InstanceProblem& problem : Scene3d::MakeInstances(g_scene.models, want)) {
+        const Scene3d::Instance& named = want[problem.index];
+        if (problem.missing_model) {
+            LOG("Scene3d", "instance '%s' names model '%s' which is not in %s",
+                named.target.c_str(), named.model.c_str(), where.c_str());
+        } else {
+            LOG("Scene3d", "instance '%s' takes the name of a model already in %s",
+                named.target.c_str(), where.c_str());
+        }
+    }
+}
+
 void ApplySetup(const Setup& setup, const std::string& where) {
     for (auto& model : g_scene.models)
         model.visible = false;
     for (const auto& want : setup.models) {
-        Scene3d::Model* model = FindModel(want.model);
+        Scene3d::Model* model = FindModel(TargetOf(want));
         if (model == nullptr) {
             LOG("Scene3d", "setup names model '%s' which is not in %s", want.model.c_str(),
                 where.c_str());
@@ -141,7 +164,10 @@ bool Load(const std::string& dir) {
 }
 
 bool LoadWithSetup(const std::string& dir, const Setup& setup) {
-    if (!Load(dir)) return false;
+    Unload();
+    if (!LoadOne(dir)) return false;
+    MakeInstances(setup, dir);
+    if (!Activate(dir)) return false;
     ApplySetup(setup, dir);
     return true;
 }
@@ -152,6 +178,7 @@ bool LoadUnion(const std::vector<std::string>& dirs, const Setup& setup) {
     for (const std::string& dir : dirs) {
         if (!LoadOne(dir)) return false;
     }
+    MakeInstances(setup, dirs.front());
     if (!Activate(dirs.front())) return false;
     ApplySetup(setup, dirs.front());
     LOG("Scene3d", "%zu scene dir(s) merged: %zu model(s), %.0f ticks", dirs.size(),
@@ -215,8 +242,21 @@ void SetLights(const std::vector<Scene3d::Light>& lights) {
     g_renderer.SetLights(lights);
 }
 
+void SetFog(const Scene3d::Fog& fog) {
+    g_renderer.SetFog(fog);
+}
+
+void SetPolyGrid(Scene3d::PolyGrid grid) {
+    g_renderer.SetPolyGrid(std::move(grid));
+}
+
+void SetMovieReporter(Scene3d::MovieReporter reporter) {
+    g_renderer.SetMovieReporter(std::move(reporter));
+}
+
 void Unload() {
     g_assets.clear();
+    g_renderer.SetFog(Scene3d::Fog{});
     if (!g_active) {
         g_scene = Scene3d::Scene{};
         return;

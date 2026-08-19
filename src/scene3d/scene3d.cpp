@@ -19,6 +19,7 @@
 #include <system_error>
 #include <iterator>
 #include <map>
+#include <numeric>
 #include <string>
 #include <utility>
 #include <vector>
@@ -234,10 +235,13 @@ bool LoadModels(const std::filesystem::path& dir, Scene& out, std::string& err) 
         Model model;
         model.name = p.stem().string();
         if (!XFile::Parse(std::string(raw.begin(), raw.end()), model.scene, err)) return false;
-        out.max_time = std::max(out.max_time, (float)model.scene.max_key_time);
+        const int loop = LoopTicks(model.scene);
+        out.max_time =
+            (out.max_time <= 0.0F) ? (float)loop : (float)std::lcm((int)out.max_time, loop);
         BuildChunks(out, model);
-        LOG("Scene3d", "model '%s': %zu frames, %zu chunks, %d key ticks", model.name.c_str(),
-            model.scene.frames.size(), model.chunks.size(), model.scene.max_key_time);
+        LOG("Scene3d", "model '%s': %zu frames, %zu chunks, %d key ticks, loops every %d",
+            model.name.c_str(), model.scene.frames.size(), model.chunks.size(),
+            model.scene.max_key_time, loop);
         out.models.push_back(std::move(model));
     }
     return true;

@@ -5,12 +5,24 @@
     "data/graph/texture/ex01": 480,
     "data/graph/texture/tranbox": 120,
     "data/graph/texture/samurai": 60,
-    "data/graph/model/red": 240
+    "data/graph/model/red": 240,
+    "data/graph/model/ex_bg": 1000,
+    "data/graph/model/mode_bg": 1500,
+    "data/graph/model/sky": 600,
+    "data/graph/model/extra_st": 640,
+    "data/graph/model/dan": 3000
   },
   "package2d": {
     "data/graph/sys/title": {
       "TITLE": 1736,
-      "TITLE_TAIKI": 720
+      "TITLE_TAIKI": 720,
+      "LOGO_IN": 120
+    },
+    "data/graph/sys/card": {
+      "CARD_BG": 120
+    },
+    "data/graph/sys/dan_e": {
+      "DAN_BG": 600
     }
   }
 }

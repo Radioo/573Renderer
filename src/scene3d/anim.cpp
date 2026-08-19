@@ -4,6 +4,7 @@
 
 #include <cmath>
 #include <cstddef>
+#include <numeric>
 #include <vector>
 
 namespace Scene3d {
@@ -16,9 +17,18 @@ struct KeyPair {
     float t = 0.0F;
 };
 
-KeyPair Locate(const std::vector<XFile::AnimationKey>& keys, float time) {
+float WrapToTrack(const std::vector<XFile::AnimationKey>& keys, float time) {
+    const auto period = (float)keys.back().time;
+    if (period <= 0.0F) return time;
+    float wrapped = std::fmod(time, period);
+    if (wrapped < 0.0F) wrapped += period;
+    return wrapped;
+}
+
+KeyPair Locate(const std::vector<XFile::AnimationKey>& keys, float raw_time) {
     KeyPair kp;
     if (keys.size() < 2) return kp;
+    const float time = WrapToTrack(keys, raw_time);
     if (time <= (float)keys.front().time) return kp;
     if (time >= (float)keys.back().time) {
         kp.a = keys.size() - 1;
@@ -70,6 +80,21 @@ void LerpN(const float* a, const float* b, float t, int n, float* out) {
         out[i] = a[i] + ((b[i] - a[i]) * t);
 }
 
+}
+
+int LoopTicks(const XFile::Scene& scene) {
+    int loop = 0;
+    const auto fold = [&loop](const std::vector<XFile::AnimationKey>& keys) {
+        if (keys.empty() || keys.back().time <= 0) return;
+        loop = (loop == 0) ? keys.back().time : std::lcm(loop, keys.back().time);
+    };
+    for (const XFile::AnimationChannel& channel : scene.channels) {
+        fold(channel.rotation);
+        fold(channel.scale);
+        fold(channel.position);
+        fold(channel.matrix);
+    }
+    return loop;
 }
 
 XFile::Matrix Multiply(const XFile::Matrix& a, const XFile::Matrix& b) {

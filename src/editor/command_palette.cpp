@@ -55,6 +55,18 @@ constexpr std::array<Blurb, Doc::kCommandTypeNames.size()> kBlurbs = {
     Blurb{.name = "Jitter", .summary = "modifier: random shake span, scale, models and mode"},
     Blurb{.name = "Select option",
           .summary = "event: change a choice at this frame during playback and export"},
+    Blurb{.name = "Fog",
+          .summary = "linear vertex fog around the model pass: colour, start, end, density"},
+    Blurb{.name = "Clear colour cycle",
+          .summary = "modifier: the strobe windows and grey ramp that drive the frame clear"},
+    Blurb{.name = "Camera ease",
+          .summary = "modifier: eye and at chase a target a fraction of the gap per frame"},
+    Blurb{.name = "Model ease",
+          .summary = "modifier: scale, position and alpha chase a target per frame"},
+    Blurb{.name = "Camera roll",
+          .summary = "modifier: the up vector turns about the view axis every frame"},
+    Blurb{.name = "Movie tile grid",
+          .summary = "a grid of spinning, orbiting quads textured with a movie file"},
 };
 
 std::string Lower(std::string_view text) {

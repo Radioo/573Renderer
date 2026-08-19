@@ -48,6 +48,13 @@ output path or an id, so `--preset-export-json iidx11 <id> --force` still writes
 | `--force` | | load a document that has validation errors anyway; the evaluator skips the offending clips. Without it, `--preset-json` refuses a document with errors. |
 | `--preset-option` | `<option-id>=<choice>` | selects an option; repeatable, one per option. The choice is a label (`mode=EXPERT`) or an index (`mode=3`). It replaced the positional option-index argument, which could only ever reach the first option. |
 
+The motion check takes its BASELINE at the first rendered frame that has any
+visible model, not at frame 0. A screen whose 3D appears later (HAPPY SKY's staff
+roll shows the sky dome from frame 200) would otherwise be compared against an
+empty pose list and reported as having no 3D at all. With no visible model over
+the whole run the log says so and names the number of frames rendered, rather than
+claiming the preset contains no model.
+
 `--preset-tweaks` is gone with the tweak file. Naming it makes the process print
 what to do instead (export the JSON, edit it, run it with `--preset-json`) and
 exit 2, rather than silently ignoring the flag.

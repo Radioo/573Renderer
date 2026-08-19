@@ -34,8 +34,45 @@ bool Spawns(const Doc::EmitterCmd& emitter, const Doc::Clip& clip, int frame, co
         if (snapshot.since[grid] != 0) return false;
         return (snapshot.index[grid] & 1) == emitter.beat_odd;
     }
+    case Doc::Spawn::Burst:
+        return false;
     }
     return false;
+}
+
+bool BurstsThisFrame(const Doc::Burst& burst, int frame, Preset::Ran3& rng) {
+    rng.Next();
+    const int span = std::max(1, burst.period_span);
+    const int period = std::max(1, (rng.Next() % span) + burst.period_base);
+    if (frame % period == 0) return true;
+    const int half = period / 2;
+    return half > 0 && frame % half == 0;
+}
+
+void SpawnBurst(const Doc::EmitterCmd& emitter, const Doc::Burst& burst, const std::string& source,
+                int frame, Preset::Ran3& rng, std::vector<Particle>& particles) {
+    int rise = burst.rise_base;
+    for (int i = 0; i < emitter.count; i++) {
+        const int span = std::max(1, emitter.life_span);
+        const int drift = (burst.life_drift > 0) ? (frame % burst.life_drift) : 0;
+        const int life = (rng.Next() % span) + emitter.life_base - drift;
+        rise = std::max(0, rise + burst.rise_step -
+                               ((burst.rise_period > 0) ? (frame % burst.rise_period) : 0));
+        const int x = rng.Next() % std::max(1, burst.span_x);
+        Particle particle;
+        particle.emitter = source;
+        particle.asset = emitter.asset;
+        particle.cell = emitter.cell;
+        particle.from_x = x;
+        particle.from_y = burst.from_y;
+        particle.to_x = x;
+        particle.to_y = burst.to_y - rise;
+        particle.life = std::max(1, life);
+        particle.priority = emitter.priority;
+        particle.blend = (int)emitter.blend;
+        particle.scale = (float)rise * 0.01F;
+        particles.push_back(std::move(particle));
+    }
 }
 
 void SpawnOne(const Doc::EmitterCmd& emitter, const std::string& source,
@@ -90,6 +127,12 @@ void SpawnParticles(const FrameState& state, int frame, const BeatSnapshot& beat
     for (const Doc::Clip* clip : state.emitters) {
         const auto* emitter = std::get_if<Doc::EmitterCmd>(&clip->command);
         if (emitter == nullptr) continue;
+        if (emitter->spawn == Doc::Spawn::Burst) {
+            if (!emitter->burst.has_value()) continue;
+            if (BurstsThisFrame(*emitter->burst, frame, rng))
+                SpawnBurst(*emitter, *emitter->burst, clip->id, frame, rng, particles);
+            continue;
+        }
         const Doc::Scatter* scatter =
             emitter->scatter.has_value() ? &emitter->scatter.value() : nullptr;
         if (scatter != nullptr && (scatter->span[0] <= 0.0 || scatter->span[1] <= 0.0)) continue;

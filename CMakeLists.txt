@@ -88,6 +88,7 @@ target_link_libraries(r573_media_format PRIVATE r573::warnings)
 
 add_library(r573_media STATIC
     src/media_sink.cpp
+    src/media/movie_source.cpp
     src/video_encoder.cpp
     src/video_encoder_codecs.cpp
 )
@@ -165,6 +166,7 @@ add_library(r573_app STATIC
     src/boot.cpp
     src/backend/backend_registry.cpp
     src/backend/scene3d_backend.cpp
+    src/backend/preset_clear_color.cpp
     src/backend/preset_command_apply.cpp
     src/editor/clip_form.cpp
     src/editor/clip_problems.cpp
@@ -295,7 +297,9 @@ add_library(r573_app STATIC
     src/preset/eval/eval_scene.cpp
     src/preset/eval/eval_particles.cpp
     src/preset/eval/eval_resolve.cpp
+    src/preset/eval/eval_poly.cpp
     src/preset/eval/frame_report.cpp
+    src/preset/eval/eval_ease.cpp
     src/preset/eval/eval_emit.cpp
     src/preset/eval/preset_evaluator.cpp
     src/preset/defaults/defaults.cpp
@@ -305,18 +309,30 @@ add_library(r573_app STATIC
     src/preset/defaults/iidx11_select_defaults.cpp
     src/preset/defaults/iidx11_ending_a_defaults.cpp
     src/preset/defaults/iidx11_ending_b_defaults.cpp
+    src/preset/defaults/iidx12_defaults.cpp
+    src/preset/defaults/iidx12_mode_defaults.cpp
+    src/preset/defaults/iidx12_dan_defaults.cpp
+    src/preset/defaults/iidx12_music_defaults.cpp
+    src/preset/defaults/iidx12_ending_defaults.cpp
+    src/preset/defaults/iidx12_2d_defaults.cpp
     src/preset/doc/preset_enum_names.cpp
     src/preset/doc/preset_fields.cpp
+    src/preset/doc/preset_fields_2d.cpp
+    src/preset/doc/preset_fields_3d.cpp
     src/preset/doc/preset_json.cpp
     src/preset/doc/preset_registry.cpp
     src/preset/doc/preset_validate.cpp
     src/scene3d/anim.cpp
     src/scene3d/atlas.cpp
     src/scene3d/camera.cpp
+    src/scene3d/poly_draw.cpp
+    src/scene3d/poly_vertex.cpp
     src/scene3d/scene3d_host.cpp
     src/scene3d/scene3d_input.cpp
     src/scene3d/scene3d_merge.cpp
     src/scene3d/scene3d.cpp
+    src/scene3d/scene3d_fog.cpp
+    src/scene3d/scene3d_material.cpp
     src/scene3d/scene3d_render.cpp
     src/scene3d/scene3d_test.cpp
 )
@@ -379,7 +395,13 @@ add_executable(formats_tests
     tests/formats/hsl_adjust_tests.cpp
     tests/formats/gcanim_tests.cpp
     tests/formats/scene3d_atlas_tests.cpp
+    tests/formats/scene3d_fog_tests.cpp
+    tests/formats/scene3d_material_tests.cpp
+    tests/formats/scene3d_anim_tests.cpp
+    src/scene3d/anim.cpp
     src/scene3d/atlas.cpp
+    src/scene3d/scene3d_fog.cpp
+    src/scene3d/scene3d_material.cpp
 )
 target_link_libraries(formats_tests PRIVATE Catch2::Catch2WithMain r573_formats r573_support r573::warnings)
 catch_discover_tests(formats_tests DISCOVERY_MODE POST_BUILD PROPERTIES LABELS ci)
@@ -394,8 +416,11 @@ add_executable(game_tests
     tests/game/preset_push_text.cpp
     tests/game/preset_legacy_view.cpp
     tests/game/preset_eval_tests.cpp
+    tests/game/preset_poly_tests.cpp
+    tests/game/poly_vertex_tests.cpp
     tests/game/preset_option_tests.cpp
     tests/game/preset_defaults_tests.cpp
+    tests/game/preset_defaults_2d_tests.cpp
     tests/game/preset_registry_tests.cpp
     tests/game/eval_tween_tests.cpp
     tests/game/preset_host_tests.cpp
@@ -410,6 +435,7 @@ add_executable(game_tests
     tests/editor/library_model_tests.cpp
     tests/editor/export_range_tests.cpp
     tests/editor/frame_inspector_model_tests.cpp
+    src/backend/preset_clear_color.cpp
     src/backend/preset_command_apply.cpp
     src/editor/clip_form.cpp
     src/editor/clip_problems.cpp
@@ -432,6 +458,8 @@ add_executable(game_tests
     src/preset/preset_preview.cpp
     src/gc2d/gc_sprite.cpp
     src/scene3d/scene3d_merge.cpp
+    src/scene3d/scene3d_fog.cpp
+    src/scene3d/scene3d_material.cpp
     src/game_profile.cpp
     src/game_revision.cpp
     src/game_fingerprint.cpp
@@ -444,7 +472,9 @@ add_executable(game_tests
     src/preset/eval/eval_scene.cpp
     src/preset/eval/eval_particles.cpp
     src/preset/eval/eval_resolve.cpp
+    src/preset/eval/eval_poly.cpp
     src/preset/eval/frame_report.cpp
+    src/preset/eval/eval_ease.cpp
     src/preset/eval/eval_emit.cpp
     src/preset/eval/preset_evaluator.cpp
     src/preset/defaults/defaults.cpp
@@ -454,12 +484,21 @@ add_executable(game_tests
     src/preset/defaults/iidx11_select_defaults.cpp
     src/preset/defaults/iidx11_ending_a_defaults.cpp
     src/preset/defaults/iidx11_ending_b_defaults.cpp
+    src/preset/defaults/iidx12_defaults.cpp
+    src/preset/defaults/iidx12_mode_defaults.cpp
+    src/preset/defaults/iidx12_dan_defaults.cpp
+    src/preset/defaults/iidx12_music_defaults.cpp
+    src/preset/defaults/iidx12_ending_defaults.cpp
+    src/preset/defaults/iidx12_2d_defaults.cpp
     src/preset/doc/preset_enum_names.cpp
     src/preset/doc/preset_fields.cpp
+    src/preset/doc/preset_fields_2d.cpp
+    src/preset/doc/preset_fields_3d.cpp
     src/preset/doc/preset_json.cpp
     src/preset/doc/preset_registry.cpp
     src/preset/preset_tools.cpp
     src/preset/doc/preset_validate.cpp
+    src/scene3d/poly_vertex.cpp
     src/mc_control.cpp
 )
 target_include_directories(game_tests PRIVATE src)
@@ -572,6 +611,12 @@ add_executable(local_dll_tests
     src/preset/defaults/iidx11_select_defaults.cpp
     src/preset/defaults/iidx11_ending_a_defaults.cpp
     src/preset/defaults/iidx11_ending_b_defaults.cpp
+    src/preset/defaults/iidx12_defaults.cpp
+    src/preset/defaults/iidx12_mode_defaults.cpp
+    src/preset/defaults/iidx12_dan_defaults.cpp
+    src/preset/defaults/iidx12_music_defaults.cpp
+    src/preset/defaults/iidx12_ending_defaults.cpp
+    src/preset/defaults/iidx12_2d_defaults.cpp
 )
 target_include_directories(local_dll_tests PRIVATE src)
 target_link_libraries(local_dll_tests PRIVATE Catch2::Catch2WithMain r573_support r573_state
@@ -588,6 +633,15 @@ target_link_libraries(export_capture_tests PRIVATE Catch2::Catch2WithMain r573_m
                                                    r573_loop r573_formats r573_support
                                                    r573::warnings)
 catch_discover_tests(export_capture_tests DISCOVERY_MODE POST_BUILD PROPERTIES LABELS ci)
+
+add_executable(media_decode_tests
+    tests/media/movie_decode_tests.cpp
+)
+target_include_directories(media_decode_tests PRIVATE src)
+target_include_directories(media_decode_tests SYSTEM PRIVATE ${FFMPEG_INCLUDE_DIRS})
+target_link_libraries(media_decode_tests PRIVATE Catch2::Catch2WithMain r573_media r573_support
+                                                 r573::warnings)
+catch_discover_tests(media_decode_tests DISCOVERY_MODE POST_BUILD PROPERTIES LABELS ci)
 
 add_executable(media_encode_tests
     tests/media/media_encode_tests.cpp

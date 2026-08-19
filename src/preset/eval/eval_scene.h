@@ -1,5 +1,6 @@
 #pragma once
 
+#include "preset/doc/preset_commands.h"
 #include "preset/doc/preset_document.h"
 #include "preset/eval/eval_tween.h"
 #include "preset/eval/frame_state.h"
@@ -8,6 +9,8 @@
 #include <string_view>
 
 namespace Preset::Eval {
+
+Vec3f ClearCycleColor(const Doc::ClearCycleCmd& cycle, int frame);
 
 int BeatIndex(const BeatState& beat, int frame, int offset);
 

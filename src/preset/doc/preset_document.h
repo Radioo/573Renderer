@@ -26,6 +26,7 @@ struct RenderSpec {
     bool opaque = true;
     Shading shading = Shading::LitMaterial;
     int sprite_split_priority = 30;
+    Vec3 clear_color = {0.0, 0.0, 0.0};
     bool operator==(const RenderSpec&) const = default;
 };
 
@@ -44,6 +45,7 @@ struct LightSpec {
     Vec3 direction = {0.0, 0.0, -1.0};
     Vec3 diffuse = {1.0, 1.0, 1.0};
     Vec3 specular = {1.0, 1.0, 1.0};
+    Vec3 ambient = {0.0, 0.0, 0.0};
     bool operator==(const LightSpec&) const = default;
 };
 

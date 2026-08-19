@@ -2,6 +2,7 @@
 
 #include "app_globals.h"
 #include "backend/backend.h"
+#include "backend/scene3d_backend.h"
 #include "export.h"
 #include "game_fingerprint.h"
 #include "gc2d/gc_host.h"
@@ -197,9 +198,9 @@ bool Differs(const std::array<float, 3>& a, const std::array<float, 3>& b) {
     return false;
 }
 
-int ReportMotion(const std::vector<Pose>& first, const std::vector<Pose>& last) {
+int ReportMotion(const std::vector<Pose>& first, const std::vector<Pose>& last, int frames) {
     if (first.empty()) {
-        LOG("PresetTest", "no visible 3D model in this preset");
+        LOG("PresetTest", "no visible 3D model over the %d rendered frame(s)", frames);
         return 0;
     }
     int moving = 0;
@@ -216,9 +217,9 @@ int ReportMotion(const std::vector<Pose>& first, const std::vector<Pose>& last) 
     if (moving > 0) return 0;
     LOG("PresetTest",
         "FAILED: nothing moves. No visible model's transform changes and no model's own "
-        "animation advances over %zu frame(s). Either the screen's per-frame transform update "
-        "was missed, or the model's anim speed is zero. Find the update.",
-        last.size());
+        "animation advances over %d rendered frame(s). Either the screen's per-frame transform "
+        "update was missed, or the model's anim speed is zero. Find the update.",
+        frames);
     return 8;
 }
 
@@ -247,12 +248,13 @@ int Run(const Job& job) {
     std::vector<Pose> first;
     for (int i = 0; i < frames; i++) {
         AppWindow::PumpMessages();
+        Backend::ApplyPresetClearColor(g_d3d, false);
         g_d3d.BeginFrame();
         PresetHost::RenderFrame(kFrameSeconds);
         g_d3d.EndFrame();
-        if (i == 0) first = CapturePoses();
+        if (first.empty()) first = CapturePoses();
     }
-    const int motion = ReportMotion(first, CapturePoses());
+    const int motion = ReportMotion(first, CapturePoses(), frames);
 
     const PresetHost::Status status = PresetHost::GetStatus();
     float model_time = 0.0F;
@@ -305,6 +307,7 @@ int RunExport(const Job& job) {
     const int guard_cap = (job.frames > 0 ? job.frames : PresetHost::NaturalFrames()) + 240;
     while (Export::IsCapturing() && guard++ < guard_cap) {
         AppWindow::PumpMessages();
+        Backend::ApplyPresetClearColor(g_d3d, true);
         g_d3d.BeginFrame();
         PresetHost::RenderFrame(kFrameSeconds);
         Export::OnMainLoopTick(g_d3d);

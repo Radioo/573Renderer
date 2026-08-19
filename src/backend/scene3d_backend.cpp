@@ -1,6 +1,8 @@
 #include "backend/scene3d_backend.h"
 
+#include "app_globals.h"
 #include "backend/backend.h"
+#include "backend/preset_clear_color.h"
 #include "backend/preset_command_apply.h"
 #include "cli/cli.h"
 #include "export.h"
@@ -14,6 +16,7 @@
 #include "preset/preset_host.h"
 #include "preset/preset_preview.h"
 #include "render_backend.h"
+#include "scene3d/poly_grid.h"
 #include "scene3d/scene3d.h"
 #include "scene3d/scene3d_host.h"
 #include "state/app_state.h"
@@ -23,6 +26,7 @@
 #include <any>
 #include <filesystem>
 #include <memory>
+#include <optional>
 #include <string>
 #include <system_error>
 #include <thread>
@@ -167,6 +171,11 @@ public:
         cli_ = env.cli;
         const std::string rev = GameRevision::LatestRevisionDir(game_dir_);
         if (!rev.empty()) LOG("Boot", "scene3d backend: active revision %s", rev.c_str());
+        Scene3dHost::SetMovieReporter(Scene3d::MovieReporter{
+            .begin = [](const std::string& what) { App::Global().BeginLoad(what); },
+            .stage = [](const std::string& stage,
+                        float fraction) { App::Global().UpdateLoadStage(stage, fraction); },
+            .end = []() { App::Global().EndLoad(); }});
         LOG("Boot", "scene3d backend ready (no engine DLLs are needed for model scenes)");
         return true;
     }
@@ -214,7 +223,7 @@ public:
     void AdvanceFrame(float dt, int frame_count, bool exporting) override {
         (void)dt;
         (void)frame_count;
-        (void)exporting;
+        ApplyPresetClearColor(g_d3d, exporting);
         const bool live = Scene3dHost::Active() || Gc2dHost::Active();
         std::string playing;
         App::PresetStatus preset;
@@ -292,6 +301,16 @@ private:
     Preset::Preview::SnapshotPtr published_preview_;
 };
 
+}
+
+void ApplyPresetClearColor(D3D9State& d3d, bool exporting) {
+    if (d3d.device == nullptr) return;
+    const std::optional<std::uint32_t> clear =
+        FrameClearColor(ClearInputs{.preset_active = PresetHost::Active(),
+                                    .exporting = exporting,
+                                    .bg_transparent = Export::ActiveSession().bg_transparent,
+                                    .color = PresetHost::ClearColor()});
+    if (clear.has_value()) d3d.clear_color = *clear;
 }
 
 std::unique_ptr<IBackend> MakeScene3dBackend() {

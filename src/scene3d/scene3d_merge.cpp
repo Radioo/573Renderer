@@ -5,7 +5,10 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <set>
+#include <string>
 #include <utility>
+#include <vector>
 
 namespace Scene3d {
 
@@ -38,6 +41,43 @@ void Merge(Scene& into, Scene other) {
     for (Tile& tile : other.tiles)
         into.tiles.push_back(std::move(tile));
     if (into.name.empty()) into.name = other.name;
+}
+
+namespace {
+
+Model* Named(std::vector<Model>& models, const std::string& name) {
+    for (Model& model : models) {
+        if (model.name == name) return &model;
+    }
+    return nullptr;
+}
+
+}
+
+std::vector<InstanceProblem> MakeInstances(std::vector<Model>& models,
+                                           const std::vector<Instance>& instances) {
+    std::vector<InstanceProblem> problems;
+    std::set<std::string> cloned;
+    for (std::size_t i = 0; i < instances.size(); i++) {
+        const Instance& want = instances[i];
+        if (want.target == want.model || cloned.contains(want.target)) continue;
+        const Model* mesh = Named(models, want.model);
+        if (mesh == nullptr) {
+            problems.push_back(InstanceProblem{.index = i, .missing_model = true});
+            continue;
+        }
+        Model clone = *mesh;
+        clone.name = want.target;
+        Model* taken = Named(models, want.target);
+        if (taken == nullptr) {
+            models.push_back(std::move(clone));
+        } else {
+            problems.push_back(InstanceProblem{.index = i, .missing_model = false});
+            *taken = std::move(clone);
+        }
+        cloned.insert(want.target);
+    }
+    return problems;
 }
 
 }

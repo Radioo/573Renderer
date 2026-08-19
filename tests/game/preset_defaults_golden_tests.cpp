@@ -26,6 +26,7 @@
 #include <sstream>
 #include <string>
 #include <variant>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -83,7 +84,12 @@ const PresetLegacy::Compat& CompatFor(const std::string& id) {
 }
 
 std::vector<PD::Document> AllDocuments() {
-    return PD::BuiltIns();
+    std::vector<PD::Document> converted;
+    for (PD::Document& document : PD::BuiltIns()) {
+        if (document.build == "iidx10" || document.build == "iidx11")
+            converted.push_back(std::move(document));
+    }
+    return converted;
 }
 
 const PD::ModelDraw* LeadDraw(const PD::Document& document, const std::string& model) {

@@ -7,6 +7,13 @@
 
 namespace Preset::Eval {
 
+struct CameraMotion {
+    Vec3f up = {0.0F, 1.0F, 0.0F};
+    bool armed = false;
+};
+
+void StepCameraMotion(CameraState& camera, CameraMotion& runtime, bool advance);
+
 CameraState CameraFrom(const Doc::CameraSpec& spec, int render_w, int render_h);
 
 void ApplyCameraSet(const Doc::Clip& clip, const Doc::CameraSet& command, int frame,

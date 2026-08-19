@@ -91,6 +91,19 @@ struct SpriteScroll {
     bool operator==(const SpriteScroll&) const = default;
 };
 
+struct Burst {
+    int period_base = 10;
+    int period_span = 5;
+    int life_drift = 30;
+    int rise_base = 40;
+    int rise_step = 10;
+    int rise_period = 60;
+    int span_x = 640;
+    int from_y = 480;
+    int to_y = -20;
+    bool operator==(const Burst&) const = default;
+};
+
 struct EmitterCmd {
     std::string asset = {};
     std::string cell = {};
@@ -112,6 +125,7 @@ struct EmitterCmd {
     int life = 0;
     int life_base = 0;
     int life_span = 0;
+    std::optional<Burst> burst = {};
     bool operator==(const EmitterCmd&) const = default;
 };
 
@@ -161,6 +175,7 @@ struct LightSet {
     std::optional<Vec3> direction = {};
     std::optional<Vec3> diffuse = {};
     std::optional<Vec3> specular = {};
+    std::optional<Vec3> ambient = {};
     bool enabled = true;
     bool operator==(const LightSet&) const = default;
 };
@@ -174,6 +189,7 @@ struct ParamOverrideCmd {
 struct RenderSettingsCmd {
     std::optional<Shading> shading = {};
     std::optional<int> sprite_split_priority = {};
+    std::optional<Vec3> clear_color = {};
     bool operator==(const RenderSettingsCmd&) const = default;
 };
 
@@ -204,15 +220,94 @@ struct OptionSelect {
     bool operator==(const OptionSelect&) const = default;
 };
 
+struct FogCmd {
+    bool enabled = true;
+    Vec3 color = {1.0, 1.0, 1.0};
+    double start = 0.0;
+    double end = 1.0;
+    double density = 0.5;
+    bool operator==(const FogCmd&) const = default;
+};
+
+struct ClearCycleCmd {
+    Vec3 base = {0.0, 0.0, 0.0};
+    Vec3 strobe_color = {48.0, 48.0, 48.0};
+    int strobe_period = 600;
+    int strobe_window_a = 25;
+    int strobe_window_b_offset = 300;
+    int strobe_window_b = 15;
+    int strobe_skip_every = 3;
+    int ramp_period = 800;
+    int ramp_length = 300;
+    int ramp_peak = 128;
+    bool operator==(const ClearCycleCmd&) const = default;
+};
+
+struct CameraEaseCmd {
+    Vec3 eye_target = {0.0, 0.0, 0.0};
+    Vec3 at_target = {0.0, 0.0, 0.0};
+    double rate = 0.1;
+    bool eye_x = true;
+    bool eye_y = true;
+    bool eye_z = true;
+    bool at_x = true;
+    bool at_y = true;
+    bool at_z = true;
+    bool start_at_target = false;
+    bool operator==(const CameraEaseCmd&) const = default;
+};
+
+struct ModelEaseCmd {
+    std::optional<Vec3> scale_target = {};
+    std::optional<Vec3> position_target = {};
+    std::optional<double> alpha_target = {};
+    double rate = 0.1;
+    EaseMode mode = EaseMode::Geometric;
+    bool start_at_target = false;
+    bool operator==(const ModelEaseCmd&) const = default;
+};
+
+struct CameraMotionCmd {
+    double up_roll_deg_per_frame = 0.0;
+    bool operator==(const CameraMotionCmd&) const = default;
+};
+
+struct MovieTexture {
+    std::string path = {};
+    bool operator==(const MovieTexture&) const = default;
+};
+
+struct PolyTileGrid {
+    int rows = 3;
+    int cols = 3;
+    double lattice_amplitude = 0.1;
+    int lattice_seed = 1;
+    Vec2 spacing = {3.0, 2.25};
+    double depth = 5.0;
+    Vec2 quad_scale = {3.6, 2.7};
+    Vec3 spin_rates = {1.0, 1.0, -2.0};
+    Vec3 orbit_rates = {0.0, -0.5, -0.3333333432674408};
+    int burst_from = 4833;
+    double burst_step = 2.0;
+    double burst_delay_per_tile = 10.0;
+    double alpha = 127.0 / 255.0;
+    std::optional<MovieTexture> texture = {};
+    Vec2 movie_size = {304.0, 416.0};
+    double texture_size = 512.0;
+    bool operator==(const PolyTileGrid&) const = default;
+};
+
 using Command =
     std::variant<SpriteDraw, SpriteAnimate, SpriteScroll, EmitterCmd, ModelDraw, ModelTween,
                  ModelMotionCmd, CameraSet, CameraTween, LightSet, ParamOverrideCmd,
-                 RenderSettingsCmd, RngSeed, RhythmBeat, RhythmJitter, OptionSelect>;
+                 RenderSettingsCmd, RngSeed, RhythmBeat, RhythmJitter, OptionSelect, FogCmd,
+                 ClearCycleCmd, CameraEaseCmd, ModelEaseCmd, CameraMotionCmd, PolyTileGrid>;
 
 using ParamValue =
     std::variant<std::monostate, bool, int, double, std::string, Vec2, Vec3,
                  std::vector<std::string>, AspectSpec, std::optional<ClipClock>, ClipTime,
-                 std::optional<Orbit>, std::optional<PulseSpec>, std::optional<Scatter>>;
+                 std::optional<Orbit>, std::optional<PulseSpec>, std::optional<Scatter>,
+                 std::optional<Burst>, std::optional<MovieTexture>>;
 
 enum class Family : uint8_t {
     None,
@@ -223,6 +318,8 @@ enum class Family : uint8_t {
     RenderSettings,
     RhythmBeat,
     RngSeed,
+    Fog,
+    Poly,
 };
 
 struct CommandTraits {
@@ -231,7 +328,7 @@ struct CommandTraits {
     bool event = false;
 };
 
-inline constexpr std::array<CommandTraits, 16> kCommandTraits = {
+inline constexpr std::array<CommandTraits, 22> kCommandTraits = {
     CommandTraits{TrackKind::Sprite, Family::Sprite, false},
     CommandTraits{TrackKind::Sprite, Family::Sprite, false},
     CommandTraits{TrackKind::Sprite, Family::None, false},
@@ -248,6 +345,12 @@ inline constexpr std::array<CommandTraits, 16> kCommandTraits = {
     CommandTraits{TrackKind::Scene, Family::RhythmBeat, false},
     CommandTraits{TrackKind::Scene, Family::None, false},
     CommandTraits{TrackKind::Scene, Family::None, true},
+    CommandTraits{TrackKind::Scene, Family::Fog, false},
+    CommandTraits{TrackKind::Scene, Family::None, false},
+    CommandTraits{TrackKind::Camera, Family::None, false},
+    CommandTraits{TrackKind::Model, Family::None, false},
+    CommandTraits{TrackKind::Camera, Family::None, false},
+    CommandTraits{TrackKind::Poly, Family::Poly, false},
 };
 
 inline CommandType TypeOf(const Command& command) {

@@ -273,7 +273,10 @@ keeps the dock.
 
 The editor covers the whole command catalog: the palette inserts every command, the options
 track edits and switches `document.options`, and the library (3.6) is where a document is
-picked, created, saved and validated.
+picked, created, saved and validated. Track kinds are `sprite` (2D), `model` (3D), `camera`
+(CAM), `light` (LIGHT), `fx` (FX), `poly` (POLY) and `scene` (SCENE); `KindBadge` and
+`TrackKindColor` in `gui_tl_colors.cpp` give each one its lane badge and colour, and
+`CommandColor` maps every catalog entry onto the same legend.
 
 #### Layout and docking
 
@@ -569,6 +572,9 @@ clip modal's Params tab is `###tl_clip_tabs/###tl_tab_params/###tl_field_<json k
 Vec2 / Vec3 row has NO item of its own (ImGui's `DragScalarN` pushes the label as an id scope):
 its axes are `.../###tl_field_position/$$0` and so on. `clip_modal_tests.cpp` accepts either.
 
+The emitter's `burst` block follows the `orbit` / `pulse` / `scatter` pattern: a checkbox that
+creates or clears the whole optional value, then one int row per field while it is present.
+
 | modal | window | items |
 |---|---|---|
 | Command palette | `Add command` | `###tl_palette_filter`, one `###tl_palette_<command type>` per catalog entry, `###tl_palette_cancel` |
@@ -577,6 +583,13 @@ its axes are `.../###tl_field_position/$$0` and so on. `clip_modal_tests.cpp` ac
 | Document properties | `Document properties` | tabs `###tl_doc_tab_general` / `_render` / `_camera` / `_lights` under `###tl_doc_tabs`, `###tl_doc_done`, `###tl_doc_cancel`, `###tl_doc_convert_fps` |
 | Convert fps | `Convert fps` | `###tl_fps_target`, `###tl_fps_rounding`, `###tl_fps_convert` |
 | Problems | `Problems` | one `###tl_problem_<index>` per row, `###tl_problems_close` |
+
+The Document properties tabs are hand-written rather than generated from `FieldsFor`, because
+`RenderSpec`, `CameraSpec` and `LightSpec` are document blocks, not commands, and carry no field
+table. Adding a document-level field therefore means adding its row here in the same change: the
+Render tab holds width, height, `###tl_doc_opaque`, shading, `###tl_doc_split` and
+`###tl_doc_clear` (the frame clear colour), and each light on the Lights tab holds
+`###tl_doc_light_dir`, `_diffuse`, `_specular` and `_ambient`.
 
 Every one of these modals closes on Esc, and Esc is the Cancel button, not the Done button: the
 clip and document modals rewind the undo stack to the depth captured when they opened, exactly
@@ -609,7 +622,11 @@ FORMS are generated from `FieldsFor(command type)`: one row per `FieldDesc`, the
 from the value the descriptor reads (`gui_tl_forms.cpp`). `asset`, `model`, `cell` and
 `animation` become combos filled from the `AssetIndex` in the status snapshot, with a warning
 beside a name the loaded asset does not carry; an optional field that is unset draws a
-checkbox that materialises it ("inherits the document value"). Hard ranges clamp on commit
+checkbox that materialises it ("inherits the document value"). The nested blocks (`orbit`,
+`pulse`, `scatter`, `burst`, and `poly.tile_grid`'s `texture`) draw the same way: a checkbox
+that turns the whole block on or off, then the block's own rows under it. `texture` unchecked
+is `null`, which is the untextured tile grid the game draws with no movie loaded, so the
+checkbox is a real choice rather than an inheritance. Hard ranges clamp on commit
 (`Editor::ClampField`), soft ranges only print "outside the usual range"
 (`Editor::OutsideSoftRange`), radian fields print a degree readout under them
 (`Editor::DegreesText`), and a field that differs from the catalog default grows a
@@ -878,9 +895,24 @@ stretch column cannot help either, because ImGui treats stretch columns as fixed
 is on. The Inspector pane is narrow by default, so the third column usually starts off screen and
 is reached by scrolling the table (or by widening the pane).
 
+Fog rows. The scene entity always carries a boolean `fog`, and the four values that make it
+up (`fog color`, `fog start`, `fog end`, `fog density`) only while it is on, because a document
+with no `scene.fog` clip would otherwise show four numbers that reach nothing. All five name the
+`scene.fog` clip that won, from `FogState::from`, so the button jumps to it. The scene row's
+`clear_color` names a `render.clear_cycle` clip on the frames the cycle runs, since the cycle is
+resolved after the track walk and overwrites both the colour and its provenance.
+
+Ease rows. A model entity carries an `ease` row while a `model.ease` clip is winning it, and
+the camera entity carries one while a `camera.ease` clip is, both naming that clip so the button
+jumps to it. The values they move (`position`, `scale`, `alpha`, `eye`, `at`) already read the
+EASED number, because the accumulator is written back into the frame state before the report is
+built. A model entity also carries a `mesh` row whenever the instance name and the mesh name
+differ, which is the only place the second instance of a shared mesh is visible.
+
 Emitter rows. One entity per `FrameState::emitters` clip (every Fx clip live at this frame,
 whether or not it spawns on it), carrying `reach` in pixels from `RingReach`, `ring phase` in
-degrees from `RingPhase` and `live`, the number of its particles currently DRAWN. Reach and
+degrees from `RingPhase` and `live`, the number of its particles currently DRAWN. A `burst`
+emitter has no ring, so it shows `spawn: rising burst` in place of the two ring rows. Reach and
 phase are the same two pure functions the spawner calls, so the readout cannot drift from what
 the screen does. `live` counts `age >= 0`, which is what is on screen: a particle is created at
 age -1 and is first drawn on the next frame (`docs/preset_document.md`), so the attract's

@@ -15,6 +15,8 @@ std::vector<Document> BuiltIns() {
             documents.push_back(std::move(document));
     }
     documents.push_back(Iidx11Ending());
+    for (Document& document : Iidx12Defaults())
+        documents.push_back(std::move(document));
     return documents;
 }
 

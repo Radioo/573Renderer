@@ -283,6 +283,9 @@ TEST_CASE("every catalog command shows a widget for every one of its field descr
         for (std::size_t i = 0; i < Doc::kCommandTypeNames.size(); i++) {
             const auto type = (Doc::CommandType)i;
             if (Doc::FieldsFor(type).empty()) continue;
+            Editor::Global().MutView().track_scroll =
+                (i * 2 < Doc::kCommandTypeNames.size()) ? 0.0F : 100000.0F;
+            ctx->Yield(2);
             OpenClipModal(ctx, (TrackIdFor(type) + "_clip").c_str());
             ClipBody(ctx);
             ctx->ItemClick("###tl_clip_tabs/###tl_tab_params");

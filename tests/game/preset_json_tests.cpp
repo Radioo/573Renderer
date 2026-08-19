@@ -5,6 +5,7 @@
 #include "preset/doc/preset_document.h"
 #include "preset/doc/preset_enum_names.h"
 #include "preset/doc/preset_json.h"
+#include "preset/doc/preset_validate.h"
 
 #include <fstream>
 #include <ios>
@@ -12,6 +13,7 @@
 #include <string>
 #include <utility>
 #include <variant>
+#include <vector>
 
 namespace {
 
@@ -246,6 +248,111 @@ TEST_CASE("the ease of the last key survives a save and a load") {
     REQUIRE(*loaded == doc);
 }
 
+TEST_CASE("render.clear_color is omitted when black and round-trips when it is not") {
+    Preset::Doc::Document doc = SmallDocument();
+    REQUIRE(Preset::Doc::Save(doc).find("clear_color") == std::string::npos);
+
+    doc.render.clear_color = {96.0 / 255.0, 96.0 / 255.0, 24.0 / 255.0};
+    const std::string text = Preset::Doc::Save(doc);
+    REQUIRE(text.find("clear_color") != std::string::npos);
+    const Preset::Doc::Loaded loaded = Preset::Doc::Load(text);
+    REQUIRE(loaded.has_value());
+    REQUIRE(loaded->render.clear_color == doc.render.clear_color);
+    REQUIRE(Preset::Doc::Save(*loaded) == text);
+}
+
+TEST_CASE("render.clear_color rejects a four component and an out of range value") {
+    Preset::Doc::Document doc = SmallDocument();
+    doc.render.clear_color = {0.5, 0.5, 0.5};
+    const std::string text = Preset::Doc::Save(doc);
+
+    std::string four = text;
+    const std::string::size_type at = four.find("\"clear_color\": [");
+    REQUIRE(at != std::string::npos);
+    const std::string::size_type close = four.find(']', at);
+    REQUIRE(close != std::string::npos);
+    four.replace(at, close + 1 - at, "\"clear_color\": [0.5, 0.5, 0.5, 0.5]");
+    const Preset::Doc::Loaded wide = Preset::Doc::Load(four);
+    REQUIRE_FALSE(wide.has_value());
+    REQUIRE(wide.error().message.find("clear_color") != std::string::npos);
+
+    std::string big = text;
+    big.replace(at, close + 1 - at, "\"clear_color\": [1.5, 0.5, 0.5]");
+    const Preset::Doc::Loaded over = Preset::Doc::Load(big);
+    REQUIRE_FALSE(over.has_value());
+    REQUIRE(over.error().message.find("clear_color") != std::string::npos);
+}
+
+TEST_CASE("a document light writes ambient only when it is not black") {
+    Preset::Doc::Document doc = SmallDocument();
+    doc.lights.push_back(Preset::Doc::LightSpec{});
+    REQUIRE(Preset::Doc::Save(doc).find("ambient") == std::string::npos);
+
+    doc.lights[0].ambient = {1.0, 1.0, 1.0};
+    const std::string text = Preset::Doc::Save(doc);
+    REQUIRE(text.find("ambient") != std::string::npos);
+    const Preset::Doc::Loaded loaded = Preset::Doc::Load(text);
+    REQUIRE(loaded.has_value());
+    REQUIRE(loaded->lights[0].ambient == doc.lights[0].ambient);
+    REQUIRE(Preset::Doc::Save(*loaded) == text);
+}
+
+TEST_CASE("light.set carries an optional ambient through a save and a load") {
+    Preset::Doc::Document doc = SmallDocument();
+    Preset::Doc::Track track;
+    track.id = "light0";
+    track.name = "light";
+    track.kind = Preset::Doc::TrackKind::Light;
+    Preset::Doc::Clip clip;
+    clip.id = "light0_set";
+    clip.start = 0;
+    clip.end = 60;
+    clip.command = Preset::Doc::LightSet{.index = 0, .ambient = Preset::Doc::Vec3{1.0, 1.0, 1.0}};
+    track.clips.push_back(std::move(clip));
+    doc.tracks.push_back(std::move(track));
+
+    const std::string text = Preset::Doc::Save(doc);
+    REQUIRE(text.find("ambient") != std::string::npos);
+    const Preset::Doc::Loaded loaded = Preset::Doc::Load(text);
+    REQUIRE(loaded.has_value());
+    REQUIRE(*loaded == doc);
+}
+
+TEST_CASE("a key may drive render.settings clear_color but never sprite_split_priority") {
+    Preset::Doc::Document doc = SmallDocument();
+    Preset::Doc::Track track;
+    track.id = "scene";
+    track.name = "scene";
+    track.kind = Preset::Doc::TrackKind::Scene;
+    Preset::Doc::Clip clip;
+    clip.id = "clear_cycle";
+    clip.start = 0;
+    clip.end = 60;
+    clip.command = Preset::Doc::RenderSettingsCmd{};
+    clip.keys.push_back(
+        Preset::Doc::Key{.at = 0,
+                         .values = {Preset::Doc::KeyValue{.id = "clear_color",
+                                                          .value = Preset::Doc::Vec3{0, 0, 0}}}});
+    clip.keys.push_back(
+        Preset::Doc::Key{.at = 30,
+                         .values = {Preset::Doc::KeyValue{.id = "clear_color",
+                                                          .value = Preset::Doc::Vec3{1, 1, 1}}}});
+    track.clips.push_back(std::move(clip));
+    doc.tracks.push_back(std::move(track));
+
+    const Preset::Doc::Loaded loaded = Preset::Doc::Load(Preset::Doc::Save(doc));
+    REQUIRE(loaded.has_value());
+    REQUIRE(*loaded == doc);
+    REQUIRE(Preset::Doc::Validate(*loaded).empty());
+
+    Preset::Doc::Document rejected = doc;
+    rejected.tracks[0].clips[0].keys[0].values[0] =
+        Preset::Doc::KeyValue{.id = "sprite_split_priority", .value = 31};
+    const std::vector<Preset::Doc::Problem> problems = Preset::Doc::Validate(rejected);
+    REQUIRE_FALSE(problems.empty());
+    REQUIRE(problems[0].message.find("not tweenable") != std::string::npos);
+}
+
 TEST_CASE("an unknown enum name is rejected and the error names the clip") {
     std::string text = ReadFixture("iidx11-attract.json");
     const std::string::size_type at = text.find("\"additive\"");
@@ -291,4 +398,232 @@ TEST_CASE("a syntax error reports the line and column it was found on") {
     REQUIRE_FALSE(loaded.has_value());
     REQUIRE(loaded.error().line == 7);
     REQUIRE(loaded.error().column > 0);
+}
+
+namespace {
+
+std::string WithTracks(const std::string& tracks) {
+    std::string text = Preset::Doc::Save(SmallDocument());
+    const std::string empty = "\"tracks\": []";
+    const std::string::size_type at = text.find(empty);
+    REQUIRE(at != std::string::npos);
+    text.replace(at, empty.size(), "\"tracks\": " + tracks);
+    return text;
+}
+
+std::string SceneTrack(const std::string& clips) {
+    return R"([{"id": "scene", "kind": "scene", "clips": [)" + clips + "]}]";
+}
+
+}
+
+TEST_CASE("a scene.fog clip round-trips through JSON and validates") {
+    const std::string text = WithTracks(SceneTrack(
+        R"({"id": "fog_on", "type": "scene.fog", "start": 0, "end": 120,
+            "params": {"enabled": true, "color": [1.0, 0.5, 0.25],
+                       "start": 55.0, "end": 62.5, "density": 0.25},
+            "keys": [{"at": 0, "values": {"start": 55.0}},
+                     {"at": 60, "values": {"start": 10.0}}]})"));
+
+    const Preset::Doc::Loaded loaded = Preset::Doc::Load(text);
+    if (!loaded.has_value()) FAIL(loaded.error().message);
+    REQUIRE(loaded.has_value());
+    REQUIRE(Preset::Doc::Validate(*loaded).empty());
+
+    const std::string saved = Preset::Doc::Save(*loaded);
+    REQUIRE(saved.find("\"scene.fog\"") != std::string::npos);
+    REQUIRE(saved.find("62.5") != std::string::npos);
+    REQUIRE(saved.find("0.25") != std::string::npos);
+    const Preset::Doc::Loaded again = Preset::Doc::Load(saved);
+    REQUIRE(again.has_value());
+    REQUIRE(*again == *loaded);
+    REQUIRE(Preset::Doc::Save(*again) == saved);
+}
+
+TEST_CASE("scene.fog rejects an out of range density, a key on enabled and a model track") {
+    const std::string dense = WithTracks(SceneTrack(
+        R"({"id": "fog_on", "type": "scene.fog", "start": 0, "end": 120,
+            "params": {"density": 1.5}})"));
+    const Preset::Doc::Loaded loaded = Preset::Doc::Load(dense);
+    REQUIRE(loaded.has_value());
+    REQUIRE_FALSE(Preset::Doc::Validate(*loaded).empty());
+
+    const std::string keyed = WithTracks(SceneTrack(
+        R"({"id": "fog_on", "type": "scene.fog", "start": 0, "end": 120,
+            "keys": [{"at": 0, "values": {"enabled": false}}]})"));
+    const Preset::Doc::Loaded keys = Preset::Doc::Load(keyed);
+    REQUIRE(keys.has_value());
+    REQUIRE_FALSE(Preset::Doc::Validate(*keys).empty());
+
+    const std::string wrong =
+        WithTracks(R"([{"id": "m", "kind": "model", "target": "core", "clips": [
+            {"id": "fog_on", "type": "scene.fog", "start": 0, "end": 120}]}])");
+    const Preset::Doc::Loaded placed = Preset::Doc::Load(wrong);
+    REQUIRE(placed.has_value());
+    REQUIRE_FALSE(Preset::Doc::Validate(*placed).empty());
+}
+
+TEST_CASE("a render.clear_cycle clip round-trips through JSON with its integer levels") {
+    const std::string text = WithTracks(SceneTrack(
+        R"({"id": "strobe", "type": "render.clear_cycle", "start": 0, "end": 120,
+            "params": {"base": [1.0, 2.0, 3.0], "strobe_color": [48.0, 48.0, 48.0],
+                       "strobe_period": 500, "strobe_window_a": 20,
+                       "strobe_window_b_offset": 250, "strobe_window_b": 10,
+                       "strobe_skip_every": 4, "ramp_period": 700,
+                       "ramp_length": 200, "ramp_peak": 64}})"));
+
+    const Preset::Doc::Loaded loaded = Preset::Doc::Load(text);
+    if (!loaded.has_value()) FAIL(loaded.error().message);
+    REQUIRE(loaded.has_value());
+    REQUIRE(Preset::Doc::Validate(*loaded).empty());
+
+    const std::string saved = Preset::Doc::Save(*loaded);
+    REQUIRE(saved.find("\"render.clear_cycle\"") != std::string::npos);
+    REQUIRE(saved.find("\"strobe_skip_every\": 4") != std::string::npos);
+    REQUIRE(saved.find("\"ramp_peak\": 64") != std::string::npos);
+    const Preset::Doc::Loaded again = Preset::Doc::Load(saved);
+    REQUIRE(again.has_value());
+    REQUIRE(*again == *loaded);
+    REQUIRE(Preset::Doc::Save(*again) == saved);
+}
+
+TEST_CASE("camera.ease and model.ease clips round-trip through JSON with their masks") {
+    const std::string text = WithTracks(
+        R"([{"id": "camera", "kind": "camera", "clips": [
+            {"id": "hold", "type": "camera.set", "start": 0, "end": 120,
+             "params": {"eye": [0, 0, -1]}},
+            {"id": "chase", "type": "camera.ease", "start": 21, "end": 120,
+             "params": {"eye_target": [0, 0.55, -0.45], "at_target": [0, 0.18, 0],
+                        "rate": 0.05, "eye_x": false, "at_x": false, "at_z": false}}]},
+           {"id": "m", "kind": "model", "target": "core", "clips": [
+            {"id": "draw", "type": "model.draw", "start": 0, "end": 120,
+             "params": {"asset": "core"}},
+            {"id": "grow", "type": "model.ease", "start": 0, "end": 120,
+             "params": {"scale_target": [3.5, 3.5, 3.5], "alpha_target": 0.6,
+                        "rate": 0.005, "mode": "linear", "start_at_target": true}}]}])");
+
+    const Preset::Doc::Loaded loaded = Preset::Doc::Load(text);
+    if (!loaded.has_value()) FAIL(loaded.error().message);
+    REQUIRE(loaded.has_value());
+
+    const std::string saved = Preset::Doc::Save(*loaded);
+    REQUIRE(saved.find("\"camera.ease\"") != std::string::npos);
+    REQUIRE(saved.find("\"model.ease\"") != std::string::npos);
+    REQUIRE(saved.find("\"eye_x\": false") != std::string::npos);
+    REQUIRE(saved.find("\"mode\": \"linear\"") != std::string::npos);
+    REQUIRE(saved.find("\"start_at_target\": true") != std::string::npos);
+    const Preset::Doc::Loaded again = Preset::Doc::Load(saved);
+    REQUIRE(again.has_value());
+    REQUIRE(*again == *loaded);
+    REQUIRE(Preset::Doc::Save(*again) == saved);
+}
+
+TEST_CASE("an emitter burst block round-trips and the ease commands reject a bad rate") {
+    const std::string text = WithTracks(
+        R"([{"id": "fx", "kind": "fx", "clips": [
+            {"id": "bubbles", "type": "emitter", "start": 59, "end": 120,
+             "params": {"asset": "pkg", "cell": "AWA1", "spawn": "burst", "count": 3,
+                        "priority": 27, "life_base": 150, "life_span": 100,
+                        "burst": {"period_base": 10, "period_span": 5, "life_drift": 30,
+                                  "rise_base": 40, "rise_step": 10, "rise_period": 60,
+                                  "span_x": 640, "from_y": 480, "to_y": -20}}}]}])");
+    const Preset::Doc::Loaded loaded = Preset::Doc::Load(text);
+    if (!loaded.has_value()) FAIL(loaded.error().message);
+    REQUIRE(loaded.has_value());
+    const std::string saved = Preset::Doc::Save(*loaded);
+    REQUIRE(saved.find("\"spawn\": \"burst\"") != std::string::npos);
+    REQUIRE(saved.find("\"rise_base\": 40") != std::string::npos);
+    REQUIRE(saved.find("\"to_y\": -20") != std::string::npos);
+    const Preset::Doc::Loaded again = Preset::Doc::Load(saved);
+    REQUIRE(again.has_value());
+    REQUIRE(*again == *loaded);
+    REQUIRE(Preset::Doc::Save(*again) == saved);
+
+    const std::string wild = WithTracks(
+        R"([{"id": "camera", "kind": "camera", "clips": [
+            {"id": "chase", "type": "camera.ease", "start": 0, "end": 120,
+             "params": {"rate": 4.0}}]}])");
+    const Preset::Doc::Loaded fast = Preset::Doc::Load(wild);
+    REQUIRE(fast.has_value());
+    REQUIRE_FALSE(Preset::Doc::Validate(*fast).empty());
+
+    const std::string misplaced = WithTracks(
+        R"([{"id": "scene", "kind": "scene", "clips": [
+            {"id": "grow", "type": "model.ease", "start": 0, "end": 120}]}])");
+    const Preset::Doc::Loaded placed = Preset::Doc::Load(misplaced);
+    REQUIRE(placed.has_value());
+    REQUIRE_FALSE(Preset::Doc::Validate(*placed).empty());
+}
+
+TEST_CASE("camera.motion and poly.tile_grid clips round-trip through JSON") {
+    const std::string text = WithTracks(
+        R"([{"id": "camera", "kind": "camera", "clips": [
+            {"id": "hold", "type": "camera.set", "start": 0, "end": 120,
+             "params": {"eye": [0, 0, 0], "at": [0, 0, 1], "up": [1, 0, 0]}},
+            {"id": "roll", "type": "camera.motion", "start": 0, "end": 120,
+             "params": {"up_roll_deg_per_frame": 0.2}}]},
+           {"id": "tiles", "kind": "poly", "clips": [
+            {"id": "movie_tiles", "type": "poly.tile_grid", "start": 20, "end": 120,
+             "params": {"rows": 3, "cols": 3, "lattice_amplitude": 0.1, "lattice_seed": 573,
+                        "spacing": [3.0, 2.25], "depth": 5.0, "quad_scale": [3.6, 2.7],
+                        "spin_rates": [1.0, 1.0, -2.0],
+                        "orbit_rates": [0.0, -0.5, -0.33333334],
+                        "burst_from": 90, "burst_step": 2.0, "burst_delay_per_tile": 10.0,
+                        "alpha": 0.49803922,
+                        "texture": {"movie": "data/movie/08ra.4"},
+                        "movie_size": [304, 416], "texture_size": 512}}]}])");
+
+    const Preset::Doc::Loaded loaded = Preset::Doc::Load(text);
+    if (!loaded.has_value()) FAIL(loaded.error().message);
+    REQUIRE(loaded.has_value());
+    REQUIRE(Preset::Doc::Validate(*loaded).empty());
+
+    const std::string saved = Preset::Doc::Save(*loaded);
+    REQUIRE(saved.find("\"camera.motion\"") != std::string::npos);
+    REQUIRE(saved.find("\"poly.tile_grid\"") != std::string::npos);
+    REQUIRE(saved.find("\"kind\": \"poly\"") != std::string::npos);
+    REQUIRE(saved.find("\"up_roll_deg_per_frame\": 0.2") != std::string::npos);
+    REQUIRE(saved.find("\"lattice_seed\": 573") != std::string::npos);
+    REQUIRE(saved.find("\"movie\": \"data/movie/08ra.4\"") != std::string::npos);
+    const Preset::Doc::Loaded again = Preset::Doc::Load(saved);
+    REQUIRE(again.has_value());
+    REQUIRE(*again == *loaded);
+    REQUIRE(Preset::Doc::Save(*again) == saved);
+}
+
+TEST_CASE("a poly.tile_grid with no texture round-trips as untextured tiles") {
+    const std::string text = WithTracks(
+        R"([{"id": "tiles", "kind": "poly", "clips": [
+            {"id": "movie_tiles", "type": "poly.tile_grid", "start": 0, "end": 120,
+             "params": {"texture": null}}]}])");
+    const Preset::Doc::Loaded loaded = Preset::Doc::Load(text);
+    if (!loaded.has_value()) FAIL(loaded.error().message);
+    REQUIRE(loaded.has_value());
+    const auto& grid =
+        std::get<Preset::Doc::PolyTileGrid>(loaded->tracks.front().clips.front().command);
+    CHECK_FALSE(grid.texture.has_value());
+    CHECK(grid.rows == 3);
+    CHECK(grid.cols == 3);
+
+    const std::string saved = Preset::Doc::Save(*loaded);
+    const Preset::Doc::Loaded again = Preset::Doc::Load(saved);
+    REQUIRE(again.has_value());
+    REQUIRE(*again == *loaded);
+}
+
+TEST_CASE("a poly.tile_grid only belongs on a poly track and two of them may not overlap") {
+    const std::string misplaced = WithTracks(
+        R"([{"id": "scene", "kind": "scene", "clips": [
+            {"id": "tiles", "type": "poly.tile_grid", "start": 0, "end": 120}]}])");
+    const Preset::Doc::Loaded placed = Preset::Doc::Load(misplaced);
+    REQUIRE(placed.has_value());
+    REQUIRE_FALSE(Preset::Doc::Validate(*placed).empty());
+
+    const std::string doubled = WithTracks(
+        R"([{"id": "tiles", "kind": "poly", "clips": [
+            {"id": "one", "type": "poly.tile_grid", "start": 0, "end": 120},
+            {"id": "two", "type": "poly.tile_grid", "start": 60, "end": 120}]}])");
+    const Preset::Doc::Loaded twice = Preset::Doc::Load(doubled);
+    REQUIRE(twice.has_value());
+    REQUIRE_FALSE(Preset::Doc::Validate(*twice).empty());
 }

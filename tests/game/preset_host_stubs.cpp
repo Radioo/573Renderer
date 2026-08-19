@@ -5,6 +5,8 @@
 #include "formats/gcanim.h"
 #include "gc2d/gc_host.h"
 #include "gc2d/gc_sprite.h"
+#include "scene3d/poly_grid.h"
+#include "scene3d/scene3d_fog.h"
 #include "scene3d/scene3d_host.h"
 #include "scene3d/scene3d_render.h"
 
@@ -74,14 +76,20 @@ std::string ProjectionText(const Scene3d::Projection& projection) {
            Num(projection.far_z) + " " + Num(projection.aspect) + "]";
 }
 
+std::string FogText(const Scene3d::Fog& fog) {
+    return "fog[" + Flag(fog.enabled) + " " + Vec(fog.color) + " " + Num(fog.start) + " " +
+           Num(fog.end) + " " + Num(fog.density) + "]";
+}
+
 std::string LightText(const Scene3d::Light& light) {
-    return "light[" + Vec(light.direction) + Vec(light.diffuse) + Vec(light.specular) + "]";
+    return "light[" + Vec(light.direction) + Vec(light.diffuse) + Vec(light.specular) +
+           Vec(light.ambient) + "]";
 }
 
 std::string ModelText(const Scene3dHost::ModelSetup& model) {
-    return "model[" + model.model + " " + Int(model.blend_mode) + " " + Num(model.alpha) + " " +
-           Num(model.anim_speed) + " " + Vec(model.position) + Vec(model.rotation) +
-           Vec(model.scale) + "]";
+    return "model[" + model.target + " " + model.model + " " + Int(model.blend_mode) + " " +
+           Num(model.alpha) + " " + Num(model.anim_speed) + " " + Vec(model.position) +
+           Vec(model.rotation) + Vec(model.scale) + "]";
 }
 
 std::string TimingText(const GcAnim::Timing& timing) {
@@ -104,6 +112,15 @@ std::string PlacementText(const Gc2dHost::SpritePlacement& sprite) {
            Num(sprite.scale) + " " + Int((int)sprite.blend) + " " + TimingText(sprite.timing) +
            " " + PartsText(sprite.skip_parts) + " " + Num(sprite.scroll_x) + " " +
            Num(sprite.scroll_wrap) + "]";
+}
+
+std::string TileText(const Scene3d::PolyTile& tile) {
+    std::string out = "tile[";
+    for (std::size_t i = 0; i < tile.corners.size(); i++) {
+        if (i > 0) out += " ";
+        out += Vec(tile.corners[i]);
+    }
+    return out + "]";
 }
 
 std::string CellText(const Gc2dHost::CellDraw& cell) {
@@ -305,6 +322,19 @@ void SetLights(const std::vector<Scene3d::Light>& lights) {
         args.push_back(LightText(light));
     Record("Scene3dHost::SetLights", args);
     g_lights = lights;
+}
+
+void SetFog(const Scene3d::Fog& fog) {
+    Record("Scene3dHost::SetFog", {FogText(fog)});
+}
+
+void SetPolyGrid(Scene3d::PolyGrid grid) {
+    const Scene3d::PolyGrid placed = std::move(grid);
+    std::vector<std::string> args{Flag(placed.active), Num(placed.alpha), Num(placed.seconds),
+                                  Str(placed.movie), Int((int)placed.tiles.size())};
+    for (const Scene3d::PolyTile& tile : placed.tiles)
+        args.push_back(TileText(tile));
+    Record("Scene3dHost::SetPolyGrid", args);
 }
 
 }

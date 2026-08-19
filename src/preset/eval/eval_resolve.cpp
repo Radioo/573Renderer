@@ -5,8 +5,10 @@
 #include "preset/doc/preset_enum_names.h"
 #include "preset/eval/eval_camera_lights.h"
 #include "preset/eval/eval_models.h"
+#include "preset/eval/eval_poly.h"
 #include "preset/eval/eval_scene.h"
 #include "preset/eval/eval_sprites.h"
+#include "preset/eval/eval_tween.h"
 #include "preset/eval/frame_state.h"
 
 #include <algorithm>
@@ -61,6 +63,7 @@ void SeedHiddenMaterial(const Doc::Document& document, const Slots& slots, Frame
             if (slot.draw_start >= 0 && clip.start >= slot.draw_start) continue;
             slot.draw_start = clip.start;
             slot.asset = draw->asset;
+            slot.mesh = draw->model.empty() ? slot.name : draw->model;
             slot.blend_mode = (int)draw->blend_mode;
             slot.alpha = (float)draw->alpha;
             slot.anim_speed = (float)draw->anim_speed;
@@ -94,6 +97,9 @@ void ApplyModelClip(const Doc::Clip& clip, int frame, int index, bool tweens, Fr
     case Doc::CommandType::ModelMotion:
         ApplyModelMotion(clip, std::get<Doc::ModelMotionCmd>(clip.command), slot);
         break;
+    case Doc::CommandType::ModelEase:
+        slot.from.ease = &clip;
+        break;
     default:
         break;
     }
@@ -119,20 +125,62 @@ void ApplySpriteClip(const Doc::Track& track, const Doc::Clip& clip, int frame, 
     }
 }
 
-void ApplySceneClip(const Doc::Clip& clip, FrameState& state) {
-    switch (Doc::TypeOf(clip.command)) {
-    case Doc::CommandType::RenderSettings: {
-        const auto& command = std::get<Doc::RenderSettingsCmd>(clip.command);
-        if (command.shading.has_value()) {
-            state.shading = *command.shading;
-            state.shading_from = &clip;
-        }
-        if (command.sprite_split_priority.has_value()) {
-            state.sprite_split_priority = *command.sprite_split_priority;
-            state.split_from = &clip;
-        }
-        break;
+void ApplyRenderSettings(const Doc::Clip& clip, int frame, bool tweens, FrameState& state) {
+    const auto& command = std::get<Doc::RenderSettingsCmd>(clip.command);
+    if (command.shading.has_value()) {
+        state.shading = *command.shading;
+        state.shading_from = &clip;
     }
+    if (command.sprite_split_priority.has_value()) {
+        state.sprite_split_priority = *command.sprite_split_priority;
+        state.split_from = &clip;
+    }
+    if (command.clear_color.has_value()) {
+        state.clear_color = {(float)(*command.clear_color)[0], (float)(*command.clear_color)[1],
+                             (float)(*command.clear_color)[2]};
+        state.clear_from = &clip;
+    }
+    if (!tweens) return;
+    TweenValue sampled;
+    TweenValue underlying;
+    underlying.kind = TweenValue::Kind::Vector;
+    underlying.vector = state.clear_color;
+    if (SampleKeys(clip.keys, "clear_color", frame - clip.start, underlying, sampled)) {
+        state.clear_color = sampled.vector;
+        state.clear_from = &clip;
+    }
+}
+
+void ApplyFog(const Doc::Clip& clip, int frame, bool tweens, FrameState& state) {
+    const auto& command = std::get<Doc::FogCmd>(clip.command);
+    state.fog.from = &clip;
+    state.fog.enabled = command.enabled;
+    state.fog.color = {(float)command.color[0], (float)command.color[1], (float)command.color[2]};
+    state.fog.start = (float)command.start;
+    state.fog.end = (float)command.end;
+    state.fog.density = (float)command.density;
+    if (!tweens) return;
+    for (const std::string_view field : {"color", "start", "end", "density"}) {
+        const std::string id = "fog." + std::string(field);
+        TweenValue underlying;
+        TweenValue sampled;
+        if (!ReadTarget(id, state, underlying)) continue;
+        if (!SampleKeys(clip.keys, field, frame - clip.start, underlying, sampled)) continue;
+        WriteTarget(id, sampled, state, &clip);
+    }
+}
+
+void ApplySceneClip(const Doc::Clip& clip, int frame, bool tweens, FrameState& state) {
+    switch (Doc::TypeOf(clip.command)) {
+    case Doc::CommandType::RenderSettings:
+        ApplyRenderSettings(clip, frame, tweens, state);
+        break;
+    case Doc::CommandType::Fog:
+        ApplyFog(clip, frame, tweens, state);
+        break;
+    case Doc::CommandType::ClearCycle:
+        state.clear_cycle = &clip;
+        break;
     case Doc::CommandType::RhythmBeat: {
         const auto& command = std::get<Doc::RhythmBeat>(clip.command);
         state.beat = BeatState{.from = &clip,
@@ -179,11 +227,20 @@ void ApplyClip(const Doc::Track& track, const Doc::Clip& clip, int frame, bool t
                         state);
         break;
     case Doc::TrackKind::Camera:
-        if (Doc::TypeOf(clip.command) == Doc::CommandType::CameraSet) {
+        switch (Doc::TypeOf(clip.command)) {
+        case Doc::CommandType::CameraSet:
             ApplyCameraSet(clip, std::get<Doc::CameraSet>(clip.command), frame, state.camera,
                            state.writes, tweens);
-        } else if (tweens) {
-            ApplyCameraTween(clip, frame, state.camera, state.writes);
+            break;
+        case Doc::CommandType::CameraEase:
+            state.camera.from.ease = &clip;
+            break;
+        case Doc::CommandType::CameraMotion:
+            state.camera.from.motion = &clip;
+            break;
+        default:
+            if (tweens) ApplyCameraTween(clip, frame, state.camera, state.writes);
+            break;
         }
         break;
     case Doc::TrackKind::Light:
@@ -193,8 +250,24 @@ void ApplyClip(const Doc::Track& track, const Doc::Clip& clip, int frame, bool t
         state.emitters.push_back(&clip);
         break;
     case Doc::TrackKind::Scene:
-        ApplySceneClip(clip, state);
+        ApplySceneClip(clip, frame, tweens, state);
         break;
+    case Doc::TrackKind::Poly:
+        ApplyPolyGrid(clip, std::get<Doc::PolyTileGrid>(clip.command), frame, state.poly);
+        break;
+    }
+}
+
+void SeedLights(const Doc::Document& document, FrameState& state) {
+    for (const Doc::LightSpec& light : document.lights) {
+        LightState entry;
+        for (std::size_t i = 0; i < entry.direction.size(); i++) {
+            entry.direction[i] = (float)light.direction[i];
+            entry.diffuse[i] = (float)light.diffuse[i];
+            entry.specular[i] = (float)light.specular[i];
+            entry.ambient[i] = (float)light.ambient[i];
+        }
+        state.lights.push_back(entry);
     }
 }
 
@@ -227,16 +300,10 @@ FrameState ResolveFrame(const ResolveInput& input, int frame) {
     state.frame = frame;
     state.shading = document.render.shading;
     state.sprite_split_priority = document.render.sprite_split_priority;
+    for (std::size_t i = 0; i < state.clear_color.size(); i++)
+        state.clear_color[i] = (float)document.render.clear_color[i];
     state.camera = CameraFrom(document.camera, document.render.width, document.render.height);
-    for (const Doc::LightSpec& light : document.lights) {
-        LightState entry;
-        for (std::size_t i = 0; i < entry.direction.size(); i++) {
-            entry.direction[i] = (float)light.direction[i];
-            entry.diffuse[i] = (float)light.diffuse[i];
-            entry.specular[i] = (float)light.specular[i];
-        }
-        state.lights.push_back(entry);
-    }
+    SeedLights(document, state);
 
     const Slots slots = CollectTargets(document);
     for (const std::string& name : slots.models) {
@@ -261,6 +328,13 @@ FrameState ResolveFrame(const ResolveInput& input, int frame) {
                 continue;
             ApplyClip(track, clip, frame, input.tweens, slots, state);
         }
+    }
+    if (state.poly.active && document.fps > 0)
+        state.poly.seconds = (float)frame / (float)document.fps;
+    if (state.clear_cycle != nullptr) {
+        state.clear_color =
+            ClearCycleColor(std::get<Doc::ClearCycleCmd>(state.clear_cycle->command), frame);
+        state.clear_from = state.clear_cycle;
     }
     return state;
 }

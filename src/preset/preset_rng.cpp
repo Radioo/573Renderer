@@ -14,6 +14,11 @@ int Wrap(int value) {
 
 }
 
+int CrtRand::Next() {
+    state_ = (state_ * 214013U) + 2531011U;
+    return (int)((state_ >> 16U) & 0x7FFFU);
+}
+
 void Ran3::Seed(int seed) {
     table_[55] = seed;
     int carry = seed;

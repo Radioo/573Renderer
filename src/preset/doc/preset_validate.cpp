@@ -50,7 +50,10 @@ constexpr std::array<std::string_view, 6> kSpriteParams = {"x",     "y",     "al
                                                            "scale", "blend", "priority"};
 constexpr std::array<std::string_view, 7> kCameraParams = {"eye",    "at",    "up",    "fov_y",
                                                            "near_z", "far_z", "aspect"};
-constexpr std::array<std::string_view, 3> kLightParams = {"direction", "diffuse", "specular"};
+constexpr std::array<std::string_view, 4> kLightParams = {"direction", "diffuse", "specular",
+                                                          "ambient"};
+constexpr std::array<std::string_view, 5> kFogParams = {"enabled", "color", "start", "end",
+                                                        "density"};
 
 bool Contains(std::span<const std::string_view> names, std::string_view name) {
     return std::ranges::find(names, name) != names.end();
@@ -68,8 +71,9 @@ bool Bracketed(std::string_view id, std::string_view prefix,
 }
 
 bool IsParamId(std::string_view id) {
-    if (id == "shading" || id == "sprite_split_priority") return true;
+    if (id == "shading" || id == "sprite_split_priority" || id == "clear_color") return true;
     if (id.starts_with("camera.")) return Contains(kCameraParams, id.substr(7));
+    if (id.starts_with("fog.")) return Contains(kFogParams, id.substr(4));
     if (Bracketed(id, "model[", kModelParams, false)) return true;
     if (Bracketed(id, "sprite[", kSpriteParams, false)) return true;
     return Bracketed(id, "light[", kLightParams, true);
@@ -378,7 +382,7 @@ void CheckClipPair(const Document& doc, const Primary& first, const Primary& sec
 }
 
 void CheckOverlaps(const Document& doc, Report& out) {
-    for (int raw = (int)Family::Sprite; raw <= (int)Family::RngSeed; ++raw) {
+    for (int raw = (int)Family::Sprite; raw <= (int)Family::Poly; ++raw) {
         const std::vector<Primary> primaries = CollectPrimaries(doc, (Family)raw);
         PairLog log;
         for (std::size_t i = 0; i < primaries.size(); ++i) {
@@ -412,6 +416,17 @@ std::size_t DrawTrackIndex(const Document& doc, std::string_view target) {
     return doc.tracks.size();
 }
 
+bool CoveredByCameraSet(const Document& doc, const Clip& clip) {
+    for (const Track& track : doc.tracks) {
+        if (track.kind != TrackKind::Camera) continue;
+        for (const Clip& other : track.clips) {
+            if (TypeOf(other.command) != CommandType::CameraSet) continue;
+            if (Overlaps(clip, other, doc)) return true;
+        }
+    }
+    return false;
+}
+
 bool ScrollCovered(const Track& track, const Clip& clip, const Document& doc) {
     return std::ranges::any_of(track.clips, [&](const Clip& other) {
         const CommandType type = TypeOf(other.command);
@@ -429,7 +444,17 @@ void CheckModifiers(const Document& doc, Report& out) {
             if (type == CommandType::SpriteScroll && !ScrollCovered(track, clip, doc)) {
                 out.Error(clip.id, "sprite.scroll has no sprite clip under it on the same track");
             }
-            if (type != CommandType::ModelTween && type != CommandType::ModelMotion) continue;
+            if (type == CommandType::CameraEase && !CoveredByCameraSet(doc, clip)) {
+                out.Warn(clip.id, "no camera.set runs under this clip, so the ease starts from the "
+                                  "document camera");
+            }
+            if (type == CommandType::CameraMotion && !CoveredByCameraSet(doc, clip)) {
+                out.Warn(clip.id, "no camera.set runs under this clip, so the roll starts from the "
+                                  "document up vector");
+            }
+            if (type != CommandType::ModelTween && type != CommandType::ModelMotion &&
+                type != CommandType::ModelEase)
+                continue;
             if (!CoveredByDraw(doc, clip, track.target)) {
                 out.Warn(clip.id, "no model.draw of target \"" + track.target +
                                       "\" runs under this clip, so it changes nothing");

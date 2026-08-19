@@ -86,6 +86,30 @@ course, a player count.
 | iidx11-ending | Drift out | phase 15 of `sub_42F030`, frames from 3787 (`off_4D9F94` timeline) |
 | iidx11-ending | Final push in | phase 16 of `sub_42F030`, frames from 4065 (`off_4D9F94` timeline) |
 | iidx11-expert-select | Outro fade | `sub_4331B0` ramps a full-screen quad 100 to 0 over 31 frames while the models fade out |
+| iidx12-expert-select | Course select | HAPPY SKY `sub_434270` state 0 for its 2760-frame timer (which only starts counting at frame 60, so the game state runs 2820 frames; the preset carries the timer length): `ex_sky` additive over the breathing clear colour of `sub_432C10` (dark blue `(0, 48, 96)` at frame 0 to dark red `(96, 0, 0)` at 2700 and back, linear per channel, C integer division). Nothing else changes with the cursor, the course, the category or the side, and the decide phase (model hidden, black clear, 180 frames) is not background, so it is not carried. Read from the disassembly, see `IIDX/happy_sky_3d_screens.md` |
+| iidx12-mode-select | Fly in | HAPPY SKY `sub_41B6B0` state 0, per frame `sub_41A1C0`: `t = min(f * 0.025252523, 1)`, `at` slides linearly from (0, 0.4340612, 0) to (0, 0.4340612, 0.9008834) and `eye` from (0, 0.3, 0) to (0, 0.0302638, -0.2755064) on `sin(t)`; the preset carries a key per frame (0..40) so the integer-frame values are exact. Frame 0 is the game's own degenerate LookAt (eye, at and up collinear) |
+| iidx12-mode-select | Settled | from frame 40 (`t` clamped to 1, `sin(1) = 0.84147`, so the eye settles at (0, 0.073023, -0.231832)); `sub_41B0C0` re-asserts the same camera every frame; nothing in the 3D depends on the mode cursor, so there is no option. The preset carries the 1201-frame timer, which the game only decrements once `MODE_IN`'s playhead reaches 66, so the game screen runs about 1267 frames. The 66-frame `MODE_IN` chrome and the `MODE_DECIDE` exit are not background. See `IIDX/happy_sky_3d_screens.md` |
+| iidx12-music-select | Song list | HAPPY SKY `sub_41F240` writes the whole 3D scene ONCE at init and `sub_4206C0` never touches a slot, a camera, a projection or a light again, so there is no phase to carry: the models only advance their baked clips (`sky` 30 ticks, `muring` 300, `extra_st` 640). The marker names the one span the preset holds. The game's own screen runs a 1800..6000 frame operator timer that only starts counting at frame 60; the preset carries 1800. The 60-frame frozen intro, `MUSIC_IN` and the `MUSIC_DECIDE` exit are chrome. See `IIDX/happy_sky_3d_screens.md` |
+| iidx12-music-select | NORMAL | the extra-stage flag `dword_18564CC` clear. `sub_41E120` shows slot 0 `sky/sky.xz` opaque alpha 1 speed 1 and slot 9 `sky/muring.xz` additive alpha 0.2 speed 1; `sub_41DF50` sets eye (-0.074308, 0.031367, -0.6388999), at (1.559, 0, 1.12) and up `D3DXMatrixRotationZ(10 deg)` applied to (0,1,0) = (-0.17364818, 0.98480775, 0), a 10 degree camera roll; `sub_41CD80` clears to `0xFFFFFFFF` once and turns fog ON, white, start 55.0, end 62.4, density 0.5 |
+| iidx12-music-select | EXTRA | the flag set (`sub_441E90`, or the 5th-stage input force). The `sub_41F240` branch shows slot 10 `extra_st/extra_bg.xz` additive alpha 1 at DOUBLE clip rate and slots 0 and 9 stay hidden; the camera becomes eye (-0.2,-0.2,-0.2), at (1, 0.78, 1), up (0, 100, 0), byte for byte the expert-select camera; `sub_41CD80` clears to `0x00000000` and turns fog OFF; and `sub_41E1F0` rewrites the clear colour every frame with the strobe and ramp the `render.clear_cycle` clip carries. The 2D half of the screen is identical on both choices, so nothing else changes |
+| iidx12-dan-select | Enter | HAPPY SKY `sub_42DFA0` writes the six slots and the entry camera eye (0, 0.06, -0.45), at (0, 0.16, 0), up (0, 1, 0), and `sub_42E730` refuses to write a camera target until the screen frame counter reaches 21, so this span holds that pose exactly. `DAN_BG` is registered on the first update frame. The preset carries the 1260-frame TIME REMAIN (`sub_42DFA0`: `(sub_43DAB0() ? 0x1284 : 0) + 0x4EC`, so 1260 normally and 6000 in event mode); no consumer was found that ends the screen when it hits 0, so the length is a display length, not a timeout |
+| iidx12-dan-select | Camera follows the grade | from frame 21 `sub_42E730` writes the per-cursor target and `sub_42D3E0` eases eye.y, eye.z and at.y toward it every frame. eye.x, at.x and at.z are never lerped: the target table's eye.x of 0.9 is written and has no reader, so the camera moves in Y and Z only |
+| iidx12-dan-select | CLASS 7 to 1 | cursor 0..6. `sub_42D3E0` holds the shared scale target at 1.0, so `dan_sky` and `dan_sky2` sit at scale 1 and y 0; `sub_42D510` runs the slot 8 alpha down at 0.1 per frame to 0, so `dan_light_bg` is invisible; the camera target is eye (0, 0.076, -0.2), at (0, 0.18, 0) at rate 0.05, and no particles spawn |
+| iidx12-dan-select | 1ST to 8TH DAN | cursor 7..14. The shared scale target flips to 3.5 and the derived position y to `(1 - 3.5) * 0.033333335 = -0.083333336`; the camera target becomes eye (0, 0.55, -0.45), at (0, 0, 0), still at rate 0.05; slot 8 stays dark and no particles spawn |
+| iidx12-dan-select | 9TH and 10TH DAN | cursor 15..16, reachable only while `sub_449FA0() >= 1`. The scale stays 3.5 but the camera lerp rate doubles to 0.15 and the target drops to eye (0, -0.05, -0.76), at (0, -0.6, 0), putting the eye under the sea planes; `sub_42D510` ramps slot 8 up at +0.005 per frame to 0.6, lighting the `dan_light_bg` curtain; and `sub_42DBF0(27)` starts raining `AWA1` bubbles from the `system` package at priority 27 once the screen frame counter passes 59. The choice is ONE preset state covering both grades, and the emitter it carries is the **9TH DAN record: 3 bubbles per burst**. 10TH DAN's own record is the same `AWA1` art at **5 bubbles per burst**; that count is documented here but is NOT carried by the preset, because the document's `grade` option has no separate 10TH DAN choice to hang it on. A preset that splits the choice in two would add a second emitter clip with `count` 5 |
+| iidx12-ending | Title plate blooms in | HAPPY SKY `sub_430440` frames 0..199. The 3D is empty: `sub_42FB10` hid slot 0 at init and `sub_42FE30`'s `if (dword_185A2BC >= 200) sub_495450(0, 1)` has not fired, so the screen is the white clear with the `ENDING_BG` cloud plate over it (a 120-frame bloom-in, then held on frame 119 by the `0x10` flag). The plate is CHROME here, see docs/preset_layers.md, so the preset carries the marker and not the layer: frames 0..199 render as the white clear alone |
+| iidx12-ending | Sky and movie tiles | frame 200. `sub_42FE30` shows slot 0 `sky/sky.xz` at alpha 0.5, draw mode 2, pose (0,0,0)/(0,0,0)/(1,1,1) as `sub_42FB10` left it, and `sub_430440` starts calling `sub_4300D0` to submit the 3 x 3 movie tile grid. The dome's own clock has been running since frame 0 (the scene loop advances `obj+164 += obj+156` regardless of the visibility flag), so it appears at tick 200. The two `>= 200` tests are one update apart in the game because `sub_4300D0` runs before the frame counter's `++` and `sub_42FE30` after it; the preset starts both at 200 |
+| iidx12-ending | Plate gone | frame 300. `sub_430440` blits `ENDING_BG` with the per-call alpha pair `(clamp(300 - f, 0, 100), 100 - that)`, so the plate cross-fades out linearly over frames 200..300 and from 300 the screen is the sky dome, the nine tiles and the credit roll. The preset does not carry the plate, so this marker records where the game's cross-fade lands rather than a change the preset makes |
+| iidx12-ending | Speed ramp and burst | frame 4833 (`dword_185A544 > 179`, first true at `27 * 179`). `sub_42FE30` starts adding 0.025 to slot 0's anim speed every frame, reaching 7.975 on the last update, and `sub_4300D0`'s burst counter `flt_185A580` starts climbing 2.0 a frame, pushing quad `i` in +Z once the counter passes `10 * i`. The tiles fly AWAY from the camera and white out in the fog around z 80 |
+| iidx12-ending | Fade | frame 5077. `cmp dword_185A544, 0BDh / jge` is unconditional, so the exit latch fires the frame after the line index reaches 189, and `sub_40E720` ramps a full-screen curtain 100 to 0 over frames 5077..5107 at 2D priority 4 before the update returns 1 on frame 5111. The curtain is chrome, so the preset carries the marker and keeps rendering the screen to its 5112th frame |
+| iidx12-ending | Seed 1 | the lattice jitter `sub_42F410` draws 16 values from the CRT `rand()` seeded from `timeGetTime` at stage init, so the game's own jitter is NOT reproducible and a preset has to name a seed. This choice runs the MSVC generator from 1, which is also the CRT's own default seed |
+| iidx12-ending | Seed 573 | the same 16 draws from seed 573. Only the seed changes: the draw order, the twelve displaced points and the +/- half-amplitude step are fixed by `sub_42F410` |
+| iidx12-ending | Seed 12345 | the same 16 draws from seed 12345, offered so the editor and `--preset-option lattice=...` can show that the grid shape is a preset parameter and not part of the screen |
+| iidx12-attract | Intro film | HAPPY SKY `sub_438970` state 0. `sub_438780` registers nothing and the update's entry block runs `sub_40E030(list, pkg, "TITLE", 16, 0, 0, 15)` on the first frame, mode 16 being play-once-then-hold-the-last-frame (`sub_492840` tests `mode & 1` for loop, then `frame < length`, then `mode & 0x10` to pin `length - 1`). `TITLE` is 422 frames, and the state only flips when `sub_40E300 >= sub_40E2C0`, i.e. one frame AFTER the playhead passes the end, so the clip owns document frames 0..422 |
+| iidx12-attract | Logo reveal | frame 423. The entry block unregisters the previous layer and registers `LOGO_IN` mode 16 at the same (0,0) and priority 15. `LOGO_IN` is 120 frames and the same late handover applies, so it owns 423..543. The preset gives each clip `time: restart` because the game registers a NEW layer with `record+8 = 0` rather than continuing the old playhead |
+| iidx12-attract | Standby loop | frame 544. `TITLE_TAIKI` is registered mode **1**, the loop mode, and nothing ends it: this is the attract standby screen. 480 frames a cycle |
+| iidx12-attract | Attract times out | frame 2400 on `dword_1895D5C`, which is reset once per title session by the latched `sub_437D30` and every frame by the operator branch. From here `sub_438970` calls `sub_40E720(100 * (2400 - c) / 60 + 100, 8)`, whose first argument is `100 - alpha` (`sub_40E720` passes the pair `(v2, 100 - v2)` where every other call site of that family passes `(100 - alpha, alpha)`), so a black curtain fades IN over frames 2400..2460 at 2D priority 8 and the update returns -1 on frame 2461. The curtain is chrome, so the preset carries the marker and keeps drawing the standby loop to its 2461st frame |
+| iidx12-card-in | Card hall | HAPPY SKY master state 2/3. `sub_42B3D0` clears the layer list and registers `sub_40E0D0(list, pkg, "CARD_BG", pkg, "CARD_IN", 16, 0, 0, 31)`, so the plate is mode 16 at priority 31, the only 2D priority the frame driver draws BEHIND the model scene (`sub_447E60` runs `sub_48FE50(30, 31)` before `sub_496730` and `sub_48FE50(0, 29)` after). The attached cell is the CARD IN caption and is chrome, so the preset carries the animation alone. Nothing else changes for the whole screen: every other registration is a per-player prompt at priority 19..28. The 3600 is the screen's own timer (`sub_43DAB0() ? 6000 : 3600`), and in event mode the 6000 is never decremented, so the digits sit frozen at 99 |
 | iidx10-mode-select | BEGINNER | the per-mode cube placement the screen lerps to |
 | iidx10-mode-select | LIGHT7 | per-mode cube placement |
 | iidx10-mode-select | 7KEYS | per-mode cube placement |
@@ -116,6 +140,51 @@ it washes the logo out instead of passing behind it. Four independent priorities
 bracket the 3D pass and all agree the split belongs between 24 and 31: title 2D
 at 15 and the ending's bursts at 24 draw in front of the models, while the title
 warp particles at 31 and the ending backdrop at 31 draw behind them.
+
+### The state HAPPY SKY's attract has that the preset does not carry
+
+`sub_438780`'s tail is `if ( sub_43E1D0() != 0 && sub_43DF50() == 0 ) dword_1895D48 = 1;`,
+so when a credit is already in the machine the title screen is ENTERED in state 1
+and the 422-frame `TITLE` film never plays: the screen opens on `LOGO_IN` and falls
+straight through to the standby loop. `sub_43F4D0` uses the same pair of tests to
+skip the whole boot-logo chain.
+
+`iidx12-attract` does NOT carry that variant, and it is a marker-less omission
+rather than a missing state row on purpose. Carrying it would need a `coin` option
+whose two choices place the SAME clips on DIFFERENT frames (`LOGO_IN` at 0 instead
+of 423) and shorten the document by 423 frames, and a document has one frame axis
+and one length. The zero-credit attract path is the one the cabinet shows when
+nobody is standing at it, which is what a background preset is for.
+
+Two more registrations on that screen are chrome and are not carried: `LOGIN`
+(mode 0, priority 14, the login handshake once a card is accepted) and `VEFX`
+(mode 0, priority 14, registered once `sub_43E1D0()` reports a credit and then
+hand-looped over frames 60..179 every frame by
+`if ( sub_40E300(...) >= 180 ) sub_40E2E0(..., 60 )`). The two ticker strips
+`CARD_NG` and `1CREDIT_DP`, both at priority 14, are chrome as well.
+
+### One card preset covers four screens
+
+The `card` package is loaded by four screens, and all four register the SAME
+`CARD_BG` animation at mode 16, position (0,0) and priority 31. They differ only in
+the caption CELL attached to it through `sub_40E0D0` and in the per-player prompts
+stacked on top, all of which are chrome:
+
+| master state | init | attached caption cell | screen |
+|---|---|---|---|
+| 2 / 3 | `sub_42B3D0` | `CARD_IN` | card in / reception |
+| 6 / 7 | `sub_435F00` | `SANKASYA` | new player invited |
+| 20 / 21 | `sub_429A20` | `CARD_OUT` | card out, save and eject |
+| 4/5, 8/9 | `sub_417D80` | (package `name`, `NAME_BG`) | name entry |
+
+So `iidx12-card-in` is the background of all three `card` screens, not just the
+reception one, and card out and new player invited get no preset of their own -
+they would be the same picture three times. Their timers differ (card in 3600,
+new player invited 1200, card out none) and the preset carries card in's.
+
+Name entry is the same hall composition recoloured teal in a different package,
+with a `NAME ENTRY` title and a TIME REMAIN chip painted INTO the plate rather than
+drawn separately, so it cannot be cleaned up and is not carried either.
 
 ## Ramps: a clip can move a value per frame
 

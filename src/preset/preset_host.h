@@ -5,6 +5,7 @@
 #include "preset/eval/frame_report.h"
 #include "preset/preset_preview.h"
 
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <string>
@@ -77,5 +78,9 @@ void SetOption(int option, int choice);
 int NaturalFrames();
 
 bool OpaqueScreen();
+
+std::string ResolveGameFile(const std::string& relative);
+
+std::uint32_t ClearColor();
 
 }

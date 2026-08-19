@@ -230,6 +230,42 @@ bool WriteCamera(CameraState& camera, std::string_view field, const TweenValue& 
     return true;
 }
 
+bool ReadFog(const FogState& fog, std::string_view field, TweenValue& out) {
+    if (field == "enabled") {
+        out = Integer(fog.enabled ? 1 : 0);
+    } else if (field == "color") {
+        out = Vector(fog.color);
+    } else if (field == "start") {
+        out = Scalar(fog.start);
+    } else if (field == "end") {
+        out = Scalar(fog.end);
+    } else if (field == "density") {
+        out = Scalar(fog.density);
+    } else {
+        return false;
+    }
+    return true;
+}
+
+bool WriteFog(FogState& fog, std::string_view field, const TweenValue& value,
+              const Doc::Clip* origin) {
+    if (field == "enabled") {
+        fog.enabled = value.integer != 0;
+    } else if (field == "color") {
+        fog.color = value.vector;
+    } else if (field == "start") {
+        fog.start = value.scalar;
+    } else if (field == "end") {
+        fog.end = value.scalar;
+    } else if (field == "density") {
+        fog.density = value.scalar;
+    } else {
+        return false;
+    }
+    fog.from = origin;
+    return true;
+}
+
 bool ReadLight(const LightState& light, std::string_view field, TweenValue& out) {
     if (field == "direction") {
         out = Vector(light.direction);
@@ -237,6 +273,8 @@ bool ReadLight(const LightState& light, std::string_view field, TweenValue& out)
         out = Vector(light.diffuse);
     } else if (field == "specular") {
         out = Vector(light.specular);
+    } else if (field == "ambient") {
+        out = Vector(light.ambient);
     } else {
         return false;
     }
@@ -252,12 +290,48 @@ bool WriteLight(LightState& light, std::string_view field, const TweenValue& val
         light.diffuse = value.vector;
     } else if (field == "specular") {
         light.specular = value.vector;
+    } else if (field == "ambient") {
+        light.ambient = value.vector;
     } else {
         return false;
     }
     return true;
 }
 
+std::array<int, 3> ClearCycleLevels(const Doc::ClearCycleCmd& cycle, int frame) {
+    std::array<int, 3> levels = {0, 0, 0};
+    for (std::size_t i = 0; i < levels.size(); i++)
+        levels[i] = (int)cycle.base[i];
+
+    if (cycle.strobe_period > 0) {
+        const int phase = frame % cycle.strobe_period;
+        const int shifted = (frame + cycle.strobe_window_b_offset) % cycle.strobe_period;
+        const bool inside = phase < cycle.strobe_window_a || shifted < cycle.strobe_window_b;
+        const bool skipped = cycle.strobe_skip_every > 0 && (frame % cycle.strobe_skip_every) == 0;
+        if (inside && !skipped) {
+            for (std::size_t i = 0; i < levels.size(); i++)
+                levels[i] = (int)cycle.strobe_color[i];
+        }
+    }
+
+    if (cycle.ramp_period > 0 && cycle.ramp_length > 0) {
+        const int phase = frame % cycle.ramp_period;
+        if (phase < cycle.ramp_length) {
+            const int grey = ((cycle.ramp_length - phase) * cycle.ramp_peak) / cycle.ramp_length;
+            levels = {grey, grey, grey};
+        }
+    }
+    return levels;
+}
+
+}
+
+Vec3f ClearCycleColor(const Doc::ClearCycleCmd& cycle, int frame) {
+    const std::array<int, 3> levels = ClearCycleLevels(cycle, frame);
+    Vec3f out = {0.0F, 0.0F, 0.0F};
+    for (std::size_t i = 0; i < out.size(); i++)
+        out[i] = (float)levels[i] / 255.0F;
+    return out;
 }
 
 int BeatIndex(const BeatState& beat, int frame, int offset) {
@@ -291,6 +365,7 @@ bool ReadTarget(std::string_view id, const FrameState& state, TweenValue& out) {
         return slot != nullptr && ReadSprite(*slot, path.field, out);
     }
     if (path.scope == "camera") return ReadCamera(state.camera, path.field, out);
+    if (path.scope == "fog") return ReadFog(state.fog, path.field, out);
     if (path.scope == "light") {
         if (path.index < 0 || (std::size_t)path.index >= state.lights.size()) return false;
         return ReadLight(state.lights[(std::size_t)path.index], path.field, out);
@@ -301,6 +376,10 @@ bool ReadTarget(std::string_view id, const FrameState& state, TweenValue& out) {
     }
     if (path.scope == "shading") {
         out = Integer((int)state.shading);
+        return true;
+    }
+    if (path.scope == "clear_color") {
+        out = Vector(state.clear_color);
         return true;
     }
     return false;
@@ -319,6 +398,7 @@ bool WriteTarget(std::string_view id, const TweenValue& value, FrameState& state
         return slot != nullptr && WriteSprite(*slot, path.field, value, origin);
     }
     if (path.scope == "camera") return WriteCamera(state.camera, path.field, value, origin);
+    if (path.scope == "fog") return WriteFog(state.fog, path.field, value, origin);
     if (path.scope == "light") {
         if (path.index < 0 || (std::size_t)path.index >= state.lights.size()) return false;
         return WriteLight(state.lights[(std::size_t)path.index], path.field, value, origin);
@@ -331,6 +411,11 @@ bool WriteTarget(std::string_view id, const TweenValue& value, FrameState& state
     if (path.scope == "shading") {
         state.shading = (Doc::Shading)value.integer;
         state.shading_from = origin;
+        return true;
+    }
+    if (path.scope == "clear_color") {
+        state.clear_color = value.vector;
+        state.clear_from = origin;
         return true;
     }
     return false;

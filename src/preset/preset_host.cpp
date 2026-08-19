@@ -135,16 +135,19 @@ Scene3dHost::Setup BuildSetup(const FrameState& state) {
         setup.lights.push_back(Scene3d::Light{.direction = light.direction,
                                               .diffuse = light.diffuse,
                                               .specular = light.specular,
+                                              .ambient = light.ambient,
                                               .enabled = light.enabled});
     }
     for (const Preset::Eval::ModelSlot& slot : state.models) {
-        setup.models.push_back(Scene3dHost::ModelSetup{.model = slot.name,
-                                                       .blend_mode = slot.blend_mode,
-                                                       .alpha = slot.alpha,
-                                                       .anim_speed = slot.anim_speed,
-                                                       .position = slot.position,
-                                                       .rotation = slot.rotation,
-                                                       .scale = slot.scale});
+        setup.models.push_back(
+            Scene3dHost::ModelSetup{.target = slot.name,
+                                    .model = slot.mesh.empty() ? slot.name : slot.mesh,
+                                    .blend_mode = slot.blend_mode,
+                                    .alpha = slot.alpha,
+                                    .anim_speed = slot.anim_speed,
+                                    .position = slot.position,
+                                    .rotation = slot.rotation,
+                                    .scale = slot.scale});
     }
     return setup;
 }
@@ -414,6 +417,7 @@ void Unload() {
     g_state_pushes.clear();
     g_lengths = Preset::AssetLengths{};
     g_accum = 0.0F;
+    ResetPushState();
     Preset::Preview::Reset();
     const std::scoped_lock guard(g_lock);
     g_shared = Shared{};
@@ -531,6 +535,10 @@ int NaturalFrames() {
 
 bool OpaqueScreen() {
     return g_active != nullptr && g_active->render.opaque;
+}
+
+std::string ResolveGameFile(const std::string& relative) {
+    return Resolve(g_game_dir, relative);
 }
 
 }

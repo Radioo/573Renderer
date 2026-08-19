@@ -1,5 +1,6 @@
 #include "preset/eval/eval_emit.h"
 
+#include "preset/eval/eval_poly.h"
 #include "preset/eval/eval_push.h"
 #include "preset/eval/eval_sprites.h"
 #include "preset/eval/frame_state.h"
@@ -39,6 +40,35 @@ SpritePlacement PlacementOf(const SpriteSlot& slot) {
     placement.scroll_wrap = slot.scroll_wrap;
     placement.scroll_offset = slot.scroll_offset;
     return placement;
+}
+
+Push FogOf(const FogState& fog) {
+    Push push;
+    push.call = PushCall::SetFog;
+    push.legacy = false;
+    push.fog = FogPush{.enabled = fog.enabled,
+                       .color = fog.color,
+                       .start = fog.start,
+                       .end = fog.end,
+                       .density = fog.density};
+    return push;
+}
+
+Push PolyOf(const PolyGridState& poly) {
+    Push push;
+    push.call = PushCall::SetPolyGrid;
+    push.legacy = false;
+    push.poly.active = poly.active;
+    push.poly.alpha = poly.alpha;
+    push.poly.seconds = poly.seconds;
+    push.poly.movie_width = poly.movie_width;
+    push.poly.movie_height = poly.movie_height;
+    push.poly.texture_side = poly.texture_side;
+    push.poly.movie = poly.movie;
+    push.poly.tiles.reserve(poly.quads.size());
+    for (const PolyQuad& quad : poly.quads)
+        push.poly.tiles.push_back(PolyTilePush{.corners = quad.corners, .uv = quad.uv});
+    return push;
 }
 
 const ModelSlot* ModelOf(const FrameState& state, int index) {
@@ -107,6 +137,7 @@ void EmitRebind(const FrameState& state, std::vector<Push>& out) {
         lights.lights.push_back(LightPush{.direction = light.direction,
                                           .diffuse = light.diffuse,
                                           .specular = light.specular,
+                                          .ambient = light.ambient,
                                           .enabled = light.enabled});
     }
     out.push_back(std::move(lights));
@@ -186,6 +217,9 @@ void EmitUnconditional(const FrameState& state, const std::vector<float>& ticks,
     }
     out.push_back(ViewPush(state.camera, false));
     out.push_back(ProjectionOf(state.camera, false));
+    out.push_back(VectorPush(PushCall::SetClearColor, {}, state.clear_color, false));
+    out.push_back(FogOf(state.fog));
+    out.push_back(PolyOf(state.poly));
     for (std::size_t i = 0; i < state.models.size() && i < ticks.size(); i++)
         out.push_back(ScalarPush(PushCall::SetModelTime, state.models[i].name, ticks[i], false));
     const std::vector<int> order = SpriteDrawOrder(state.sprites);

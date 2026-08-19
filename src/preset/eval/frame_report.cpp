@@ -93,8 +93,15 @@ void AddModels(const FrameState& state, const EvalState& runtime, FrameReport& r
                                      slot.from.blend_mode));
         if (i < runtime.models.size())
             entity.values.push_back(Scalar("tick", runtime.models[i].tick, nullptr));
+        if (!slot.mesh.empty() && slot.mesh != slot.name) {
+            entity.values.push_back(Text("mesh", slot.mesh, slot.from.visible));
+        }
         if (slot.from.motion != nullptr)
             entity.values.push_back(Text("motion", "orbit, spin and pulse", slot.from.motion));
+        if (slot.from.ease != nullptr) {
+            entity.values.push_back(
+                Text("ease", "toward a scale, position and alpha", slot.from.ease));
+        }
         report.entities.push_back(std::move(entity));
     }
 }
@@ -135,10 +142,15 @@ void AddEmitters(const FrameState& state, const EvalState& runtime, FrameReport&
         ReportEntity entity;
         entity.kind = "emitter";
         entity.name = clip->id;
-        entity.values.push_back(
-            Text("reach", std::to_string(RingReach(*emitter, elapsed)) + " px", clip));
-        entity.values.push_back(Text(
-            "ring phase", std::to_string((int)RingPhase(*emitter, state.frame)) + " deg", clip));
+        if (emitter->spawn == Doc::Spawn::Burst) {
+            entity.values.push_back(Text("spawn", "rising burst", clip));
+        } else {
+            entity.values.push_back(
+                Text("reach", std::to_string(RingReach(*emitter, elapsed)) + " px", clip));
+            entity.values.push_back(
+                Text("ring phase", std::to_string((int)RingPhase(*emitter, state.frame)) + " deg",
+                     clip));
+        }
         entity.values.push_back(Integer("live", live, clip));
         entity.values.push_back(Text("cell", emitter->asset + " " + emitter->cell, clip));
         report.entities.push_back(std::move(entity));
@@ -157,6 +169,33 @@ void AddCamera(const FrameState& state, FrameReport& report) {
     entity.values.push_back(Scalar("near_z", camera.near_z, camera.from.near_z));
     entity.values.push_back(Scalar("far_z", camera.far_z, camera.from.far_z));
     entity.values.push_back(Scalar("aspect", camera.aspect_value, camera.from.aspect));
+    if (camera.from.ease != nullptr) {
+        entity.values.push_back(Text("ease", "toward an eye and at", camera.from.ease));
+    }
+    if (camera.from.motion != nullptr) {
+        const auto& motion = std::get<Doc::CameraMotionCmd>(camera.from.motion->command);
+        entity.values.push_back(
+            Scalar("up roll", (float)motion.up_roll_deg_per_frame, camera.from.motion));
+    }
+    report.entities.push_back(std::move(entity));
+}
+
+void AddPoly(const FrameState& state, FrameReport& report) {
+    if (!state.poly.active) return;
+    const auto& grid = std::get<Doc::PolyTileGrid>(state.poly.from->command);
+    ReportEntity entity;
+    entity.kind = "poly";
+    entity.name = state.poly.from->id;
+    entity.values.push_back(Integer("tiles", (int)state.poly.quads.size(), state.poly.from));
+    entity.values.push_back(Scalar("alpha", state.poly.alpha, state.poly.from));
+    entity.values.push_back(Integer("lattice seed", grid.lattice_seed, state.poly.from));
+    entity.values.push_back(Text(
+        "texture", state.poly.movie.empty() ? "untextured" : state.poly.movie, state.poly.from));
+    entity.values.push_back(Scalar("movie time", state.poly.seconds, state.poly.from));
+    if (!state.poly.quads.empty()) {
+        entity.values.push_back(
+            Vector("tile 0 corner 0", state.poly.quads.front().corners.front(), state.poly.from));
+    }
     report.entities.push_back(std::move(entity));
 }
 
@@ -169,6 +208,7 @@ void AddLights(const FrameState& state, FrameReport& report) {
         entity.values.push_back(Vector("direction", light.direction, light.from));
         entity.values.push_back(Vector("diffuse", light.diffuse, light.from));
         entity.values.push_back(Vector("specular", light.specular, light.from));
+        entity.values.push_back(Vector("ambient", light.ambient, light.from));
         report.entities.push_back(std::move(entity));
     }
 }
@@ -182,6 +222,14 @@ void AddScene(const Doc::Document& document, const FrameState& state, const Eval
         Text("shading", NameOf(Doc::kShadingNames, (int)state.shading), state.shading_from));
     entity.values.push_back(
         Integer("sprite_split_priority", state.sprite_split_priority, state.split_from));
+    entity.values.push_back(Vector("clear_color", state.clear_color, state.clear_from));
+    entity.values.push_back(Boolean("fog", state.fog.enabled, state.fog.from));
+    if (state.fog.enabled) {
+        entity.values.push_back(Vector("fog color", state.fog.color, state.fog.from));
+        entity.values.push_back(Scalar("fog start", state.fog.start, state.fog.from));
+        entity.values.push_back(Scalar("fog end", state.fog.end, state.fog.from));
+        entity.values.push_back(Scalar("fog density", state.fog.density, state.fog.from));
+    }
     if (state.beat.rate > 0) {
         entity.values.push_back(Integer("beat a", runtime.beat[0], state.beat.from));
         entity.values.push_back(Integer("beat b", runtime.beat[1], state.beat.from));
@@ -251,6 +299,7 @@ FrameReport BuildFrameReport(const Doc::Document& document, const FrameState& st
     AddSprites(state, runtime, report);
     AddEmitters(state, runtime, report);
     AddCamera(state, report);
+    AddPoly(state, report);
     AddLights(state, report);
     AddScene(document, state, runtime, report);
     AddOptions(document, runtime, report);

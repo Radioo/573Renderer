@@ -53,7 +53,21 @@ struct TempDir {
         const std::vector<char> bytes(size, fill);
         f.write(bytes.data(), (std::streamsize)bytes.size());
     }
+
+    void SizedWithTail(const char* rel, std::size_t size, char fill,
+                       const std::vector<unsigned char>& tail) const {
+        std::error_code ec;
+        std::filesystem::create_directories((root / rel).parent_path(), ec);
+        std::ofstream f(root / rel, std::ios::binary);
+        const std::vector<char> bytes(size - tail.size(), fill);
+        f.write(bytes.data(), (std::streamsize)bytes.size());
+        for (const unsigned char byte : tail)
+            f.put((char)byte);
+    }
 };
+
+constexpr std::size_t kHappySkySize = 1105920;
+const std::vector<unsigned char> kHappySkyCrcTail = {0xAD, 0xE9, 0x63, 0x32};
 
 }
 
@@ -82,6 +96,40 @@ TEST_CASE("fingerprint accepts a size match as a patched copy and rejects a size
     const TempDir wrong("fp_wrongsize");
     wrong.Sized("JAE/bm2dx.exe", 4096, 'A');
     CHECK(GameFingerprint::Identify(wrong.root.string()).build == nullptr);
+}
+
+TEST_CASE("fingerprint identifies a HAPPY SKY bm2dx.exe by size and CRC") {
+    const TempDir exact("fp_iidx12");
+    exact.SizedWithTail("JAD/bm2dx.exe", kHappySkySize, 'A', kHappySkyCrcTail);
+    const GameFingerprint::Match hit = GameFingerprint::Identify(exact.root.string());
+    REQUIRE(hit.build != nullptr);
+    CHECK(std::string(hit.build->id) == "iidx12");
+    CHECK(std::string(hit.build->profile_slug) == "iidx12");
+    CHECK(hit.build->size == kHappySkySize);
+    CHECK(hit.build->crc == 0x122D2CC3U);
+    CHECK(hit.file.find("bm2dx.exe") != std::string::npos);
+
+    const TempDir patched("fp_iidx12_patched");
+    patched.Sized("JAD/bm2dx.exe", kHappySkySize, 'A');
+    const GameFingerprint::Match by_size = GameFingerprint::Identify(patched.root.string());
+    REQUIRE(by_size.build != nullptr);
+    CHECK(std::string(by_size.build->id) == "iidx12");
+
+    CHECK(std::string(GameFingerprint::ProfileSlugFor("iidx12")) == "iidx12");
+}
+
+TEST_CASE("A HAPPY SKY install auto-detects as IIDX 12, not as the generic IIDX profile") {
+    const GameProfile::Profile* happy = GameProfile::AutoDetect("F:/IIDX/IIDX 12 - HAPPY SKY");
+    REQUIRE(happy != nullptr);
+    CHECK(std::string(happy->slug) == "iidx12");
+    CHECK(std::string(happy->backend_id) == "scene3d");
+    CHECK(std::string(happy->game_dll) == "bm2dx.exe");
+    CHECK(happy->default_render_w == 640);
+    CHECK(happy->default_render_h == 480);
+
+    const GameProfile::Profile* distorted = GameProfile::AutoDetect("F:/IIDX/IIDX 13 - DistorteD");
+    REQUIRE(distorted != nullptr);
+    CHECK(std::string(distorted->slug) == "iidx13");
 }
 
 TEST_CASE("fingerprint finds nothing in an empty directory") {
@@ -131,8 +179,9 @@ TEST_CASE("Profiles are listed oldest-first within the IIDX family") {
         const std::string slug = p.slug;
         if (slug.starts_with("iidx")) iidx.push_back(slug);
     }
-    CHECK(iidx == std::vector<std::string>{"iidx09", "iidx11", "iidx13", "iidx17", "iidx18",
-                                           "iidx19", "iidx20", "iidx24", "iidx26", "iidx33"});
+    CHECK(iidx == std::vector<std::string>{"iidx09", "iidx11", "iidx12", "iidx13", "iidx17",
+                                           "iidx18", "iidx19", "iidx20", "iidx24", "iidx26",
+                                           "iidx33"});
 }
 
 TEST_CASE("Profile order keeps the specific IIDX substrings ahead of the generic one") {

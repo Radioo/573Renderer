@@ -3,6 +3,8 @@
 #include "preset/doc/preset_commands.h"
 #include "preset/doc/preset_document.h"
 #include "preset/doc/preset_enum_names.h"
+#include "preset/eval/eval_camera_lights.h"
+#include "preset/eval/eval_ease.h"
 #include "preset/eval/eval_emit.h"
 #include "preset/eval/eval_models.h"
 #include "preset/eval/eval_particles.h"
@@ -153,9 +155,11 @@ void Evaluator::ResetRuntime() {
         state_.sprite_start[i] = current_.sprites[i].draw_start;
         state_.sprite_clock[i] = (float)current_.sprites[i].offset;
     }
-    if (!FireSelects(current_)) return;
-    current_ = Resolve(state_.frame);
-    ApplyChoiceValues(current_);
+    if (FireSelects(current_)) {
+        current_ = Resolve(state_.frame);
+        ApplyChoiceValues(current_);
+    }
+    StepEases(current_, true);
 }
 
 bool Evaluator::FireSelects(const FrameState& state) {
@@ -231,6 +235,7 @@ std::vector<Push> Evaluator::Seek(int frame) {
             state_ = found->second;
             current_ = Resolve(state_.frame);
             ApplyChoiceValues(current_);
+            StepEases(current_, false);
         }
     }
     while (state_.frame < target)
@@ -298,6 +303,7 @@ void Evaluator::SetOption(int option, int choice) {
     }
     current_ = Resolve(state_.frame);
     ApplyChoiceValues(current_);
+    StepEases(current_, false);
 }
 
 std::vector<Push> Evaluator::DrawFrame(float dt) const {
@@ -344,6 +350,13 @@ void Evaluator::ArmRuntime(const FrameState& next, std::vector<char>& first_fram
         state_.sprite_start[i] = next.sprites[i].draw_start;
         if (next.sprites[i].restart_clock) state_.sprite_clock[i] = (float)next.sprites[i].offset;
     }
+}
+
+void Evaluator::StepEases(FrameState& state, bool advance) {
+    StepCameraEase(state.camera, state_.camera_ease, advance);
+    StepCameraMotion(state.camera, state_.camera_motion, advance);
+    for (std::size_t i = 0; i < state.models.size() && i < state_.models.size(); i++)
+        StepModelEase(state.models[i], (int)i, state_.models[i].ease, state.writes, advance);
 }
 
 void Evaluator::EmitChoiceCamera(const FrameState& state, std::vector<Push>& out) const {
@@ -445,6 +458,7 @@ std::vector<Push> Evaluator::AdvanceFrame() {
     state_.jitter = DrawJitter(state.jitter, state_.rng);
 
     ApplyChoiceValues(state);
+    StepEases(state, true);
     EmitChoiceCamera(state, out);
     EmitTransforms(state, first_frame, out);
     EmitPulse(state, out);

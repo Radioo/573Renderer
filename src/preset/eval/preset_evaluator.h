@@ -47,6 +47,7 @@ private:
     [[nodiscard]] int TransitionStep() const;
     void ApplyChoiceValues(FrameState& state) const;
     void ArmRuntime(const FrameState& next, std::vector<char>& first_frame);
+    void StepEases(FrameState& state, bool advance);
     void EmitChoiceCamera(const FrameState& state, std::vector<Push>& out) const;
     void EmitTransforms(const FrameState& state, const std::vector<char>& first_frame,
                         std::vector<Push>& out);

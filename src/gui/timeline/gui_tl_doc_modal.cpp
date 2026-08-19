@@ -115,6 +115,8 @@ FieldEvent DrawRender(Doc::Document& document) {
 
     event = std::max(event, DrawIntRow("###tl_doc_split", "sprite split priority",
                                        document.render.sprite_split_priority));
+    event = std::max(event, DrawVec3Row("###tl_doc_clear", "clear colour",
+                                        document.render.clear_color, 0.005F, "rgb"));
     return event;
 }
 
@@ -154,6 +156,8 @@ FieldEvent DrawLights(Doc::Document& document) {
             event, DrawVec3Row("###tl_doc_light_diffuse", "diffuse", light.diffuse, 0.01F, "rgb"));
         event = std::max(event, DrawVec3Row("###tl_doc_light_specular", "specular", light.specular,
                                             0.01F, "rgb"));
+        event = std::max(
+            event, DrawVec3Row("###tl_doc_light_ambient", "ambient", light.ambient, 0.01F, "rgb"));
         if (ImGui::SmallButton("remove###tl_doc_light_remove")) {
             document.lights.erase(document.lights.begin() + (long long)i);
             ImGui::PopID();

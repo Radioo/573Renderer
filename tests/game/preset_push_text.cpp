@@ -42,8 +42,23 @@ std::string ProjectionText(const Preset::Eval::ProjectionPush& projection) {
            Num(projection.far_z) + " " + Num(projection.aspect) + "]";
 }
 
+std::string FogText(const Preset::Eval::FogPush& fog) {
+    return "fog[" + Flag(fog.enabled) + " " + Vec(fog.color) + " " + Num(fog.start) + " " +
+           Num(fog.end) + " " + Num(fog.density) + "]";
+}
+
+std::string TileText(const Preset::Eval::PolyTilePush& tile) {
+    std::string out = "tile[";
+    for (std::size_t i = 0; i < tile.corners.size(); i++) {
+        if (i > 0) out += " ";
+        out += Vec(tile.corners[i]);
+    }
+    return out + "]";
+}
+
 std::string LightText(const Preset::Eval::LightPush& light) {
-    return "light[" + Vec(light.direction) + Vec(light.diffuse) + Vec(light.specular) + "]";
+    return "light[" + Vec(light.direction) + Vec(light.diffuse) + Vec(light.specular) +
+           Vec(light.ambient) + "]";
 }
 
 std::string TimingText(const GcAnim::Timing& timing) {
@@ -73,32 +88,48 @@ std::string CellText(const Preset::Eval::CellDraw& cell) {
            " " + Num(cell.scale) + " " + Int(cell.blend) + "]";
 }
 
-}
-
-std::string Format(const Push& push, bool legacy_rotation) {
+bool Format2d(const Push& push, std::string& out) {
     std::vector<std::string> args;
     switch (push.call) {
     case PushCall::DrawSprites:
-        return PresetGolden::FormatCall("Gc2dHost::DrawSprites",
-                                        {Int(push.index), Int(push.index2)});
+        out =
+            PresetGolden::FormatCall("Gc2dHost::DrawSprites", {Int(push.index), Int(push.index2)});
+        return true;
     case PushCall::DrawParticles:
         for (const Preset::Eval::CellDraw& cell : push.cells)
             args.push_back(CellText(cell));
-        return PresetGolden::FormatCall("Gc2dHost::DrawParticles", args);
-    case PushCall::RenderFrame:
-        return PresetGolden::FormatCall("Scene3dHost::RenderFrame", {Num(push.value)});
+        out = PresetGolden::FormatCall("Gc2dHost::DrawParticles", args);
+        return true;
     case PushCall::AdvanceSprites:
-        return PresetGolden::FormatCall("Gc2dHost::AdvanceSprites", {Num(push.value)});
+        out = PresetGolden::FormatCall("Gc2dHost::AdvanceSprites", {Num(push.value)});
+        return true;
     case PushCall::SetSprites:
         for (const Preset::Eval::SpritePlacement& sprite : push.sprites)
             args.push_back(PlacementText(sprite));
-        return PresetGolden::FormatCall("Gc2dHost::SetSprites", args);
+        out = PresetGolden::FormatCall("Gc2dHost::SetSprites", args);
+        return true;
     case PushCall::SetSpriteScale:
-        return PresetGolden::FormatCall("Gc2dHost::SetSpriteScale",
-                                        {Int(push.index), Num(push.value)});
+        out = PresetGolden::FormatCall("Gc2dHost::SetSpriteScale",
+                                       {Int(push.index), Num(push.value)});
+        return true;
     case PushCall::SetSpriteFrame:
-        return PresetGolden::FormatCall("Gc2dHost::SetSpriteFrame",
-                                        {Int(push.index), Int(push.index2)});
+        out = PresetGolden::FormatCall("Gc2dHost::SetSpriteFrame",
+                                       {Int(push.index), Int(push.index2)});
+        return true;
+    default:
+        return false;
+    }
+}
+
+}
+
+std::string Format(const Push& push, bool legacy_rotation) {
+    std::string text;
+    if (Format2d(push, text)) return text;
+    std::vector<std::string> args;
+    switch (push.call) {
+    case PushCall::RenderFrame:
+        return PresetGolden::FormatCall("Scene3dHost::RenderFrame", {Num(push.value)});
     case PushCall::SetStyle:
         return PresetGolden::FormatCall("Scene3dHost::SetStyle", {Int(push.index)});
     case PushCall::SetView:
@@ -133,6 +164,23 @@ std::string Format(const Push& push, bool legacy_rotation) {
     case PushCall::SetModelTime:
         return PresetGolden::FormatCall("Scene3dHost::SetModelTime",
                                         {Str(push.name), Num(push.value)});
+    case PushCall::SetClearColor:
+        return PresetGolden::FormatCall("PresetHost::SetClearColor", {Vec(push.vec_a)});
+    case PushCall::SetFog:
+        return PresetGolden::FormatCall("Scene3dHost::SetFog", {FogText(push.fog)});
+    case PushCall::SetPolyGrid:
+        args = {Flag(push.poly.active), Num(push.poly.alpha), Num(push.poly.seconds),
+                Str(push.poly.movie), Int((int)push.poly.tiles.size())};
+        for (const Preset::Eval::PolyTilePush& tile : push.poly.tiles)
+            args.push_back(TileText(tile));
+        return PresetGolden::FormatCall("Scene3dHost::SetPolyGrid", args);
+    case PushCall::DrawSprites:
+    case PushCall::DrawParticles:
+    case PushCall::AdvanceSprites:
+    case PushCall::SetSprites:
+    case PushCall::SetSpriteScale:
+    case PushCall::SetSpriteFrame:
+        break;
     }
     return {};
 }

@@ -3,6 +3,7 @@
 #include "preset/doc/preset_commands.h"
 #include "preset/doc/preset_enum_names.h"
 #include "preset/doc/preset_document.h"
+#include "preset/eval/eval_ease.h"
 #include "preset/eval/eval_tween.h"
 #include "preset/eval/preset_evaluator.h"
 #include "preset/preset_asset_lengths.h"
@@ -117,4 +118,17 @@ TEST_CASE("a value first named at a later key blends from the value under the tw
     REQUIRE(middle < 0.626F);
     REQUIRE(evaluator.Resolve(50).models.front().alpha == 1.0F);
     REQUIRE(evaluator.Resolve(80).models.front().alpha == 1.0F);
+}
+
+TEST_CASE("EaseToward closes a fraction of the gap, or steps and stops on the target") {
+    const float geometric = PE::EaseToward(0.0F, 1.0F, 0.1F, PD::EaseMode::Geometric);
+    REQUIRE(geometric == 0.1F);
+    REQUIRE(PE::EaseToward(geometric, 1.0F, 0.1F, PD::EaseMode::Geometric) == 0.19F);
+
+    REQUIRE(PE::EaseToward(0.0F, 0.6F, 0.005F, PD::EaseMode::Linear) == 0.005F);
+    REQUIRE(PE::EaseToward(0.599F, 0.6F, 0.005F, PD::EaseMode::Linear) == 0.6F);
+    REQUIRE(PE::EaseToward(0.6F, 0.6F, 0.005F, PD::EaseMode::Linear) == 0.6F);
+    REQUIRE(PE::EaseToward(0.6F, 0.0F, 0.1F, PD::EaseMode::Linear) == 0.5F);
+    REQUIRE(PE::EaseToward(0.05F, 0.0F, 0.1F, PD::EaseMode::Linear) == 0.0F);
+    REQUIRE(PE::EaseToward(0.0F, 0.0F, 0.1F, PD::EaseMode::Linear) == 0.0F);
 }

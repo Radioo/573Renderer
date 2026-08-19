@@ -403,3 +403,133 @@ TEST_CASE("duplicate clip ids and unsorted markers are errors") {
     REQUIRE(Has(problems, PD::Severity::Error, "duplicate clip id"));
     REQUIRE(Has(problems, PD::Severity::Error, "markers"));
 }
+
+namespace {
+
+std::string SceneDocument(const std::string& clips) {
+    return std::string(R"({
+  "schema": "573renderer/scene-preset",
+  "version": 1,
+  "id": "scene-doc",
+  "name": "Scene doc",
+  "build": "iidx12",
+  "fps": 60,
+  "length": 600,
+  "render": {"width": 640, "height": 480, "opaque": true, "shading": "lit_material",
+             "sprite_split_priority": 30},
+  "camera": {"eye": [0, 0, -1], "at": [0, 0, 0], "up": [0, 1, 0], "fov_y": 1.0471976,
+             "near_z": 0.1, "far_z": 500.0, "aspect": "auto"},
+  "lights": [], "assets": {}, "options": [], "rng_seed": 1, "markers": [],
+  "tracks": [{"id": "scene", "kind": "scene", "clips": [)") +
+           clips + "]}]\n}";
+}
+
+PD::Document LoadScene(const std::string& clips) {
+    const PD::Loaded loaded = PD::Load(SceneDocument(clips));
+    if (!loaded.has_value()) FAIL(loaded.error().message);
+    REQUIRE(loaded.has_value());
+    return *loaded;
+}
+
+}
+
+TEST_CASE("fog parameter ids are schema ids and an unknown fog field is not") {
+    const PD::Document good = LoadScene(
+        R"({"id": "white", "type": "param.override", "start": 0, "end": 60,
+            "params": {"id": "fog.color", "value": [1.0, 1.0, 1.0]}},
+           {"id": "far", "type": "param.override", "start": 0, "end": 60,
+            "params": {"id": "fog.end", "value": 62.4}},
+           {"id": "off", "type": "param.override", "start": 60, "end": 120,
+            "params": {"id": "fog.enabled", "value": false}})");
+    INFO(Describe(PD::Validate(good)));
+    REQUIRE(PD::Validate(good).empty());
+
+    const PD::Document bad =
+        LoadScene(R"({"id": "blur", "type": "param.override", "start": 0, "end": 60,
+                      "params": {"id": "fog.blur", "value": 1.0}})");
+    REQUIRE(Has(PD::Validate(bad), PD::Severity::Error, "fog.blur"));
+}
+
+TEST_CASE("two scene.fog primaries may not overlap but a render.clear_cycle stands alone") {
+    const PD::Document clash =
+        LoadScene(R"({"id": "fog_a", "type": "scene.fog", "start": 0, "end": 300},
+                     {"id": "fog_b", "type": "scene.fog", "start": 200, "end": 600})");
+    REQUIRE(Has(PD::Validate(clash), PD::Severity::Error, "primary of the same family"));
+
+    const PD::Document split =
+        LoadScene(R"({"id": "fog_a", "type": "scene.fog", "start": 0, "end": 300},
+                     {"id": "fog_b", "type": "scene.fog", "start": 300, "end": 600})");
+    INFO(Describe(PD::Validate(split)));
+    REQUIRE(PD::Validate(split).empty());
+
+    const PD::Document lone =
+        LoadScene(R"({"id": "strobe", "type": "render.clear_cycle", "start": 0, "end": 600})");
+    INFO(Describe(PD::Validate(lone)));
+    REQUIRE(PD::Validate(lone).empty());
+}
+
+TEST_CASE("an ease with nothing under it warns, and a covered one is clean") {
+    PD::Document bare = BaseDocument();
+    PD::Clip ease;
+    ease.id = "grow";
+    ease.start = 0;
+    ease.end = 120;
+    ease.command = PD::ModelEaseCmd{.scale_target = PD::Vec3{3.5, 3.5, 3.5}, .rate = 0.1};
+    bare.tracks.push_back(ModelTrack("core_track", "core", {ease}));
+    REQUIRE(Has(PD::Validate(bare), PD::Severity::Warning, "runs under this clip"));
+
+    PD::Document covered = BaseDocument();
+    const PD::Clip drawn = DrawClip("core_draw", 0, 600);
+    PD::Clip grow;
+    grow.id = "grow";
+    grow.start = 0;
+    grow.end = 120;
+    grow.command = PD::ModelEaseCmd{.scale_target = PD::Vec3{3.5, 3.5, 3.5}, .rate = 0.1};
+    covered.tracks.push_back(ModelTrack("core_track", "core", {drawn, grow}));
+    INFO(Describe(PD::Validate(covered)));
+    REQUIRE(PD::Validate(covered).empty());
+
+    PD::Document loose = BaseDocument();
+    PD::Track camera;
+    camera.id = "camera";
+    camera.name = "camera";
+    camera.kind = PD::TrackKind::Camera;
+    PD::Clip chase;
+    chase.id = "chase";
+    chase.start = 0;
+    chase.end = 120;
+    chase.command = PD::CameraEaseCmd{};
+    camera.clips.push_back(chase);
+    loose.tracks.push_back(camera);
+    REQUIRE(Has(PD::Validate(loose), PD::Severity::Warning, "no camera.set runs under this clip"));
+
+    PD::Track anchored = loose.tracks.back();
+    PD::Clip pose;
+    pose.id = "pose";
+    pose.start = 0;
+    pose.end = 600;
+    pose.command = PD::CameraSet{.eye = PD::Vec3{0.0, 0.0, -1.0}};
+    anchored.clips.insert(anchored.clips.begin(), pose);
+    PD::Document held = BaseDocument();
+    held.tracks.push_back(anchored);
+    INFO(Describe(PD::Validate(held)));
+    REQUIRE(PD::Validate(held).empty());
+}
+
+TEST_CASE("two ease modifiers on one target may overlap because neither is a primary") {
+    PD::Document doc = BaseDocument();
+    const PD::Clip drawn = DrawClip("core_draw", 0, 600);
+    PD::Clip near_ease;
+    near_ease.id = "near";
+    near_ease.start = 0;
+    near_ease.end = 600;
+    near_ease.command = PD::ModelEaseCmd{.scale_target = PD::Vec3{1.0, 1.0, 1.0}, .rate = 0.1};
+    PD::Clip far_ease;
+    far_ease.id = "far";
+    far_ease.start = 0;
+    far_ease.end = 600;
+    far_ease.command = PD::ModelEaseCmd{.scale_target = PD::Vec3{3.5, 3.5, 3.5}, .rate = 0.1};
+    doc.tracks.push_back(ModelTrack("core_track", "core", {drawn, near_ease, far_ease}));
+    INFO(Describe(PD::Validate(doc)));
+    REQUIRE(PD::Validate(doc).empty());
+}

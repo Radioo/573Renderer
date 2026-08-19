@@ -1,6 +1,7 @@
 #pragma once
 
 #include "scene3d/camera.h"
+#include "scene3d/poly_grid.h"
 #include "scene3d/scene3d_render.h"
 
 #include <array>
@@ -20,6 +21,7 @@ struct ModelInfo {
 };
 
 struct ModelSetup {
+    std::string target;
     std::string model;
     int blend_mode = 0;
     float alpha = 1.0F;
@@ -89,6 +91,12 @@ void SetView(const std::array<float, 3>& eye, const std::array<float, 3>& at,
 void SetStyle(Scene3d::RenderStyle style);
 
 void SetLights(const std::vector<Scene3d::Light>& lights);
+
+void SetFog(const Scene3d::Fog& fog);
+
+void SetPolyGrid(Scene3d::PolyGrid grid);
+
+void SetMovieReporter(Scene3d::MovieReporter reporter);
 
 void SetModelTransform(const std::string& model, const std::array<float, 3>& position,
                        const std::array<float, 3>& rotation);

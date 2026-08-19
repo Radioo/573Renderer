@@ -8,4 +8,6 @@ namespace PresetHost {
 
 void ApplyPushes(const std::vector<Preset::Eval::Push>& pushes);
 
+void ResetPushState();
+
 }

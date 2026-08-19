@@ -28,6 +28,9 @@ enum class PushCall : uint8_t {
     SetModelVisible,
     SetModelTransform,
     SetModelTime,
+    SetClearColor,
+    SetFog,
+    SetPolyGrid,
 };
 
 struct SpritePlacement {
@@ -62,6 +65,7 @@ struct LightPush {
     std::array<float, 3> direction = {0.0F, 0.0F, -1.0F};
     std::array<float, 3> diffuse = {1.0F, 1.0F, 1.0F};
     std::array<float, 3> specular = {1.0F, 1.0F, 1.0F};
+    std::array<float, 3> ambient = {0.0F, 0.0F, 0.0F};
     bool enabled = true;
 };
 
@@ -70,6 +74,30 @@ struct ProjectionPush {
     float near_z = 0.1F;
     float far_z = 500.0F;
     float aspect = 0.0F;
+};
+
+struct FogPush {
+    bool enabled = false;
+    std::array<float, 3> color = {1.0F, 1.0F, 1.0F};
+    float start = 0.0F;
+    float end = 1.0F;
+    float density = 0.5F;
+};
+
+struct PolyTilePush {
+    std::array<std::array<float, 3>, 4> corners = {};
+    std::array<std::array<float, 2>, 4> uv = {};
+};
+
+struct PolyGridPush {
+    bool active = false;
+    float alpha = 1.0F;
+    float seconds = 0.0F;
+    int movie_width = 0;
+    int movie_height = 0;
+    int texture_side = 0;
+    std::string movie;
+    std::vector<PolyTilePush> tiles;
 };
 
 struct Push {
@@ -86,6 +114,8 @@ struct Push {
     std::array<float, 3> vec_c = {0.0F, 0.0F, 0.0F};
     std::array<float, 3> legacy_vec_b = {0.0F, 0.0F, 0.0F};
     ProjectionPush projection = {};
+    FogPush fog = {};
+    PolyGridPush poly = {};
     std::vector<SpritePlacement> sprites;
     std::vector<CellDraw> cells;
     std::vector<LightPush> lights;

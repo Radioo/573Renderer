@@ -29,7 +29,8 @@ allowed to have.
 | Enums and their JSON name tables | `src/preset/doc/preset_enum_names.h/.cpp` | `kCommandTypeNames`, `kEaseNames`, ..., `IndexForName`, `NameForIndex` |
 | One struct per command, the `Command` variant, the command traits | `src/preset/doc/preset_commands.h` | `Command`, `ParamValue`, `TypeOf`, `TraitsFor`, `IsEvent`, `kCommandTraits` |
 | Document, Track, Clip, Key, Gate, OptionSpec, Marker, Asset, render/camera/light blocks | `src/preset/doc/preset_document.h` | `Document`, `kSchemaId`, `kSchemaVersion`, `HasTarget` |
-| One `FieldDesc` per command parameter | `src/preset/doc/preset_fields.h/.cpp` | `FieldsFor`, `KeyFieldsFor`, `FindField`, `DefaultCommand` |
+| One `FieldDesc` per command parameter | `src/preset/doc/preset_fields.h`, `preset_fields.cpp` | `FieldsFor`, `KeyFieldsFor`, `FindField`, `DefaultCommand` |
+| The `FieldDesc` tables, split by family | `src/preset/doc/preset_fields_table.h`, `preset_fields_2d.cpp`, `preset_fields_3d.cpp` | `Field`, `ToParam`, `FromParam`, `SpriteDrawFields`, ..., `PolyTileGridFields` |
 | JSON load and save | `src/preset/doc/preset_json.h/.cpp` | `Load`, `Save`, `ParseError`, `Loaded` |
 | Validation | `src/preset/doc/preset_validate.h/.cpp` | `Validate`, `Problem`, `Severity` |
 | Key sampling and the eases | `src/preset/eval/eval_tween.h/.cpp` | `SampleKeys`, `EaseFactor`, `BlendValues`, `TweenValue` |
@@ -38,7 +39,7 @@ allowed to have.
 | The frame the evaluator resolves and what it pushes | `src/preset/eval/frame_state.h`, `eval_push.h` | `FrameState`, `ModelSlot`, `SpriteSlot`, `Push`, `PushCall` |
 | The evaluator | `src/preset/eval/preset_evaluator.h/.cpp` | `Evaluator::Load`, `Reset`, `Seek`, `SetOption`, `RenderFrame`, `Resolve` |
 | Asset lengths the evaluator needs | `src/preset/preset_asset_lengths.h` | `AssetLengths::MaxTime`, `AnimationLength` |
-| Tests | `tests/game/preset_json_tests.cpp`, `preset_validate_tests.cpp`, `eval_tween_tests.cpp`, `preset_eval_tests.cpp`, `preset_defaults_tests.cpp`, `preset_registry_tests.cpp`, `preset_defaults_golden_tests.cpp` | fixtures in `tests/game/fixtures/` |
+| Tests | `tests/game/preset_json_tests.cpp`, `preset_validate_tests.cpp`, `eval_tween_tests.cpp`, `preset_eval_tests.cpp`, `preset_defaults_tests.cpp`, `preset_registry_tests.cpp`, `preset_defaults_golden_tests.cpp`, `preset_poly_tests.cpp`, `poly_vertex_tests.cpp` | fixtures in `tests/game/fixtures/` |
 
 Everything lives in `namespace Preset::Doc`. The nested namespace was deliberate
 while the old table structs (`Preset::ParamOverride`, `Preset::ModelMotion`,
@@ -46,6 +47,20 @@ while the old table structs (`Preset::ParamOverride`, `Preset::ModelMotion`,
 `namespace Preset` and the converter had to include both headers at once; the
 tables are gone, the nesting stays because the file names and the include paths
 would otherwise all move.
+
+The field tables outgrew one file, so they live in three. `preset_fields_table.h`
+is the internal header the three share: the `ParamValue` conversions
+(`ToParam` / `FromParam`), the `Field<C, Member>` factory that builds a
+`FieldDesc`'s typed getter and setter, the `Range` constants used by more than one
+family, and the declaration of one accessor per table. `preset_fields_2d.cpp` holds
+the sprite and emitter tables, `preset_fields_3d.cpp` the model, camera, light and
+poly ones, and `preset_fields.cpp` keeps the scene and document level tables plus
+the only public entry points, `FieldsFor` / `KeyFieldsFor` / `FindField` /
+`DefaultCommand`. `FieldsFor` still indexes ONE array whose length is
+`static_assert`ed against `std::variant_size_v<Command>`, so a new command still
+cannot be added without giving it a table slot. Nothing outside these three files
+includes `preset_fields_table.h`; every consumer sees `preset_fields.h` exactly as
+before.
 
 JSON is `nlohmann-json` (vcpkg port `nlohmann-json`, header only), used through
 `nlohmann::ordered_json` so key order is what the writer wrote. It is a header-only
@@ -63,9 +78,9 @@ dependency of the preset JSON layer, so only the targets that compile
 | `build` | string | Game fingerprint id (`iidx10`, `iidx11`, `src/game_fingerprint.cpp`). |
 | `fps` | int | Frames per second the frame axis is defined in. Default 60. |
 | `length` | int or `"auto"` | Document length in frames. `"auto"` (parsed as an absent `Document::length`) means the evaluator derives it; every converted document writes a number. |
-| `render` | object | `width`, `height`, `opaque`, `shading`, `sprite_split_priority`. Written in full. |
+| `render` | object | `width`, `height`, `opaque`, `shading`, `sprite_split_priority` written in full, plus `clear_color` (`[r, g, b]`, each 0..1, default black) written only when it is not black, so every document that predates it is byte-identical. A channel outside 0..1 is a load error. |
 | `camera` | object | `eye`, `at`, `up`, `fov_y` (rad), `near_z`, `far_z`, `aspect` (positive number or `"auto"`). Written in full. |
-| `lights` | array | Each entry `direction`, `diffuse`, `specular`. Written in full. |
+| `lights` | array | Each entry `direction`, `diffuse`, `specular` written in full, plus `ambient` (default black) written only when it is not black. |
 | `assets` | object | `"<asset id>": { "kind": "scene3d" or "package2d", "dir": "<game relative dir>" }`. Order is preserved. |
 | `options` | array | The only storage of selectable options, see "Options" below. |
 | `rng_seed` | int | Seed of the shared `Ran3` stream at frame 0. |
@@ -99,7 +114,7 @@ in the file.
 ## Tracks, clips, keys and gates
 
 A track is `id`, `name`, `kind` (`sprite`, `model`, `camera`, `light`, `fx`,
-`scene`), `target`, the `muted` / `solo` / `locked` flags, an optional `color`, and
+`scene`, `poly`), `target`, the `muted` / `solo` / `locked` flags, an optional `color`, and
 its `clips`. `name` may be left out of the file: it then takes the track's
 `target`, or the track's kind name on the kinds that have no target. The writer
 always emits it, so a document that omits it is rewritten with the resolved name.
@@ -134,7 +149,8 @@ the `camera.set` catalog (`KeyFieldsFor`).
 `TraitsFor(type)` gives each command its track kind and its family. A family with
 a value other than `Family::None` is a PRIMARY: `sprite.draw` and
 `sprite.animate` share the sprite family, `model.draw`, `camera.set`, `light.set`
-(per `index`), `render.settings`, `rhythm.beat` and `rng.seed` are their own.
+(per `index`), `render.settings`, `scene.fog`, `poly.tile_grid`, `rhythm.beat` and
+`rng.seed` are their own.
 Everything else is a modifier and may overlap freely. Two primaries of one family
 may not overlap on one target unless their gates are mutually exclusive. Two
 gates are mutually exclusive when they name the same option and no choice
@@ -150,7 +166,8 @@ parameter is optional in the file and takes the catalog default when absent; the
 default is the member initializer of the command struct, and `DefaultCommand`
 hands the JSON writer the same value so "equal to the default" is decided in one
 place. Ranges are the `Range` of the parameter's `FieldDesc`
-(`src/preset/doc/preset_fields.cpp`), carried over from the rows of the deleted
+(`preset_fields_2d.cpp`, `preset_fields_3d.cpp` or `preset_fields.cpp`, see "Where
+the code is"), carried over from the rows of the deleted
 `preset_schema.cpp` where one existed; a soft range is a UI hint that validation
 never enforces, a hard range is an error.
 
@@ -218,7 +235,7 @@ inspector tab shows the resolved offset read-only.
 | Param | Kind | Default | T |
 |-------|------|---------|---|
 | `asset`, `cell` | asset id, string | required | |
-| `spawn` | enum `clip_start` / `every_frame` / `beat` | `clip_start` | |
+| `spawn` | enum `clip_start` / `every_frame` / `beat` / `burst` | `clip_start` | |
 | `count` | int | 0 | |
 | `angle_step_deg`, `phase_rate_deg`, `phase_amplitude_deg` | float deg | 0 | |
 | `radius_from`, `radius_to` | int px | 0 | |
@@ -230,6 +247,47 @@ inspector tab shows the resolved offset read-only.
 | `scatter` | `{ "span": [x, y], "offset": [x, y] }` or null | null | |
 | `beat_grid`, `beat_odd` | enum `a` / `b`, int 0..1 | `a`, 0 | |
 | `life`, `life_base`, `life_span` | int frames | 0 | |
+| `burst` | `{ "period_base", "period_span", "life_drift", "rise_base", "rise_step", "rise_period", "span_x", "from_y", "to_y" }` or null | null | |
+
+`spawn: "burst"` ignores the ring entirely and reads `burst` instead; with `burst`
+null it never spawns. It is the HAPPY SKY class-course bubble rain
+(`sub_42DBF0`, `IIDX/happy_sky_3d_screens.md`). Every frame the clip is active it
+draws two Ran3 values and keeps the second, so the stream advances whether or not
+the burst fires:
+
+```
+period = (rng % period_span) + period_base
+fires when frame % period == 0 or frame % (period / 2) == 0
+```
+
+On a firing frame it spawns `count` particles, carrying a `rise` accumulator that
+starts at `rise_base` for that frame and grows once per particle:
+
+```
+life = (rng % life_span) + life_base - (frame % life_drift)
+rise = max(0, rise + rise_step - (frame % rise_period))
+x    = rng % span_x
+```
+
+Each particle travels from `(x, from_y)` to `(x, to_y - rise)`, so it rises
+straight up, and its scale is `rise` percent. The two draws per particle are in the
+game's order (life first, then x) so a fixed `rng_seed` reproduces the game's own
+sequence. A zero `life_drift` or `rise_period` turns that modulo term off.
+
+Both halves of that schedule are pinned. `preset_defaults_tests.cpp` walks the real
+`iidx12-dan-select` document on its 9TH and 10TH DAN choice for 180 frames and
+requires the exact list of frames the bubbles fire on, plus the first burst's scale
+and `to_y`. The list only holds if the period is drawn as written, if the HALF
+period fires between the whole ones, and if the rise starts at `rise_base`: raising
+`period_base`, dropping the half-period branch, and starting the rise at 0 each
+change it.
+
+The one part of the game's kind-3 particle motion the renderer does NOT reproduce
+is the per-frame jitter `sub_40EE30` applies from the CRT `rand()` (a stream
+separate from Ran3): a scale multiplier uniform in 0.75..1.25 and an x offset of
+`rand() % (w / 4) - (w / 4) / 2`, both redrawn every frame so a bubble wobbles and
+pulses as it rises. That is engine-level motion, not spawn data; it is recorded
+here rather than guessed at.
 
 The ring phase is a function of the ABSOLUTE document frame, not the clip-relative
 one, because the game rotates the whole ring on its own frame counter. Life is
@@ -264,6 +322,35 @@ opaque); the second name exists only so the int survives a round trip.
 `spin_per_frame` is the RATE. The spin itself is a per-model accumulator in the
 evaluator's stateful step, zeroed when a draw primary with a different `start`
 becomes the winner, so a keyed or choice-changed rate is simply integrated.
+
+The track `target` names an INSTANCE and `model` names the MESH inside the asset.
+Two model tracks may therefore point at one mesh and draw it twice with independent
+transform, blend, alpha, speed and 3D time: HAPPY SKY class course draws
+`dan/dan_sea2.xz` as `dan_sea2` opaque at the origin and again as `dan_sea2_flip`,
+additive at alpha 0.8, one centimetre lower and rolled 3.14 rad about X. The host
+clones the loaded `Scene3d::Model` under the instance name before the renderer
+builds its buffers (`Scene3dHost::MakeInstances` over `Scene3d::MakeInstances`), so
+every later `SetModel*(target)` reaches one instance only, and the mesh data is
+copied once at load rather than per frame. With `model` empty or equal to the target
+there is no clone and nothing changes, which is why the converted documents and the
+golden fixture are untouched.
+
+The clone is a DEEP COPY (`Scene3d::Model clone = *mesh;`): the second instance
+carries its own vertex and index data, and the renderer builds it a second set of
+buffers. That is deliberate for now. The one preset that uses it clones `dan_sea2`,
+a single small sea plane, so the duplicated geometry costs less than the bookkeeping
+a shared mesh would need, and a copy keeps every per-instance field (`time`,
+`visible`, `alpha`, `blend_mode`) independent with no extra indirection. Sharing one
+mesh between instances, with the per-instance state split out, is a later
+optimisation to make if a preset ever instances a heavy model.
+
+An instance target that collides with a model name the asset already carries is NOT
+silently bound to that stranger: `Scene3d::MakeInstances` replaces the colliding
+model with the clone of the mesh the instance actually named, and reports the
+collision so the host logs it. Repeating one target across several tracks clones it
+once, tracked by the set of names cloned in that call rather than by probing the
+scene, so the probe can no longer mistake an unrelated mesh for an instance already
+made.
 
 ### model.tween (model track, modifier)
 
@@ -302,11 +389,242 @@ all, so an `aspect` key is rejected as a non-tweenable value.
 
 `camera.tween` has no params; its tweenable set is the `camera.set` table.
 
+### camera.ease (camera track, modifier)
+
+| Param | Kind | Default |
+|-------|------|---------|
+| `eye_target`, `at_target` | vec3 world | (0, 0, 0) |
+| `rate` | float 0..1 | 0.1 |
+| `eye_x`, `eye_y`, `eye_z` | bool | true |
+| `at_x`, `at_y`, `at_z` | bool | true |
+| `start_at_target` | bool | false |
+
+Every frame the clip is active, each component whose mask bit is set moves
+`v += (target - v) * rate` and is written back over whatever `camera.set` resolved.
+A masked-off component is never touched, so it keeps the primary's value: HAPPY SKY
+class course eases only `eye.y`, `eye.z` and `at.y` and leaves `eye.x`, `at.x` and
+`at.z` where the entry pose put them, exactly as `sub_42D3E0` does.
+
+The eased vector lives in `EvalState::camera_ease` and is armed ONCE, the first
+frame any `camera.ease` clip is active: from the resolved camera of that frame, or
+from the target when `start_at_target` is set. It is never re-armed. A `when`-gated
+clip that takes over therefore continues from the CURRENT eased value and walks to
+its new target, which is what the game does when the cursor moves to another grade
+group. `SetOption` writes the accumulator into the frame without stepping it, so
+the choice change alone moves nothing.
+
+### model.ease (model track, modifier)
+
+| Param | Kind | Default |
+|-------|------|---------|
+| `scale_target` | vec3 | absent, meaning scale is not eased |
+| `position_target` | vec3 world | absent |
+| `alpha_target` | float 0..1 | absent |
+| `rate` | float 0..1 | 0.1 |
+| `mode` | enum `geometric` / `linear` | `geometric` |
+| `start_at_target` | bool | false |
+
+`geometric` is `v += (target - v) * rate`; `linear` is `v += rate` toward the
+target, clamped at it. The game's two directions on one value are two gated clips
+with their own rate, which is how `dan_light_bg`'s alpha falls at 0.1 and climbs at
+0.005. The clip must overlap a `model.draw` of the same target or validation warns.
+
+The accumulator is per model in `ModelRuntime::ease`, armed once with the same rule
+as `camera.ease`: `start_at_target` seeds it at the target so a document LOADED on
+that choice starts settled, while switching the choice later eases. That is the
+game: `sub_42DFA0` writes `flt_1859A84 = (cursor > 6 ? 3.5 : 1.0)` at init and only
+a cursor move animates it.
+
+Position and scale on `dan_sky` / `dan_sky2` are one geometric sequence in the game
+(`y = (1 - s) * 0.033333335`). Because that is an affine map of `s` and both start
+consistent, easing the position toward `(0, (1 - T) * 0.033333335, 0)` at the same
+rate is exact, not an approximation.
+
+### camera.motion (camera track, modifier)
+
+| Param | Kind | Default | T |
+|-------|------|---------|---|
+| `up_roll_deg_per_frame` | float deg/frame | 0 | T |
+
+Every frame the clip is active, the resolved `up` is rotated about the world Z
+axis THROUGH THE EYE by that many degrees and written back, so it integrates and
+is never reset. Positive sweeps from +X toward -Y: 0.2 deg/frame is one turn per
+30 s at 60 fps, and over HAPPY SKY's 5112-frame staff roll that is 1022.4 degrees,
+about 2.84 turns.
+
+This is `sub_42FE30`'s per-frame `sub_42FC40(&up.x, &up.y, &up.z, eye.x, eye.y,
+eye.z, 0, 0, roll)` followed by `D3DXMatrixLookAtLH(eye, at, up)`. `sub_42FC40` is
+the game's point rotator, not a matrix builder: it rotates about X, then Y, then Z,
+in DEGREES, about an arbitrary pivot, and the ending passes only the Z angle. The
+pivot is the eye, which is the origin on that screen, so the roll is a plain
+rotation of the up vector there; the renderer still pivots on the eye so a preset
+that moves the eye gets what the game's arithmetic would give.
+
+`RotateAbout` in `src/preset/eval/eval_poly.cpp` is that rotator. It is written as
+the algebraically identical sine and cosine form rather than the game's
+`atan2` + `sin` + `cos`, so it can use `Support::Sinf` / `Support::Cosf` and stay
+bit-identical across machines. It keeps the game's exact stage order and its one
+oddity: the X stage rotates in the (z, y) plane and leaves x alone, and the Y stage
+then consumes that ORIGINAL x rather than a rotated one.
+
+The rolled vector lives in `EvalState::camera_motion` and is armed ONCE, on the
+first frame any `camera.motion` clip is active, from the camera the frame resolved.
+The checkpoint carries it, so `Seek(n)` reproduces n advances exactly and scrubbing
+backwards re-simulates rather than snapping. Validation warns when no `camera.set`
+runs under the clip, because the roll then starts from the document camera's `up`.
+
+### poly.tile_grid (poly track, primary)
+
+A `poly` track has no target and holds one `poly.tile_grid`. The command is the
+game's `poly_draw` quad pass: a grid of textured quads submitted every active
+frame, each spinning about its own centre and orbiting the grid centre, both at
+rates proportional to the document frame number. It is HAPPY SKY's `sub_4300D0`.
+
+| Param | Kind | Default |
+|-------|------|---------|
+| `rows`, `cols` | int 1..16 | 3, 3 |
+| `lattice_amplitude` | float 0..1 | 0.1 |
+| `lattice_seed` | int | 1 |
+| `spacing` | vec2 world | (3.0, 2.25) |
+| `depth` | float world | 5.0 |
+| `quad_scale` | vec2 world | (3.6, 2.7) |
+| `spin_rates` | vec3 deg/frame | (1, 1, -2) |
+| `orbit_rates` | vec3 deg/frame | (0, -0.5, -0.33333334) |
+| `burst_from` | int frame | 4833 |
+| `burst_step` | float world/frame | 2.0 |
+| `burst_delay_per_tile` | float | 10.0 |
+| `alpha` | float 0..1, T | 127/255 |
+| `texture` | `{ "movie": "<path>" }` or `null` | `null` |
+| `movie_size` | vec2 px | (304, 416) |
+| `texture_size` | float px | 512 |
+
+The defaults ARE the ending's values, so the exported JSON of `iidx12-ending`
+carries almost none of them: `WriteCommand` drops every param that still equals
+`DefaultCommand`, which leaves `texture` on all three tile clips and
+`lattice_seed` on the two that pick a seed other than 1. That dump is what the CI
+gates read and what a user editing an export sees, so the table above, not the
+export, is where the ending's numbers are written down.
+
+**The lattice.** A `(rows + 1) x (cols + 1)` grid of points in unit space, point
+`(row, col)` at `(col / cols, row / rows)`. Every point on an interior ROW takes a
+`y` step and every point on an interior COLUMN takes an `x` step, each
+`+/- lattice_amplitude / 2` on a fair coin. At 3 x 3 that is 12 of the 16 points
+moved and 16 draws, in row-major order with `y` before `x` at each point; only the
+four corners are untouched. The generator is the MSVC CRT `rand()`
+(`seed = seed * 214013 + 2531011; return (seed >> 16) & 0x7FFF`, `Preset::CrtRand`),
+which is what `sub_42F410` calls. The game seeds it from `timeGetTime` at stage
+init, so the game's own lattice is not reproducible and a preset must name a seed:
+that is why `lattice_seed` exists, and why `iidx12-ending` hangs three seeds off a
+`lattice` option instead of pretending one of them is the truth.
+
+**The four stages, rebuilt from scratch every frame.** Nothing accumulates, so the
+whole grid is a pure function of the frame number plus the one-time lattice.
+
+1. Quad `(row, col)` is centred at `((col - (cols-1)/2) * spacing.x,
+   (row - (rows-1)/2) * spacing.y, depth)`, and its four corners are
+   `centre + (lattice[k] - cellCentre) * quad_scale`, with
+   `cellCentre = ((2*col + 1) / (2*cols), (2*row + 1) / (2*rows))`. The corner to
+   lattice mapping is 0: `(row+1, col)`, 1: `(row+1, col+1)`, 2: `(row, col)`,
+   3: `(row, col+1)`, which is a triangle-strip order of bottom-left,
+   bottom-right, top-left, top-right. At 3 x 3 with the ending's numbers each quad
+   is 1.2 x 0.9 on a 3.0 x 2.25 pitch, so the quads do not tile: the gaps are 2.5x
+   the quad.
+2. Each quad spins about ITS OWN centre by `spin_rates` times a fixed parity
+   pattern times the frame number: X by `col % 2`, Y by `((row + 1) % 2) - 0.5`,
+   Z by `(row + col) % 2`.
+3. Each CORNER then orbits the grid centre `(0, 0, depth)` by `orbit_rates` times
+   the frame number: X has no parity pattern (the game passes a literal zero, and
+   the ending's multiplier is 0), Y by `(row % 2) - 0.5`, Z by
+   `((row + col) % 3) - 1`. The stored centre is not orbited, only the corners.
+4. From `burst_from` a counter climbs `burst_step` per frame, first true ON
+   `burst_from` so that frame already carries one step. Quad `i` (row-major) moves
+   `max(0, counter - i * burst_delay_per_tile)` in +Z, away from the camera.
+
+The parity patterns are the fixed STRUCTURE of the command, not parameters: they
+are the game's grid. Only their multipliers are data.
+
+**The pass.** Vertices are `XYZ|NORMAL|DIFFUSE|TEX1`, normal `(0, 1, 0)`, diffuse
+`alpha` over white, uv `lattice * movie_size / texture_size`. Each quad is one
+`DrawPrimitive(TRIANGLESTRIP, 2)`. The pass runs after the model scene and before
+the front 2D layers, INSIDE the fog bracket, so the fog whitens the tiles as they
+fly away, and it is drawn UNLIT with `ZENABLE`, `ALPHABLENDENABLE`,
+`SRCALPHA / INVSRCALPHA`, in SUBMISSION ORDER. Where the pass sits is fixed by the
+renderer, so there is no priority parameter.
+
+Unlit and unsorted are both the game (`sub_40CC70`): its poly pass lights the tiles
+only when light 5 is enabled, no screen enters the ending with light 5 on, and the
+depth sort in that function belongs to the other queue, whose entries have a 292
+byte stride. The queue this pass uses walks its 204 byte entries in submission
+order with no distance computed at all. Since the tiles alpha blend against each
+other, the order is load bearing.
+
+`ZWRITEENABLE` is deliberately not set, matching the game, which also leaves it as
+the model scene left it. The pass writes `ZENABLE = D3DZB_TRUE` where the model
+pass writes `D3DZB_USEW`, and that split is the game's own: the scene's base state
+block sets `ZENABLE = 2 (D3DZB_USEW)`, so the 3D models run on a w-buffer, while
+`sub_40CC70` sets `ZENABLE = 1 (D3DZB_TRUE)` for the tiles. The renderer keeps the
+two apart rather than unifying them. Re-find the base block through the six
+`BeginStateBlock` captures of `sub_498DA0`; the poly value is the second
+`SetRenderState` in `sub_40CC70`, right after `SHADEMODE = GOURAUD`.
+
+The vertex packing lives in `src/scene3d/poly_vertex.h/.cpp` (`PolyVertex`,
+`kPolyFvf`, `DiffuseOf`, `StripOf`) rather than in `poly_draw.cpp`, so the FVF
+layout, the `(0, 1, 0)` normal, the alpha to diffuse conversion and the per corner
+uv are pinned by `tests/game/poly_vertex_tests.cpp` with no device and no window.
+`poly_draw.cpp` static asserts `kPolyFvf` against the D3D9 `D3DFVF_*` bits so the
+device free copy of the layout cannot drift from what `SetFVF` receives.
+
+**The texture.** `texture` names a movie file relative to the game directory. It is
+the BGA movie in the game, which is per playthrough content: `sub_42F720` opens the
+last played song's `.4`, or a random `MMSS.4` on a fresh boot, and `sub_409480`
+falls back to the literal `..\data\movie\08ra.4` when the named file is missing.
+`08ra.4` is the one deterministic answer and is the ending preset's default. The
+file is an MPEG-2 program stream; see docs/media_formats.md for the decode path and
+what the renderer does at the end of it.
+
+`texture: null` draws the tiles UNTEXTURED, which is what the game does with no
+movie loaded: `sub_409600` returns 0, and `sub_40CC70` special-cases the magic name
+`REAL_TEXTURE` to read the texture pointer straight out of the queue entry rather
+than looking the name up in the poly atlas, so a null pointer becomes
+`SetTexture(NULL)`. A missing movie FILE takes the same path in the renderer, and
+so does a movie whose decoder cannot build a scaler (`Movie::Source::Broken`,
+docs/media_formats.md): the tiles draw untextured and the reason is logged once.
+
 ### light.set (light track, primary per `index`)
 
-`index` (int), `direction` (vec3, T), `diffuse` (colour, T), `specular` (colour,
-T), `enabled` (bool, default true). Absent values fall back to the document
-`lights`.
+`index` (int, HARD 0..7: the eight fixed-function slots, anything else is a
+validation error; HAPPY SKY drives 0, 1, 2 and 5), `direction` (vec3, T), `diffuse` (colour, T), `specular`
+(colour, T), `ambient` (colour, T), `enabled` (bool, default true). Absent values
+fall back to the document `lights`.
+
+`ambient` reaches `D3DLIGHT9.Ambient` through `LightPush` and `Scene3d::Light`.
+The field defaults to black, but no built-in leaves it there any more: HAPPY SKY
+M8 re-read the IIDX 10 and RED light setters and moved the white the notes had
+recorded as
+specular onto ambient, where the game really puts it, so every converted document
+carries `ambient` white and `specular` black (docs/preset_golden.md, and the
+setter proof in `IIDX/red_3d_screens.md`). `specular` also reaches
+`D3DLIGHT9.Specular`, but it is INERT on models: `Renderer::ApplyBaseState`
+leaves `D3DRS_SPECULARENABLE` off, exactly as the game does, so a specular colour
+changes nothing on screen - which is why the mistake was invisible until the
+HAPPY SKY engine diff read the setter bodies.
+
+`ambient` is INERT on models too, for a different reason, and the renderer
+reproduces that: the fixed-function ambient term is `material.Ambient x
+(D3DRS_AMBIENT + sum of the enabled lights' Ambient)`, and every one of these games
+loads its meshes through the statically linked D3DX8 `D3DXLoadMeshFromXof`, whose
+material fill writes `Ambient = (0, 0, 0, 1)` explicitly (the `fldz / fstp
+[ebx+8..10h] / fld1 / fstp [ebx+14h]` run right after the emissive copy, in
+`sub_4C900E` on HAPPY SKY, `sub_4B1DCB` on RED and `sub_496F73` on IIDX 10), and
+the only material transform before `SetMaterial` is the per-slot tint multiply on
+Diffuse. So the white per-light ambient the games set contributes nothing, and
+`Scene3d::MaterialFor` (`src/scene3d/scene3d_material.h`, pinned by
+`tests/formats/scene3d_material_tests.cpp`) keeps the material ambient black.
+Until 2026-08-19 the renderer set `material.Ambient = material.Diffuse`, which was
+harmless while every document carried black light ambient and wrong (too bright)
+the moment a document carried the game's white. The channel is carried because
+the game sets it, and it matters the day a model ships with a non-black material
+ambient.
 
 `enabled` reaches the device: it rides the `SetLights` push (`Preset::Eval::LightPush`)
 into `Scene3d::Light`, and `Renderer::ApplyLights` (`src/scene3d/scene3d_render.cpp`)
@@ -330,15 +648,139 @@ everywhere in the document:
 model[<target>].{blend_mode, alpha, anim_speed, position, rotation, scale, spin_per_frame}
 sprite[<target>].{x, y, alpha, scale, blend, priority}
 camera.{eye, at, up, fov_y, near_z, far_z, aspect}
-light[<index>].{direction, diffuse, specular}
+light[<index>].{direction, diffuse, specular, ambient}
+fog.{enabled, color, start, end, density}
 shading
 sprite_split_priority
+clear_color
 ```
 
 ### render.settings (scene track, primary)
 
-`shading` (enum `texture_only` / `lit_material`) and `sprite_split_priority`
-(int 0..64). Both absent by default, meaning "no override".
+`shading` (enum `texture_only` / `lit_material`), `sprite_split_priority`
+(int 0..64) and `clear_color` (colour, each channel a HARD 0..1, T). All three
+absent by default, meaning "no override".
+
+`clear_color` is the only tweenable parameter of the command: a key list on a
+`render.settings` clip drives the frame clear over time, which is what HAPPY
+SKY's expert course select does with its 5400-frame triangle wave. A key on
+`shading` or on `sprite_split_priority` is rejected as a non-tweenable value.
+
+The resolved colour reaches the device through `PushCall::SetClearColor`, emitted
+once per frame by `EmitUnconditional` (`src/preset/eval/eval_emit.cpp`) with
+`legacy = false`, since the old host had no counterpart. `PresetHost::ApplyPushes`
+packs it to `0x00RRGGBB` with alpha 0 and `PresetHost::ClearColor()` hands it out;
+`Backend::FrameClearColor` (`src/backend/preset_clear_color.h`, a pure function
+so `preset_host_tests.cpp` can pin it without a device) decides whether the frame
+really clears with it, and `Backend::ApplyPresetClearColor` (`scene3d_backend.h`)
+writes the decision into `D3D9State::clear_color` before every `BeginFrame`: the
+scene3d backend calls it from `AdvanceFrame`, and `--preset-test` /
+`--preset-export` call it in their own frame loops, which bypass the backend.
+
+The decision: the frame clears with the preset colour whenever a preset is
+active, live and during an opaque-background export, and it does NOT during an
+export with a transparent background. `Export::StartSession` zeroes
+`D3D9State::clear_color` for EVERY export (`ApplyBgClearColor`, restored at the
+end), which is exactly why the per-frame rewrite is needed for the opaque case to
+show the colour at all; the transparent case leaves that zero alone because there
+the clear is backdrop and the coverage-derived alpha depends on the frame staying
+black. With no
+preset active the scene3d backend clears with 0 again, which is what it always
+did: without that reset the last preset's colour would outlive the preset and
+tint the scene and package browsers after an unload.
+
+### scene.fog (scene track, primary)
+
+| Param | Kind | Default | T |
+|-------|------|---------|---|
+| `enabled` | bool | `true` | |
+| `color` | colour, each channel 0..1 | `[1, 1, 1]` | T |
+| `start` | float, world units | `0` | T |
+| `end` | float, world units | `1` | T |
+| `density` | float 0..1 | `0.5` | T |
+
+Its own primary family, so two `scene.fog` clips may not overlap unless their
+gates are mutually exclusive, and it may sit on the scene track beside
+`render.settings`, `rhythm.beat` and `rng.seed`. A document that states no
+`scene.fog` clip has NO fog on that frame, which is what every preset written
+before HAPPY SKY wants: the parameter defaults above are the game's own fog
+defaults, not the document's, and they only take effect once a clip turns fog on.
+
+The resolved state is `FrameState::fog` (`enabled`, `color`, `start`, `end`,
+`density` and the clip it came from), pushed every frame as
+`PushCall::SetFog` by `EmitUnconditional` with `legacy = false`, applied by
+`PresetHost::ApplyPushes` through `Scene3dHost::SetFog` into `Scene3d::Renderer`.
+The renderer brackets the two model passes with it and nothing else, so the 2D
+layers are never fogged: `Scene3d::FogOnWrites` (`src/scene3d/scene3d_fog.h`, a
+pure function so `tests/formats/scene3d_fog_tests.cpp` can pin the exact values
+without a device) gives `FOGENABLE = TRUE`, `FOGCOLOR = 0x00RRGGBB` with the alpha
+byte dropped, `FOGSTART`, `FOGEND`, `FOGDENSITY` clamped to 0..1,
+`FOGTABLEMODE = D3DFOG_NONE`, `FOGVERTEXMODE = D3DFOG_LINEAR` and
+`RANGEFOGENABLE = TRUE` (that last one is the single state the game sets once at
+device init, in its fog-defaults routine, rather than per apply; the renderer folds
+it into the on-list because nothing ever clears it and it is idempotent); `Scene3d::FogOffWrites` clears the vertex mode, the table
+mode and the enable after the passes, unconditionally, exactly as the game's own
+fog-off routine does. `Scene3dHost::Unload` resets the renderer's fog to the
+disabled default, for the same reason the backend resets the clear colour: every
+load path runs `Unload` first, so a preset's fog cannot outlive it and fog the
+scene or package browser afterwards. That reset has no device-free seam and is
+checked by looking at the screen, unlike the state values themselves. With
+`FOGTABLEMODE = NONE` and a LINEAR vertex mode the
+density never reaches the fade, which is why its help text calls it inert: it is
+carried because the game carries it. HAPPY SKY's engine, the apply order and the
+RANGEFOG default are in `IIDX/happy_sky_3d_screens.md` "2. Fog".
+
+### render.clear_cycle (scene track, modifier)
+
+| Param | Kind | Default | T |
+|-------|------|---------|---|
+| `base` | three levels 0..255 | `[0, 0, 0]` | |
+| `strobe_color` | three levels 0..255 | `[48, 48, 48]` | |
+| `strobe_period` | int frames | `600` | |
+| `strobe_window_a` | int frames | `25` | |
+| `strobe_window_b_offset` | int frames | `300` | |
+| `strobe_window_b` | int frames | `15` | |
+| `strobe_skip_every` | int frames | `3` | |
+| `ramp_period` | int frames | `800` | |
+| `ramp_length` | int frames | `300` | |
+| `ramp_peak` | level 0..255 | `128` | |
+
+The extra-stage clear-colour flicker of IIDX 12 music select, as data. Nothing
+here is tweenable: the game computes the colour with C integer division on 8-bit
+channel levels, so the command carries the same integers. `base` and
+`strobe_color` are stored as `Vec3` (the schema's only 0..255 colours; every other
+`rgb` field is 0..1) and truncated to integers on evaluation, so a fractional
+level entered in the editor is silently floored. `ClearCycleLevels` (file-local
+in `src/preset/eval/eval_scene.cpp`) reproduces the arithmetic bit for bit, with
+`ClearCycleColor` dividing the result
+by 255 on the way into the document's 0..1 clear colour. `t` is the ABSOLUTE
+document frame, not the clip frame, because the game reads its own screen frame
+counter:
+
+```
+levels = base
+if ((t % strobe_period < strobe_window_a ||
+     (t + strobe_window_b_offset) % strobe_period < strobe_window_b) &&
+    t % strobe_skip_every != 0)
+    levels = strobe_color
+if (t % ramp_period < ramp_length)
+    levels = grey(((ramp_length - t % ramp_period) * ramp_peak) / ramp_length)
+```
+
+The ramp is written LAST and therefore wins wherever it overlaps a strobe window,
+which is the game's order. A zero `strobe_period`, `ramp_period` or `ramp_length`
+turns that half of the cycle off instead of dividing by zero, and a
+`strobe_skip_every` of 0 means "never skip", so the window flashes on every frame.
+
+It is a MODIFIER, in the same sense `rhythm.jitter` is: it has no family, it may
+overlap anything, and it is NOT required to sit over a `render.settings` clip. The
+rule matches the other scene-track modifier rather than `sprite.scroll`'s
+coverage check, because the cycle writes an absolute colour rather than offsetting
+one, so it is meaningful on its own. It still WINS over any `render.settings`
+value on the frames it runs, and it wins regardless of track or clip order:
+`ResolveFrame` records the winning clip in `FrameState::clear_cycle` while it
+walks the tracks and evaluates it after the walk, writing `FrameState::clear_color`
+and `clear_from`, so `PushCall::SetClearColor` carries the cycle's colour.
 
 ### rng.seed, rhythm.beat, rhythm.jitter (scene track)
 
@@ -606,9 +1048,13 @@ Errors:
 
 Warnings:
 
-- A `model.tween` or `model.motion` clip with no `model.draw` of the same target
-  under any part of it: a tween never makes a model visible, so the clip changes
-  nothing. `camera.tween` is exempt, since it modifies the document camera.
+- A `model.tween`, `model.motion` or `model.ease` clip with no `model.draw` of the
+  same target under any part of it: a tween never makes a model visible, so the
+  clip changes nothing. `camera.tween` is exempt, since it modifies the document
+  camera.
+- A `camera.ease` clip with no `camera.set` under it. This one is a warning and not
+  an error because the ease still runs: it arms from the DOCUMENT camera instead of
+  a clip's pose, which is a working but usually unintended authoring state.
 - A modifier track for a target that sits ABOVE that target's draw track in
   `tracks` order, and is therefore evaluated before it.
 - A `blend` key on a `sprite.animate` clip.
@@ -696,7 +1142,9 @@ the upper clamp to the evaluator when the document has no length of its own.
    not match the selected choice skipped, the primary of a family first and its
    modifiers after it in clip order. An `option.select` event clip on the resolved
    frame fires here, after the drop, and the frame is resolved again so its gates
-   see the new choice.
+   see the new choice. A `render.clear_cycle` clip is evaluated after the whole
+   track walk rather than in clip order, so its colour wins over every
+   `render.settings` value on the frames it runs whatever order the tracks sit in.
 3. Reset the per model spin accumulator of every model whose winning `model.draw`
    primary now has a different `start`, and arm the kick multiplier of every model
    whose `model.motion` clip starts on this frame to `max(1, spin_kick)`.
@@ -710,7 +1158,9 @@ the upper clamp to the evaluator when the document has no length of its own.
    order, spawn the emitters active on this frame from the beat state of the
    PREVIOUS frame, and draw the single `rhythm.jitter` random value.
 6. Motion: apply the choice values (blended from the captured start values while a
-   transition is in flight, by the counter step 2 already dropped), push the choice
+   transition is in flight, by the counter step 2 already dropped), step the
+   `camera.ease`, `camera.motion` and `model.ease` accumulators once each and write
+   them over the resolved camera, up vector, scale, position and alpha, push the choice
    camera when the selected choice names `camera.eye`,
    then per model decay the kick multiplier toward 1, integrate the resolved
    `spin_per_frame` times that multiplier into the accumulator, and push the
@@ -724,8 +1174,12 @@ the upper clamp to the evaluator when the document has no length of its own.
    and clips wrote them.
 9. Advance the two beat grids for the frame just resolved, then push the values
    that do not depend on the old host's code paths at all: alpha per visible
-   model, view, projection, `SetModelTime` per model and `SetSpriteFrame` per
-   sprite instance.
+   model, view, projection, `SetClearColor`, `SetFog`, `SetPolyGrid`,
+   `SetModelTime` per model and `SetSpriteFrame` per sprite instance.
+   `SetPolyGrid` goes out on EVERY frame, carrying `active = false` and no tiles
+   when no `poly.tile_grid` is live, so the pass clears itself the frame the clip
+   ends. Like `SetFog` it is not a legacy push, so it never reaches the golden
+   comparison.
 10. Apply the `rng.seed` events of this frame (reseed and clear the pool).
 
 ### EvalState and checkpoints
@@ -733,10 +1187,17 @@ the upper clamp to the evaluator when the document has no length of its own.
 `EvalState` (`src/preset/eval/eval_state.h`) is exactly: the frame, the `Ran3`
 stream and its seed, the particle pool, the two beat grid indices with their age,
 the last jitter draw, the pulse factor, per model the spin accumulator, the
-legacy-parity accumulator, the kick multiplier, the 3D tick and the winning draw
-and motion clip starts, per sprite instance the clock and its winning clip start,
-the option transition counter, the captured transition start values and the
-selected choices. Nothing else survives a frame.
+legacy-parity accumulator, the kick multiplier, the 3D tick, the winning draw
+and motion clip starts and the `model.ease` accumulator with its armed flag, per
+sprite instance the clock and its winning clip start, the option transition
+counter, the captured transition start values, the selected choices, the
+`camera.ease` accumulator with its armed flag and the `camera.motion` up vector
+with its own. Nothing else survives a frame.
+
+The tile grid is deliberately NOT in there: `poly.tile_grid` is a pure function of
+the frame number and the seeded lattice, exactly as `sub_42F800` rebuilds the whole
+grid from scratch every frame, so seeking to a frame and playing to it give the
+same geometry with nothing to checkpoint.
 
 A checkpoint is a copy of `EvalState` every 256 frames. `Load` discards every
 checkpoint, so replacing a document always re-simulates from frame 0: an edit
@@ -746,10 +1207,47 @@ equals 700 `RenderFrame` calls for every member of `EvalState`, and a document
 whose emitter moved to frame 10 gives the same state through `Load` plus
 `Seek(700)` as a fresh run.
 
+Restoring a checkpoint rebuilds the visible frame the same way `SetOption` does:
+resolve the frame, apply the selected choice values, then `StepEases(current_,
+false)` to lay the stored `camera.ease`, `camera.motion` and `model.ease`
+accumulators back over the resolved pose WITHOUT advancing them. The accumulators live in `EvalState`, so the
+checkpoint carries them, but the resolved frame does not: scrubbing backwards onto a
+checkpoint frame without that step snapped an eased camera back to its `camera.set`
+pose and an eased model back to its `model.draw` scale. `preset_eval_tests.cpp`
+pins it by seeking to 300 and then back to 256 and requiring the same pose a
+forward-only `Seek(256)` reaches.
+
 The 3D tick follows the host's own rule (`scene3d_host.cpp`, `RenderFrame`): it
 adds `anim_speed` per frame and RESETS TO ZERO on the first frame it exceeds
 `max_time`, so it is not a modulo. The IIDX RED attract core reaches exactly
 240 ticks at frame 320, is zero at 321, and is `0.75 * (502 - 321)` at frame 502.
+
+That counter reset is the renderer's, not the game's, and it is harmless only
+because of what `max_time` is. The game never wraps its per-slot clock
+(`obj+164` accumulates forever); instead EVERY KEY TRACK wraps on its own last
+key time when it is sampled: HAPPY SKY's quaternion sampler `sub_497BD0` (and its
+scale / position siblings) does `t = fmod(anim_time, last_key_time); if (t < 0)
+t += last_key_time;` before it searches the key pair, so a 30-tick track inside a
+scene whose other model runs 300 ticks loops ten times per 300. `Scene3d::Locate`
+(`src/scene3d/anim.cpp`, `WrapToTrack`) does the same, and `Scene3d::LoopTicks`
+makes a scene's `max_time` the least common multiple of all its tracks' last key
+times rather than their maximum, so the counter reset lands on a frame where every
+track is at phase zero anyway. Until 2026-08-19 the sampler HELD a track's last key
+and `max_time` was the plain maximum: IIDX 12 music select's `sky.xz` (30 ticks)
+froze after half a second of every 300-tick `muring` cycle, and RED's 60-tick core,
+flame, shield and r_side clips held still for three quarters of the 240-tick gate
+loop. `tests/formats/scene3d_anim_tests.cpp` pins both rules. The converted
+builds' `asset_lengths.json` values are unchanged by the LCM (240, 480, 60, 120,
+60 and 240 already divide every track); HAPPY SKY's `sky` became 600 (30, 300 and
+the unbound `muyaji` 120) and `dan` 3000 (600, 1000, 1500).
+
+It also runs while a model is HIDDEN, because `SeedHiddenMaterial` gives a slot the
+`anim_speed` of its earliest `model.draw` before that clip starts. That is the
+game: `sub_496730` advances `obj+164 += obj+156` for every drawn frame regardless
+of the visibility flag. So "the clock ran while the model was hidden" needs no
+parameter at all, and `clip_time` stays at its `continue` default. HAPPY SKY's
+staff roll relies on it: `sky/sky.xz` is hidden until frame 200 and appears with
+its clock already at tick 200, which `preset_defaults_tests.cpp` pins.
 
 ### The legacy-parity accumulator
 
@@ -918,8 +1416,24 @@ of a later milestone can duplicate one without a parse step.
 | IIDX RED dan, expert, mode and music select | `src/preset/defaults/iidx11_select_defaults.cpp` | `Iidx11SelectDefaults` |
 | The ending, markers 1 to 9 plus the document header | `src/preset/defaults/iidx11_ending_a_defaults.cpp` | `Iidx11Ending`, file-local `Iidx11EndingPartA` |
 | The ending, markers 10 to 18 | `src/preset/defaults/iidx11_ending_b_defaults.cpp` | `Iidx11EndingPartB` |
+| IIDX 12 HAPPY SKY, expert course select and the build list | `src/preset/defaults/iidx12_defaults.cpp` | `Iidx12Defaults` |
+| IIDX 12 HAPPY SKY, mode select | `src/preset/defaults/iidx12_mode_defaults.cpp` | `Iidx12ModeSelect` |
+| IIDX 12 HAPPY SKY, music select | `src/preset/defaults/iidx12_music_defaults.cpp` | `Iidx12MusicSelect` |
+| IIDX 12 HAPPY SKY, class course select | `src/preset/defaults/iidx12_dan_defaults.cpp` | `Iidx12DanSelect` |
+| IIDX 12 HAPPY SKY, the staff roll | `src/preset/defaults/iidx12_ending_defaults.cpp` | `Iidx12Ending` |
+| IIDX 12 HAPPY SKY, the two 2D-only screens | `src/preset/defaults/iidx12_2d_defaults.cpp` | `Iidx12TwoD` |
+
 | The registry over built-ins plus user files | `src/preset/doc/preset_registry.h/.cpp` | `Registry::Load`, `ForBuild`, `Find`, `Problems`, `UserRoot`, `LoadFile`, `Entry`, `ScanStatus` |
 | The headless document tools behind the CLI | `src/preset/preset_tools.h/.cpp` | `DumpDefaults`, `ExportJson`, `Validate` |
+Constants read out of a game executable are authored as the game's own float
+BITS (`std::bit_cast<float>(0x3EDE3D44U)` and friends in `iidx12_mode_defaults.cpp`)
+when a decimal literal would not round-trip to them or would trip a gate: the
+mode-select camera height 0.4340612 is within the `modernize-use-std-numbers`
+tidy check's tolerance of log10(e) and gets rejected as a literal, and three of
+the fly-in endpoints (`0x3CF7EBC8`, `0xBE8D0F2E`, `0x3F66A04C`) are one or two ULP
+away from their shortest decimals. The bytes are the fact; the decimal is a
+rendering of it. `IIDX/happy_sky_3d_screens.md` records where each word lives.
+
 
 ### How the defaults were produced
 
@@ -1083,7 +1597,25 @@ not error), unknown option and unknown choice gates, a `param.override` id and a
 choice value key outside the grammar, a user id equal to a built-in id, a command
 on the wrong track kind, an event clip carrying an end, a `render.settings` clip
 that leaves its optional enum absent, hard versus soft ranges, and duplicate clip
-ids with unsorted markers.
+ids with unsorted markers, the `fog.*` parameter ids and the rejection of an
+unknown one, two overlapping `scene.fog` primaries versus two that abut, and a
+`render.clear_cycle` standing alone with no `render.settings` under it.
+
+`tests/game/fixtures/asset_lengths.json` carries the scene3d `max_time` of every
+asset a built-in names; M4 added `data/graph/model/sky` (300) and
+`data/graph/model/extra_st` (640). A missing entry fails the host stub loudly
+rather than silently deriving a zero length.
+
+Its `package2d` half is keyed by package DIRECTORY, and IIDX RED and HAPPY SKY ship
+different art at the same `data/graph/sys/title` path: RED's `TITLE` is 1736 frames
+and its `TITLE_TAIKI` 720, HAPPY SKY's are 422 and 480. The fixture keeps RED's,
+because RED's are the ones the golden replay reads, and adds only what does not
+collide: `LOGO_IN` (120, HAPPY SKY only) and `data/graph/sys/card` `CARD_BG` (120,
+the same on both games). Nothing is lost by that, because the lengths are consulted
+only by `Evaluator::DerivedLength`, which runs when a document has no `length` of
+its own, and every HAPPY SKY document carries one. At run time the map is built per
+loaded game from the packages themselves (`PresetHost::BuildLengths`), so the two
+games never share a map outside this fixture.
 
 ## Layer verdicts and the layer preview at runtime
 

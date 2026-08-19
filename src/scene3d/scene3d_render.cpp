@@ -3,6 +3,8 @@
 #include "scene3d/anim.h"
 #include "formats/xfile.h"
 #include "scene3d/scene3d.h"
+#include "scene3d/scene3d_fog.h"
+#include "scene3d/scene3d_material.h"
 #include "support/log.h"
 
 #include <d3d9.h>
@@ -71,6 +73,7 @@ bool Renderer::Init(IDirect3DDevice9* device, const Scene& scene) {
     dev_ = device;
     if (dev_ == nullptr) return false;
 
+    poly_.Init(dev_);
     textures_.assign(scene.tiles.size(), nullptr);
     for (size_t i = 0; i < scene.tiles.size(); i++) {
         const auto& tile = scene.tiles[i];
@@ -95,6 +98,7 @@ bool Renderer::Init(IDirect3DDevice9* device, const Scene& scene) {
 }
 
 void Renderer::Release() {
+    poly_.Release();
     for (auto*& t : textures_) {
         if (t != nullptr) t->Release();
         t = nullptr;
@@ -175,6 +179,10 @@ void Renderer::ApplyLights(const std::vector<Light>& lights) {
                           .g = lights[i].specular[1],
                           .b = lights[i].specular[2],
                           .a = 1.0F};
+        light.Ambient = {.r = lights[i].ambient[0],
+                         .g = lights[i].ambient[1],
+                         .b = lights[i].ambient[2],
+                         .a = 1.0F};
         light.Direction = {
             .x = lights[i].direction[0], .y = lights[i].direction[1], .z = lights[i].direction[2]};
         dev_->SetLight(i, &light);
@@ -201,14 +209,20 @@ void Renderer::ApplyBlendMode(int mode) {
 }
 
 void Renderer::ApplyMaterial(const DrawChunk& chunk, float alpha) {
+    const MaterialColors colors = MaterialFor(chunk.diffuse, chunk.emissive, alpha);
     D3DMATERIAL9 material{};
-    material.Diffuse = {.r = chunk.diffuse[0],
-                        .g = chunk.diffuse[1],
-                        .b = chunk.diffuse[2],
-                        .a = chunk.diffuse[3] * alpha};
-    material.Ambient = material.Diffuse;
-    material.Emissive = {
-        .r = chunk.emissive[0], .g = chunk.emissive[1], .b = chunk.emissive[2], .a = 1.0F};
+    material.Diffuse = {.r = colors.diffuse[0],
+                        .g = colors.diffuse[1],
+                        .b = colors.diffuse[2],
+                        .a = colors.diffuse[3]};
+    material.Ambient = {.r = colors.ambient[0],
+                        .g = colors.ambient[1],
+                        .b = colors.ambient[2],
+                        .a = colors.ambient[3]};
+    material.Emissive = {.r = colors.emissive[0],
+                         .g = colors.emissive[1],
+                         .b = colors.emissive[2],
+                         .a = colors.emissive[3]};
     dev_->SetMaterial(&material);
 }
 
@@ -244,8 +258,22 @@ void Renderer::Draw(const Scene& scene, float camera_time, int width, int height
     ToD3D(view_, view);
     dev_->SetTransform(D3DTS_VIEW, &view);
 
+    EnterFog();
     DrawPass(scene, false);
     DrawPass(scene, true);
+    poly_.Draw(style_ == RenderStyle::LitMaterial);
+    LeaveFog();
+}
+
+void Renderer::EnterFog() {
+    if (!fog_.enabled) return;
+    for (const FogWrite& write : FogOnWrites(fog_))
+        dev_->SetRenderState((D3DRENDERSTATETYPE)write.state, write.value);
+}
+
+void Renderer::LeaveFog() {
+    for (const FogWrite& write : FogOffWrites())
+        dev_->SetRenderState((D3DRENDERSTATETYPE)write.state, write.value);
 }
 
 void Renderer::DrawPass(const Scene& scene, bool blended) {

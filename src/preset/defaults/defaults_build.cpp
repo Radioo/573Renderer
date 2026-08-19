@@ -60,7 +60,12 @@ CameraSpec WideLensAt(Vec3 eye, Vec3 at) {
 }
 
 std::vector<LightSpec> StandardLights() {
-    return {LightSpec{.direction = {1.0, 1.0, 1.0}}, LightSpec{.direction = {-1.0, -1.0, -1.0}}};
+    return {LightSpec{.direction = {1.0, 1.0, 1.0},
+                      .specular = {0.0, 0.0, 0.0},
+                      .ambient = {1.0, 1.0, 1.0}},
+            LightSpec{.direction = {-1.0, -1.0, -1.0},
+                      .specular = {0.0, 0.0, 0.0},
+                      .ambient = {1.0, 1.0, 1.0}}};
 }
 
 Asset Scene3dAsset(std::string id, std::string dir) {
@@ -83,12 +88,20 @@ Track CameraTrack(std::string id, std::vector<Clip> clips) {
     return Named(std::move(id), TrackKind::Camera, {}, std::move(clips));
 }
 
+Track LightTrack(std::string id, std::vector<Clip> clips) {
+    return Named(std::move(id), TrackKind::Light, {}, std::move(clips));
+}
+
 Track FxTrack(std::string id, std::vector<Clip> clips) {
     return Named(std::move(id), TrackKind::Fx, {}, std::move(clips));
 }
 
 Track SceneTrack(std::string id, std::vector<Clip> clips) {
     return Named(std::move(id), TrackKind::Scene, {}, std::move(clips));
+}
+
+Track PolyTrack(std::string id, std::vector<Clip> clips) {
+    return Named(std::move(id), TrackKind::Poly, {}, std::move(clips));
 }
 
 void AppendPart(Document& document, DocumentPart part) {

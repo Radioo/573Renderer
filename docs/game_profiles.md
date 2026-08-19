@@ -30,6 +30,50 @@ binary token stream to the text form (`src/formats/xfile_binary.cpp`) and reuses
 the existing parser rather than growing a second one. Token table and the
 transcoding pitfalls: `IIDX/binary_x_models.md`.
 
+## IIDX 12 (HAPPY SKY) - its own profile ahead of the generic IIDX row
+
+HAPPY SKY runs the same engine-free `scene3d` backend as RED and DistorteD at
+640x480, and its `sys/` textures are plain LZSS `.gcz` like RED's, not Blowfish
+like DistorteD's. It still needs a profile of its own for one reason: the
+directory-substring detection scans `kProfiles` in order and returns the FIRST
+match, and a folder called "IIDX 12 - HAPPY SKY" contains the generic "iidx"
+substring of the `iidx33` row. Before this profile existed, an auto-detected
+HAPPY SKY install booted as `afp_modern` at 1920x1080 and died looking for
+`avs2-core.dll`; `--profile iidx13` was the workaround. The `iidx12` row is
+therefore placed BEFORE the `iidx13` ("distorted") row and far ahead of the
+generic "iidx" one, with `dir_substring = "happy sky"`:
+
+| field | value |
+|---|---|
+| `name` | IIDX 12 |
+| `slug` | `iidx12` |
+| `dir_substring` | `happy sky` |
+| `backend_id` | `scene3d` |
+| `game_dll` | `bm2dx.exe` |
+| default render size | 640x480 |
+
+The matching `GameFingerprint::Build` row identifies the JAD executable:
+
+| field | value |
+|---|---|
+| `id` | `iidx12` |
+| `name` | IIDX 12 HAPPY SKY (JAD) |
+| `file` | `bm2dx.exe` |
+| `size` | 1105920 bytes |
+| `crc` | 0x122D2CC3 |
+| `profile_slug` | `iidx12` |
+
+`tests/game/game_profile_tests.cpp` pins both. The CRC case builds a synthetic
+1105920-byte file rather than depending on a game install: 1105916 bytes of `A`
+followed by the four bytes `AD E9 63 32`, which are the unique tail that drives
+CRC32 to 0x122D2CC3 (CRC32 is affine, so the last four bytes of a fixed prefix
+are solvable in closed form). Change the fill byte and the tail has to be
+recomputed. The same test also writes a wrong-CRC file of the right size and
+requires the patched-copy path to still resolve to `iidx12`.
+
+The 3D screen system itself, its model slots, the light setter identities and the
+re-find recipes live in `IIDX/happy_sky_3d_screens.md` in the notes repo.
+
 ## IIDX 13 (DistorteD) - same backend, Blowfish textures
 
 DistorteD shares the whole IIDX 17 stack below (`scene3d` backend, 640x480, GC
@@ -1190,8 +1234,11 @@ the `INFORMATION` bar that share its one `MODE_BG_LOOP` animation. Every one of
 those names needs a `chrome` row in `docs/preset_layers.md`.
 
 Built-in presets are split per build under `src/preset/defaults/`
-(`iidx10_defaults.cpp`, `iidx11_defaults.cpp`, `iidx11_select_defaults.cpp` and the
-two ending halves), each a function returning a `Preset::Doc::Document`;
+(`iidx10_defaults.cpp`, `iidx11_defaults.cpp`, `iidx11_select_defaults.cpp`, the
+two ending halves, `iidx12_defaults.cpp`, `iidx12_mode_defaults.cpp`,
+`iidx12_music_defaults.cpp`, `iidx12_dan_defaults.cpp`,
+`iidx12_ending_defaults.cpp` and `iidx12_2d_defaults.cpp`), each a function
+returning a `Preset::Doc::Document`;
 `defaults.cpp` aggregates them for `BuiltIns()`, and `Preset::Doc::Registry`
 resolves a build's list out of those plus the user documents in
 `presets/<build>/*.json` (docs/preset_document.md). Registered IIDX RED screens
@@ -1209,11 +1256,86 @@ resolves a build's list out of those plus the user documents in
 | `iidx11-login` | `gate` at alpha 0.8 + `LOGIN` | 1200 frames |
 | `iidx11-ending` | `core` + `flame` over the `END_BG1` cell | 1200 frames |
 
+Every IIDX 10 and RED preset carries the same two directional lights, `(1,1,1)` and
+`(-1,-1,-1)`, diffuse white, **ambient white and specular black**. That is what the
+title screen of each game writes every frame and nothing after it changes: the light
+array is 8 x 104-byte `D3DLIGHT8`, the boot init memsets it (so `Specular` stays
+black) and only three setters exist, at +4 diffuse, +36 ambient and +64 direction.
+Until 2026-08-19 the presets carried white SPECULAR and black ambient because the
+RED and IIDX 10 notes had named the +36 setter "specular"; specular is inert on both
+games (`D3DRS_SPECULARENABLE` is never enabled). The white ambient is inert as well:
+D3DX8's mesh loader writes every material's `Ambient` as `(0, 0, 0, 1)` and nothing
+in these games changes it, so the per-light ambient multiplies to nothing and the
+models are lit by diffuse and emissive alone; `Scene3d::MaterialFor` keeps the
+material ambient black for that reason (docs/preset_document.md, light.set). The
+correction therefore changes what the documents RECORD, not what they render. See
+`IIDX/red_3d_screens.md`, `IIDX/tenth_style_music_select.md` and docs/preset_golden.md.
+
 RED needs one thing IIDX 10 did not: its music select calls the projection setter
 with an EXPLICIT aspect (850/480) that does not match the 640x480 framebuffer, so
 the document's `camera.aspect` (`Preset::Doc::CameraSpec::aspect`, and
 `Scene3d::Projection::aspect`) overrides the derived-from-render-size default when
 it is a number rather than `"auto"`.
+
+Registered IIDX 12 HAPPY SKY screens (`IIDX/happy_sky_3d_screens.md`), built one
+milestone at a time per the plan in `docs/iidx12_scene_report.html`:
+
+| id | content | natural length |
+|---|---|---|
+| `iidx12-expert-select` | `ex_sky` additive over the breathing clear colour, two lights with white ambient, no 2D layer | 2760 frames |
+| `iidx12-mode-select` | `harfsky` opaque over a white clear, the 40-frame sin(t) camera fly-in as a key per frame, no 2D layer | 1201 frames |
+| `iidx12-music-select` | a `stage` option: NORMAL is `sky` opaque plus `muring` additive at alpha 0.2 under white linear fog over a white clear, EXTRA is `extra_bg` additive at double clip rate with fog off over the strobing black clear; no 2D layer | 1800 frames |
+| `iidx12-dan-select` | a `grade` option over six model draws from `dan` (two of them the same `dan_sea2` mesh), four lights at slots 0, 1, 2 and 5 with slots 3 and 4 off, `DAN_BG` behind the 3D at priority 30, `model.ease` and `camera.ease` per choice and an `AWA1` bubble emitter on the top grades | 1260 frames |
+| `iidx12-ending` | `sky` at alpha 0.5 in draw mode 2 from frame 200 under white 50-to-80 fog over a white clear, a `camera.motion` roll of 0.2 deg a frame on a camera that never moves, a `model.tween` speed ramp 1.0 to 7.975 over the last 279 frames, and a `poly.tile_grid` of nine BGA-movie quads with a `lattice` seed option; no 2D layer | 5112 frames |
+| `iidx12-attract` | 2D only: one sprite track running `TITLE` (hold last) 0..422, `LOGO_IN` (hold last) 423..543 and `TITLE_TAIKI` (loop) from 544, all from the `title` package at priority 15 over a black clear, with 39 hidden parts covering the wordmark, the advert block, the version marks and the coin blinker; no model, no light, no camera work | 2461 frames |
+| `iidx12-card-in` | 2D only: `CARD_BG` from the `card` package, hold last at priority 31 over a black clear, hiding only `T_REMAIN`; the background of card in, card out and new player invited alike | 3600 frames |
+
+HAPPY SKY is the first build whose presets carry a non-black `render.clear_color`
+and light `ambient`. The expert preset sees its sky plane from inside with the same
+850/480 lens RED uses (its camera is byte for byte HAPPY SKY's own extra-stage
+music-select camera) and keys its clear colour on the `render.settings` clip because
+the game recomputes it every frame; the mode select preset keeps the device's own
+640/480 aspect (`auto`), a negative fov literal and a static white clear.
+
+Class course select is the first preset to draw ONE mesh TWICE (its track `target`
+is an instance name and `model.draw`'s `model` is the mesh, docs/preset_document.md),
+the first with a 2D layer BEHIND the 3D on this build, the first to need the two
+geometric-ease commands, and the first with a `burst` emitter. Its `system` package
+supplies the `AWA1` bubble cell: the game's particle record names the cell `AWA1`
+and the leading `C` earlier reports read is the top byte (0x43) of the preceding
+float 335.0 in the same 32-byte record.
+
+The staff roll is the first preset to need a `poly` track at all, and the first
+whose content is not in the game's own asset tree: its tiles are textured with the
+BGA movie of whatever song was played last, so the document names the one file the
+game itself falls back to (`data/movie/08ra.4`) and the tiles degrade to untextured
+with a logged warning when it is missing. It is also the first preset with a
+stateful CAMERA (the up vector integrates and is never reset), the first to leave a
+game screen's 2D out entirely on a chrome verdict (docs/preset_layers.md), and the
+first whose `lattice` option exists because the game's own value is not
+reproducible rather than because the player picks it.
+
+The title attract and the card hall are the first HAPPY SKY presets with NO 3D at
+all, which is not a gap: `IIDX/happy_sky_re/screens/two_d_only.md` re-checked the
+xrefs of every model, camera, light, fog and clear-colour entry point against every
+function in the title, card, name-entry and game-over ranges and found none. So
+those documents carry no `scene3d` asset, no `lights` and no camera clip, and
+`PresetHost::LoadAssets` never starts the 3D host for them (`ReportMotion` in
+`--preset-test` reports "no visible 3D model" and exits 0 instead of the exit-8
+"nothing moves" failure, which is a models-only check). The attract is also the
+first preset to run three clips of three DIFFERENT animations through ONE sprite
+track, which is what the game does: `sub_438970` unregisters the previous layer and
+registers the next in the same slot, so each clip carries `time: restart` to match
+the fresh `record+8 = 0` playhead.
+
+Music select is also the first preset to need FOG (`scene.fog`) and the first to
+drive its clear colour from an integer machine rather than from tween keys
+(`render.clear_cycle`); both commands are in `docs/preset_document.md`. It is the
+only HAPPY SKY screen so far whose 3D branches on player state, and exactly one
+thing branches it: the extra-stage flag. Mode, difficulty, category, side, cursor
+row, 1P/2P/DP and the stage number change 2D chrome only, so the preset exposes a
+single `stage` option with an instant (zero frame) transition, because the game's
+own switch is an init-time branch and not a blend.
 
 Two more RED-only differences: it inherits TWO directional lights from the title
 update rather than one, and its attract and ending screens spin several models at

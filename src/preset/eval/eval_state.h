@@ -1,5 +1,7 @@
 #pragma once
 
+#include "preset/eval/eval_camera_lights.h"
+#include "preset/eval/eval_ease.h"
 #include "preset/eval/eval_particles.h"
 #include "preset/eval/eval_tween.h"
 #include "preset/eval/frame_state.h"
@@ -18,6 +20,7 @@ struct ModelRuntime {
     float tick = 0.0F;
     int draw_start = -1;
     int motion_start = -1;
+    ModelEase ease = {};
 };
 
 struct CapturedValue {
@@ -41,6 +44,8 @@ struct EvalState {
     int transition_from = -1;
     std::vector<int> choices;
     std::vector<CapturedValue> captured;
+    CameraEase camera_ease;
+    CameraMotion camera_motion;
 };
 
 }

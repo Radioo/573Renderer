@@ -7,7 +7,9 @@ against documents the converter produced, and M8 re-pointed the same comparison 
 the built-in default documents of `src/preset/defaults/`. A recorded VALUE is never
 re-recorded to make a comparison pass; the fixture is only ever re-recorded to ADD
 to the format, from the old host, and only when every value it already holds comes
-back identical.
+back identical. The recording has changed exactly twice since, both documented
+below with the frames and the proof: the deterministic-math re-record, and the
+HAPPY SKY light-channel transformation.
 
 Status: the asset table, the frozen legacy view and the fixtures are in the tree,
 and both the coverage test and the evaluator comparison run in the `ci` label. The
@@ -95,7 +97,7 @@ already in the tree; none is an assumption.
 
 | Key | Value | Source |
 |-----|-------|--------|
-| `data/graph/texture/music` | 240 | `573Renderer.exe --scene3d-test <game>/data/graph/texture/music out.png 1`, the `[Scene3d] scene 'music': ... 240 ticks` line. `max_time` is the maximum `max_key_time` over the scene's models (`src/scene3d/scene3d.cpp`, `LoadModels`) |
+| `data/graph/texture/music` | 240 | `573Renderer.exe --scene3d-test <game>/data/graph/texture/music out.png 1`, the `[Scene3d] scene 'music': ... 240 ticks` line. `max_time` was the maximum `max_key_time` over the scene's models when this was recorded; since 2026-08-19 it is the least common multiple of every key track's last key time (`Scene3d::LoopTicks`), which is the same 240 here and for every other converted dir (`src/scene3d/scene3d.cpp`, `LoadModels`) |
 | `data/graph/texture/cube_x` | 60 | same command on `cube_x` |
 | `data/graph/texture/ex01` | 480 | same command on `ex01` |
 | `data/graph/texture/tranbox` | 120 | same command on `tranbox` |
@@ -103,6 +105,23 @@ already in the tree; none is an assumption.
 | `data/graph/model/red` | 240 | same command on IIDX RED's `data/graph/model/red`; cross-checked by `docs/export_pipeline.md`, which states the ending tail is `240 / 0.75 = 320` |
 | `data/graph/sys/title` `TITLE` | 1736 | `573Renderer.exe --preset-test <game> iidx11-attract out.png 1740`, the `[Gc2d] layer 'TITLE': 1736 frames` line; the same 1736 is quoted in `docs/preset_states.md` for the attract phase boundary |
 | `data/graph/sys/title` `TITLE_TAIKI` | 720 | same run, the `[Gc2d] layer 'TITLE_TAIKI': 720 frames` line, reached once the attract preset enters its last phase; `docs/export_pipeline.md` states attract is `1736 + 720 = 2456` |
+
+| `data/graph/model/ex_bg` | 1000 | `--scene3d-test` on HAPPY SKY's `ex_bg`, the `max ticks` line (HAPPY SKY, not in the golden replay) |
+| `data/graph/model/mode_bg` | 1500 | same, `mode_bg` |
+| `data/graph/model/sky` | 600 | same, `sky`: the loop LCM of sky.xz 30, muring.xz 300 and the unbound muyaji.xz 120 |
+| `data/graph/model/extra_st` | 640 | same, `extra_st` |
+| `data/graph/model/dan` | 3000 | same, `dan`: the loop LCM of 600 (sea), 1000 (sky) and 1500 (light_bg) |
+| `data/graph/sys/title` `LOGO_IN` | 120 | HAPPY SKY's `title` package (`--gc2d-sheet`), used by `iidx12-attract` |
+| `data/graph/sys/card` `CARD_BG` | 120 | HAPPY SKY's and RED's `card` package, identical on both |
+| `data/graph/sys/dan_e` `DAN_BG` | 600 | HAPPY SKY's `dan_e` package |
+
+The key is the directory, and `data/graph/sys/title` exists in BOTH installs with
+different animation lengths: RED's `TITLE` is 1736 and `TITLE_TAIKI` 720 (above),
+HAPPY SKY's are 422 and 480. The fixture keeps RED's numbers because the golden
+replay reads them; the HAPPY SKY documents carry an explicit `length`, and
+`tests/game/preset_defaults_2d_tests.cpp` builds its own `TitleLengths()` with 422,
+so nothing reads the wrong game's value today. Do not feed an iidx12 document this
+fixture without keying the table by build first.
 
 Only `TITLE_TAIKI` is actually queried by the old host (it is the one animated
 layer visible in the attract preset's last phase; the ending's `END_BG1` is not
@@ -175,7 +194,11 @@ picture of the float BITS and the FORMATTING is platform independent (nothing in
 is locale dependent); strings are quoted with `'`; `std::array<float, 3>` prints as
 `[x y z]`; the compound arguments (`proj[...]`, `light[...]`, `model[...]`,
 `sprite[...]`, `timing[...]`, `parts[...]`, `cell[...]`) are spelled out in
-`tests/game/preset_host_stubs.cpp`. The hash is over that canonical text, joined by
+`tests/game/preset_host_stubs.cpp`. `model[...]` gained a leading INSTANCE name in
+front of the mesh name when model tracks became instances
+(docs/preset_document.md); the committed fixtures are untouched by that, because
+the golden reader only checks the recorded `setup` line is present and replays the
+per-frame hashes, which carry no `ModelSetup` at all. The hash is over that canonical text, joined by
 newlines, so it is stable across runs, compilers and platforms: nothing in it is a
 pointer, an address, an unordered container order or a locale-dependent number.
 
@@ -189,7 +212,7 @@ see the proof table in `docs/support.md`. The recording and the evaluator now bo
 call `Support::Sinf` / `Support::Cosf`, which is deterministic by construction, so
 the fixture is a property of the document and not of the machine that ran it.
 
-## The one re-recording, and why
+## The first change to the recording: deterministic math
 
 The fixture was re-recorded once, on 2026-08-18, for the deterministic-math change
 and for nothing else. It is the case the rule at the top of this file allows: the
@@ -224,6 +247,79 @@ re-record by sweeping the preset's 1211 orbit angles for a printed difference
 between this machine's CRT and the correctly rounded result (frames 732, 919,
 1153); frame 121 is the remaining case, where the vendored implementation rather
 than the CRT is the one that is a last bit off the correctly rounded value.
+
+## The second change to the recording: the HAPPY SKY light channels
+
+HAPPY SKY milestone M8 (`docs/iidx12_scene_report.html`, not the editor plan's M8
+named at the top of this file) is the deliberate re-record the point above
+announced. It changed two things at once, and both are text inside the ONE
+`light[...]` token:
+
+1. `LightText` (in `tests/game/preset_push_text.cpp` and in
+   `tests/game/preset_host_stubs.cpp`, which must stay identical) now prints
+   `ambient` as a fourth vector.
+2. The converted documents' lights changed from `specular` white / `ambient` black
+   to `specular` black / `ambient` white, because that is what the game sets: on
+   both IIDX 10 and RED the light array is 8 x 104-byte `D3DLIGHT8`, the boot init
+   `memset`s each entry (leaving `Specular` at 0), writes `Type = 3`, and then
+   calls diffuse (+4), ambient (+36) and direction (+64); **no instruction anywhere
+   in either executable references the specular field**, and the title update
+   writes ambient white on lights 0 and 1 every frame. The proof is in
+   `IIDX/red_3d_screens.md` and `IIDX/tenth_style_music_select.md`.
+
+So every recorded `light[[dir][diffuse][1 1 1]]` became
+`light[[dir][diffuse][0 0 0][1 1 1]]`. Nothing else in the recording changed.
+
+**How it was applied, and why it is not a re-recording.** The old host is not in
+the tree, and patching its light table in the 61d22b7 worktree would have been
+"editing the reference so the comparison passes". Instead the recording was
+TRANSFORMED, with the transformation proven frame by frame by a throwaway test
+(`tests/game/preset_golden_relight.cpp`, run once in this change and then deleted,
+exactly like the `legacy_compat.json` extractor). For all 40 fixtures and all
+62401 frames it replayed the CHANGED documents, mapped each produced call back to
+the old three-vector light text, and REQUIREd that the result reproduce the
+recorded `hashes`, `hashes_no_transform` and every `detail` push list byte for
+byte - 125408 assertions, all passing. Only then did it write the new hashes from
+the four-vector text. Any difference outside the light token would have failed
+that check, so what landed is provably the recording with one token rewritten.
+
+One honest limit: the inverse map DROPS the ambient vector, so the proof shows that
+nothing OTHER than the light token changed; it cannot show that the ambient value is
+right, because any ambient at all would have passed it and the new hashes were then
+written from what the evaluator emitted. The authority for "ambient white" is the
+RE above and `preset_eval_tests.cpp`, not the recording. From now on the recording
+does guard it: flipping `StandardLights()` ambient back to black fails six fixtures.
+
+What changed, exactly:
+
+| Part | Files | Entries |
+|---|---|---|
+| `setup` | all 40 | the `LoadWithSetup` line and both `SetLights` lines in each |
+| `detail` | none | no detail push list contains a light: `SetLights` is only emitted by `EmitRebind` |
+| `hashes` / `hashes_no_transform` | 6 | 57 entries, all on rebind frames |
+
+| Fixture | `hashes` frames | `hashes_no_transform` frames |
+|---|---|---|
+| `iidx11-attract.json` | 501, 901, 1735 | 501, 792, 901, 1735 |
+| `iidx11-ending.json` | 70, 439, 813, 1184, 1556, 1929, 2299, 2474, 2485, 2671, 2764, 2857, 2903, 2949, 3033, 3786, 4064 | the same 17 |
+| `iidx11-expert-select.json` | 41, 399, 549 | the same 3 |
+| `iidx11-mode-select.json` | 14, 27, 39 | the same 3 |
+| `iidx11-music-select.0.json` | 34 | 34 |
+| `iidx11-music-select.1.json` | 34 | 34 |
+
+The other 34 fixtures have no clip that starts or ends after frame 0, so they never
+rebind inside the recorded range and no frame of theirs carries a `SetLights` push.
+
+One entry is deliberately NOT rewritten: `iidx11-attract.json` `hashes[792]`.
+`Adapter::Excluded` keys on `PhaseAt(record_frame + 1)`, so the excluded record
+frames are 0..500 and 792..900 - 610 of them, which is what `HiddenModelFrames`
+asserts - and record frame 792 is the first of the second span. On an excluded
+frame the recorded `hashes` entry covers `SetModelTransform` lines for models the
+evaluator does not emit at all (see "The one difference that is not reconcilable"),
+which is exactly why the comparison reads `hashes_no_transform` there instead. That
+entry is therefore not derivable and is never read, so it still carries the pre-M8
+light text. It is recorded here rather than quietly rewritten. The other two attract
+rebind frames, 501 and 901, are not excluded and were rewritten normally.
 
 ## The fixture is frozen, and how to re-record it
 
@@ -434,6 +530,53 @@ transforms are compared there too.
 Every frame of every fixture also cross-checks its detail list against
 `hashes_no_transform`, which is what stops the second hash from drifting away from
 the list it is supposed to summarise.
+
+## Presets that are not conversions are outside the fixture
+
+The fixture is the recording of the 18 documents converted from the legacy
+tables of IIDX 10 and RED. Built-ins for later builds (HAPPY SKY's `iidx12-*`
+documents, authored from the sweep in `IIDX/happy_sky_3d_screens.md`, never from
+a legacy table) have no legacy counterpart to compare against, so
+`AllDocuments()` in `tests/game/preset_defaults_golden_tests.cpp` keeps only the
+`iidx10` and `iidx11` builds and every count in that file stays at 18 documents,
+40 fixtures. Their correctness is pinned by `preset_defaults_tests.cpp` and by
+`--preset-test` on the install instead. One consequence: `iidx12_mode_defaults.cpp`
+computes its camera keys with `std::sin` in double, which is fine for a document
+whose numbers are only compared against the same computation, but it is NOT
+`Support::Sinf` (docs/support.md); a HAPPY SKY document must not be added to a
+bit-compared fixture without moving that computation onto the deterministic
+functions first.
+
+## Growing the push vocabulary without touching the fixture
+
+A milestone that adds a push kind or a light channel must leave all 40 recorded
+files byte-identical, and there are exactly two ways to do that. Both were used
+by the HAPPY SKY M1 change and both are the rule for anything after it.
+
+1. **A NEW push kind is emitted with `legacy = false`.** `PushCall::SetClearColor`
+   (M1) and `PushCall::SetFog` (M4)
+   are emitted once per frame by `EmitUnconditional`, exactly like `SetModelTime`
+   and `SetSpriteFrame`, and the comparison drops them with the rest of the
+   `legacy = false` list (`Adapter::Filter`, `preset_legacy_view.cpp`). No
+   recorded line changes, on any frame, for any preset. The alternative
+   considered and rejected was emitting the push only when a document sets a
+   non-default value: that makes the emitted push list depend on a value rather
+   than on the document's shape, so a preset that tweens back to the default
+   would silently stop pushing, and the fragility would live in the renderer
+   forever to protect a test fixture.
+2. **A NEW field on an EXISTING push is not added to the canonical text.**
+   `LightPush::ambient` rides `SetLights`, which the old host really made, so its
+   text is compared line by line. `LightText` in `tests/game/preset_push_text.cpp`
+   therefore printed only direction, diffuse and specular through M1 to M7:
+   printing ambient would have appended `[0 0 0]` to every
+   `Scene3dHost::SetLights` line of every fixture and forced a re-record for a
+   value that was black in all 18 converted documents. The cost was that a
+   difference in ambient alone was invisible to the golden comparison; it was
+   covered instead by `preset_eval_tests.cpp`, which asserts the ambient a
+   document light and a `light.set` clip put on the push. **M8 made ambient
+   non-black in every converted preset, which is the deliberate re-record this
+   rule anticipated, and the text gained the channel there** - see the section
+   below for what changed and how it was proven.
 
 Two further legacy behaviours are reproduced by the evaluator rather than
 tolerated, because the document can express them:

@@ -14,6 +14,7 @@ enum class TrackKind : uint8_t {
     Light,
     Fx,
     Scene,
+    Poly,
 };
 
 enum class CommandType : uint8_t {
@@ -33,6 +34,12 @@ enum class CommandType : uint8_t {
     RhythmBeat,
     RhythmJitter,
     OptionSelect,
+    Fog,
+    ClearCycle,
+    CameraEase,
+    ModelEase,
+    CameraMotion,
+    PolyTileGrid,
 };
 
 enum class Ease : uint8_t {
@@ -74,6 +81,12 @@ enum class Spawn : uint8_t {
     ClipStart,
     EveryFrame,
     Beat,
+    Burst,
+};
+
+enum class EaseMode : uint8_t {
+    Geometric,
+    Linear,
 };
 
 enum class Grid : uint8_t {
@@ -100,14 +113,15 @@ enum class GateKind : uint8_t {
 inline constexpr std::array<std::string_view, 3> kGateKindNames = {"is choice", "is one of",
                                                                    "is not"};
 
-inline constexpr std::array<std::string_view, 6> kTrackKindNames = {"sprite", "model", "camera",
-                                                                    "light",  "fx",    "scene"};
+inline constexpr std::array<std::string_view, 7> kTrackKindNames = {
+    "sprite", "model", "camera", "light", "fx", "scene", "poly"};
 
-inline constexpr std::array<std::string_view, 16> kCommandTypeNames = {
-    "sprite.draw",  "sprite.animate", "sprite.scroll",  "emitter",
-    "model.draw",   "model.tween",    "model.motion",   "camera.set",
-    "camera.tween", "light.set",      "param.override", "render.settings",
-    "rng.seed",     "rhythm.beat",    "rhythm.jitter",  "option.select"};
+inline constexpr std::array<std::string_view, 22> kCommandTypeNames = {
+    "sprite.draw",    "sprite.animate",  "sprite.scroll",      "emitter",      "model.draw",
+    "model.tween",    "model.motion",    "camera.set",         "camera.tween", "light.set",
+    "param.override", "render.settings", "rng.seed",           "rhythm.beat",  "rhythm.jitter",
+    "option.select",  "scene.fog",       "render.clear_cycle", "camera.ease",  "model.ease",
+    "camera.motion",  "poly.tile_grid"};
 
 inline constexpr std::array<std::string_view, 7> kEaseNames = {
     "hold", "linear", "sine_deg", "ease_in", "ease_out", "ease_in_out", "bezier"};
@@ -125,8 +139,10 @@ inline constexpr std::array<std::string_view, 5> kModelBlendNames = {"opaque", "
 inline constexpr std::array<std::string_view, 3> kPlaybackNames = {"loop", "hold_last",
                                                                    "hide_after_end"};
 
-inline constexpr std::array<std::string_view, 3> kSpawnNames = {"clip_start", "every_frame",
-                                                                "beat"};
+inline constexpr std::array<std::string_view, 4> kSpawnNames = {"clip_start", "every_frame", "beat",
+                                                                "burst"};
+
+inline constexpr std::array<std::string_view, 2> kEaseModeNames = {"geometric", "linear"};
 
 inline constexpr std::array<std::string_view, 2> kGridNames = {"a", "b"};
 

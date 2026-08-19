@@ -246,6 +246,36 @@ FieldEvent DrawScatter(const char* id, std::optional<Doc::Scatter>& value) {
     return event;
 }
 
+FieldEvent DrawBurst(const char* id, std::optional<Doc::Burst>& value) {
+    FieldEvent event = DrawOptionalBlock(id, value, "rising burst");
+    if (!value.has_value()) return event;
+    Doc::Burst burst = *value;
+    const std::array<std::pair<const char*, int*>, 9> rows = {
+        std::pair{"period base", &burst.period_base},
+        std::pair{"period span", &burst.period_span},
+        std::pair{"life drift", &burst.life_drift},
+        std::pair{"rise base", &burst.rise_base},
+        std::pair{"rise step", &burst.rise_step},
+        std::pair{"rise period", &burst.rise_period},
+        std::pair{"span x", &burst.span_x},
+        std::pair{"from y", &burst.from_y},
+        std::pair{"to y", &burst.to_y}};
+    for (const auto& [label, field] : rows)
+        event = Merge(event, DrawIntRow((std::string(id) + "_" + label).c_str(), label, *field));
+    if (event != FieldEvent::None) value = burst;
+    return event;
+}
+
+FieldEvent DrawMovie(const char* id, std::optional<Doc::MovieTexture>& value) {
+    FieldEvent event = DrawOptionalBlock(id, value, "movie file");
+    if (!value.has_value()) return event;
+    Doc::MovieTexture movie = *value;
+    RowLabel("movie");
+    event = Merge(event, DrawStringRow((std::string(id) + "_path").c_str(), movie.path));
+    if (event != FieldEvent::None) value = movie;
+    return event;
+}
+
 FieldEvent DrawOverride(const char* id, Doc::OverrideValue& value) {
     if (auto* number = std::get_if<double>(&value)) {
         return DrawDoubleRow(id, nullptr, *number, 0.01F, "");
@@ -386,6 +416,31 @@ FieldEvent DrawEnumRow(const char* id, const char* label, int& value,
 
 namespace {
 
+FieldEvent DrawVec2Row(const char* id, const char* label, Doc::Vec2& value, float speed,
+                       const char* unit) {
+    const bool labelled = label != nullptr && label[0] != '\0';
+    if (labelled && unit != nullptr && unit[0] != '\0') {
+        RowLabel((std::string(label) + "  " + unit).c_str());
+    } else {
+        RowLabel(label);
+    }
+    const std::array<const char*, 2> axes = {"_x", "_y"};
+    const float width =
+        (ImGui::GetContentRegionAvail().x - kResetColumn - ImGui::GetStyle().ItemInnerSpacing.x) /
+        2.0F;
+    FieldEvent event = FieldEvent::None;
+    for (std::size_t i = 0; i < axes.size(); i++) {
+        if (i > 0) ImGui::SameLine(0.0F, ImGui::GetStyle().ItemInnerSpacing.x);
+        auto number = (float)value[i];
+        ImGui::SetNextItemWidth(std::max(48.0F, width));
+        const bool changed = ImGui::DragFloat((std::string(id) + axes[i]).c_str(), &number, speed,
+                                              0.0F, 0.0F, "%.4f");
+        if (changed) value[i] = number;
+        event = Merge(event, Outcome(changed));
+    }
+    return event;
+}
+
 bool DrawScalar(const FormContext& context, const Doc::FieldDesc& field, const std::string& id,
                 Doc::ParamValue& value, FieldEvent& event) {
     if (auto* text = std::get_if<std::string>(&value)) {
@@ -413,12 +468,9 @@ bool DrawScalar(const FormContext& context, const Doc::FieldDesc& field, const s
         event = DrawDoubleRow(id.c_str(), std::string(field.id).c_str(), *number, speed,
                               std::string(field.unit).c_str());
     } else if (auto* pair = std::get_if<Doc::Vec2>(&value)) {
-        RowLabel(std::string(field.id).c_str());
-        auto values = ImVec2((float)(*pair)[0], (float)(*pair)[1]);
-        ImGui::SetNextItemWidth(-kResetColumn);
-        const bool changed = ImGui::DragFloat2(id.c_str(), &values.x, 1.0F);
-        if (changed) *pair = {values.x, values.y};
-        event = Outcome(changed);
+        const float speed = field.range.step > 0.0F ? field.range.step : 1.0F;
+        event = DrawVec2Row(id.c_str(), std::string(field.id).c_str(), *pair, speed,
+                            std::string(field.unit).c_str());
     } else if (auto* triple = std::get_if<Doc::Vec3>(&value)) {
         const float speed = field.range.step > 0.0F ? field.range.step : 0.01F;
         event = DrawVec3Row(id.c_str(), std::string(field.id).c_str(), *triple, speed,
@@ -452,6 +504,12 @@ bool DrawStructured(const Doc::FieldDesc& field, const std::string& id, Doc::Par
     } else if (auto* scatter = std::get_if<std::optional<Doc::Scatter>>(&value)) {
         RowLabel(std::string(field.id).c_str());
         event = DrawScatter(id.c_str(), *scatter);
+    } else if (auto* burst = std::get_if<std::optional<Doc::Burst>>(&value)) {
+        RowLabel(std::string(field.id).c_str());
+        event = DrawBurst(id.c_str(), *burst);
+    } else if (auto* movie = std::get_if<std::optional<Doc::MovieTexture>>(&value)) {
+        RowLabel(std::string(field.id).c_str());
+        event = DrawMovie(id.c_str(), *movie);
     } else {
         return false;
     }

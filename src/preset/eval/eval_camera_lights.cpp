@@ -2,6 +2,7 @@
 
 #include "preset/doc/preset_commands.h"
 #include "preset/doc/preset_document.h"
+#include "preset/eval/eval_poly.h"
 #include "preset/eval/eval_tween.h"
 #include "preset/eval/frame_state.h"
 
@@ -77,6 +78,21 @@ void SampleCameraKeys(const Doc::Clip& clip, int frame, CameraState& camera,
 
 }
 
+void StepCameraMotion(CameraState& camera, CameraMotion& runtime, bool advance) {
+    const Doc::Clip* clip = camera.from.motion;
+    if (clip == nullptr) return;
+    const auto& command = std::get<Doc::CameraMotionCmd>(clip->command);
+    if (!runtime.armed) {
+        runtime.up = camera.up;
+        runtime.armed = true;
+    } else if (advance) {
+        runtime.up =
+            RotateAbout(runtime.up, camera.eye, 0.0F, 0.0F, (float)command.up_roll_deg_per_frame);
+    }
+    camera.up = runtime.up;
+    camera.from.up = clip;
+}
+
 CameraState CameraFrom(const Doc::CameraSpec& spec, int render_w, int render_h) {
     CameraState out;
     out.eye = ToVec3f(spec.eye);
@@ -138,6 +154,7 @@ void ApplyLightSet(const Doc::Clip& clip, const Doc::LightSet& command,
     if (command.direction.has_value()) light.direction = ToVec3f(*command.direction);
     if (command.diffuse.has_value()) light.diffuse = ToVec3f(*command.diffuse);
     if (command.specular.has_value()) light.specular = ToVec3f(*command.specular);
+    if (command.ambient.has_value()) light.ambient = ToVec3f(*command.ambient);
     light.enabled = command.enabled;
     light.from = &clip;
 }

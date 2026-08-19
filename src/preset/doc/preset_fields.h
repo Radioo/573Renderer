@@ -31,7 +31,9 @@ enum class FieldKind : uint8_t {
     OrbitField,
     PulseField,
     ScatterField,
+    BurstField,
     OverrideField,
+    MovieField,
 };
 
 struct FieldDesc {

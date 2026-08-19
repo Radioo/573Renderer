@@ -4,6 +4,7 @@
 
 #include "preset_host_stubs.h"
 
+#include "backend/preset_clear_color.h"
 #include "backend/preset_command_apply.h"
 #include "formats/gcanim.h"
 #include "formats/sysidx.h"
@@ -14,6 +15,7 @@
 #include "preset/doc/preset_commands.h"
 #include "preset/doc/preset_document.h"
 #include "preset/doc/preset_enum_names.h"
+#include "preset/doc/preset_validate.h"
 #include "preset/eval/frame_report.h"
 #include "preset/eval/preset_evaluator.h"
 #include "preset/preset_asset_lengths.h"
@@ -159,7 +161,7 @@ TEST_CASE("the host pushes the document canvas into the 2D renderer", "[preset][
 
 TEST_CASE("every built-in keeps the 640x480 canvas", "[preset][host]") {
     const std::vector<Doc::Document> documents = Doc::BuiltIns();
-    REQUIRE(documents.size() == 18);
+    REQUIRE(documents.size() == 25);
     for (const Doc::Document& document : documents) {
         INFO(document.id);
         CHECK(document.render.width == 640);
@@ -229,10 +231,11 @@ TEST_CASE("the status snapshot carries an asset index with the asset names", "[p
     CHECK(index->assets[1].dir == kPackageDir);
     CHECK(index->assets[1].loaded);
     CHECK(index->assets[1].cells == std::vector<std::string>{"PTC"});
-    REQUIRE(index->assets[1].animations.size() == 2);
-    CHECK(index->assets[1].animations[0].name == "TITLE");
-    CHECK(index->assets[1].animations[0].frames == 1736);
-    CHECK(index->assets[1].animations[1].name == "TITLE_TAIKI");
+    REQUIRE(index->assets[1].animations.size() == 3);
+    CHECK(index->assets[1].animations[0].name == "LOGO_IN");
+    CHECK(index->assets[1].animations[1].name == "TITLE");
+    CHECK(index->assets[1].animations[1].frames == 1736);
+    CHECK(index->assets[1].animations[2].name == "TITLE_TAIKI");
 
     Doc::Document replaced = MakeDocument(640, 480);
     replaced.assets.erase(replaced.assets.begin() + 1);
@@ -509,6 +512,44 @@ TEST_CASE("merging two scene dirs offsets the second one's tile indices", "[pres
     CHECK(first.bounds_max[1] == Catch::Approx(2.0F));
 }
 
+TEST_CASE("an instance clones the mesh it names, never a stranger holding the same name",
+          "[preset][host]") {
+    Scene3d::Scene scene;
+    Scene3d::Model core;
+    core.name = "core";
+    core.chunks.push_back(Scene3d::DrawChunk{.frame = 0, .tile = 0, .vertices = {}, .indices = {}});
+    scene.models.push_back(std::move(core));
+    Scene3d::Model stranger;
+    stranger.name = "core_flip";
+    stranger.chunks.push_back(
+        Scene3d::DrawChunk{.frame = 0, .tile = 4, .vertices = {}, .indices = {}});
+    scene.models.push_back(std::move(stranger));
+
+    const std::vector<Scene3d::Instance> want = {
+        Scene3d::Instance{.target = "core", .model = "core"},
+        Scene3d::Instance{.target = "core_twin", .model = "core"},
+        Scene3d::Instance{.target = "core_flip", .model = "core"},
+        Scene3d::Instance{.target = "core_flip", .model = "core"},
+        Scene3d::Instance{.target = "ghost", .model = "absent"}};
+    const std::vector<Scene3d::InstanceProblem> problems =
+        Scene3d::MakeInstances(scene.models, want);
+
+    REQUIRE(scene.models.size() == 3);
+    INFO("a target that names its own mesh clones nothing, a fresh target appends one clone");
+    CHECK(scene.models[2].name == "core_twin");
+    CHECK(scene.models[2].chunks[0].tile == 0);
+    INFO("the instance carries the mesh it named, not the stranger that owned the name");
+    CHECK(scene.models[1].name == "core_flip");
+    CHECK(scene.models[1].chunks[0].tile == 0);
+
+    REQUIRE(problems.size() == 2);
+    INFO("the repeated target is cloned once, and both problems name their own instance");
+    CHECK(problems[0].index == 2);
+    CHECK_FALSE(problems[0].missing_model);
+    CHECK(problems[1].index == 4);
+    CHECK(problems[1].missing_model);
+}
+
 TEST_CASE("a capture at half the document fps advances two document frames per host frame",
           "[preset][host][export]") {
     PrepareStub();
@@ -541,5 +582,115 @@ TEST_CASE("the frame report is built only while the frame inspector asks for it"
     CHECK(report->frame == PresetHost::GetStatus().frame);
 
     PresetHost::SetFrameReportWanted(false);
+    PresetHost::Unload();
+}
+
+TEST_CASE("the host publishes the document clear colour packed with a zero alpha",
+          "[preset][host]") {
+    PrepareStub();
+    CHECK(PresetHost::ClearColor() == 0x00000000U);
+
+    Doc::Document blue = MakeDocument(640, 480);
+    blue.render.clear_color = {0.0, 48.0 / 255.0, 96.0 / 255.0};
+    REQUIRE(PresetHost::LoadDocument({}, std::make_shared<const Doc::Document>(blue)));
+    CHECK(PresetHost::ClearColor() == 0x00003060U);
+
+    PresetHost::RenderFrame(1.0F / 60.0F);
+    CHECK(PresetHost::ClearColor() == 0x00003060U);
+
+    PresetHost::Unload();
+    CHECK(PresetHost::ClearColor() == 0x00000000U);
+}
+
+TEST_CASE("the backend clears with the preset colour except in a transparent export",
+          "[preset][host][export]") {
+    const Backend::ClearInputs live{
+        .preset_active = true, .exporting = false, .bg_transparent = true, .color = 0x00FFFFFFU};
+    REQUIRE(Backend::FrameClearColor(live).has_value());
+    CHECK(*Backend::FrameClearColor(live) == 0x00FFFFFFU);
+
+    Backend::ClearInputs transparent = live;
+    transparent.exporting = true;
+    CHECK_FALSE(Backend::FrameClearColor(transparent).has_value());
+
+    Backend::ClearInputs opaque_export = transparent;
+    opaque_export.bg_transparent = false;
+    REQUIRE(Backend::FrameClearColor(opaque_export).has_value());
+    CHECK(*Backend::FrameClearColor(opaque_export) == 0x00FFFFFFU);
+
+    Backend::ClearInputs no_preset = live;
+    no_preset.preset_active = false;
+    REQUIRE(Backend::FrameClearColor(no_preset).has_value());
+    CHECK(*Backend::FrameClearColor(no_preset) == 0x00000000U);
+
+    Backend::ClearInputs no_preset_transparent_export = transparent;
+    no_preset_transparent_export.preset_active = false;
+    CHECK_FALSE(Backend::FrameClearColor(no_preset_transparent_export).has_value());
+}
+
+TEST_CASE("the host pushes the music select fog state into the 3D renderer", "[preset][host]") {
+    PrepareStub();
+    const std::vector<Doc::Document> built_ins = Doc::BuiltIns();
+    const Doc::Document* music = nullptr;
+    for (const Doc::Document& document : built_ins) {
+        if (document.id == "iidx12-music-select") music = &document;
+    }
+    REQUIRE(music != nullptr);
+    REQUIRE(PresetHost::LoadDocument({}, std::make_shared<const Doc::Document>(*music)));
+    PresetStub::Take();
+
+    PresetHost::RenderFrame(1.0F / 60.0F);
+    const std::vector<std::string> calls = PresetStub::Take();
+    INFO(PresetStub::Error());
+    CHECK(Mentions(calls, "Scene3dHost::SetFog(fog[true [1 1 1] 55 62.4 0.5])"));
+
+    PresetHost::Unload();
+}
+
+TEST_CASE("two model tracks on one mesh draw two instances with their own transforms",
+          "[preset][host]") {
+    PrepareStub();
+    Doc::Document document = MakeDocument(640, 480);
+    Doc::Track twin;
+    twin.id = "core_flip_track";
+    twin.kind = Doc::TrackKind::Model;
+    twin.target = "core_flip";
+    Doc::Clip draw;
+    draw.id = "core_flip_draw";
+    draw.start = 0;
+    draw.command = Doc::ModelDraw{.asset = "scene",
+                                  .model = "core",
+                                  .alpha = 0.5,
+                                  .position = Doc::Vec3{0.0, -0.01, 0.0},
+                                  .rotation = Doc::Vec3{3.14, 0.0, 0.0}};
+    twin.clips.push_back(std::move(draw));
+    document.tracks.push_back(std::move(twin));
+    REQUIRE(Doc::Validate(document).empty());
+
+    REQUIRE(PresetHost::LoadDocument({}, std::make_shared<const Doc::Document>(document)));
+    const std::vector<std::string> boot = PresetStub::Take();
+    INFO("the setup names both instances and points each at the same mesh");
+    CHECK(Mentions(boot, "model[core core "));
+    CHECK(Mentions(boot, "model[core_flip core "));
+
+    PresetHost::RenderFrame(1.0F / 60.0F);
+    const std::vector<std::string> calls = PresetStub::Take();
+    INFO("each instance carries its own transform");
+    CHECK(Mentions(calls, "Scene3dHost::SetModelTransform('core', [0 0 0]"));
+    CHECK(Mentions(calls, "Scene3dHost::SetModelTransform('core_flip', [0 -0.01 0]"));
+    CHECK(Mentions(calls, "Scene3dHost::SetModelAlpha('core_flip', 0.5)"));
+    PresetHost::Unload();
+}
+
+TEST_CASE("the HAPPY SKY class course built-in loads its two sea instances", "[preset][host]") {
+    PrepareStub();
+    const std::vector<Doc::Document> documents = Doc::BuiltIns();
+    const auto found = std::ranges::find_if(
+        documents, [](const Doc::Document& doc) { return doc.id == "iidx12-dan-select"; });
+    REQUIRE(found != documents.end());
+    REQUIRE(PresetHost::LoadDocument({}, std::make_shared<const Doc::Document>(*found)));
+    const std::vector<std::string> boot = PresetStub::Take();
+    CHECK(Mentions(boot, "model[dan_sea2 dan_sea2 "));
+    CHECK(Mentions(boot, "model[dan_sea2_flip dan_sea2 "));
     PresetHost::Unload();
 }

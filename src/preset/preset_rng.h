@@ -2,8 +2,19 @@
 
 #include <array>
 #include <cstddef>
+#include <cstdint>
 
 namespace Preset {
+
+class CrtRand {
+public:
+    void Seed(int seed) { state_ = (std::uint32_t)seed; }
+
+    int Next();
+
+private:
+    std::uint32_t state_ = 1;
+};
 
 class Ran3 {
 public:

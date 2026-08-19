@@ -1,6 +1,9 @@
 #pragma once
 
+#include "scene3d/poly_draw.h"
+#include "scene3d/poly_grid.h"
 #include "scene3d/scene3d.h"
+#include "scene3d/scene3d_fog.h"
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
@@ -22,6 +25,7 @@ struct Light {
     std::array<float, 3> direction = {0.0F, 0.0F, -1.0F};
     std::array<float, 3> diffuse = {1.0F, 1.0F, 1.0F};
     std::array<float, 3> specular = {1.0F, 1.0F, 1.0F};
+    std::array<float, 3> ambient = {0.0F, 0.0F, 0.0F};
     bool enabled = true;
 };
 
@@ -47,7 +51,13 @@ public:
 
     void SetStyle(RenderStyle style) { style_ = style; }
 
-    [[nodiscard]] int DrawCalls() const { return draw_calls_; }
+    void SetFog(const Fog& fog) { fog_ = fog; }
+
+    void SetPolyGrid(PolyGrid grid) { poly_.SetGrid(std::move(grid)); }
+
+    void SetMovieReporter(MovieReporter reporter) { poly_.SetMovieReporter(std::move(reporter)); }
+
+    [[nodiscard]] int DrawCalls() const { return draw_calls_ + poly_.DrawCalls(); }
 
 private:
     [[nodiscard]] DWORD ColorOp() const;
@@ -57,12 +67,16 @@ private:
     void ApplyMaterial(const DrawChunk& chunk, float alpha);
     void BindTile(int tile, int blend_mode);
     void DrawPass(const Scene& scene, bool blended);
+    void EnterFog();
+    void LeaveFog();
     XFile::Matrix view_{};
 
     IDirect3DDevice9* dev_ = nullptr;
     std::vector<IDirect3DTexture9*> textures_;
     std::vector<Light> lights_;
+    PolyDraw poly_;
     Projection projection_;
+    Fog fog_;
     RenderStyle style_ = RenderStyle::TextureOnly;
     DWORD active_lights_ = 0;
     int draw_calls_ = 0;
