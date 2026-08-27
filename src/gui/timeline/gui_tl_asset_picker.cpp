@@ -1,6 +1,7 @@
 #include "gui_tl_asset_picker.h"
 
 #include "gui_tl_forms.h"
+#include "gui/gui_dpi.h"
 #include "imgui.h"
 #include "native_dialog.h"
 #include "preset/asset_index.h"
@@ -116,7 +117,7 @@ FieldEvent DrawHiddenParts(const FormContext& context, Doc::Command& command) {
         }
         ImGui::SameLine();
         ImGui::TextUnformatted(part.c_str());
-        ImGui::SameLine(0.0F, 10.0F);
+        ImGui::SameLine(0.0F, Gui::Dpi::S(10.0F));
         const Preset::LayerVerdict verdict =
             Preset::VerdictFor(entry != nullptr ? entry->dir : std::string{}, part);
         const std::string_view name = Preset::VerdictName(verdict);
@@ -150,10 +151,10 @@ FieldEvent DrawAssetTab(const FormContext& context, Doc::Document& document,
     std::array<char, 256> dir_buffer = {};
     const std::string dir = declared != nullptr ? declared->dir : std::string("(not declared)");
     std::copy_n(dir.begin(), std::min(dir.size(), dir_buffer.size() - 1), dir_buffer.begin());
-    ImGui::SetNextItemWidth(260.0F);
+    ImGui::SetNextItemWidth(Gui::Dpi::S(260.0F));
     ImGui::InputText("###tl_asset_dir", dir_buffer.data(), dir_buffer.size(),
                      ImGuiInputTextFlags_ReadOnly);
-    ImGui::SameLine(0.0F, 10.0F);
+    ImGui::SameLine(0.0F, Gui::Dpi::S(10.0F));
     if (entry != nullptr && entry->loaded) {
         ImGui::TextColored(ImVec4(0.50F, 0.92F, 0.65F, 1.0F), "loaded");
     } else {

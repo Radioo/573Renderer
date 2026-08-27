@@ -24,7 +24,7 @@ struct View {
     bool snap = true;
 };
 
-int RulerStep(double px_per_frame);
+int RulerStep(double px_per_frame, float label_gap);
 
 double ClampZoom(double px_per_frame);
 

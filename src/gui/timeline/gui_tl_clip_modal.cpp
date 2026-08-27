@@ -4,6 +4,7 @@
 #include "editor/preset_editor_state.h"
 #include "editor/timeline_edits.h"
 #include "gui_tl_asset_picker.h"
+#include "gui/gui_dpi.h"
 #include "gui_tl_forms.h"
 #include "gui_tl_preview.h"
 #include "imgui.h"
@@ -31,6 +32,7 @@ namespace Doc = Preset::Doc;
 namespace {
 
 constexpr const char* kTitle = "Clip properties";
+constexpr float kModalWidth = 660.0F;
 constexpr float kScreenMargin = 60.0F;
 constexpr float kModalChrome = 150.0F;
 
@@ -153,7 +155,7 @@ FieldEvent DrawGeneral(Doc::Document& document, Doc::Clip& clip, int length, int
     RowLabel("label");
     std::array<char, 128> buffer = {};
     std::copy_n(clip.label.begin(), std::min(clip.label.size(), buffer.size() - 1), buffer.begin());
-    ImGui::SetNextItemWidth(-30.0F);
+    ImGui::SetNextItemWidth(Gui::Dpi::S(-30.0F));
     if (ImGui::InputText("###tl_general_label", buffer.data(), buffer.size())) {
         clip.label = buffer.data();
         event = FieldEvent::Changed;
@@ -294,8 +296,9 @@ bool CancelKeyPressed() {
 
 FieldEvent DrawBody(Doc::Document& working, Doc::CommandType type, const std::string& target) {
     const ImGuiViewport* viewport = ImGui::GetMainViewport();
-    const float cap = std::max(200.0F, viewport->WorkSize.y - kScreenMargin - kModalChrome);
-    const float height = (g_body_h <= 0.0F) ? cap : std::clamp(g_body_h, 60.0F, cap);
+    const float cap = std::max(Gui::Dpi::S(200.0F),
+                               viewport->WorkSize.y - Gui::Dpi::S(kScreenMargin + kModalChrome));
+    const float height = (g_body_h <= 0.0F) ? cap : std::clamp(g_body_h, Gui::Dpi::S(60.0F), cap);
     FieldEvent event = FieldEvent::None;
     if (ImGui::BeginChild("###tl_clip_body", ImVec2(0.0F, height), ImGuiChildFlags_None)) {
         event = DrawTabs(working, type, target);
@@ -358,8 +361,9 @@ void RenderClipModal() {
 
     ImGuiViewport* viewport = ImGui::GetMainViewport();
     ImGui::SetNextWindowPos(viewport->GetCenter(), ImGuiCond_Always, ImVec2(0.5F, 0.5F));
-    ImGui::SetNextWindowSizeConstraints(ImVec2(660.0F, 0.0F),
-                                        ImVec2(660.0F, viewport->WorkSize.y - kScreenMargin));
+    ImGui::SetNextWindowSizeConstraints(
+        Gui::Dpi::S(kModalWidth, 0.0F),
+        ImVec2(Gui::Dpi::S(kModalWidth), viewport->WorkSize.y - Gui::Dpi::S(kScreenMargin)));
     if (!ImGui::BeginPopupModal(kTitle, nullptr, ImGuiWindowFlags_AlwaysAutoResize)) return;
     if (!editor.Loaded()) {
         Close();

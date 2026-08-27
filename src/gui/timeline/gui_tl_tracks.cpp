@@ -3,6 +3,7 @@
 #include "editor/preset_editor_state.h"
 #include "editor/timeline_edits.h"
 #include "editor/timeline_lanes.h"
+#include "gui/gui_dpi.h"
 #include "imgui.h"
 #include "preset/doc/preset_document.h"
 
@@ -20,9 +21,26 @@ namespace Doc = Preset::Doc;
 
 namespace {
 
-constexpr float kChipW = 4.0F;
-constexpr float kToggleGap = 2.0F;
-constexpr float kNameMinW = 24.0F;
+constexpr float kChipWDips = 4.0F;
+constexpr float kToggleGapDips = 2.0F;
+constexpr float kNameMinWDips = 24.0F;
+constexpr float kNameGapDips = 6.0F;
+
+float ChipW() {
+    return Gui::Dpi::S(kChipWDips);
+}
+
+float ToggleGap() {
+    return Gui::Dpi::S(kToggleGapDips);
+}
+
+float NameMinW() {
+    return Gui::Dpi::S(kNameMinWDips);
+}
+
+float NameGap() {
+    return Gui::Dpi::S(kNameGapDips);
+}
 
 char g_rename[96] = {};
 std::string g_rename_track;
@@ -35,7 +53,7 @@ struct Band {
 Band g_band;
 
 float TogglesWidth() {
-    return (3.0F * ToggleSide()) + (2.0F * kToggleGap);
+    return (3.0F * ToggleSide()) + (2.0F * ToggleGap());
 }
 
 void Toggle(Ctx& ctx, const char* prefix, const Doc::Track& track, bool on, const char* tip,
@@ -92,7 +110,7 @@ void HeaderMenu(Ctx& ctx, const Doc::Track& track) {
 
 void RenameField(Ctx& ctx, const Doc::Track& track, float x, float y, float width) {
     if (g_rename_track != track.id) return;
-    ImGui::SetCursorScreenPos(ImVec2(x, y + 2.0F));
+    ImGui::SetCursorScreenPos(ImVec2(x, y + Gui::Dpi::S(2.0F)));
     ImGui::SetNextItemWidth(width);
     const std::string id = "###tl_rename_" + track.id;
     const bool done = ImGui::InputText(id.c_str(), g_rename, sizeof(g_rename),
@@ -128,7 +146,7 @@ void LaneMenu(Ctx& ctx, const Doc::Track& track, int frame) {
 
 void DrawHeaderName(Ctx& ctx, const Doc::Track& track, float y, float height, float name_w) {
     const std::string head_id = "###tl_head_" + track.id;
-    const float name_x = ctx.header_x + kChipW + 6.0F;
+    const float name_x = ctx.header_x + ChipW() + NameGap();
     ImGui::SetCursorScreenPos(ImVec2(name_x, y));
     ImGui::InvisibleButton(head_id.c_str(), ImVec2(name_w, height));
 
@@ -168,10 +186,10 @@ void DrawHeaderToggles(Ctx& ctx, const Doc::Track& track, float x, float y) {
     ImGui::SetCursorScreenPos(ImVec2(x, y + ((RowHeight() - side) * 0.5F)));
     Toggle(ctx, "M###tl_mute_", track, track.muted, "Mute: the evaluator skips this track.",
            &Editor::SetTrackMuted);
-    ImGui::SameLine(0.0F, kToggleGap);
+    ImGui::SameLine(0.0F, ToggleGap());
     Toggle(ctx, "S###tl_solo_", track, track.solo, "Solo: only solo tracks evaluate.",
            &Editor::SetTrackSolo);
-    ImGui::SameLine(0.0F, kToggleGap);
+    ImGui::SameLine(0.0F, ToggleGap());
     Toggle(ctx, "L###tl_lock_", track, track.locked, "Lock: this track rejects edits.",
            &Editor::SetTrackLocked);
 }
@@ -193,27 +211,29 @@ float ToggleSide() {
 }
 
 Editor::LaneMetrics LaneSizes() {
-    return Editor::LaneMetricsFor(ImGui::GetTextLineHeight(), ImGui::GetStyle().FramePadding.y);
+    return Editor::LaneMetricsFor(ImGui::GetTextLineHeight(), ImGui::GetStyle().FramePadding.y,
+                                  Gui::Dpi::Scale());
 }
 
 float RowHeight() {
-    return std::max(LaneSizes().row, ToggleSide() + 4.0F);
+    return std::max(LaneSizes().row, ToggleSide() + Gui::Dpi::S(4.0F));
 }
 
 void DrawTrackHeader(Ctx& ctx, const Doc::Track& track, float y, float height) {
     ctx.draw->AddRectFilled(ImVec2(ctx.header_x, y), ImVec2(ctx.lane_x, y + height),
                             ImGui::GetColorU32(ImGuiCol_FrameBg));
-    ctx.draw->AddRectFilled(ImVec2(ctx.header_x, y), ImVec2(ctx.header_x + kChipW, y + height),
+    ctx.draw->AddRectFilled(ImVec2(ctx.header_x, y), ImVec2(ctx.header_x + ChipW(), y + height),
                             TrackKindColor(track.kind));
     ctx.draw->AddLine(ImVec2(ctx.header_x, y + height), ImVec2(ctx.lane_x, y + height),
-                      ImGui::GetColorU32(ImGuiCol_Border), 1.0F);
+                      ImGui::GetColorU32(ImGuiCol_Border), Gui::Dpi::S(1.0F));
 
-    const float name_x = ctx.header_x + kChipW + 6.0F;
-    const float toggles_x = ctx.lane_x - 4.0F - TogglesWidth();
+    const float name_x = ctx.header_x + ChipW() + NameGap();
+    const float toggles_x = ctx.lane_x - Gui::Dpi::S(4.0F) - TogglesWidth();
     const float badge_w = ImGui::CalcTextSize(KindBadge(track.kind)).x;
-    const float badge_x = toggles_x - 6.0F - badge_w;
-    const bool badge_fits = badge_x - 6.0F - name_x >= kNameMinW;
-    const float name_w = std::max(kNameMinW, (badge_fits ? badge_x : toggles_x) - 6.0F - name_x);
+    const float badge_x = toggles_x - NameGap() - badge_w;
+    const bool badge_fits = badge_x - NameGap() - name_x >= NameMinW();
+    const float name_w =
+        std::max(NameMinW(), (badge_fits ? badge_x : toggles_x) - NameGap() - name_x);
 
     DrawHeaderName(ctx, track, y, height, name_w);
     if (badge_fits) DrawHeaderBadge(ctx, track, badge_x, y);
@@ -227,7 +247,7 @@ void DrawTrackLane(Ctx& ctx, const Doc::Track& track, float y, float height) {
     ctx.draw->AddRectFilled(ImVec2(ctx.lane_x, y), ImVec2(right, y + height),
                             ImGui::GetColorU32(dimmed ? ImGuiCol_ScrollbarBg : ImGuiCol_ChildBg));
     ctx.draw->AddLine(ImVec2(ctx.lane_x, y + height), ImVec2(right, y + height),
-                      ImGui::GetColorU32(ImGuiCol_Border), 1.0F);
+                      ImGui::GetColorU32(ImGuiCol_Border), Gui::Dpi::S(1.0F));
 
     ImGui::SetCursorScreenPos(ImVec2(ctx.lane_x, y));
     ImGui::SetNextItemAllowOverlap();

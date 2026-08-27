@@ -1,6 +1,7 @@
 #include "gui_preset_library_internal.h"
 
 #include "editor/library_model.h"
+#include "gui_dpi.h"
 #include "gui_preset_library.h"
 #include "editor/preset_editor_state.h"
 #include "editor/timeline_edits.h"
@@ -33,6 +34,8 @@ namespace {
 constexpr const char* kPromptTitle = "Unsaved changes";
 constexpr const char* kImportTitle = "Import problems";
 constexpr const char* kSaveAsTitle = "Save as user copy";
+constexpr float kModalWidth = 560.0F;
+constexpr float kScreenMargin = 80.0F;
 
 bool g_prompt_open = false;
 bool g_import_open = false;
@@ -251,8 +254,9 @@ void RenderImportProblems() {
     if (g_import_open) ImGui::OpenPopup(kImportTitle);
     ImGuiViewport* viewport = ImGui::GetMainViewport();
     ImGui::SetNextWindowPos(viewport->GetCenter(), ImGuiCond_Always, ImVec2(0.5F, 0.5F));
-    ImGui::SetNextWindowSizeConstraints(ImVec2(560.0F, 0.0F),
-                                        ImVec2(560.0F, viewport->WorkSize.y - 80.0F));
+    ImGui::SetNextWindowSizeConstraints(
+        Gui::Dpi::S(kModalWidth, 0.0F),
+        ImVec2(Gui::Dpi::S(kModalWidth), viewport->WorkSize.y - Gui::Dpi::S(kScreenMargin)));
     if (!ImGui::BeginPopupModal(kImportTitle, nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
         g_import_open = false;
         return;
@@ -282,7 +286,7 @@ void RenderSaveAs() {
     }
     g_saveas_open = false;
     ImGui::TextDisabled("Built-in ids are reserved, so this saves a user copy under a new id.");
-    ImGui::SetNextItemWidth(320.0F);
+    ImGui::SetNextItemWidth(Gui::Dpi::S(320.0F));
     ImGui::InputText("###lib_saveas_id", g_saveas_id.data(), g_saveas_id.size());
     if (ImGui::Button("Save###lib_saveas_ok")) {
         const std::string id =

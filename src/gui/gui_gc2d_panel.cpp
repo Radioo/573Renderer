@@ -1,4 +1,5 @@
 #include "gui_gc2d_panel.h"
+#include "gui_dpi.h"
 
 #include "gc2d/gc_host.h"
 #include "imgui.h"
@@ -34,7 +35,7 @@ void DrawPlayback(const Gc2dHost::Status& st) {
     if (ImGui::Checkbox("Pause##gc2d", &paused)) Gc2dHost::SetPaused(paused);
     ImGui::SameLine();
     float speed = st.speed;
-    ImGui::SetNextItemWidth(120);
+    ImGui::SetNextItemWidth(Gui::Dpi::S(120.0F));
     if (ImGui::SliderFloat("speed##gc2d", &speed, 0.0F, 4.0F, "%.2fx")) Gc2dHost::SetSpeed(speed);
 
     int frame = st.frame;

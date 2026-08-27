@@ -101,6 +101,83 @@ mutex-guarded Status structs polled the same way.
   for root-loop, continuous-loop, background, MC-name-type, and the main-view switch) and
   `SectionHeader` (icon + header-font title + dim suffix + separator).
 
+### 2.1 High-DPI scaling (gui_dpi)
+
+The control panel scales with the monitor's DPI the way any other Windows app does: text,
+padding, panes, modals and every drawn decoration grow together, so a 4K screen at 150% or
+200% Windows scaling shows the same layout at a readable size instead of a postage stamp.
+
+WHY A GUI-THREAD-ONLY AWARENESS CONTEXT. `WinMain` calls `SetProcessDPIAware()`, which makes
+the PROCESS system-DPI-aware. That is deliberate and must stay: the renderer window
+(`AppWindow::Create`) sizes its client area with `AdjustWindowRect` and asserts a 1:1
+client-to-backbuffer match, and any DPI virtualization would break that guarantee. So the GUI
+raises its awareness for ITS THREAD ONLY - `Gui::Dpi::MakeThreadPerMonitorAware()` calls
+`SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2)` as the first
+statement in `Gui::Init`. Because the GUI owns its own thread (1.1) and creates its window
+there, the awareness context is inherited by that HWND alone; the render window is created on
+the render thread and keeps the process default. The two DPI APIs are resolved through
+`GetProcAddress` on user32 so the binary still loads on a Windows without them, falling back
+to the desktop DC's LOGPIXELSX.
+
+THE SCALE. `Gui::Dpi::Scale()` is `dpi / 96`, clamped to [1, 4], set from
+`GetDpiForWindow(hwnd)` right after the window is created and re-set from `HIWORD(wParam)` on
+`WM_DPICHANGED` (which only arrives because of the per-monitor context). It is a plain float
+read on the GUI thread; tests set it with `Gui::Dpi::SetScaleFromDpi(dpi)` before building a
+context.
+
+TWO MECHANISMS DO MOST OF THE WORK, in `Gui::ApplyStyle()`:
+- `style.FontScaleDpi = Scale()` - imgui 1.92's dynamic font system re-rasterizes every glyph
+  at the scaled size, so the text is crisp, not stretched. `ImFontConfig::GlyphOffset` and
+  `GlyphMinAdvanceX` (the merged icon font) are documented as relative to the default size and
+  scale with it, so the icon alignment is carried along for free.
+- `style.ScaleAllSizes(Scale())` - every padding, spacing, scrollbar and grab metric.
+  `ApplyStyle` therefore starts with `s = ImGuiStyle()`, so re-applying it on `WM_DPICHANGED`
+  scales from the unscaled baseline instead of compounding. That reset also clears the accent
+  cache (`g_applied_accent_slug`), so the per-game accent is re-derived on the next frame.
+
+EVERYTHING ELSE IS A DIP. Every remaining pixel literal in `src/gui/` is a design unit at 96
+DPI and is multiplied at the point of use with `Gui::Dpi::S(x)` (or `S(x, y)` for an
+`ImVec2`). Named constants keep the raw number as `k...Dips` and expose a scaled accessor
+(`RulerH()`, `LabelWidth()`, `OptionRowH()`, ...) so call sites read the same as before. When
+you add a widget, a drawn decoration or a modal width, wrap the number - the rule is
+mechanical and the tests below enforce the outcome.
+
+VIEW STATE IS STORED IN DIPS, NOT PIXELS. `Editor::View::header_w` and `View::height`, and the
+`RenderRendererView` pane widths, hold design units; the GUI multiplies on the way to the
+screen and divides the mouse delta on the way back. That keeps the editor layer DPI-free (it
+must be: `check_gui_isolation.py` forbids ImGui outside `src/gui/`), keeps
+`kHeaderWidthMin/Max` and `kEditorHeightDefault` meaningful at any DPI, and means a live DPI
+change does not leave the panes at a stale pixel width. The timeline ZOOM (`px_per_frame`) is
+deliberately NOT scaled - it is a user-chosen view parameter like the scroll position, not
+chrome.
+
+PIXEL QUANTITIES THE EDITOR LAYER OWNS ARE PARAMETERS, NOT CONSTANTS. `Editor::RulerStep`
+takes a `label_gap`, `Editor::ZoneAt` takes a `handle_px`, `Editor::DragInput` carries
+`snap_px` / `label_gap`, and `LaneMetricsFor` / `LaneLabelY` take a `scale`. The GUI passes
+`Gui::Dpi::S(Editor::kLabelGapPx)` etc; the editor's own tests pass the unscaled constants.
+Tick density has to grow with the text it must not collide with, and the snap and grab
+tolerances are mouse-precision distances that halve in physical terms at 2x if left alone.
+
+THE WINDOW ITSELF. `Gui::Init` creates the window at the unscaled default and then
+`SizeToDpi` resizes it to `S(kDefaultWindowW/H)`, clamped to the monitor work area AND
+repositioned so it cannot hang off the right or bottom edge (at 200% the default 1360x820
+would otherwise want 2720x1640). `WM_GETMINMAXINFO` clamps the minimum to
+`S(kMinClientW/H)`. `WM_DPICHANGED` re-applies the style and moves/sizes the window to the
+RECT Windows suggests.
+
+WHAT THIS DOES NOT DO. The scale comes from Windows, so a 4K panel left at 100% Windows
+scaling reports 96 DPI and the UI stays small - the same as every other app on that machine.
+There is no manual override.
+
+TESTS: `tests/gui/dpi_scaling_tests.cpp` asserts the style/font scale factors and that the top
+bar, status strip and timeline dock double in height at 192 DPI while still holding their
+content. `tests/gui/modal_layout_tests.cpp` runs its whole "content fits inside the modal"
+suite at 96, 144 and 192 DPI - `GuiTest::Harness(dpi)` sets the scale and a proportionally
+larger `io.DisplaySize` before `LoadFonts()` / `ApplyStyle()`, and resets to 96 on teardown.
+Those modal cases are what caught the original bug: with the fonts scaled and the modal widths
+fixed, the Clip properties, Document properties, Option properties and Add track modals all
+overflowed at 144 and 192.
+
 ## 3. Layout
 
 Ready view = fixed shell, top to bottom:
@@ -129,6 +206,8 @@ Ready view = fixed shell, top to bottom:
 
 - Layout constants live in `gui_layout_constants.h` so WM_GETMINMAXINFO and the pane layout
   cannot drift. Pane minimums: left 240, center 320, right 280; defaults 300/340; splitter 6.
+  All of them are design units at 96 DPI - see 2.1 - and every use goes through
+  `Gui::Dpi::S()`.
 - Views: BootState WaitingForDir/Booting/Failed -> Setup view; Ready -> the shell above. The
   loading overlay renders on top of EITHER view from the same LoadProgress API.
 - Keyboard (active when no text input is focused): Space = play/pause, Left/Right = step 1,
@@ -320,12 +399,15 @@ clips are all one family - only draws, only tweens, only emitters - is a single 
 clips fill it at the full main-lane height, which is why a camera.tween track and an fx track
 are the same height as a plain model track.
 
-Every one of those heights comes from `Editor::LaneMetricsFor(text height, FramePadding.y)`
+Every one of those heights comes from
+`Editor::LaneMetricsFor(text height, FramePadding.y, dpi scale)`
 (`src/editor/timeline_lanes.cpp`), a PURE function the renderer and the tests both call, and
 it is derived from the FONT, not fixed: `clip` and `sub_clip` are each at least
 `GetTextLineHeight() + 2 * FramePadding.y` - the same rule `ToggleSide` uses for the header
-toggles - over floors of 22 px and 14 px, `sub_lane` is `sub_clip` plus a 2 px gap and `row`
-is `clip` plus 4 px over a 26 px floor. `RowHeight` then takes the larger of that row and
+toggles - over floors of 22 and 14 design units, `sub_lane` is `sub_clip` plus a 2 unit gap
+and `row` is `clip` plus 4 units over a 26 unit floor. The floors and the gap are the only
+raw pixel numbers in there, which is why the caller hands in the DPI scale (2.1) rather than
+the function reaching for a constant it cannot scale. `RowHeight` then takes the larger of that row and
 `ToggleSide() + 4`, so the header controls and the label rule can each only make the row
 taller. Bar heights were HARDCODED at 22 px and 14 px until 2026-08-18, and a 14 px modifier
 sub-lane is shorter than a 16 px line of Segoe UI: the label was drawn in `ImGuiCol_WindowBg`
@@ -335,8 +417,9 @@ re-broken it, which is why the rule is metric-derived rather than a bigger const
 modifier lane stays visually secondary through its command COLOUR and its own clip range, not
 through a height too short to read.
 
-The label's own Y is `Editor::LaneLabelY(bar top, bar height, text height, keyed)` from the
-same file: a keyed clip drops the label below the key diamonds by up to 6 px, an unkeyed one
+The label's own Y is
+`Editor::LaneLabelY(bar top, bar height, text height, keyed, dpi scale)` from the
+same file: a keyed clip drops the label below the key diamonds by up to 6 units, an unkeyed one
 centres it, and both clamp to the room the bar actually has, so the text is inside the bar by
 construction. `tl_label_fits` (`tests/gui/timeline_editor_tests.cpp`) walks EVERY clip of a
 document with `sprite.animate` + `sprite.scroll` and `model.draw` + `model.motion` sub-lanes
@@ -412,11 +495,14 @@ protects the walk from undo/redo too.
   `PrimaryPeers` / `Overlaps` implement the overlap rule: one PRIMARY per family per frame
   per TARGET across all its tracks, modifiers overlap freely, and two primaries whose `when`
   gates are mutually exclusive may overlap.
-- `timeline_drag.h/.cpp` - hit testing (`ZoneAt`: 6 px resize handles, never more than 30
-  percent of a short bar) and the drag state machine as a pure function. `SnapFrame` walks
-  the snap targets in priority order: playhead, other clips' starts and ends on any track,
-  tween keys, document start and end, ruler major ticks; within 8 px, the nearest candidate
-  of the first non-empty group wins. `ResolveDrag` keeps the duration on a move, REFUSES a
+- `timeline_drag.h/.cpp` - hit testing (`ZoneAt`: `kClipHandlePx` = 6 unit resize handles,
+  never more than 30 percent of a short bar) and the drag state machine as a pure function.
+  `SnapFrame` walks the snap targets in priority order: playhead, other clips' starts and
+  ends on any track, tween keys, document start and end, ruler major ticks; within
+  `DragInput::snap_px` (`kSnapPx` = 8 units), the nearest candidate of the first non-empty
+  group wins. The handle width, the snap radius and the ruler `label_gap` arrive as
+  PARAMETERS from the GUI, already multiplied by the DPI scale (2.1), so the editor layer
+  itself never has to know what a pixel is worth. `ResolveDrag` keeps the duration on a move, REFUSES a
   move that would overlap a same-family primary, and CLAMPS a resize at the neighbour
   instead of overlapping it. Alt drops `DragInput::snap`, so the raw frame survives. Ctrl+drag
   duplicates: the copy is created by `DuplicateClipTo` at the DROP position under the same

@@ -1,6 +1,7 @@
 #include "state/boot_lifecycle.h"
 #include <cfloat>
 #include <utility>
+#include "gui_dpi.h"
 #include "gui_setup_view.h"
 #include "gui_style.h"
 #include "gui_window.h"
@@ -77,7 +78,7 @@ void DrawErrorBanner(App::BootState bs, const std::string& err) {
 
 void DrawGameDirInput(App::State& state) {
     ImGui::Text("Game directory:");
-    ImGui::SetNextItemWidth(-120.0F);
+    ImGui::SetNextItemWidth(Gui::Dpi::S(-120.0F));
     if (ImGui::InputText("##gamedir", g_dir_buf, sizeof(g_dir_buf))) {
         PersistSetup(state, g_dir_buf);
     }
@@ -152,7 +153,7 @@ void DrawRenderFps(App::State& state) {
     int fps = state.GetRenderFps();
 
     ImGui::Text("Frame rate:");
-    ImGui::SetNextItemWidth(120.0F);
+    ImGui::SetNextItemWidth(Gui::Dpi::S(120.0F));
     ImGui::BeginGroup();
     if (ImGui::InputInt("##render_fps", &fps, 5, 30, ImGuiInputTextFlags_AutoSelectAll)) {
         staged_fps = fps;
@@ -231,7 +232,7 @@ void DrawRenderPresetCombo(App::State& state, int rw, int rh) {
     last_rh = rh;
 
     ImGui::Text("Render resolution:");
-    ImGui::SetNextItemWidth(-120.0F);
+    ImGui::SetNextItemWidth(Gui::Dpi::S(-120.0F));
     if (ImGui::BeginCombo("##render_preset", kPresets[shown_idx].label)) {
         for (int i = 0; i < kPresetCount; i++) {
             if (i == kQproIdx && !show_qpro_preset && i != shown_idx) continue;
@@ -276,7 +277,7 @@ void DrawStretchWide(App::State& state, int rw, int rh) {
     ImGui::TextDisabled("-> %dx%d", present.w, present.h);
 
     const Stretch::Filter current = state.GetStretchFilter();
-    ImGui::SetNextItemWidth(160.0F);
+    ImGui::SetNextItemWidth(Gui::Dpi::S(160.0F));
     if (ImGui::BeginCombo("Scaling##stretch_filter", Stretch::FilterName(current))) {
         for (const Stretch::Filter filter : Stretch::AllFilters()) {
             const bool supported = g_d3d.StretchFilterSupported(filter);
@@ -310,7 +311,7 @@ void DrawRenderResolution(App::State& state) {
 
     int w_val = rw;
     int h_val = rh;
-    const float input_w = 100.0F;
+    const float input_w = Gui::Dpi::S(100.0F);
     ImGui::SetNextItemWidth(input_w);
     ImGui::InputInt("##render_w", &w_val, 0, 0, ImGuiInputTextFlags_AutoSelectAll);
     bool const w_changed = ImGui::IsItemDeactivatedAfterEdit();
@@ -343,7 +344,7 @@ void DrawArcExtractor() {
     ArcExtract::Status const st = ArcExtract::GetStatus();
 
     ImGui::BeginDisabled(st.running);
-    if (ImGui::Button("Extract .arc files...", ImVec2(200, 0))) {
+    if (ImGui::Button("Extract .arc files...", ImVec2(Gui::Dpi::S(200.0F), 0.0F))) {
         std::string const picked = NativeDialog::BrowseForFolder(Gui::GetHwnd(), g_dir_buf);
         if (!picked.empty()) ArcExtract::Start(picked);
     }
@@ -388,7 +389,7 @@ void DrawCustomizeExtractor() {
     CustomizeExtract::Status const st = CustomizeExtract::GetStatus();
 
     ImGui::BeginDisabled(st.running);
-    if (ImGui::Button("Extract customize images...", ImVec2(220, 0))) {
+    if (ImGui::Button("Extract customize images...", ImVec2(Gui::Dpi::S(220.0F), 0.0F))) {
         std::string const picked = NativeDialog::BrowseForFolder(Gui::GetHwnd(), g_dir_buf);
         if (!picked.empty()) CustomizeExtract::Start(picked);
     }
@@ -429,7 +430,7 @@ void DrawCustomizeExtractor() {
 void DrawLoadButton(App::State& state, App::BootState bs) {
     const bool boot_in_flight = (bs == App::BootState::Booting);
     ImGui::BeginDisabled(boot_in_flight || g_dir_buf[0] == '\0');
-    if (ImGui::Button("Load", ImVec2(160, 32))) {
+    if (ImGui::Button("Load", Gui::Dpi::S(160.0F, 32.0F))) {
         App::Cmd::BootGame r;
         r.game_dir = g_dir_buf;
         state.GetRenderSize(r.render_width, r.render_height);
@@ -461,15 +462,16 @@ void RenderView() {
                  ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
                      ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoBringToFrontOnFocus);
 
-    const float card_w = 640.0F;
+    const float card_w = Gui::Dpi::S(640.0F);
     const float avail_w = ImGui::GetContentRegionAvail().x;
     const float indent = avail_w > card_w ? (avail_w - card_w) * 0.5F : 0.0F;
     const float avail_h = ImGui::GetContentRegionAvail().y;
-    ImGui::Dummy(ImVec2(0, avail_h > 560.0F ? (avail_h - 560.0F) * 0.35F : 0.0F));
+    const float fold = Gui::Dpi::S(560.0F);
+    ImGui::Dummy(ImVec2(0.0F, avail_h > fold ? (avail_h - fold) * 0.35F : 0.0F));
 
     ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indent);
     ImGui::PushStyleColor(ImGuiCol_ChildBg, ImGui::GetStyleColorVec4(ImGuiCol_PopupBg));
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(22, 18));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, Gui::Dpi::S(22.0F, 18.0F));
     ImGui::BeginChild("setup_card", ImVec2(card_w, 0),
                       ImGuiChildFlags_Borders | ImGuiChildFlags_AutoResizeY,
                       ImGuiWindowFlags_NoScrollbar);

@@ -1,6 +1,7 @@
 #include "gui_panels.h"
 #include "gui_panels_internal.h"
 #include "gui_export_panel.h"
+#include "gui_dpi.h"
 #include "gui_icons.h"
 #include "gui_layout_constants.h"
 #include "gui_loading_overlay.h"
@@ -211,19 +212,22 @@ namespace {
 int g_main_view = 0;
 
 void ClampPaneWidths(float avail_w, float sw, float& left_w, float& right_w, float& center_w) {
-    left_w = std::max(left_w, Gui::kPaneLeftMin);
-    right_w = std::max(Gui::kPaneRightMin, right_w);
+    const float left_min = Gui::Dpi::S(Gui::kPaneLeftMin);
+    const float right_min = Gui::Dpi::S(Gui::kPaneRightMin);
+    const float center_min = Gui::Dpi::S(Gui::kPaneCenterMin);
+    left_w = std::max(left_w, left_min);
+    right_w = std::max(right_min, right_w);
     center_w = avail_w - left_w - right_w - (2.0F * sw);
-    if (center_w < Gui::kPaneCenterMin) {
-        float deficit = Gui::kPaneCenterMin - center_w;
-        const float room_r = right_w - Gui::kPaneRightMin;
+    if (center_w < center_min) {
+        float deficit = center_min - center_w;
+        const float room_r = right_w - right_min;
         const float take_r = room_r < deficit ? room_r : deficit;
         if (take_r > 0.0F) {
             right_w -= take_r;
             deficit -= take_r;
         }
         if (deficit > 0.0F) {
-            const float room_l = left_w - Gui::kPaneLeftMin;
+            const float room_l = left_w - left_min;
             const float take_l = room_l < deficit ? room_l : deficit;
             if (take_l > 0.0F) left_w -= take_l;
         }
@@ -234,8 +238,9 @@ void ClampPaneWidths(float avail_w, float sw, float& left_w, float& right_w, flo
 
 void RenderTopBar(const App::Status& status) {
     ImGui::PushStyleColor(ImGuiCol_ChildBg, ImGui::GetStyleColorVec4(ImGuiCol_PopupBg));
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(14, 8));
-    ImGui::BeginChild("topbar", ImVec2(0, Gui::kTopBarH), 1, ImGuiWindowFlags_NoScrollbar);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, Gui::Dpi::S(14.0F, 8.0F));
+    ImGui::BeginChild("topbar", ImVec2(0.0F, Gui::Dpi::S(Gui::kTopBarH)), 1,
+                      ImGuiWindowFlags_NoScrollbar);
 
     ImGui::AlignTextToFramePadding();
     Gui::PushHeaderFont();
@@ -245,9 +250,9 @@ void RenderTopBar(const App::Status& status) {
     static std::vector<const Gui::PanelDesc*> tabs;
     Gui::CollectActivePanels(Gui::PanelSlot::MainTab, tabs);
     if (tabs.size() > 1) {
-        ImGui::SameLine(0.0F, 18.0F);
+        ImGui::SameLine(0.0F, Gui::Dpi::S(18.0F));
         for (size_t i = 0; i < tabs.size(); i++) {
-            if (i > 0) ImGui::SameLine(0.0F, 2.0F);
+            if (i > 0) ImGui::SameLine(0.0F, Gui::Dpi::S(2.0F));
             const bool active = std::cmp_equal(i, g_main_view);
             ImGui::PushStyleColor(
                 ImGuiCol_Button,
@@ -258,7 +263,7 @@ void RenderTopBar(const App::Status& status) {
     }
     if (std::cmp_greater_equal(g_main_view, tabs.size())) g_main_view = 0;
 
-    ImGui::SameLine(0.0F, 18.0F);
+    ImGui::SameLine(0.0F, Gui::Dpi::S(18.0F));
     Gui::PushMonoFont();
     if (status.current_ifs_path.empty()) {
         ImGui::TextDisabled("no IFS loaded");
@@ -270,8 +275,8 @@ void RenderTopBar(const App::Status& status) {
     char fps_buf[24];
     snprintf(fps_buf, sizeof(fps_buf), "%.1f fps", status.fps_measured);
     float const fps_w = ImGui::CalcTextSize(fps_buf).x;
-    float const export_w = ImGui::CalcTextSize(ICON_EXPORT "  Export...").x + 22.0F;
-    ImGui::SameLine(ImGui::GetWindowWidth() - fps_w - export_w - 44.0F);
+    float const export_w = ImGui::CalcTextSize(ICON_EXPORT "  Export...").x + Gui::Dpi::S(22.0F);
+    ImGui::SameLine(ImGui::GetWindowWidth() - fps_w - export_w - Gui::Dpi::S(44.0F));
     ImGui::BeginDisabled(!status.scene_loaded);
     if (ImGui::Button(ICON_EXPORT "  Export...")) {
         Export::RequestOpen();
@@ -280,7 +285,7 @@ void RenderTopBar(const App::Status& status) {
     if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
         ImGui::SetTooltip("Export the playing animation to video / image (Ctrl+E).");
     }
-    ImGui::SameLine(ImGui::GetWindowWidth() - fps_w - 18.0F);
+    ImGui::SameLine(ImGui::GetWindowWidth() - fps_w - Gui::Dpi::S(18.0F));
     ImGui::AlignTextToFramePadding();
     ImGui::TextColored(ImGui::GetStyleColorVec4(ImGuiCol_CheckMark), "%s", fps_buf);
 
@@ -318,7 +323,7 @@ void DrawExportStatusTag(App::State& state) {
         return;
     }
 
-    ImGui::SameLine(0.0F, 14.0F);
+    ImGui::SameLine(0.0F, Gui::Dpi::S(14.0F));
     ImGui::PushStyleColor(ImGuiCol_Text, color);
     if (ImGui::SmallButton(label)) Export::RequestOpen();
     ImGui::PopStyleColor();
@@ -333,7 +338,7 @@ void DrawExportStatusTag(App::State& state) {
     }
 
     if (ex.phase != App::ExportPhase::Done || ex.output_path.empty()) return;
-    ImGui::SameLine(0.0F, 6.0F);
+    ImGui::SameLine(0.0F, Gui::Dpi::S(6.0F));
     if (ImGui::SmallButton("Open folder")) NativeDialog::RevealInFileManager(ex.output_path);
     if (ImGui::IsItemHovered()) {
         ImGui::SetTooltip("Show %s in Explorer.", ex.output_path.c_str());
@@ -352,26 +357,30 @@ void RenderViewportPane() {
 
 float ClampEditorHeight(float available) {
     Editor::View& view = Editor::Global().MutView();
-    const float room =
-        available - Gui::kPaneRowMinH - Gui::kSplitterW - (2.0F * ImGui::GetStyle().ItemSpacing.y);
-    view.height =
-        std::clamp(view.height, Editor::kEditorHeightMin, std::max(Editor::kEditorHeightMin, room));
-    return view.height;
+    const float room = available - Gui::Dpi::S(Gui::kPaneRowMinH) - Gui::Dpi::S(Gui::kSplitterW) -
+                       (2.0F * ImGui::GetStyle().ItemSpacing.y);
+    const float room_dips = room / Gui::Dpi::Scale();
+    view.height = std::clamp(view.height, Editor::kEditorHeightMin,
+                             std::max(Editor::kEditorHeightMin, room_dips));
+    return Gui::Dpi::S(view.height);
 }
 
 void RenderEditorDock(float width, float row_h) {
     Editor::View& view = Editor::Global().MutView();
     float row = row_h;
-    Gui::HSplitter("##split_timeline", width, Gui::kSplitterW, &row, &view.height,
-                   Gui::kPaneRowMinH, Editor::kEditorHeightMin, Editor::kEditorHeightDefault);
-    Timeline::Render(view.height);
+    float editor_px = Gui::Dpi::S(view.height);
+    Gui::HSplitter("##split_timeline", width, Gui::Dpi::S(Gui::kSplitterW), &row, &editor_px,
+                   Gui::Dpi::S(Gui::kPaneRowMinH), Gui::Dpi::S(Editor::kEditorHeightMin),
+                   Gui::Dpi::S(Editor::kEditorHeightDefault));
+    view.height = editor_px / Gui::Dpi::Scale();
+    Timeline::Render(editor_px);
 }
 
 void RenderStatusStripImpl(const App::Status& status) {
     auto& state = App::Global();
     ImGui::PushStyleColor(ImGuiCol_ChildBg, ImGui::GetStyleColorVec4(ImGuiCol_TitleBg));
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(14, 4));
-    ImGui::BeginChild("status_strip", ImVec2(0, Gui::kStatusStripH), 0,
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, Gui::Dpi::S(14.0F, 4.0F));
+    ImGui::BeginChild("status_strip", ImVec2(0.0F, Gui::Dpi::S(Gui::kStatusStripH)), 0,
                       ImGuiWindowFlags_NoScrollbar);
 
     Gui::PushMonoFont();
@@ -383,10 +392,10 @@ void RenderStatusStripImpl(const App::Status& status) {
     int rw = 0;
     int rh = 0;
     state.GetRenderSize(rw, rh);
-    ImGui::SameLine(0.0F, 14.0F);
+    ImGui::SameLine(0.0F, Gui::Dpi::S(14.0F));
     ImGui::TextDisabled("%dx%d", rw, rh);
 
-    ImGui::SameLine(0.0F, 14.0F);
+    ImGui::SameLine(0.0F, Gui::Dpi::S(14.0F));
     if (status.last_error.empty()) {
         ImGui::TextColored(ImVec4(0.50F, 0.92F, 0.65F, 1.0F), "render ok");
     } else {
@@ -402,7 +411,7 @@ void RenderStatusStripImpl(const App::Status& status) {
         char ver[32];
         snprintf(ver, sizeof(ver), "afp %u.%u.%u", (live.afp_ver >> 16) & 0xFFFF,
                  (live.afp_ver >> 8) & 0xFF, live.afp_ver & 0xFF);
-        ImGui::SameLine(ImGui::GetWindowWidth() - ImGui::CalcTextSize(ver).x - 18.0F);
+        ImGui::SameLine(ImGui::GetWindowWidth() - ImGui::CalcTextSize(ver).x - Gui::Dpi::S(18.0F));
         ImGui::TextDisabled("%s", ver);
     }
 
@@ -415,17 +424,19 @@ void RenderStatusStripImpl(const App::Status& status) {
 }
 
 void RenderRendererView() {
-    static float left_w = Gui::kPaneLeftDefault;
-    static float right_w = Gui::kPaneRightDefault;
+    static float left_dips = Gui::kPaneLeftDefault;
+    static float right_dips = Gui::kPaneRightDefault;
+    float left_w = Gui::Dpi::S(left_dips);
+    float right_w = Gui::Dpi::S(right_dips);
 
     const bool editor = Timeline::Active();
     const float avail_w = ImGui::GetContentRegionAvail().x;
     const float avail_h = ImGui::GetContentRegionAvail().y;
     const float spacing = ImGui::GetStyle().ItemSpacing.y;
-    const float sw = Gui::kSplitterW;
+    const float sw = Gui::Dpi::S(Gui::kSplitterW);
     const float editor_h = editor ? ClampEditorHeight(avail_h) : 0.0F;
     const float row_h = editor ? (avail_h - editor_h - sw - (2.0F * spacing))
-                               : (avail_h - Gui::kTimelineH - spacing);
+                               : (avail_h - Gui::Dpi::S(Gui::kTimelineH) - spacing);
 
     float center_w = 0.0F;
     ClampPaneWidths(avail_w, sw, left_w, right_w, center_w);
@@ -437,7 +448,8 @@ void RenderRendererView() {
     ImGui::SameLine(0.0F, 0.0F);
     {
         float c = center_w;
-        Gui::VSplitter("##split_l", sw, row_h, &left_w, &c, Gui::kPaneLeftMin, Gui::kPaneCenterMin);
+        Gui::VSplitter("##split_l", sw, row_h, &left_w, &c, Gui::Dpi::S(Gui::kPaneLeftMin),
+                       Gui::Dpi::S(Gui::kPaneCenterMin));
     }
     ImGui::SameLine(0.0F, 0.0F);
 
@@ -448,14 +460,17 @@ void RenderRendererView() {
     ImGui::SameLine(0.0F, 0.0F);
     {
         float c = center_w;
-        Gui::VSplitter("##split_r", sw, row_h, &c, &right_w, Gui::kPaneCenterMin,
-                       Gui::kPaneRightMin);
+        Gui::VSplitter("##split_r", sw, row_h, &c, &right_w, Gui::Dpi::S(Gui::kPaneCenterMin),
+                       Gui::Dpi::S(Gui::kPaneRightMin));
     }
     ImGui::SameLine(0.0F, 0.0F);
 
     ImGui::BeginChild("pane_right", ImVec2(right_w, row_h), 0);
     RenderInspectorPane();
     ImGui::EndChild();
+
+    left_dips = left_w / Gui::Dpi::Scale();
+    right_dips = right_w / Gui::Dpi::Scale();
 
     if (editor) {
         RenderEditorDock(avail_w, row_h);
@@ -471,7 +486,7 @@ void RenderReadyView() {
     ImGuiViewport* vp = ImGui::GetMainViewport();
     ImGui::SetNextWindowPos(vp->WorkPos);
     ImGui::SetNextWindowSize(vp->WorkSize);
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(10, 8));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, Gui::Dpi::S(10.0F, 8.0F));
     ImGui::Begin("##main", nullptr,
                  ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
                      ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoBringToFrontOnFocus);
@@ -483,8 +498,8 @@ void RenderReadyView() {
     Gui::CollectActivePanels(Gui::PanelSlot::MainTab, tabs);
     if (!tabs.empty()) {
         int const view = std::clamp(g_main_view, 0, (int)tabs.size() - 1);
-        const float content_h =
-            ImGui::GetContentRegionAvail().y - Gui::kStatusStripH - ImGui::GetStyle().ItemSpacing.y;
+        const float content_h = ImGui::GetContentRegionAvail().y - Gui::Dpi::S(Gui::kStatusStripH) -
+                                ImGui::GetStyle().ItemSpacing.y;
         ImGui::BeginChild("main_view", ImVec2(0, content_h), 0);
         tabs[(size_t)view]->draw();
         ImGui::EndChild();

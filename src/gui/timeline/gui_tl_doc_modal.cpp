@@ -4,6 +4,7 @@
 #include "editor/library_model.h"
 #include "editor/preset_editor_state.h"
 #include "gui_tl_forms.h"
+#include "gui/gui_dpi.h"
 #include "imgui.h"
 #include "preset/doc/preset_document.h"
 #include "preset/doc/preset_enum_names.h"
@@ -24,6 +25,8 @@ namespace {
 
 constexpr const char* kTitle = "Document properties";
 constexpr const char* kFpsTitle = "Convert fps";
+constexpr float kModalWidth = 640.0F;
+constexpr float kScreenMargin = 80.0F;
 
 bool g_requested = false;
 bool g_fresh = false;
@@ -39,7 +42,7 @@ FieldEvent TextRow(const char* id, const char* label, std::string& value, std::s
     RowLabel(label);
     std::vector<char> buffer(limit, '\0');
     std::copy_n(value.begin(), std::min(value.size(), limit - 1), buffer.begin());
-    ImGui::SetNextItemWidth(-30.0F);
+    ImGui::SetNextItemWidth(Gui::Dpi::S(-30.0F));
     const bool changed = ImGui::InputText(id, buffer.data(), buffer.size());
     if (changed) value = buffer.data();
     if (ImGui::IsItemDeactivatedAfterEdit()) return FieldEvent::Committed;
@@ -285,8 +288,9 @@ void RenderDocumentModal() {
     }
     ImGuiViewport* viewport = ImGui::GetMainViewport();
     ImGui::SetNextWindowPos(viewport->GetCenter(), ImGuiCond_Always, ImVec2(0.5F, 0.5F));
-    ImGui::SetNextWindowSizeConstraints(ImVec2(640.0F, 0.0F),
-                                        ImVec2(640.0F, viewport->WorkSize.y - 80.0F));
+    ImGui::SetNextWindowSizeConstraints(
+        Gui::Dpi::S(kModalWidth, 0.0F),
+        ImVec2(Gui::Dpi::S(kModalWidth), viewport->WorkSize.y - Gui::Dpi::S(kScreenMargin)));
     if (!ImGui::BeginPopupModal(kTitle, nullptr, ImGuiWindowFlags_AlwaysAutoResize)) return;
     if (!editor.Loaded()) {
         ImGui::CloseCurrentPopup();

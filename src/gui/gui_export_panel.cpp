@@ -1,4 +1,5 @@
 #include "gui_export_panel.h"
+#include "gui_dpi.h"
 #include "../native_dialog.h"
 #include "editor/export_range.h"
 #include "editor/preset_editor_state.h"
@@ -31,6 +32,9 @@ std::string g_last_ifs;
 std::string g_last_anim;
 
 const App::ExportRequest kDefaults{};
+
+constexpr float kModalWidth = 620.0F;
+constexpr float kScreenMargin = 48.0F;
 
 int g_fps = kDefaults.fps;
 int g_quality = kDefaults.quality;
@@ -165,7 +169,7 @@ void DrawFilenameAndFormat() {
 }
 
 void DrawFpsQualitySliders() {
-    ImGui::SetNextItemWidth(120);
+    ImGui::SetNextItemWidth(Gui::Dpi::S(120.0F));
     ImGui::InputInt("fps##exp_fps", &g_fps, 1, 10);
     g_fps = std::clamp(g_fps, 1, 240);
     if (ImGui::IsItemHovered()) {
@@ -197,7 +201,7 @@ void DrawFpsQualitySliders() {
 
 void DrawKeyframeIntervalControl(MediaSink::Format current_format) {
     if (MediaSink::UsesKeyframeInterval(current_format)) {
-        ImGui::SetNextItemWidth(120);
+        ImGui::SetNextItemWidth(Gui::Dpi::S(120.0F));
         ImGui::InputInt("keyframe interval##exp_keyint", &g_keyframe_interval, 1, 30);
         g_keyframe_interval = std::clamp(g_keyframe_interval, 0, 100000);
         if (ImGui::IsItemHovered()) {
@@ -233,7 +237,7 @@ void DrawFrameLimitControls(const ::Export::Capabilities& caps) {
     ImGui::SameLine();
     ImGui::BeginDisabled(!g_limit_frames);
     if (g_limit_frames && g_max_frames <= 0) g_max_frames = 60;
-    ImGui::SetNextItemWidth(120);
+    ImGui::SetNextItemWidth(Gui::Dpi::S(120.0F));
     ImGui::InputInt("frames##exp_maxf", &g_max_frames, 1, 10);
     const bool frames_hovered = ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled);
     g_max_frames = std::clamp(g_max_frames, 1, 100000);
@@ -262,7 +266,7 @@ void DrawLoopControls(const ::Export::Capabilities& caps) {
         }
         return;
     }
-    ImGui::SetNextItemWidth(120);
+    ImGui::SetNextItemWidth(Gui::Dpi::S(120.0F));
     if (ImGui::InputInt("Continuous loop count##exp_loops", &g_loop_count, 1, 5))
         g_loop_count = std::clamp(g_loop_count, 1, 1000);
     if (ImGui::IsItemHovered()) {
@@ -282,7 +286,7 @@ void DrawLoopControls(const ::Export::Capabilities& caps) {
     }
     if (g_blend_loop) {
         ImGui::SameLine();
-        ImGui::SetNextItemWidth(100);
+        ImGui::SetNextItemWidth(Gui::Dpi::S(100.0F));
         if (ImGui::InputInt("Blend frames##exp_blendN", &g_blend_frames, 1, 5))
             g_blend_frames = std::clamp(g_blend_frames, 0, 240);
         if (ImGui::IsItemHovered()) {
@@ -370,7 +374,7 @@ void DrawResolutionPresetCombo(int rw, int rh) {
 void DrawResolutionInputs(int rw, int rh, int& w_disp, int& h_disp) {
     w_disp = (g_out_w > 0) ? g_out_w : rw;
     h_disp = (g_out_h > 0) ? g_out_h : rh;
-    const float input_w = 100.0F;
+    const float input_w = Gui::Dpi::S(100.0F);
     ImGui::SetNextItemWidth(input_w);
     bool const w_changed =
         ImGui::InputInt("##exp_w", &w_disp, 0, 0, ImGuiInputTextFlags_AutoSelectAll);
@@ -455,12 +459,12 @@ bool DrawCropPickButtons(App::State& state, bool pick_mode, int* xywh, bool& cha
     if (pick_mode) {
         ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.65F, 0.45F, 0.15F, 1.0F));
         ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.75F, 0.55F, 0.22F, 1.0F));
-        if (ImGui::Button("Picking...##crop_pick", ImVec2(110, 0))) {
+        if (ImGui::Button("Picking...##crop_pick", ImVec2(Gui::Dpi::S(110.0F), 0.0F))) {
             state.SetCropPickMode(false);
         }
         ImGui::PopStyleColor(2);
     } else {
-        if (ImGui::Button("Pick region##crop_pick", ImVec2(110, 0))) {
+        if (ImGui::Button("Pick region##crop_pick", ImVec2(Gui::Dpi::S(110.0F), 0.0F))) {
             state.SetCropPickMode(true);
             close_for_pick = true;
         }
@@ -473,7 +477,7 @@ bool DrawCropPickButtons(App::State& state, bool pick_mode, int* xywh, bool& cha
                           "will encode only pixels inside the rect.");
     }
     ImGui::SameLine();
-    if (ImGui::Button("Clear##crop_clear", ImVec2(70, 0))) {
+    if (ImGui::Button("Clear##crop_clear", ImVec2(Gui::Dpi::S(70.0F), 0.0F))) {
         state.SetCropRect({});
         state.SetCropPickMode(false);
         xywh[0] = xywh[1] = xywh[2] = xywh[3] = 0;
@@ -493,7 +497,7 @@ bool DrawCrop(App::State& state) {
     const ImGuiStyle& st = ImGui::GetStyle();
     const float lbl_w = ImGui::CalcTextSize("x").x;
     const float per_overhead = lbl_w + st.ItemInnerSpacing.x + st.ItemSpacing.x;
-    const float per_input_w = (std::max)(36.0F, (avail - per_overhead * 4.0F) / 4.0F);
+    const float per_input_w = (std::max)(Gui::Dpi::S(36.0F), (avail - per_overhead * 4.0F) / 4.0F);
 
     const char* labels[4] = {"x##crop_x", "y##crop_y", "w##crop_w", "h##crop_h"};
     bool changed = false;
@@ -588,7 +592,7 @@ void DrawBackgroundAndHw(MediaSink::Format current_format, bool hw_available,
     ImGui::SameLine();
     const bool bg_colour_inert = g_bg_transparent || !caps.transparent_bg;
     if (bg_colour_inert) ImGui::BeginDisabled();
-    ImGui::SetNextItemWidth(160);
+    ImGui::SetNextItemWidth(Gui::Dpi::S(160.0F));
     ImGui::ColorEdit3("##exp_bg_color", g_bg_rgb.data(),
                       ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
     if (bg_colour_inert) ImGui::EndDisabled();
@@ -660,7 +664,7 @@ void DrawStartAndStatus(App::State& state, const App::ExportState& ex, bool busy
     const bool ratio_ok = !plan.loaded || Editor::FpsRatioAllowed(plan.fps, g_fps);
     if (!busy) {
         ImGui::BeginDisabled(!ratio_ok);
-        if (ImGui::Button("Start export", ImVec2(120, 0))) {
+        if (ImGui::Button("Start export", ImVec2(Gui::Dpi::S(120.0F), 0.0F))) {
             const bool format_can_use_hw = (current_format == MediaSink::Format::AVIF ||
                                             current_format == MediaSink::Format::WebM_AV1 ||
                                             current_format == MediaSink::Format::MP4_H264);
@@ -675,12 +679,12 @@ void DrawStartAndStatus(App::State& state, const App::ExportState& ex, bool busy
                               plan.fps);
         }
     } else {
-        if (ImGui::Button("Cancel", ImVec2(120, 0))) {
+        if (ImGui::Button("Cancel", ImVec2(Gui::Dpi::S(120.0F), 0.0F))) {
             state.PostCommand(App::Cmd::CancelExport{});
         }
     }
     ImGui::SameLine();
-    if (ImGui::Button("Close", ImVec2(90, 0))) {
+    if (ImGui::Button("Close", ImVec2(Gui::Dpi::S(90.0F), 0.0F))) {
         ImGui::CloseCurrentPopup();
     }
     ImGui::SameLine();
@@ -719,6 +723,16 @@ bool g_reopen_after_pick = false;
 
 }
 
+namespace {
+void PlaceModalWindow() {
+    const ImGuiViewport* vp = ImGui::GetMainViewport();
+    ImGui::SetNextWindowPos(vp->GetCenter(), ImGuiCond_Always, ImVec2(0.5F, 0.5F));
+    ImGui::SetNextWindowSizeConstraints(
+        Gui::Dpi::S(kModalWidth, 0.0F),
+        ImVec2(Gui::Dpi::S(kModalWidth), vp->WorkSize.y - Gui::Dpi::S(kScreenMargin)));
+}
+}
+
 void RequestOpen() {
     g_open_requested = true;
 }
@@ -736,9 +750,7 @@ void RenderModal() {
         g_open_requested = false;
     }
 
-    ImGuiViewport* vp = ImGui::GetMainViewport();
-    ImGui::SetNextWindowPos(vp->GetCenter(), ImGuiCond_Always, ImVec2(0.5F, 0.5F));
-    ImGui::SetNextWindowSizeConstraints(ImVec2(620, 0), ImVec2(620, vp->WorkSize.y - 48.0F));
+    PlaceModalWindow();
     if (!ImGui::BeginPopupModal("Export", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) return;
 
     App::ExportState const ex = state.GetExport();

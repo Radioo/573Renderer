@@ -5,6 +5,7 @@
 #include "qpro/qpro_dll.h"
 
 #include "gui_panels_internal.h"
+#include "gui_dpi.h"
 #include "gui_window.h"
 #include "../backend/afp_commands.h"
 #include "../state/app_state.h"
@@ -37,7 +38,8 @@ void DrawQproIssues(const QproExtract::Status& st) {
         }
         ImGui::SetClipboardText(all.c_str());
     }
-    ImGui::BeginChild("qpro_issues", ImVec2(0, 170), 1, ImGuiWindowFlags_HorizontalScrollbar);
+    ImGui::BeginChild("qpro_issues", ImVec2(0.0F, Gui::Dpi::S(170.0F)), 1,
+                      ImGuiWindowFlags_HorizontalScrollbar);
     for (const auto& is : st.issues) {
         ImGui::TextColored(is.failure ? red : orange, "%s %s", is.failure ? "[FAIL]" : "[skip]",
                            is.text.c_str());
@@ -172,7 +174,7 @@ int DrawPartScanList(bool busy) {
     ImGui::TextDisabled("Uncheck older date groups to render only recent parts (the category boxes "
                         "above still apply).");
 
-    ImGui::BeginChild("qpro_parts", ImVec2(0, 300), 1);
+    ImGui::BeginChild("qpro_parts", ImVec2(0.0F, Gui::Dpi::S(300.0F)), 1);
     for (size_t gi = 0; gi < s_groups.size(); ++gi)
         DrawPartGroup(gi);
     ImGui::EndChild();
@@ -230,7 +232,7 @@ void DrawQproOptions() {
     }
     ImGui::Spacing();
 
-    ImGui::SetNextItemWidth(120);
+    ImGui::SetNextItemWidth(Gui::Dpi::S(120.0F));
     ImGui::InputInt("Output fps", &s_qpro_fps, 1, 10);
     s_qpro_fps = std::max(s_qpro_fps, 1);
     s_qpro_fps = std::min(s_qpro_fps, 240);
@@ -280,7 +282,7 @@ bool DrawCategoryChecks() {
 void DrawExtractButton(App::State& state, const QproExtract::Status& st, bool any_cat, int nsel) {
     const bool any_part = (nsel != 0);
     ImGui::BeginDisabled(st.running || !any_cat || !any_part);
-    if (ImGui::Button("Choose output folder + extract...", ImVec2(280, 32))) {
+    if (ImGui::Button("Choose output folder + extract...", Gui::Dpi::S(280.0F, 32.0F))) {
         std::string const picked = NativeDialog::BrowseForFolder(Gui::GetHwnd(), "");
         if (!picked.empty()) {
             AfpCmd::QproStartExtract r;

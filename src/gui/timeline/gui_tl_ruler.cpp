@@ -4,6 +4,7 @@
 #include "editor/export_range.h"
 #include "editor/timeline_edits.h"
 #include "editor/timeline_view.h"
+#include "gui/gui_dpi.h"
 #include "gui/gui_style.h"
 #include "imgui.h"
 #include "preset/doc/preset_document.h"
@@ -22,7 +23,11 @@ namespace Doc = Preset::Doc;
 
 namespace {
 
-constexpr float kMarkerHalf = 6.0F;
+constexpr float kMarkerHalfDips = 6.0F;
+
+float MarkerHalf() {
+    return Gui::Dpi::S(kMarkerHalfDips);
+}
 
 char g_marker_name[96] = {};
 int g_marker_menu = -1;
@@ -30,7 +35,7 @@ int g_range_anchor = -1;
 
 void DrawTicks(const Ctx& ctx, float top) {
     const Editor::View& view = ctx.editor->GetView();
-    const int step = Editor::RulerStep(view.px_per_frame);
+    const int step = Editor::RulerStep(view.px_per_frame, Gui::Dpi::S(Editor::kLabelGapPx));
     const int fps = std::max(1, ctx.document->fps);
     const ImU32 line = ImGui::GetColorU32(ImGuiCol_Border);
     const ImU32 text = ImGui::GetColorU32(ImGuiCol_TextDisabled);
@@ -40,13 +45,13 @@ void DrawTicks(const Ctx& ctx, float top) {
     for (int frame = std::max(0, first); frame <= last; frame += step) {
         const float x = FrameToX(ctx, frame);
         if (x < ctx.lane_x - 1.0F || x > ctx.lane_x + ctx.lane_w) continue;
-        ctx.draw->AddLine(ImVec2(x, top), ImVec2(x, top + kRulerH), line, 1.0F);
+        ctx.draw->AddLine(ImVec2(x, top), ImVec2(x, top + RulerH()), line, Gui::Dpi::S(1.0F));
         char frames[24];
         snprintf(frames, sizeof(frames), "%d", frame);
-        ctx.draw->AddText(ImVec2(x + 3.0F, top + 1.0F), text, frames);
+        ctx.draw->AddText(ImVec2(x + Gui::Dpi::S(3.0F), top + Gui::Dpi::S(1.0F)), text, frames);
         char seconds[24];
         snprintf(seconds, sizeof(seconds), "%.2fs", (double)frame / (double)fps);
-        ctx.draw->AddText(ImVec2(x + 3.0F, top + 16.0F), text, seconds);
+        ctx.draw->AddText(ImVec2(x + Gui::Dpi::S(3.0F), top + Gui::Dpi::S(16.0F)), text, seconds);
     }
 }
 
@@ -64,10 +69,11 @@ void DrawEndLine(Ctx& ctx, float top) {
     DashedVertical(ctx, x, top, ctx.lanes_bottom, color);
     char label[32];
     snprintf(label, sizeof(label), "end %d", ctx.length);
-    ctx.draw->AddText(ImVec2(x + 4.0F, ctx.lanes_bottom - 16.0F), color, label);
+    ctx.draw->AddText(ImVec2(x + Gui::Dpi::S(4.0F), ctx.lanes_bottom - Gui::Dpi::S(16.0F)), color,
+                      label);
 
-    ImGui::SetCursorScreenPos(ImVec2(x - 4.0F, top));
-    ImGui::InvisibleButton("###tl_end_line", ImVec2(9.0F, ctx.lanes_bottom - top));
+    ImGui::SetCursorScreenPos(ImVec2(x - Gui::Dpi::S(4.0F), top));
+    ImGui::InvisibleButton("###tl_end_line", ImVec2(Gui::Dpi::S(9.0F), ctx.lanes_bottom - top));
     if (ImGui::IsItemHovered() || ImGui::IsItemActive()) {
         ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
     }
@@ -83,7 +89,7 @@ void MarkerPopup(Ctx& ctx) {
     if (!ImGui::BeginPopup("##tl_marker_menu")) return;
     const int index = g_marker_menu;
     if (index >= 0 && std::cmp_less(index, ctx.document->markers.size())) {
-        ImGui::SetNextItemWidth(180.0F);
+        ImGui::SetNextItemWidth(Gui::Dpi::S(180.0F));
         ImGui::InputText("###tl_marker_name", g_marker_name, sizeof(g_marker_name));
         if (ImGui::MenuItem("Rename marker")) {
             const std::string label = g_marker_name;
@@ -103,21 +109,21 @@ void MarkerPopup(Ctx& ctx) {
 int MarkerHit(const Ctx& ctx, float mouse_x) {
     for (std::size_t i = 0; i < ctx.document->markers.size(); i++) {
         const float x = FrameToX(ctx, ctx.document->markers[i].frame);
-        if (std::fabs(mouse_x - x) <= kMarkerHalf) return (int)i;
+        if (std::fabs(mouse_x - x) <= MarkerHalf()) return (int)i;
     }
     return -1;
 }
 
 void DrawMarkers(Ctx& ctx, float top) {
     const ImU32 accent = ImGui::GetColorU32(ImGuiCol_CheckMark);
-    const float base = top + kRulerH;
+    const float base = top + RulerH();
     for (std::size_t i = 0; i < ctx.document->markers.size(); i++) {
         const Doc::Marker& marker = ctx.document->markers[i];
         const float x = FrameToX(ctx, marker.frame);
-        if (x < ctx.lane_x - kMarkerHalf || x > ctx.lane_x + ctx.lane_w) continue;
-        ctx.draw->AddTriangleFilled(ImVec2(x - kMarkerHalf, base - 9.0F),
-                                    ImVec2(x + kMarkerHalf, base - 9.0F), ImVec2(x, base - 1.0F),
-                                    accent);
+        if (x < ctx.lane_x - MarkerHalf() || x > ctx.lane_x + ctx.lane_w) continue;
+        ctx.draw->AddTriangleFilled(ImVec2(x - MarkerHalf(), base - Gui::Dpi::S(9.0F)),
+                                    ImVec2(x + MarkerHalf(), base - Gui::Dpi::S(9.0F)),
+                                    ImVec2(x, base - Gui::Dpi::S(1.0F)), accent);
     }
 }
 
@@ -138,16 +144,19 @@ void DrawExportRange(const Ctx& ctx, float top) {
     const float x1 = std::min(FrameToX(ctx, range.end), ctx.lane_x + ctx.lane_w);
     if (x1 <= ctx.lane_x || x0 >= ctx.lane_x + ctx.lane_w) return;
     const ImU32 accent = ImGui::GetColorU32(ImGuiCol_CheckMark);
-    const float y = top + kRulerH - 3.0F;
-    ctx.draw->AddRectFilled(ImVec2(x0, y - 1.0F), ImVec2(x1, y + 1.0F), accent);
-    ctx.draw->AddRectFilled(ImVec2(x0, y - 6.0F), ImVec2(x0 + 2.0F, y + 2.0F), accent);
-    ctx.draw->AddRectFilled(ImVec2(x1 - 2.0F, y - 6.0F), ImVec2(x1, y + 2.0F), accent);
+    const float y = top + RulerH() - Gui::Dpi::S(3.0F);
+    ctx.draw->AddRectFilled(ImVec2(x0, y - Gui::Dpi::S(1.0F)), ImVec2(x1, y + Gui::Dpi::S(1.0F)),
+                            accent);
+    ctx.draw->AddRectFilled(ImVec2(x0, y - Gui::Dpi::S(6.0F)),
+                            ImVec2(x0 + Gui::Dpi::S(2.0F), y + Gui::Dpi::S(2.0F)), accent);
+    ctx.draw->AddRectFilled(ImVec2(x1 - Gui::Dpi::S(2.0F), y - Gui::Dpi::S(6.0F)),
+                            ImVec2(x1, y + Gui::Dpi::S(2.0F)), accent);
     char label[48];
     snprintf(label, sizeof(label), "export %d..%d", range.start, range.end - 1);
     const ImVec2 size = ImGui::CalcTextSize(label);
-    const float text_x = ctx.lane_x - size.x - 8.0F;
-    if (text_x < ctx.header_x + 4.0F) return;
-    ctx.draw->AddText(ImVec2(text_x, y - size.y - 2.0F), accent, label);
+    const float text_x = ctx.lane_x - size.x - Gui::Dpi::S(8.0F);
+    if (text_x < ctx.header_x + Gui::Dpi::S(4.0F)) return;
+    ctx.draw->AddText(ImVec2(text_x, y - size.y - Gui::Dpi::S(2.0F)), accent, label);
 }
 
 bool UpdateExportRange(Ctx& ctx, bool hovered) {
@@ -166,7 +175,7 @@ bool UpdateExportRange(Ctx& ctx, bool hovered) {
 void RulerInput(Ctx& ctx, float top) {
     ImGui::SetCursorScreenPos(ImVec2(ctx.lane_x, top));
     ImGui::SetNextItemAllowOverlap();
-    ImGui::InvisibleButton("###tl_ruler", ImVec2(std::max(1.0F, ctx.lane_w), kRulerH));
+    ImGui::InvisibleButton("###tl_ruler", ImVec2(std::max(1.0F, ctx.lane_w), RulerH()));
     const bool hovered = ImGui::IsItemHovered();
     const int marker = hovered ? MarkerHit(ctx, ImGui::GetIO().MousePos.x) : -1;
 
@@ -218,7 +227,7 @@ void HandleWheel(Ctx& ctx) {
         view.px_per_frame = Editor::ClampZoom(view.px_per_frame * std::pow(1.2, io.MouseWheel));
         view.scroll = anchor - ((double)(io.MousePos.x - ctx.lane_x) / view.px_per_frame);
     } else {
-        view.scroll -= (double)io.MouseWheel * (60.0 / view.px_per_frame);
+        view.scroll -= (double)io.MouseWheel * ((double)Gui::Dpi::S(60.0F) / view.px_per_frame);
     }
     view.scroll = Editor::ClampScroll(view.scroll, ctx.length, view.px_per_frame, ctx.lane_w);
 }
@@ -226,7 +235,7 @@ void HandleWheel(Ctx& ctx) {
 }
 
 void DrawRuler(Ctx& ctx) {
-    const float top = ctx.lanes_top - kRulerH;
+    const float top = ctx.lanes_top - RulerH();
     ctx.draw->AddRectFilled(ImVec2(ctx.header_x, top),
                             ImVec2(ctx.lane_x + ctx.lane_w, ctx.lanes_top),
                             ImGui::GetColorU32(ImGuiCol_TitleBg));
@@ -243,18 +252,22 @@ void DrawRuler(Ctx& ctx) {
 void DrawPlayhead(const Ctx& ctx) {
     const float x = FrameToX(ctx, ctx.status.frame);
     if (x < ctx.lane_x || x > ctx.lane_x + ctx.lane_w) return;
-    const float top = ctx.lanes_top - kRulerH;
+    const float top = ctx.lanes_top - RulerH();
     const ImU32 color = ImGui::GetColorU32(ImGuiCol_Text);
-    ctx.draw->AddRectFilled(ImVec2(x - 1.0F, top), ImVec2(x + 1.0F, ctx.lanes_bottom), color);
-    ctx.draw->AddTriangleFilled(ImVec2(x - 5.0F, top), ImVec2(x + 5.0F, top), ImVec2(x, top + 7.0F),
-                                color);
+    ctx.draw->AddRectFilled(ImVec2(x - Gui::Dpi::S(1.0F), top),
+                            ImVec2(x + Gui::Dpi::S(1.0F), ctx.lanes_bottom), color);
+    ctx.draw->AddTriangleFilled(ImVec2(x - Gui::Dpi::S(5.0F), top),
+                                ImVec2(x + Gui::Dpi::S(5.0F), top),
+                                ImVec2(x, top + Gui::Dpi::S(7.0F)), color);
 
     char badge[24];
     snprintf(badge, sizeof(badge), "%d", ctx.status.frame);
     const ImVec2 size = ImGui::CalcTextSize(badge);
-    ctx.draw->AddRectFilled(ImVec2(x + 3.0F, top), ImVec2(x + 7.0F + size.x, top + size.y + 2.0F),
-                            ImGui::GetColorU32(ImGuiCol_PopupBg));
-    ctx.draw->AddText(ImVec2(x + 5.0F, top + 1.0F), color, badge);
+    ctx.draw->AddRectFilled(
+        ImVec2(x + Gui::Dpi::S(3.0F), top),
+        ImVec2(x + Gui::Dpi::S(7.0F) + size.x, top + size.y + Gui::Dpi::S(2.0F)),
+        ImGui::GetColorU32(ImGuiCol_PopupBg));
+    ctx.draw->AddText(ImVec2(x + Gui::Dpi::S(5.0F), top + Gui::Dpi::S(1.0F)), color, badge);
 }
 
 }

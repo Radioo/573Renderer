@@ -11,9 +11,9 @@ struct LaneMetrics {
     float sub_clip = 0.0F;
 };
 
-LaneMetrics LaneMetricsFor(float text_height, float pad_y);
+LaneMetrics LaneMetricsFor(float text_height, float pad_y, float scale);
 
-float LaneLabelY(float bar_y0, float bar_height, float text_height, bool keyed);
+float LaneLabelY(float bar_y0, float bar_height, float text_height, bool keyed, float scale);
 
 int LaneCount(const Preset::Doc::Track& track);
 

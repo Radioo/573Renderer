@@ -13,7 +13,9 @@
 #include "state/app_state.h"
 #include "state/telemetry.h"
 
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 
 #include <memory>
 #include <optional>
@@ -128,7 +130,9 @@ void CheckText(ImGuiTestContext* ctx, const char* needle) {
 
 TEST_CASE("the Add track modal keeps its asset warning inside the modal",
           "[gui][timeline][modal]") {
-    GuiTest::Harness harness;
+    unsigned const dpi = GENERATE(96U, 144U, 192U);
+    INFO("display dpi " << dpi);
+    GuiTest::Harness harness(dpi);
     Open(MakeDocument());
 
     ImGuiTest* test = harness.NewTest("tl_modal_add_track_fits");
@@ -154,7 +158,9 @@ TEST_CASE("the Add track modal keeps its asset warning inside the modal",
 
 TEST_CASE("the clip properties modal keeps its not-loaded warning inside the modal",
           "[gui][timeline][modal]") {
-    GuiTest::Harness harness;
+    unsigned const dpi = GENERATE(96U, 144U, 192U);
+    INFO("display dpi " << dpi);
+    GuiTest::Harness harness(dpi);
     Open(MakeDocument());
 
     ImGuiTest* test = harness.NewTest("tl_modal_clip_fits");
@@ -187,7 +193,9 @@ TEST_CASE("the clip properties modal keeps its not-loaded warning inside the mod
 
 TEST_CASE("the document and option properties modals keep every hint inside the modal",
           "[gui][timeline][modal]") {
-    GuiTest::Harness harness;
+    unsigned const dpi = GENERATE(96U, 144U, 192U);
+    INFO("display dpi " << dpi);
+    GuiTest::Harness harness(dpi);
     Open(MakeDocument());
 
     ImGuiTest* document = harness.NewTest("tl_modal_doc_fits");

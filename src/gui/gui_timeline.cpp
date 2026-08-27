@@ -1,5 +1,6 @@
 #include "gui_export_panel.h"
 #include "gui_icons.h"
+#include "gui_dpi.h"
 #include "gui_layout_constants.h"
 #include "gui_panels_internal.h"
 #include "gui_style.h"
@@ -41,14 +42,14 @@ void StepWrapped(App::State& state, const App::State::LiveState& live, int delta
 }
 
 bool TransportButton(const char* icon, const char* tip) {
-    bool const pressed = ImGui::Button(icon, ImVec2(34, 0));
+    bool const pressed = ImGui::Button(icon, ImVec2(Gui::Dpi::S(34.0F), 0.0F));
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", tip);
     return pressed;
 }
 
 void DrawLabelCombo(App::State& state, const App::Status& status) {
-    ImGui::SameLine(0.0F, 12.0F);
-    ImGui::SetNextItemWidth(170.0F);
+    ImGui::SameLine(0.0F, Gui::Dpi::S(12.0F));
+    ImGui::SetNextItemWidth(Gui::Dpi::S(170.0F));
     const char* preview =
         status.active_label.empty() ? "go to label..." : status.active_label.c_str();
     if (ImGui::BeginCombo("##tl_labels", preview)) {
@@ -80,36 +81,36 @@ void DrawTransportRow(App::State& state, const App::Status& status,
                                         "Wraps around the master timeline; seeking pauses.")) {
         StepWrapped(state, live, -100);
     }
-    ImGui::SameLine(0.0F, 3.0F);
+    ImGui::SameLine(0.0F, Gui::Dpi::S(3.0F));
     if (TransportButton(ICON_STEP_BACK, "Step back 1 frame (Left).")) StepWrapped(state, live, -1);
-    ImGui::SameLine(0.0F, 3.0F);
+    ImGui::SameLine(0.0F, Gui::Dpi::S(3.0F));
     if (TransportButton(ov.paused ? ICON_PLAY : ICON_PAUSE,
                         "Play / pause (Space). Sets the stream playback speed to\n"
                         "1 / 0 (afp_stream_set_speed), matching the debug viewer's\n"
                         "RETURN+SHIFT toggle. Forced to running while exporting.")) {
         PostTogglePause(state);
     }
-    ImGui::SameLine(0.0F, 3.0F);
+    ImGui::SameLine(0.0F, Gui::Dpi::S(3.0F));
     if (TransportButton(ICON_STEP_FWD, "Step forward 1 frame (Right).")) {
         StepWrapped(state, live, +1);
     }
-    ImGui::SameLine(0.0F, 3.0F);
+    ImGui::SameLine(0.0F, Gui::Dpi::S(3.0F));
     if (TransportButton(ICON_JUMP_FWD, "Step forward 100 frames (Shift+Right).")) {
         StepWrapped(state, live, +100);
     }
 
-    ImGui::SameLine(0.0F, 14.0F);
+    ImGui::SameLine(0.0F, Gui::Dpi::S(14.0F));
     Gui::PushMonoFont();
     ImGui::AlignTextToFramePadding();
     ImGui::Text("%u / %u", live.mc_cur, live.mc_total);
-    ImGui::SameLine(0.0F, 12.0F);
+    ImGui::SameLine(0.0F, Gui::Dpi::S(12.0F));
     ImGui::TextDisabled("loop %u", live.mc_wrap_count);
     ImGui::PopFont();
 
     if (!status.labels.empty()) DrawLabelCombo(state, status);
 
     if (exporting) {
-        ImGui::SameLine(0.0F, 14.0F);
+        ImGui::SameLine(0.0F, Gui::Dpi::S(14.0F));
         ImGui::TextDisabled("(seek / pause disabled during export)");
     }
 }
@@ -118,7 +119,7 @@ int LabelHitTest(const App::Status& status, uint32_t total, float x0, float w, f
     int hit = -1;
     for (size_t i = 0; i < status.labels.size(); ++i) {
         float const lx = x0 + (w * ((float)status.labels[i].frame / (float)total));
-        if (std::fabs(mouse_x - lx) <= 5.0F) hit = (int)i;
+        if (std::fabs(mouse_x - lx) <= Gui::Dpi::S(5.0F)) hit = (int)i;
     }
     return hit;
 }
@@ -128,14 +129,14 @@ void DrawTrackMarkers(ImDrawList* dl, const App::Status& status, uint32_t total,
     const ImU32 tick_col = ImGui::GetColorU32(ImVec4(0.851F, 0.627F, 0.247F, 0.85F));
     for (const auto& l : status.labels) {
         float const lx = x0 + (w * ((float)l.frame / (float)total));
-        dl->AddLine(ImVec2(lx, y0), ImVec2(lx, y0 + h), tick_col, 1.0F);
+        dl->AddLine(ImVec2(lx, y0), ImVec2(lx, y0 + h), tick_col, Gui::Dpi::S(1.0F));
     }
 }
 
 void DrawTrack(App::State& state, const App::Status& status, const App::State::LiveState& live,
                const App::ExportState& ex, bool exporting) {
     const float w = ImGui::GetContentRegionAvail().x;
-    const float h = 22.0F;
+    const float h = Gui::Dpi::S(22.0F);
     const ImVec2 p0 = ImGui::GetCursorScreenPos();
     ImDrawList* dl = ImGui::GetWindowDrawList();
 
@@ -161,7 +162,8 @@ void DrawTrack(App::State& state, const App::Status& status, const App::State::L
     DrawTrackMarkers(dl, status, total, p0.x, p0.y, w, h);
 
     float const head_x = p0.x + (w * frac);
-    dl->AddRectFilled(ImVec2(head_x - 1.0F, p0.y - 2.0F), ImVec2(head_x + 1.0F, p0.y + h + 2.0F),
+    dl->AddRectFilled(ImVec2(head_x - Gui::Dpi::S(1.0F), p0.y - Gui::Dpi::S(2.0F)),
+                      ImVec2(head_x + Gui::Dpi::S(1.0F), p0.y + h + Gui::Dpi::S(2.0F)),
                       ImGui::GetColorU32(ImGuiCol_SliderGrabActive));
 
     if (exporting) return;
@@ -216,7 +218,7 @@ void RenderTimelineDock() {
     const bool exporting = (ex.phase == App::ExportPhase::Capturing);
 
     ImGui::PushStyleColor(ImGuiCol_ChildBg, ImGui::GetStyleColorVec4(ImGuiCol_PopupBg));
-    ImGui::BeginChild("##timeline_dock", ImVec2(0, Gui::kTimelineH), 1,
+    ImGui::BeginChild("##timeline_dock", ImVec2(0.0F, Gui::Dpi::S(Gui::kTimelineH)), 1,
                       ImGuiWindowFlags_NoScrollbar);
 
     if (!status.scene_loaded) {

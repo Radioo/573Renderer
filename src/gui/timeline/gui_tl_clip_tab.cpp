@@ -8,6 +8,7 @@
 #include "editor/clip_summary.h"
 #include "editor/preset_editor_state.h"
 #include "editor/timeline_edits.h"
+#include "gui/gui_dpi.h"
 #include "imgui.h"
 #include "preset/doc/preset_commands.h"
 #include "preset/doc/preset_document.h"
@@ -52,10 +53,11 @@ void Commit(Editor::State& editor, const Doc::Document& working, FieldEvent even
 
 void DrawHeading(const Doc::Track& track, const Doc::Clip& clip) {
     const ImVec2 chip = ImGui::GetCursorScreenPos();
-    ImGui::Dummy(ImVec2(10.0F, ImGui::GetTextLineHeight()));
-    ImGui::GetWindowDrawList()->AddRectFilled(ImVec2(chip.x, chip.y + 2.0F),
-                                              ImVec2(chip.x + 6.0F, chip.y + 16.0F),
-                                              CommandColor(Doc::TypeOf(clip.command)));
+    ImGui::Dummy(ImVec2(Gui::Dpi::S(10.0F), ImGui::GetTextLineHeight()));
+    ImGui::GetWindowDrawList()->AddRectFilled(
+        ImVec2(chip.x, chip.y + Gui::Dpi::S(2.0F)),
+        ImVec2(chip.x + Gui::Dpi::S(6.0F), chip.y + Gui::Dpi::S(16.0F)),
+        CommandColor(Doc::TypeOf(clip.command)));
     ImGui::SameLine();
     ImGui::TextUnformatted(
         std::string(Doc::kCommandTypeNames[(std::size_t)Doc::TypeOf(clip.command)]).c_str());

@@ -2,6 +2,7 @@
 
 #include "../state/app_state.h"
 #include "../warp_device.h"
+#include "gui_dpi.h"
 #include "gui_panels.h"
 #include "gui_layout_constants.h"
 #include "gui_style.h"
@@ -62,11 +63,21 @@ LRESULT WINAPI WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     case WM_ERASEBKGND:
         return 1;
     case WM_GETMINMAXINFO: {
-        RECT r = {0, 0, kMinClientW, kMinClientH};
+        RECT r = {0, 0, (LONG)Dpi::S(kMinClientW), (LONG)Dpi::S(kMinClientH)};
         AdjustWindowRect(&r, WS_OVERLAPPEDWINDOW, FALSE);
         auto* mmi = reinterpret_cast<MINMAXINFO*>(lp);
         mmi->ptMinTrackSize.x = r.right - r.left;
         mmi->ptMinTrackSize.y = r.bottom - r.top;
+        return 0;
+    }
+    case WM_DPICHANGED: {
+        Dpi::SetScaleFromDpi(HIWORD(wp));
+        ApplyStyle();
+        const auto* suggested = reinterpret_cast<const RECT*>(lp);
+        SetWindowPos(hwnd, nullptr, suggested->left, suggested->top,
+                     suggested->right - suggested->left, suggested->bottom - suggested->top,
+                     SWP_NOZORDER | SWP_NOACTIVATE);
+        LOG("Gui", "GUI window DPI changed to %u (scale %.2f)", (unsigned)HIWORD(wp), Dpi::Scale());
         return 0;
     }
     case WM_SYSCOMMAND:
@@ -132,7 +143,40 @@ bool CreateDevice(Window& w) {
 }
 }
 
+namespace {
+RECT WorkAreaOf(HWND hwnd) {
+    MONITORINFO mi = {};
+    mi.cbSize = sizeof(mi);
+    HMONITOR mon = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+    if ((mon != nullptr) && GetMonitorInfoW(mon, &mi) != 0) return mi.rcWork;
+    RECT rc = {0, 0, 0, 0};
+    GetWindowRect(hwnd, &rc);
+    return rc;
+}
+
+void SizeToDpi(HWND hwnd) {
+    Dpi::SetScaleFromDpi(Dpi::DpiForWindow(hwnd));
+
+    const RECT work = WorkAreaOf(hwnd);
+    const LONG work_w = std::max<LONG>(work.right - work.left, 1);
+    const LONG work_h = std::max<LONG>(work.bottom - work.top, 1);
+    const LONG wanted_w = std::min<LONG>((LONG)Dpi::S(kDefaultWindowW), work_w);
+    const LONG wanted_h = std::min<LONG>((LONG)Dpi::S(kDefaultWindowH), work_h);
+
+    RECT current = {0, 0, 0, 0};
+    GetWindowRect(hwnd, &current);
+    const LONG x = std::clamp(current.left, work.left, work.right - wanted_w);
+    const LONG y = std::clamp(current.top, work.top, work.bottom - wanted_h);
+
+    SetWindowPos(hwnd, nullptr, x, y, wanted_w, wanted_h, SWP_NOZORDER | SWP_NOACTIVATE);
+    LOG("Gui", "GUI window DPI %u (scale %.2f), placed %ldx%ld at %ld,%ld", Dpi::DpiForWindow(hwnd),
+        Dpi::Scale(), wanted_w, wanted_h, x, y);
+}
+}
+
 bool Init(Window& w, HINSTANCE hinst) {
+    Dpi::MakeThreadPerMonitorAware();
+
     w.wc.cbSize = sizeof(w.wc);
     w.wc.style = CS_CLASSDC;
     w.wc.lpfnWndProc = WndProc;
@@ -141,12 +185,15 @@ bool Init(Window& w, HINSTANCE hinst) {
     w.wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
     RegisterClassExW(&w.wc);
 
-    w.hwnd = CreateWindowExW(0, w.wc.lpszClassName, L"573Renderer - Control", WS_OVERLAPPEDWINDOW,
-                             80, 60, 1360, 820, nullptr, nullptr, hinst, nullptr);
+    w.hwnd =
+        CreateWindowExW(0, w.wc.lpszClassName, L"573Renderer - Control", WS_OVERLAPPEDWINDOW, 80,
+                        60, kDefaultWindowW, kDefaultWindowH, nullptr, nullptr, hinst, nullptr);
     if (w.hwnd == nullptr) {
         UnregisterClassW(w.wc.lpszClassName, hinst);
         return false;
     }
+
+    SizeToDpi(w.hwnd);
 
     if (!CreateDevice(w)) {
         DestroyWindow(w.hwnd);

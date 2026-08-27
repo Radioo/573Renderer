@@ -5,6 +5,7 @@
 #include "editor/preset_editor_state.h"
 #include "editor/timeline_edits.h"
 #include "gui_tl_forms.h"
+#include "gui/gui_dpi.h"
 #include "gui_tl_internal.h"
 #include "imgui.h"
 #include "preset/asset_index.h"
@@ -30,6 +31,9 @@ namespace {
 
 constexpr const char* kPaletteTitle = "Add command";
 constexpr const char* kTrackTitle = "Add track";
+constexpr float kPaletteWidth = 720.0F;
+constexpr float kTrackModalWidth = 520.0F;
+constexpr float kScreenMargin = 48.0F;
 
 std::string g_track_id;
 int g_frame = 0;
@@ -78,14 +82,15 @@ void DrawEntry(const Editor::PaletteEntry& entry, bool highlighted) {
     ImGui::BeginDisabled(!entry.enabled);
     const ImU32 chip = CommandColor(entry.type);
     const ImVec2 origin = ImGui::GetCursorScreenPos();
-    ImGui::Dummy(ImVec2(10.0F, 1.0F));
-    ImGui::GetWindowDrawList()->AddRectFilled(ImVec2(origin.x, origin.y + 2.0F),
-                                              ImVec2(origin.x + 6.0F, origin.y + 16.0F), chip);
+    ImGui::Dummy(Gui::Dpi::S(10.0F, 1.0F));
+    ImGui::GetWindowDrawList()->AddRectFilled(
+        ImVec2(origin.x, origin.y + Gui::Dpi::S(2.0F)),
+        ImVec2(origin.x + Gui::Dpi::S(6.0F), origin.y + Gui::Dpi::S(16.0F)), chip);
     ImGui::SameLine();
     if (ImGui::Selectable((entry.name + id).c_str(), highlighted)) Insert(entry.type);
     if (highlighted && ImGui::IsWindowAppearing()) ImGui::SetScrollHereY();
     ImGui::EndDisabled();
-    ImGui::SameLine(0.0F, 12.0F);
+    ImGui::SameLine(0.0F, Gui::Dpi::S(12.0F));
     if (entry.enabled) {
         ImGui::TextDisabled("%s", entry.summary.c_str());
     } else {
@@ -138,7 +143,7 @@ void DrawAddOption(const std::vector<Editor::PaletteEntry>& entries, std::string
         !entries.empty() && entries.back().section == Editor::PaletteSection::Document;
     if (!in_section) ImGui::SeparatorText(SectionLabel(Editor::PaletteSection::Document));
     const bool picked = ImGui::Selectable("Add option###tl_palette_add_option");
-    ImGui::SameLine(0.0F, 12.0F);
+    ImGui::SameLine(0.0F, Gui::Dpi::S(12.0F));
     ImGui::TextDisabled("appends to document.options; not a clip and not a track");
     if (!picked) return;
 
@@ -163,7 +168,7 @@ int ClampHighlight(const std::vector<Editor::PaletteEntry>& entries, int wanted)
 
 void DrawFreeTargetRow() {
     RowLabel("target");
-    ImGui::SetNextItemWidth(-30.0F);
+    ImGui::SetNextItemWidth(Gui::Dpi::S(-30.0F));
     std::array<char, 64> buffer = {};
     std::copy_n(g_track_target.begin(), std::min(g_track_target.size(), buffer.size() - 1),
                 buffer.begin());
@@ -238,7 +243,9 @@ void RenderPalette() {
     }
     ImGuiViewport* viewport = ImGui::GetMainViewport();
     ImGui::SetNextWindowPos(viewport->GetCenter(), ImGuiCond_Always, ImVec2(0.5F, 0.5F));
-    ImGui::SetNextWindowSizeConstraints(ImVec2(720, 0), ImVec2(720, viewport->WorkSize.y - 48.0F));
+    ImGui::SetNextWindowSizeConstraints(
+        Gui::Dpi::S(kPaletteWidth, 0.0F),
+        ImVec2(Gui::Dpi::S(kPaletteWidth), viewport->WorkSize.y - Gui::Dpi::S(kScreenMargin)));
     if (!ImGui::BeginPopupModal(kPaletteTitle, nullptr,
                                 ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoNavInputs)) {
         return;
@@ -280,6 +287,16 @@ void RenderPalette() {
     ImGui::EndPopup();
 }
 
+namespace {
+void PlaceTrackModal() {
+    const ImGuiViewport* viewport = ImGui::GetMainViewport();
+    ImGui::SetNextWindowPos(viewport->GetCenter(), ImGuiCond_Always, ImVec2(0.5F, 0.5F));
+    ImGui::SetNextWindowSizeConstraints(
+        ImVec2(Gui::Dpi::S(kTrackModalWidth), 0.0F),
+        ImVec2(Gui::Dpi::S(kTrackModalWidth), viewport->WorkSize.y - Gui::Dpi::S(kScreenMargin)));
+}
+}
+
 void RequestTrackModal(std::string selected_track_id) {
     g_track_selected = std::move(selected_track_id);
     g_track_requested = true;
@@ -293,9 +310,7 @@ void RenderTrackModal() {
         ImGui::OpenPopup(kTrackTitle);
         g_track_requested = false;
     }
-    ImGuiViewport* viewport = ImGui::GetMainViewport();
-    ImGui::SetNextWindowPos(viewport->GetCenter(), ImGuiCond_Always, ImVec2(0.5F, 0.5F));
-    ImGui::SetNextWindowSizeConstraints(ImVec2(520, 0), ImVec2(520, viewport->WorkSize.y - 48.0F));
+    PlaceTrackModal();
     if (!ImGui::BeginPopupModal(kTrackTitle, nullptr, ImGuiWindowFlags_AlwaysAutoResize)) return;
     if (!editor.Loaded()) {
         ImGui::CloseCurrentPopup();
@@ -320,7 +335,7 @@ void RenderTrackModal() {
     if (Doc::HasTarget(kind)) DrawTargetRow(assets, kind);
 
     RowLabel("name");
-    ImGui::SetNextItemWidth(-30.0F);
+    ImGui::SetNextItemWidth(Gui::Dpi::S(-30.0F));
     ImGui::InputTextWithHint("###tl_track_name", g_track_target.c_str(), g_track_name.data(),
                              g_track_name.size());
 
