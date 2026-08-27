@@ -3,11 +3,13 @@
 #include "formats/gcanim.h"
 #include "formats/sysidx.h"
 #include "gc2d/gc_package.h"
+#include "gc2d/gc_sprite.h"
 #include "support/log.h"
 
 #include <d3d9.h>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -19,8 +21,6 @@ namespace Gc2d {
 namespace {
 
 constexpr DWORD kFvf = D3DFVF_XYZRHW | D3DFVF_DIFFUSE | D3DFVF_TEX1;
-constexpr int kCanvasWidth = 640;
-constexpr int kCanvasHeight = 480;
 constexpr float kHalfTexel = 0.5F;
 
 struct Vtx {
@@ -77,16 +77,31 @@ void SplitCell(const Package& pkg, const SysIdx::Cell& cell, std::vector<CellSeg
 }
 
 void ApplyBlend(IDirect3DDevice9* dev, GcAnim::Blend blend) {
+    dev->SetRenderState(D3DRS_SEPARATEALPHABLENDENABLE, TRUE);
+    dev->SetRenderState(D3DRS_BLENDOPALPHA, D3DBLENDOP_ADD);
+    dev->SetRenderState(D3DRS_SRCBLENDALPHA, D3DBLEND_ONE);
+    dev->SetRenderState(D3DRS_DESTBLENDALPHA, D3DBLEND_INVSRCALPHA);
     switch (blend) {
     case GcAnim::Blend::Additive:
         dev->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
         dev->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_ONE);
         dev->SetRenderState(D3DRS_BLENDOP, D3DBLENDOP_ADD);
+        dev->SetRenderState(D3DRS_SRCBLENDALPHA, D3DBLEND_ZERO);
+        dev->SetRenderState(D3DRS_DESTBLENDALPHA, D3DBLEND_ONE);
         break;
     case GcAnim::Blend::Subtract:
         dev->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
         dev->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_ONE);
         dev->SetRenderState(D3DRS_BLENDOP, D3DBLENDOP_REVSUBTRACT);
+        dev->SetRenderState(D3DRS_SRCBLENDALPHA, D3DBLEND_ZERO);
+        dev->SetRenderState(D3DRS_DESTBLENDALPHA, D3DBLEND_ONE);
+        break;
+    case GcAnim::Blend::Replace:
+        dev->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
+        dev->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_ZERO);
+        dev->SetRenderState(D3DRS_BLENDOP, D3DBLENDOP_ADD);
+        dev->SetRenderState(D3DRS_SRCBLENDALPHA, D3DBLEND_ONE);
+        dev->SetRenderState(D3DRS_DESTBLENDALPHA, D3DBLEND_ZERO);
         break;
     default:
         dev->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
@@ -188,6 +203,9 @@ void Renderer::ApplyState() {
     dev_->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
     dev_->SetRenderState(D3DRS_ZENABLE, FALSE);
     dev_->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
+    dev_->SetRenderState(D3DRS_ALPHATESTENABLE, TRUE);
+    dev_->SetRenderState(D3DRS_ALPHAFUNC, D3DCMP_GREATER);
+    dev_->SetRenderState(D3DRS_ALPHAREF, 0);
     dev_->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_MODULATE);
     dev_->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_TEXTURE);
     dev_->SetTextureStageState(0, D3DTSS_COLORARG2, D3DTA_DIFFUSE);
@@ -201,12 +219,13 @@ void Renderer::ApplyState() {
 }
 
 void Renderer::Draw(const Package& pkg, const std::vector<GcAnim::DrawNode>& nodes, int width,
-                    int height) {
+                    int height, const Canvas& canvas) {
     if (dev_ == nullptr || textures_.empty() || nodes.empty()) return;
     ApplyState();
 
-    const float sx = (float)width / (float)kCanvasWidth;
-    const float sy = (float)height / (float)kCanvasHeight;
+    const std::array<float, 2> factors = ScaleFactors(canvas, width, height);
+    const float sx = factors[0];
+    const float sy = factors[1];
 
     std::vector<CellSegment> segments;
     for (const auto& n : nodes) {

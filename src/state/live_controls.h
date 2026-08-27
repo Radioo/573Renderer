@@ -1,5 +1,7 @@
 #pragma once
 
+#include "render/stretch.h"
+
 #include "state/telemetry.h"
 
 #include <array>
@@ -65,6 +67,12 @@ public:
     void GetRenderSize(int& w, int& h) const;
     void SetRenderSize(int w, int h);
 
+    [[nodiscard]] bool GetStretchWide() const;
+    void SetStretchWide(bool on);
+
+    [[nodiscard]] Stretch::Filter GetStretchFilter() const;
+    void SetStretchFilter(Stretch::Filter filter);
+
     [[nodiscard]] int GetRenderFps() const;
     void SetRenderFps(int fps);
 
@@ -97,6 +105,8 @@ private:
     LiveOverrides live_overrides_;
     CropRect crop_rect_;
     float master_scale_{1.0F};
+    bool stretch_wide_{false};
+    Stretch::Filter stretch_filter_{Stretch::Filter::Linear};
     int render_w_{1920};
     int render_h_{1080};
     int render_fps_{120};

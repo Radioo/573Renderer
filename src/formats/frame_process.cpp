@@ -27,6 +27,21 @@ void CompositeOverOpaqueBg(std::span<uint8_t> bgra, float r, float g, float b) {
     }
 }
 
+void DeriveAlphaFromCoverage(std::span<uint8_t> bgra) {
+    const std::size_t n = bgra.size() / 4;
+    for (std::size_t i = 0; i < n; i++) {
+        const std::size_t o = i * 4;
+        const int cover = std::max({bgra[o + 0], bgra[o + 1], bgra[o + 2]});
+        bgra[o + 3] = static_cast<uint8_t>(cover);
+    }
+}
+
+void SetAlphaOpaque(std::span<uint8_t> bgra) {
+    const std::size_t n = bgra.size() / 4;
+    for (std::size_t i = 0; i < n; i++)
+        bgra[(i * 4) + 3] = 255;
+}
+
 CropSpec ClampCropToImage(CropSpec c, int img_w, int img_h) {
     CropSpec out;
     out.x = std::max(0, std::min(c.x, img_w - 1));

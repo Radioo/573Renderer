@@ -8,6 +8,10 @@ namespace Frame {
 
 void CompositeOverOpaqueBg(std::span<uint8_t> bgra, float r, float g, float b);
 
+void DeriveAlphaFromCoverage(std::span<uint8_t> bgra);
+
+void SetAlphaOpaque(std::span<uint8_t> bgra);
+
 struct CropSpec {
     int x = 0;
     int y = 0;

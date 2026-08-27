@@ -31,6 +31,15 @@ const std::vector<Profile> kProfiles = {
         .default_render_h = 480,
     },
     Profile{
+        .name = "IIDX 12",
+        .slug = "iidx12",
+        .dir_substring = "happy sky",
+        .backend_id = "scene3d",
+        .game_dll = "bm2dx.exe",
+        .default_render_w = 640,
+        .default_render_h = 480,
+    },
+    Profile{
         .name = "IIDX 12-13",
         .slug = "iidx13",
         .dir_substring = "distorted",
@@ -137,6 +146,15 @@ const std::vector<Profile> kProfiles = {
         .game_dll = "jubeat2019.dll",
         .default_render_w = 1080,
         .default_render_h = 1920,
+    },
+    Profile{
+        .name = "pop'n music 29",
+        .slug = "popn29",
+        .dir_substring = "popn",
+        .backend_id = "afp_modern",
+        .game_dll = "popn.dll",
+        .default_render_w = 1920,
+        .default_render_h = 1080,
     },
 };
 

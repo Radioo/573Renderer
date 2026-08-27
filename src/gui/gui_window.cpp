@@ -1,5 +1,6 @@
 #include "gui_window.h"
 
+#include "../state/app_state.h"
 #include "../warp_device.h"
 #include "gui_panels.h"
 #include "gui_layout_constants.h"
@@ -31,6 +32,10 @@ HWND GetHwnd() {
 
 namespace {
 Window* g_win = nullptr;
+}
+
+IDirect3DDevice9* GetDevice() {
+    return (g_win != nullptr) ? g_win->device : nullptr;
 }
 
 namespace {
@@ -66,6 +71,12 @@ LRESULT WINAPI WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     }
     case WM_SYSCOMMAND:
         if ((wp & 0xfff0) == SC_KEYMENU) return 0;
+        break;
+    case WM_CLOSE:
+        if (App::Global().CloseNeedsPrompt() && !App::Global().CloseRequested()) {
+            App::Global().PostCloseRequest();
+            return 0;
+        }
         break;
     case WM_DESTROY:
         PostQuitMessage(0);
@@ -281,7 +292,7 @@ bool PumpAndRender(Window& w) {
     }
 
     RenderFrameLocked(w);
-    return true;
+    return !App::Global().CloseConfirmed();
 }
 
 }

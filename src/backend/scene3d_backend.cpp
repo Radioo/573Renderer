@@ -1,25 +1,39 @@
 #include "backend/scene3d_backend.h"
 
+#include "app_globals.h"
 #include "backend/backend.h"
+#include "backend/preset_clear_color.h"
+#include "backend/preset_command_apply.h"
 #include "cli/cli.h"
+#include "export.h"
 #include "export_capture.h"
+#include "export_internal.h"
+#include "formats/frame_process.h"
 #include "game_revision.h"
 #include "gc2d/gc_host.h"
 #include "gc2d/gc_package.h"
 #include "loop/cli_autopilot.h"
+#include "preset/preset_host.h"
+#include "preset/preset_preview.h"
 #include "render_backend.h"
+#include "scene3d/poly_grid.h"
 #include "scene3d/scene3d.h"
 #include "scene3d/scene3d_host.h"
 #include "state/app_state.h"
+#include "state/telemetry.h"
 #include "support/log.h"
 
 #include <any>
 #include <filesystem>
 #include <memory>
+#include <optional>
 #include <string>
 #include <system_error>
 #include <thread>
 #include <utility>
+#include <cstddef>
+#include <span>
+#include <cstdint>
 #include <vector>
 
 namespace Backend {
@@ -28,12 +42,94 @@ namespace {
 
 class Scene3dCaptureDriver final : public Export::ICaptureDriver {
 public:
-    void BeginCapture(Export::Session& sess) override { (void)sess; }
-    void TickCapture(Export::Session& sess, D3D9State& d3d) override {
-        (void)sess;
-        (void)d3d;
+    void BeginCapture(Export::Session& sess) override {
+        planned_frames_ = 0;
+        int preset_frames = 0;
+        int package_frames = 0;
+        if (PresetHost::Active()) {
+            ResumeForCapture();
+            PresetHost::Seek(sess.start_frame);
+            preset_frames = PresetHost::NaturalFrames() - sess.start_frame;
+        } else if (Gc2dHost::Active()) {
+            ResumeForCapture();
+            Gc2dHost::SetFrame(0);
+            package_frames = Gc2dHost::GetStatus().length;
+        } else {
+            Export::FailSession(sess, "Load a screen preset or a 2D package first - the scene "
+                                      "browser has no timeline the exporter can bound on.");
+            return;
+        }
+
+        planned_frames_ = Export::PlannedFrames(sess.max_frames, preset_frames, package_frames);
+        if (planned_frames_ <= 0) {
+            Export::FailSession(sess, "This screen has no countdown and no looping animation - "
+                                      "turn on 'Limit frames' to set a length.");
+            return;
+        }
+        LOG("Export", "scene export: %d frames (%s)", planned_frames_,
+            (sess.max_frames > 0) ? "frame limit"
+            : (preset_frames > 0) ? "one full screen timeline"
+                                  : "one full animation loop");
     }
-    void EndCapture(Export::Session& sess) override { (void)sess; }
+
+    void TickCapture(Export::Session& sess, D3D9State& d3d) override {
+        static std::vector<uint8_t> bgra;
+        int w = 0;
+        int h = 0;
+        if (!d3d.ReadPresentBGRA(bgra, w, h)) {
+            Export::FailSession(sess, "D3D9 presented-frame readback failed");
+            return;
+        }
+        const std::span<uint8_t> frame{bgra.data(), (size_t)w * h * 4};
+        if (!sess.bg_transparent) {
+            Frame::SetAlphaOpaque(frame);
+        } else if (PresetHost::Active() && PresetHost::OpaqueScreen()) {
+            Frame::DeriveAlphaFromCoverage(frame);
+        }
+        Export::SubmitOneFrame(sess, bgra.data(), w, h);
+        if (!sess.active) return;
+        if (sess.frames_captured >= planned_frames_) {
+            Export::FinishAndEncode(sess);
+            return;
+        }
+        Export::PublishCapturing(sess);
+    }
+
+    void EndCapture(Export::Session& sess) override {
+        (void)sess;
+        if (!resumed_) return;
+        resumed_ = false;
+        Gc2dHost::SetPaused(gc2d_was_paused_);
+        Scene3dHost::SetPaused(scene_was_paused_);
+        PresetHost::SetPaused(preset_was_paused_);
+    }
+
+    [[nodiscard]] Export::Capabilities Caps() const override {
+        return Export::Capabilities{
+            .loop_count = false,
+            .blend_seam = false,
+            .transparent_bg = false,
+            .natural_end = "one full run of the screen's timeline, or of the animation's loop"};
+    }
+
+private:
+    void ResumeForCapture() {
+        gc2d_was_paused_ = Gc2dHost::GetStatus().paused;
+        scene_was_paused_ = Scene3dHost::GetStatus().paused;
+        preset_was_paused_ = PresetHost::Active() && !PresetHost::GetStatus().playing;
+        resumed_ = true;
+        if (!gc2d_was_paused_ && !scene_was_paused_ && !preset_was_paused_) return;
+        Gc2dHost::SetPaused(false);
+        Scene3dHost::SetPaused(false);
+        PresetHost::SetPaused(false);
+        LOG("Export", "playback was paused - resuming it for the capture, restoring it after");
+    }
+
+    int planned_frames_ = 0;
+    bool resumed_ = false;
+    bool gc2d_was_paused_ = false;
+    bool scene_was_paused_ = false;
+    bool preset_was_paused_ = false;
 };
 
 void ScanScenes(const std::string& game_dir) noexcept {
@@ -75,11 +171,17 @@ public:
         cli_ = env.cli;
         const std::string rev = GameRevision::LatestRevisionDir(game_dir_);
         if (!rev.empty()) LOG("Boot", "scene3d backend: active revision %s", rev.c_str());
+        Scene3dHost::SetMovieReporter(Scene3d::MovieReporter{
+            .begin = [](const std::string& what) { App::Global().BeginLoad(what); },
+            .stage = [](const std::string& stage,
+                        float fraction) { App::Global().UpdateLoadStage(stage, fraction); },
+            .end = []() { App::Global().EndLoad(); }});
         LOG("Boot", "scene3d backend ready (no engine DLLs are needed for model scenes)");
         return true;
     }
 
     void Shutdown() override {
+        PresetHost::Unload();
         Scene3dHost::Unload();
         Gc2dHost::Unload();
     }
@@ -96,6 +198,7 @@ public:
     bool LoadContent(const std::string& path, bool from_arc) override {
         (void)from_arc;
         auto& state = App::Global();
+        PresetHost::Unload();
         state.BeginLoad(path);
         bool ok = false;
         if (Scene3d::IsSceneDir(path)) {
@@ -112,6 +215,7 @@ public:
     }
 
     void UnloadContent() override {
+        PresetHost::Unload();
         Scene3dHost::Unload();
         Gc2dHost::Unload();
     }
@@ -119,11 +223,51 @@ public:
     void AdvanceFrame(float dt, int frame_count, bool exporting) override {
         (void)dt;
         (void)frame_count;
-        (void)exporting;
+        ApplyPresetClearColor(g_d3d, exporting);
+        const bool live = Scene3dHost::Active() || Gc2dHost::Active();
+        std::string playing;
+        App::PresetStatus preset;
+        PresetHost::SetFrameReportWanted(App::Global().TakePresetFrameReportRequest());
+        if (PresetHost::Active()) {
+            const PresetHost::Status status = PresetHost::GetStatus();
+            playing = status.id;
+            preset.id = status.id;
+            preset.frame = status.frame;
+            preset.length = status.length;
+            preset.fps = status.fps;
+            preset.playing = status.playing;
+            preset.loop = status.loop;
+            preset.option_choices = status.option_choices;
+            preset.transition = App::PresetTransition{.option = status.transition_option,
+                                                      .from = status.transition_from,
+                                                      .to = status.transition_to,
+                                                      .frames_left = status.transition_left};
+            preset.assets = PresetHost::GetAssetIndex();
+            preset.frame_report = PresetHost::GetFrameReport();
+        } else if (Gc2dHost::Active()) {
+            playing = Gc2dHost::GetStatus().animation;
+        }
+        PresetHost::PumpPreview();
+        const Preset::Preview::SnapshotPtr preview = PresetHost::GetPreview();
+        if (preview != published_preview_) {
+            published_preview_ = preview;
+            App::Global().SetPresetPreview(preview);
+        }
+        App::Global().SetPresetStatus(std::move(preset));
+        App::Status st = App::Global().GetStatus();
+        if (st.scene_loaded != live || st.playing_animation != playing) {
+            st.scene_loaded = live;
+            st.playing_animation = playing;
+            App::Global().SetStatus(st);
+        }
     }
 
     void RenderScene(float dt, int frame_count) override {
         (void)frame_count;
+        if (PresetHost::Active()) {
+            PresetHost::RenderFrame(dt);
+            return;
+        }
         Scene3dHost::RenderFrame(dt);
         Gc2dHost::RenderFrame(dt);
     }
@@ -132,13 +276,20 @@ public:
         const bool live = Scene3dHost::Active() || Gc2dHost::Active();
         in.clip_live = live;
         in.scene_renderable = live;
+        const bool wanted = (cli_ != nullptr) && !cli_->animation_name.empty();
+        in.anim_name_matches = !wanted || Gc2dHost::GetStatus().animation == cli_->animation_name;
+        in.active_clip_matches = in.anim_name_matches;
     }
 
     void BindSubmonitor() override {}
 
     bool HandleCommand(const std::any& payload) override {
-        (void)payload;
-        return false;
+        const LoadReporter reporter{
+            .begin = [](const std::string& what) { App::Global().BeginLoad(what); },
+            .stage = [](const std::string& stage,
+                        float fraction) { App::Global().UpdateLoadStage(stage, fraction); },
+            .end = []() { App::Global().EndLoad(); }};
+        return ApplyPresetCommand(payload, reporter);
     }
 
     Export::ICaptureDriver& ExportDriver() override { return capture_; }
@@ -147,8 +298,19 @@ private:
     std::string game_dir_;
     const Cli::Options* cli_ = nullptr;
     Scene3dCaptureDriver capture_;
+    Preset::Preview::SnapshotPtr published_preview_;
 };
 
+}
+
+void ApplyPresetClearColor(D3D9State& d3d, bool exporting) {
+    if (d3d.device == nullptr) return;
+    const std::optional<std::uint32_t> clear =
+        FrameClearColor(ClearInputs{.preset_active = PresetHost::Active(),
+                                    .exporting = exporting,
+                                    .bg_transparent = Export::ActiveSession().bg_transparent,
+                                    .color = PresetHost::ClearColor()});
+    if (clear.has_value()) d3d.clear_color = *clear;
 }
 
 std::unique_ptr<IBackend> MakeScene3dBackend() {

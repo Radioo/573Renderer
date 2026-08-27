@@ -30,6 +30,7 @@ find_package(imgui CONFIG REQUIRED)
 find_package(FFMPEG REQUIRED COMPONENTS avcodec avformat avutil swscale)
 find_package(Catch2 3 CONFIG REQUIRED)
 find_package(tl-expected CONFIG REQUIRED)
+find_package(nlohmann_json CONFIG REQUIRED)
 
 set(R573_MSVC_WARNING_FLAGS
     /W4
@@ -49,7 +50,12 @@ add_library(r573_support STATIC
     src/support/log.cpp
     src/support/dll_loader.cpp
     src/support/env.cpp
+    src/support/math/float_trig.cpp
 )
+if(MSVC)
+    set_source_files_properties(src/support/math/float_trig.cpp
+        PROPERTIES COMPILE_OPTIONS "/fp:precise")
+endif()
 target_include_directories(r573_support PUBLIC src)
 target_link_libraries(r573_support PUBLIC tl::expected PRIVATE r573::warnings)
 
@@ -82,6 +88,7 @@ target_link_libraries(r573_media_format PRIVATE r573::warnings)
 
 add_library(r573_media STATIC
     src/media_sink.cpp
+    src/media/movie_source.cpp
     src/video_encoder.cpp
     src/video_encoder_codecs.cpp
 )
@@ -130,6 +137,7 @@ target_link_libraries(r573_loop PRIVATE r573::warnings)
 add_library(r573_render STATIC
     src/render/blend_map.cpp
     src/render/vertex_math.cpp
+    src/render/stretch.cpp
     src/render/hsv_filter.cpp
     src/render/command_trace.cpp
     src/render/command_list.cpp
@@ -139,14 +147,48 @@ add_library(r573_render STATIC
 target_include_directories(r573_render PUBLIC src)
 target_link_libraries(r573_render PRIVATE r573::warnings)
 
+find_package(Python3 COMPONENTS Interpreter REQUIRED)
+
+set(R573_LAYER_VERDICTS "${CMAKE_BINARY_DIR}/generated/preset_layer_verdicts.cpp")
+add_custom_command(
+    OUTPUT "${R573_LAYER_VERDICTS}"
+    COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/tools/ci/gen_layer_verdicts.py"
+            "${CMAKE_SOURCE_DIR}/docs/preset_layers.md" "${R573_LAYER_VERDICTS}"
+    DEPENDS "${CMAKE_SOURCE_DIR}/tools/ci/gen_layer_verdicts.py"
+            "${CMAKE_SOURCE_DIR}/docs/preset_layers.md"
+    COMMENT "Generating preset layer verdicts from docs/preset_layers.md"
+    VERBATIM
+)
+
 add_library(r573_app STATIC
+    "${R573_LAYER_VERDICTS}"
     src/tool_commands.cpp
     src/boot.cpp
     src/backend/backend_registry.cpp
     src/backend/scene3d_backend.cpp
+    src/backend/preset_clear_color.cpp
+    src/backend/preset_command_apply.cpp
+    src/editor/clip_form.cpp
+    src/editor/clip_problems.cpp
+    src/editor/clip_summary.cpp
+    src/editor/command_palette.cpp
+    src/editor/document_edits.cpp
+    src/editor/preset_editor_state.cpp
+    src/editor/timeline_drag.cpp
+    src/editor/timeline_lanes.cpp
+    src/editor/timeline_edits.cpp
+    src/editor/timeline_view.cpp
+    src/editor/tween_edits.cpp
+    src/editor/curve_geometry.cpp
+    src/editor/options_model.cpp
+    src/editor/library_model.cpp
+    src/editor/export_range.cpp
+    src/editor/frame_inspector_model.cpp
     src/gc2d/gc_package.cpp
     src/gc2d/gc_host.cpp
+    src/gc2d/gc_sheet.cpp
     src/gc2d/gc_render.cpp
+    src/gc2d/gc_sprite.cpp
     src/game_revision.cpp
     src/backend/afp_profiles.cpp
     src/backend/afp_family_backend.cpp
@@ -178,12 +220,34 @@ add_library(r573_app STATIC
     src/gui/gui_panels.cpp
     src/gui/gui_scene3d_panel.cpp
     src/gui/gui_gc2d_panel.cpp
+    src/gui/gui_preset_library.cpp
+    src/gui/gui_preset_library_actions.cpp
+    src/gui/timeline/gui_tl_frame_inspector.cpp
     src/gui/panel_registry.cpp
     src/gui/gui_style.cpp
     src/gui/gui_widgets.cpp
     src/gui/gui_scene_panel.cpp
     src/gui/gui_inspector.cpp
     src/gui/gui_timeline.cpp
+    src/gui/timeline/gui_tl_editor.cpp
+    src/gui/timeline/gui_tl_transport.cpp
+    src/gui/timeline/gui_tl_ruler.cpp
+    src/gui/timeline/gui_tl_tracks.cpp
+    src/gui/timeline/gui_tl_clips.cpp
+    src/gui/timeline/gui_tl_drag.cpp
+    src/gui/timeline/gui_tl_colors.cpp
+    src/gui/timeline/gui_tl_forms.cpp
+    src/gui/timeline/gui_tl_asset_picker.cpp
+    src/gui/timeline/gui_tl_preview.cpp
+    src/gui/timeline/gui_tl_palette.cpp
+    src/gui/timeline/gui_tl_clip_modal.cpp
+    src/gui/timeline/gui_tl_clip_tab.cpp
+    src/gui/timeline/gui_tl_tween_tab.cpp
+    src/gui/timeline/gui_tl_curve.cpp
+    src/gui/timeline/gui_tl_options.cpp
+    src/gui/timeline/gui_tl_option_modal.cpp
+    src/gui/timeline/gui_tl_doc_modal.cpp
+    src/gui/timeline/gui_tl_problems.cpp
     src/gui/gui_qpro_panel.cpp
     src/gui/gui_splitter.cpp
     src/gui/gui_export_panel.cpp
@@ -219,11 +283,56 @@ add_library(r573_app STATIC
     src/afp_ddr_boot.cpp
     src/afp_ddr_txp2.cpp
     src/afp_ddr_test.cpp
+    src/game_fingerprint.cpp
+    src/preset/preset_host.cpp
+    src/preset/preset_host_push.cpp
+    src/preset/preset_preview.cpp
+    src/preset/preset_rng.cpp
+    src/preset/preset_test.cpp
+    src/preset/preset_tools.cpp
+    src/preset/eval/eval_tween.cpp
+    src/preset/eval/eval_models.cpp
+    src/preset/eval/eval_sprites.cpp
+    src/preset/eval/eval_camera_lights.cpp
+    src/preset/eval/eval_scene.cpp
+    src/preset/eval/eval_particles.cpp
+    src/preset/eval/eval_resolve.cpp
+    src/preset/eval/eval_poly.cpp
+    src/preset/eval/frame_report.cpp
+    src/preset/eval/eval_ease.cpp
+    src/preset/eval/eval_emit.cpp
+    src/preset/eval/preset_evaluator.cpp
+    src/preset/defaults/defaults.cpp
+    src/preset/defaults/defaults_build.cpp
+    src/preset/defaults/iidx10_defaults.cpp
+    src/preset/defaults/iidx11_defaults.cpp
+    src/preset/defaults/iidx11_select_defaults.cpp
+    src/preset/defaults/iidx11_ending_a_defaults.cpp
+    src/preset/defaults/iidx11_ending_b_defaults.cpp
+    src/preset/defaults/iidx12_defaults.cpp
+    src/preset/defaults/iidx12_mode_defaults.cpp
+    src/preset/defaults/iidx12_dan_defaults.cpp
+    src/preset/defaults/iidx12_music_defaults.cpp
+    src/preset/defaults/iidx12_ending_defaults.cpp
+    src/preset/defaults/iidx12_2d_defaults.cpp
+    src/preset/doc/preset_enum_names.cpp
+    src/preset/doc/preset_fields.cpp
+    src/preset/doc/preset_fields_2d.cpp
+    src/preset/doc/preset_fields_3d.cpp
+    src/preset/doc/preset_json.cpp
+    src/preset/doc/preset_registry.cpp
+    src/preset/doc/preset_validate.cpp
     src/scene3d/anim.cpp
+    src/scene3d/atlas.cpp
     src/scene3d/camera.cpp
+    src/scene3d/poly_draw.cpp
+    src/scene3d/poly_vertex.cpp
     src/scene3d/scene3d_host.cpp
     src/scene3d/scene3d_input.cpp
+    src/scene3d/scene3d_merge.cpp
     src/scene3d/scene3d.cpp
+    src/scene3d/scene3d_fog.cpp
+    src/scene3d/scene3d_material.cpp
     src/scene3d/scene3d_render.cpp
     src/scene3d/scene3d_test.cpp
 )
@@ -278,11 +387,21 @@ add_executable(formats_tests
     tests/formats/blowfish_tests.cpp
     tests/formats/xfile_binary_tests.cpp
     src/gc2d/gc_package.cpp
+    src/gc2d/gc_sprite.cpp
+    tests/formats/gc_sprite_tests.cpp
     tests/formats/frame_process_tests.cpp
     tests/formats/dxt_decode_tests.cpp
     tests/formats/bgra_crop_tests.cpp
     tests/formats/hsl_adjust_tests.cpp
     tests/formats/gcanim_tests.cpp
+    tests/formats/scene3d_atlas_tests.cpp
+    tests/formats/scene3d_fog_tests.cpp
+    tests/formats/scene3d_material_tests.cpp
+    tests/formats/scene3d_anim_tests.cpp
+    src/scene3d/anim.cpp
+    src/scene3d/atlas.cpp
+    src/scene3d/scene3d_fog.cpp
+    src/scene3d/scene3d_material.cpp
 )
 target_link_libraries(formats_tests PRIVATE Catch2::Catch2WithMain r573_formats r573_support r573::warnings)
 catch_discover_tests(formats_tests DISCOVERY_MODE POST_BUILD PROPERTIES LABELS ci)
@@ -290,12 +409,103 @@ catch_discover_tests(formats_tests DISCOVERY_MODE POST_BUILD PROPERTIES LABELS c
 add_executable(game_tests
     tests/game/game_profile_tests.cpp
     tests/game/mc_control_tests.cpp
+    tests/game/preset_json_tests.cpp
+    tests/game/preset_validate_tests.cpp
+    tests/game/preset_defaults_golden_tests.cpp
+    tests/game/preset_golden_format.cpp
+    tests/game/preset_push_text.cpp
+    tests/game/preset_legacy_view.cpp
+    tests/game/preset_eval_tests.cpp
+    tests/game/preset_poly_tests.cpp
+    tests/game/poly_vertex_tests.cpp
+    tests/game/preset_option_tests.cpp
+    tests/game/preset_defaults_tests.cpp
+    tests/game/preset_defaults_2d_tests.cpp
+    tests/game/preset_registry_tests.cpp
+    tests/game/eval_tween_tests.cpp
+    tests/game/preset_host_tests.cpp
+    tests/game/preset_preview_tests.cpp
+    tests/game/preset_host_stubs.cpp
+    tests/editor/clip_form_tests.cpp
+    tests/editor/clip_problems_tests.cpp
+    tests/editor/timeline_editor_tests.cpp
+    tests/editor/tween_edits_tests.cpp
+    tests/editor/curve_geometry_tests.cpp
+    tests/editor/options_model_tests.cpp
+    tests/editor/library_model_tests.cpp
+    tests/editor/export_range_tests.cpp
+    tests/editor/frame_inspector_model_tests.cpp
+    src/backend/preset_clear_color.cpp
+    src/backend/preset_command_apply.cpp
+    src/editor/clip_form.cpp
+    src/editor/clip_problems.cpp
+    src/editor/clip_summary.cpp
+    src/editor/command_palette.cpp
+    src/editor/document_edits.cpp
+    src/editor/preset_editor_state.cpp
+    src/editor/timeline_drag.cpp
+    src/editor/timeline_lanes.cpp
+    src/editor/timeline_edits.cpp
+    src/editor/timeline_view.cpp
+    src/editor/tween_edits.cpp
+    src/editor/curve_geometry.cpp
+    src/editor/options_model.cpp
+    src/editor/library_model.cpp
+    src/editor/export_range.cpp
+    src/editor/frame_inspector_model.cpp
+    src/preset/preset_host.cpp
+    src/preset/preset_host_push.cpp
+    src/preset/preset_preview.cpp
+    src/gc2d/gc_sprite.cpp
+    src/scene3d/scene3d_merge.cpp
+    src/scene3d/scene3d_fog.cpp
+    src/scene3d/scene3d_material.cpp
     src/game_profile.cpp
     src/game_revision.cpp
+    src/game_fingerprint.cpp
+    src/backend/afp_profiles.cpp
+    src/preset/preset_rng.cpp
+    src/preset/eval/eval_tween.cpp
+    src/preset/eval/eval_models.cpp
+    src/preset/eval/eval_sprites.cpp
+    src/preset/eval/eval_camera_lights.cpp
+    src/preset/eval/eval_scene.cpp
+    src/preset/eval/eval_particles.cpp
+    src/preset/eval/eval_resolve.cpp
+    src/preset/eval/eval_poly.cpp
+    src/preset/eval/frame_report.cpp
+    src/preset/eval/eval_ease.cpp
+    src/preset/eval/eval_emit.cpp
+    src/preset/eval/preset_evaluator.cpp
+    src/preset/defaults/defaults.cpp
+    src/preset/defaults/defaults_build.cpp
+    src/preset/defaults/iidx10_defaults.cpp
+    src/preset/defaults/iidx11_defaults.cpp
+    src/preset/defaults/iidx11_select_defaults.cpp
+    src/preset/defaults/iidx11_ending_a_defaults.cpp
+    src/preset/defaults/iidx11_ending_b_defaults.cpp
+    src/preset/defaults/iidx12_defaults.cpp
+    src/preset/defaults/iidx12_mode_defaults.cpp
+    src/preset/defaults/iidx12_dan_defaults.cpp
+    src/preset/defaults/iidx12_music_defaults.cpp
+    src/preset/defaults/iidx12_ending_defaults.cpp
+    src/preset/defaults/iidx12_2d_defaults.cpp
+    src/preset/doc/preset_enum_names.cpp
+    src/preset/doc/preset_fields.cpp
+    src/preset/doc/preset_fields_2d.cpp
+    src/preset/doc/preset_fields_3d.cpp
+    src/preset/doc/preset_json.cpp
+    src/preset/doc/preset_registry.cpp
+    src/preset/preset_tools.cpp
+    src/preset/doc/preset_validate.cpp
+    src/scene3d/poly_vertex.cpp
     src/mc_control.cpp
 )
 target_include_directories(game_tests PRIVATE src)
-target_link_libraries(game_tests PRIVATE Catch2::Catch2WithMain r573_support r573::warnings)
+target_compile_definitions(game_tests
+    PRIVATE R573_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/game/fixtures")
+target_link_libraries(game_tests PRIVATE Catch2::Catch2WithMain r573_support r573_formats
+                                         nlohmann_json::nlohmann_json r573::warnings)
 catch_discover_tests(game_tests DISCOVERY_MODE POST_BUILD PROPERTIES LABELS ci)
 
 add_executable(cli_tests
@@ -321,11 +531,13 @@ add_executable(state_tests
     tests/state/app_state_tests.cpp
     tests/state/fifo_queue_tests.cpp
 )
-target_link_libraries(state_tests PRIVATE Catch2::Catch2WithMain r573_state r573::warnings)
+target_link_libraries(state_tests PRIVATE Catch2::Catch2WithMain r573_state r573_media_format
+                                             r573::warnings)
 catch_discover_tests(state_tests DISCOVERY_MODE POST_BUILD PROPERTIES LABELS ci)
 
 add_executable(support_tests
     tests/support/support_tests.cpp
+    tests/support/float_trig_tests.cpp
 )
 target_link_libraries(support_tests PRIVATE Catch2::Catch2WithMain r573_support r573::warnings)
 catch_discover_tests(support_tests DISCOVERY_MODE POST_BUILD PROPERTIES LABELS ci)
@@ -350,6 +562,7 @@ add_executable(render_tests
     tests/render/command_list_tests.cpp
     tests/render/command_diff_tests.cpp
     tests/render/prim_layout_tests.cpp
+    tests/render/stretch_tests.cpp
 )
 target_link_libraries(render_tests PRIVATE Catch2::Catch2WithMain r573_render r573::warnings)
 catch_discover_tests(render_tests DISCOVERY_MODE POST_BUILD PROPERTIES LABELS ci)
@@ -371,6 +584,7 @@ add_executable(pixel_golden_tests
     tests/render/pixel_golden_tests.cpp
     src/afp_d3d9_callbacks.cpp
     src/afp_d3d9_commands.cpp
+    src/render_backend.cpp
     src/render_executor.cpp
     src/warp_device.cpp
 )
@@ -383,15 +597,30 @@ catch_discover_tests(pixel_golden_tests DISCOVERY_MODE POST_BUILD PROPERTIES LAB
 
 add_executable(local_dll_tests
     tests/local/dll_contract_tests.cpp
+    tests/local/iidx10_screen_data_tests.cpp
     src/avs_boot.cpp
     src/avs_xml.cpp
     src/game_profile.cpp
     src/ifs_inspect.cpp
     src/qpro/qpro_dll.cpp
+    src/gc2d/gc_package.cpp
+    src/preset/defaults/defaults.cpp
+    src/preset/defaults/defaults_build.cpp
+    src/preset/defaults/iidx10_defaults.cpp
+    src/preset/defaults/iidx11_defaults.cpp
+    src/preset/defaults/iidx11_select_defaults.cpp
+    src/preset/defaults/iidx11_ending_a_defaults.cpp
+    src/preset/defaults/iidx11_ending_b_defaults.cpp
+    src/preset/defaults/iidx12_defaults.cpp
+    src/preset/defaults/iidx12_mode_defaults.cpp
+    src/preset/defaults/iidx12_dan_defaults.cpp
+    src/preset/defaults/iidx12_music_defaults.cpp
+    src/preset/defaults/iidx12_ending_defaults.cpp
+    src/preset/defaults/iidx12_2d_defaults.cpp
 )
 target_include_directories(local_dll_tests PRIVATE src)
 target_link_libraries(local_dll_tests PRIVATE Catch2::Catch2WithMain r573_support r573_state
-                                              r573::warnings)
+                                              r573_formats r573::warnings)
 catch_discover_tests(local_dll_tests DISCOVERY_MODE POST_BUILD PROPERTIES LABELS local_dll)
 
 add_executable(export_capture_tests
@@ -404,6 +633,15 @@ target_link_libraries(export_capture_tests PRIVATE Catch2::Catch2WithMain r573_m
                                                    r573_loop r573_formats r573_support
                                                    r573::warnings)
 catch_discover_tests(export_capture_tests DISCOVERY_MODE POST_BUILD PROPERTIES LABELS ci)
+
+add_executable(media_decode_tests
+    tests/media/movie_decode_tests.cpp
+)
+target_include_directories(media_decode_tests PRIVATE src)
+target_include_directories(media_decode_tests SYSTEM PRIVATE ${FFMPEG_INCLUDE_DIRS})
+target_link_libraries(media_decode_tests PRIVATE Catch2::Catch2WithMain r573_media r573_support
+                                                 r573::warnings)
+catch_discover_tests(media_decode_tests DISCOVERY_MODE POST_BUILD PROPERTIES LABELS ci)
 
 add_executable(media_encode_tests
     tests/media/media_encode_tests.cpp
@@ -426,6 +664,12 @@ add_executable(gui_tests
     tests/gui/timeline_tests.cpp
     tests/gui/qpro_panel_tests.cpp
     tests/gui/host_panel_tests.cpp
+    tests/gui/library_tests.cpp
+    tests/gui/frame_inspector_tests.cpp
+    tests/gui/clip_modal_tests.cpp
+    tests/gui/modal_layout_tests.cpp
+    tests/gui/timeline_editor_tests.cpp
+    tests/gui/tween_ui_tests.cpp
     tests/gui/host_live_tests.cpp
     tests/gui/gui_mock_assets.cpp
     tests/gui/gui_gpu.cpp

@@ -1,3 +1,4 @@
+#include "scene3d/scene3d_fog.h"
 #include "scene3d/scene3d_host.h"
 
 #include "app_globals.h"
@@ -5,22 +6,26 @@
 #include "formats/xfile.h"
 #include "render_backend.h"
 #include "scene3d/camera.h"
+#include "scene3d/poly_grid.h"
 #include "scene3d/scene3d.h"
 #include "scene3d/scene3d_input.h"
+#include "scene3d/scene3d_merge.h"
 #include "scene3d/scene3d_render.h"
 #include "support/log.h"
 
 #include <algorithm>
 #include <array>
 #include <cstddef>
+#include <map>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace Scene3dHost {
 
 namespace {
 
-constexpr float kTicksPerSecond = 600.0F;
+constexpr float kViewerTicksPerSecond = 600.0F;
 
 Scene3d::Scene g_scene;
 Scene3d::Renderer g_renderer;
@@ -33,6 +38,18 @@ bool g_animate_models = true;
 bool g_animate_camera = true;
 float g_model_hold = 0.0F;
 float g_camera_hold = 0.0F;
+float g_tick_rate = kViewerTicksPerSecond;
+
+bool g_fixed_camera = false;
+XFile::Matrix g_fixed_view = XFile::Identity();
+std::map<std::string, SceneInfo> g_assets;
+
+Scene3d::Model* FindModel(const std::string& name) {
+    for (auto& m : g_scene.models) {
+        if (m.name == name) return &m;
+    }
+    return nullptr;
+}
 
 void PlaceCameraFromBounds() {
     const std::array<float, 3> center = {(g_scene.bounds_min[0] + g_scene.bounds_max[0]) * 0.5F,
@@ -44,15 +61,7 @@ void PlaceCameraFromBounds() {
     Scene3d::PlaceFreeCamera(g_camera, center.data(), radius);
 }
 
-}
-
-bool Load(const std::string& dir) {
-    Unload();
-    std::string err;
-    if (!Scene3d::Load(dir, g_scene, err)) {
-        LOG("Scene3d", "load failed for %s: %s", dir.c_str(), err.c_str());
-        return false;
-    }
+bool Activate(const std::string& label) {
     if (!g_renderer.Init(g_d3d.device, g_scene)) {
         LOG("Scene3d", "renderer init failed");
         return false;
@@ -66,15 +75,192 @@ bool Load(const std::string& dir) {
     g_model_hold = 0.0F;
     g_camera_hold = 0.0F;
     g_active = true;
+    g_fixed_camera = false;
+    g_tick_rate = kViewerTicksPerSecond;
+    g_renderer.SetStyle(Scene3d::RenderStyle::TextureOnly);
+    g_renderer.SetLights({});
+    g_renderer.SetProjection(Scene3d::Projection{});
     Scene3d::SetInputEnabled(true);
-    App::Global().SetActiveIfs(dir);
+    App::Global().SetActiveIfs(label);
     LOG("Scene3d", "scene '%s' ready (free camera %s)", g_scene.name.c_str(),
         g_camera.active ? "on" : "off");
     return true;
 }
 
+bool LoadOne(const std::string& dir) {
+    Scene3d::Scene one;
+    std::string err;
+    if (!Scene3d::Load(dir, one, err)) {
+        LOG("Scene3d", "load failed for %s: %s", dir.c_str(), err.c_str());
+        return false;
+    }
+    SceneInfo info;
+    info.loaded = true;
+    info.max_time = one.max_time;
+    info.models.reserve(one.models.size());
+    for (const Scene3d::Model& model : one.models)
+        info.models.push_back(model.name);
+    g_assets[dir] = std::move(info);
+    Scene3d::Merge(g_scene, std::move(one));
+    return true;
+}
+
+std::string TargetOf(const ModelSetup& want) {
+    return want.target.empty() ? want.model : want.target;
+}
+
+void MakeInstances(const Setup& setup, const std::string& where) {
+    std::vector<Scene3d::Instance> want;
+    want.reserve(setup.models.size());
+    for (const ModelSetup& model : setup.models)
+        want.push_back(Scene3d::Instance{.target = TargetOf(model), .model = model.model});
+    for (const Scene3d::InstanceProblem& problem : Scene3d::MakeInstances(g_scene.models, want)) {
+        const Scene3d::Instance& named = want[problem.index];
+        if (problem.missing_model) {
+            LOG("Scene3d", "instance '%s' names model '%s' which is not in %s",
+                named.target.c_str(), named.model.c_str(), where.c_str());
+        } else {
+            LOG("Scene3d", "instance '%s' takes the name of a model already in %s",
+                named.target.c_str(), where.c_str());
+        }
+    }
+}
+
+void ApplySetup(const Setup& setup, const std::string& where) {
+    for (auto& model : g_scene.models)
+        model.visible = false;
+    for (const auto& want : setup.models) {
+        Scene3d::Model* model = FindModel(TargetOf(want));
+        if (model == nullptr) {
+            LOG("Scene3d", "setup names model '%s' which is not in %s", want.model.c_str(),
+                where.c_str());
+            continue;
+        }
+        model->visible = true;
+        model->blend_mode = want.blend_mode;
+        model->alpha = want.alpha;
+        model->anim_speed = want.anim_speed;
+        model->position = want.position;
+        model->rotation = want.rotation;
+        model->scale = want.scale;
+        model->time = 0.0F;
+    }
+    g_tick_rate = setup.ticks_per_second;
+    g_renderer.SetStyle(setup.style);
+    g_renderer.SetLights(setup.lights);
+    g_renderer.SetProjection(setup.projection);
+    g_fixed_view = Scene3d::LookAtView(setup.eye.data(), setup.at.data(), setup.up.data());
+    g_fixed_camera = true;
+    g_camera.active = false;
+    Scene3d::SetInputEnabled(false);
+}
+
+}
+
+bool Load(const std::string& dir) {
+    Unload();
+    if (!LoadOne(dir)) return false;
+    return Activate(dir);
+}
+
+bool LoadWithSetup(const std::string& dir, const Setup& setup) {
+    Unload();
+    if (!LoadOne(dir)) return false;
+    MakeInstances(setup, dir);
+    if (!Activate(dir)) return false;
+    ApplySetup(setup, dir);
+    return true;
+}
+
+bool LoadUnion(const std::vector<std::string>& dirs, const Setup& setup) {
+    Unload();
+    if (dirs.empty()) return false;
+    for (const std::string& dir : dirs) {
+        if (!LoadOne(dir)) return false;
+    }
+    MakeInstances(setup, dirs.front());
+    if (!Activate(dirs.front())) return false;
+    ApplySetup(setup, dirs.front());
+    LOG("Scene3d", "%zu scene dir(s) merged: %zu model(s), %.0f ticks", dirs.size(),
+        g_scene.models.size(), g_scene.max_time);
+    return true;
+}
+
+SceneInfo DescribeScene(const std::string& dir) {
+    const auto found = g_assets.find(dir);
+    return (found == g_assets.end()) ? SceneInfo{} : found->second;
+}
+
+void SetModelSpeed(const std::string& model, float speed) {
+    Scene3d::Model* m = FindModel(model);
+    if (m != nullptr) m->anim_speed = speed;
+}
+
+void SetModelAlpha(const std::string& model, float alpha) {
+    Scene3d::Model* m = FindModel(model);
+    if (m != nullptr) m->alpha = alpha;
+}
+
+void SetModelTransform(const std::string& model, const std::array<float, 3>& position,
+                       const std::array<float, 3>& rotation) {
+    Scene3d::Model* m = FindModel(model);
+    if (m == nullptr) return;
+    m->position = position;
+    m->rotation = rotation;
+}
+
+void SetModelBlendByName(const std::string& model, int mode) {
+    Scene3d::Model* m = FindModel(model);
+    if (m != nullptr) m->blend_mode = mode;
+}
+
+void SetModelScale(const std::string& model, const std::array<float, 3>& scale) {
+    Scene3d::Model* m = FindModel(model);
+    if (m != nullptr) m->scale = scale;
+}
+
+void SetModelVisibleByName(const std::string& model, bool visible) {
+    Scene3d::Model* m = FindModel(model);
+    if (m != nullptr) m->visible = visible;
+}
+
+void SetProjection(const Scene3d::Projection& projection) {
+    g_renderer.SetProjection(projection);
+}
+
+void SetView(const std::array<float, 3>& eye, const std::array<float, 3>& at,
+             const std::array<float, 3>& up) {
+    g_fixed_view = Scene3d::LookAtView(eye.data(), at.data(), up.data());
+    g_fixed_camera = true;
+}
+
+void SetStyle(Scene3d::RenderStyle style) {
+    g_renderer.SetStyle(style);
+}
+
+void SetLights(const std::vector<Scene3d::Light>& lights) {
+    g_renderer.SetLights(lights);
+}
+
+void SetFog(const Scene3d::Fog& fog) {
+    g_renderer.SetFog(fog);
+}
+
+void SetPolyGrid(Scene3d::PolyGrid grid) {
+    g_renderer.SetPolyGrid(std::move(grid));
+}
+
+void SetMovieReporter(Scene3d::MovieReporter reporter) {
+    g_renderer.SetMovieReporter(std::move(reporter));
+}
+
 void Unload() {
-    if (!g_active) return;
+    g_assets.clear();
+    g_renderer.SetFog(Scene3d::Fog{});
+    if (!g_active) {
+        g_scene = Scene3d::Scene{};
+        return;
+    }
     Scene3d::SetInputEnabled(false);
     g_renderer.Release();
     g_scene = Scene3d::Scene{};
@@ -93,8 +279,14 @@ void RenderFrame(float dt) {
     if (g_camera.active) Scene3d::UpdateFreeCamera(g_camera, in, dt);
 
     if (!g_paused) {
-        g_time += dt * kTicksPerSecond * g_speed;
+        g_time += dt * g_tick_rate * g_speed;
         if (g_scene.max_time > 0.0F && g_time > g_scene.max_time) g_time = 0.0F;
+        if (g_animate_models) {
+            for (auto& model : g_scene.models) {
+                model.time += dt * g_tick_rate * g_speed * model.anim_speed;
+                if (g_scene.max_time > 0.0F && model.time > g_scene.max_time) model.time = 0.0F;
+            }
+        }
     }
 
     int w = 0;
@@ -105,10 +297,15 @@ void RenderFrame(float dt) {
         h = g_d3d.height;
     }
 
-    const float model_time = g_animate_models ? g_time : g_model_hold;
     const float camera_time = g_animate_camera ? g_time : g_camera_hold;
     const XFile::Matrix view = Scene3d::FreeCameraView(g_camera);
-    g_renderer.Draw(g_scene, model_time, camera_time, w, h, g_camera.active ? &view : nullptr);
+    const XFile::Matrix* override_view = nullptr;
+    if (g_camera.active) {
+        override_view = &view;
+    } else if (g_fixed_camera) {
+        override_view = &g_fixed_view;
+    }
+    g_renderer.Draw(g_scene, camera_time, w, h, override_view);
 }
 
 Status GetStatus() {
@@ -138,6 +335,13 @@ void SetPaused(bool on) {
 
 void SetTime(float ticks) {
     g_time = std::clamp(ticks, 0.0F, (g_scene.max_time > 0.0F) ? g_scene.max_time : ticks);
+    for (auto& model : g_scene.models)
+        model.time = g_time;
+}
+
+void SetModelTime(const std::string& model, float ticks) {
+    Scene3d::Model* m = FindModel(model);
+    if (m != nullptr) m->time = ticks;
 }
 
 void SetSpeed(float speed) {
@@ -161,8 +365,15 @@ void SetAnimateCamera(bool on) {
 std::vector<ModelInfo> ListModels() {
     std::vector<ModelInfo> out;
     out.reserve(g_scene.models.size());
-    for (const auto& m : g_scene.models)
-        out.push_back({.name = m.name, .blend_mode = m.blend_mode, .visible = m.visible});
+    for (const auto& m : g_scene.models) {
+        out.push_back({.name = m.name,
+                       .blend_mode = m.blend_mode,
+                       .visible = m.visible,
+                       .time = m.time,
+                       .position = m.position,
+                       .rotation = m.rotation,
+                       .scale = m.scale});
+    }
     return out;
 }
 

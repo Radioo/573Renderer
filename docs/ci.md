@@ -164,10 +164,15 @@ DLL-dependent tiers run manually on the owner machine.
 gate and is the required exit criterion for any refactor slice: it runs
 build.bat (dev preset), `ctest -L ci` (locating ctest.exe next to the
 cmake.exe recorded in build/CMakeCache.txt, since the VS-bundled toolchain
-is not on the Git Bash PATH), then the seven gate scripts
+is not on the Git Bash PATH), then the gate scripts
 (check_file_length, check_no_comments, check_banned_chars,
-check_machine_paths, check_gui_isolation, run_format, run_tidy), and prints
-`ALL CHECKS PASSED` only if every step succeeded.
+check_machine_paths, check_gui_isolation, check_preset_layers,
+check_preset_states, the tools/ci pytest gate self-test, run_format, ruff and
+run_tidy), and prints `ALL CHECKS PASSED` only if every step succeeded.
+The two preset gates read the JSON that `573Renderer.exe
+--preset-dump-defaults` writes, so they need the build step and cannot run in
+the hosted gates job; their pytest self-test needs no exe and does run there
+(docs/gates.md).
 run_tidy needs the pip-pinned clang-tidy (see docs/tidy_migration.md) and
 the build dir's compile_commands.json, which the build step guarantees.
 

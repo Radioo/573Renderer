@@ -58,6 +58,12 @@ public:
     void GetRenderSize(int& w, int& h) const;
     void SetRenderSize(int w, int h);
 
+    [[nodiscard]] bool GetStretchWide() const;
+    void SetStretchWide(bool on);
+
+    [[nodiscard]] Stretch::Filter GetStretchFilter() const;
+    void SetStretchFilter(Stretch::Filter filter);
+
     [[nodiscard]] int GetRenderFps() const;
     void SetRenderFps(int fps);
 
@@ -97,6 +103,15 @@ public:
     [[nodiscard]] ExportState GetExport() const;
     void SetExport(ExportState e);
 
+    [[nodiscard]] PresetStatus GetPresetStatus() const;
+    void SetPresetStatus(PresetStatus p);
+
+    [[nodiscard]] Preset::Preview::SnapshotPtr GetPresetPreview() const;
+    void SetPresetPreview(Preset::Preview::SnapshotPtr p);
+
+    void RequestPresetFrameReport();
+    bool TakePresetFrameReportRequest();
+
     [[nodiscard]] CropRect GetCropRect() const;
     void SetCropRect(CropRect r);
     [[nodiscard]] bool GetCropPickMode() const;
@@ -115,6 +130,14 @@ public:
 
     std::atomic<bool>& ShouldExit() { return should_exit_; }
 
+    void PostCloseRequest() { close_requested_ = true; }
+    [[nodiscard]] bool CloseRequested() const { return close_requested_; }
+    void ClearCloseRequest();
+    void SetCloseNeedsPrompt(bool needs) { close_needs_prompt_ = needs; }
+    [[nodiscard]] bool CloseNeedsPrompt() const { return close_needs_prompt_; }
+    void ConfirmClose();
+    [[nodiscard]] bool CloseConfirmed() const { return close_confirmed_; }
+
 private:
     mutable std::mutex mu_;
     FifoQueue<Command> pending_;
@@ -123,6 +146,9 @@ private:
     LiveControls live_;
     Telemetry telemetry_;
     std::atomic<bool> should_exit_{false};
+    std::atomic<bool> close_requested_{false};
+    std::atomic<bool> close_needs_prompt_{false};
+    std::atomic<bool> close_confirmed_{false};
 };
 
 State& Global();

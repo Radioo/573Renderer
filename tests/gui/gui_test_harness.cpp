@@ -1,11 +1,14 @@
 #include "gui_test_harness.h"
 
+#include "timeline/gui_tl_modals.h"
+
 #include "gui_panels.h"
 #include "gui_style.h"
 #include "imgui.h"
 #include "imgui_internal.h"
 #include "imgui_te_context.h"
 #include "imgui_te_engine.h"
+#include "editor/preset_editor_state.h"
 #include "native_dialog.h"
 #include "state/app_state.h"
 #include "state/boot_lifecycle.h"
@@ -40,6 +43,16 @@ std::string& RevealedPath() {
     return value;
 }
 
+std::string& OpenFileResult() {
+    static std::string value;
+    return value;
+}
+
+std::string& SaveFileResult() {
+    static std::string value;
+    return value;
+}
+
 bool& CaptureArmed() {
     static bool armed = false;
     return armed;
@@ -58,6 +71,16 @@ std::string BrowseStub(const std::string& initial) {
 bool RevealStub(const std::string& path) {
     RevealedPath() = path;
     return true;
+}
+
+std::string OpenFileStub(const NativeDialog::FileRequest& request) {
+    (void)request;
+    return OpenFileResult();
+}
+
+std::string SaveFileStub(const NativeDialog::FileRequest& request) {
+    (void)request;
+    return SaveFileResult();
 }
 
 void ResetAppState() {
@@ -80,14 +103,18 @@ void ResetAppState() {
     state.SetCropPickMode(false);
     state.SetRenderSize(1280, 720);
     state.SetRenderFps(120);
+    state.SetPresetStatus({});
+    Editor::Global().Close();
 }
 
 ImGuiContext* CreateUiContext() {
     ResetAppState();
     BrowseResult().clear();
     RevealedPath().clear();
-    NativeDialog::SetOverrides(
-        {.browse_for_folder = &BrowseStub, .reveal_in_file_manager = &RevealStub});
+    NativeDialog::SetOverrides({.browse_for_folder = &BrowseStub,
+                                .reveal_in_file_manager = &RevealStub,
+                                .open_file = &OpenFileStub,
+                                .save_file = &SaveFileStub});
 
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
@@ -128,6 +155,10 @@ Harness::Harness() : ui_(CreateUiContext()), engine_(ImGuiTestEngine_CreateConte
     te_io.ConfigVerboseLevel = ImGuiTestVerboseLevel_Warning;
     te_io.ConfigVerboseLevelOnError = ImGuiTestVerboseLevel_Debug;
     ImGuiTestEngine_Start(engine_, ui_);
+    Panels::Timeline::ResetClipModal();
+    Panels::Timeline::ResetPalette();
+    Panels::Timeline::ResetDocumentModal();
+    Panels::Timeline::ResetProblems();
 }
 
 Harness::~Harness() {
@@ -250,6 +281,14 @@ void LoadScene(const char* ifs_path, unsigned cur, unsigned total) {
 
 void SetBrowseResult(std::string path) {
     BrowseResult() = std::move(path);
+}
+
+void SetOpenFileResult(std::string path) {
+    OpenFileResult() = std::move(path);
+}
+
+void SetSaveFileResult(std::string path) {
+    SaveFileResult() = std::move(path);
 }
 
 std::string TakeRevealedPath() {

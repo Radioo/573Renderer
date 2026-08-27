@@ -1,0 +1,566 @@
+{
+  "schema": "573renderer/scene-preset",
+  "version": 1,
+  "id": "iidx11-attract",
+  "name": "Attract logo",
+  "build": "iidx11",
+  "fps": 60,
+  "length": 2456,
+  "render": {
+    "width": 640,
+    "height": 480,
+    "opaque": true,
+    "shading": "lit_material",
+    "sprite_split_priority": 30
+  },
+  "camera": {
+    "eye": [
+      0.0,
+      0.0,
+      -0.25
+    ],
+    "at": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "up": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "fov_y": 1.0471976,
+    "near_z": 0.0,
+    "far_z": 1000.0,
+    "aspect": 1.7708334
+  },
+  "lights": [
+    {
+      "direction": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "diffuse": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "specular": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "direction": [
+        -1.0,
+        -1.0,
+        -1.0
+      ],
+      "diffuse": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "specular": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    }
+  ],
+  "assets": {
+    "red": {
+      "kind": "scene3d",
+      "dir": "data/graph/model/red"
+    },
+    "title": {
+      "kind": "package2d",
+      "dir": "data/graph/sys/title"
+    },
+    "system": {
+      "kind": "package2d",
+      "dir": "data/graph/sys/system"
+    }
+  },
+  "options": [],
+  "rng_seed": 1,
+  "markers": [
+    {
+      "frame": 0,
+      "label": "Boot animation, models hidden"
+    },
+    {
+      "frame": 502,
+      "label": "Warp in, rotating and zooming"
+    },
+    {
+      "frame": 793,
+      "label": "Boot animation runs on, models hidden again"
+    },
+    {
+      "frame": 902,
+      "label": "Attract loop, settled to the right"
+    },
+    {
+      "frame": 1736,
+      "label": "Standby logo, TITLE_TAIKI looping"
+    }
+  ],
+  "tracks": [
+    {
+      "id": "title",
+      "name": "TITLE",
+      "kind": "sprite",
+      "target": "TITLE",
+      "clips": [
+        {
+          "id": "title_boot",
+          "type": "sprite.animate",
+          "start": 0,
+          "end": 1736,
+          "params": {
+            "asset": "title",
+            "animation": "TITLE",
+            "priority": 15,
+            "playback": "hold_last"
+          }
+        }
+      ]
+    },
+    {
+      "id": "taiki",
+      "name": "TITLE_TAIKI",
+      "kind": "sprite",
+      "target": "TITLE_TAIKI",
+      "clips": [
+        {
+          "id": "taiki_loop",
+          "type": "sprite.animate",
+          "start": 1736,
+          "end": null,
+          "params": {
+            "asset": "title",
+            "animation": "TITLE_TAIKI",
+            "priority": 15
+          }
+        }
+      ]
+    },
+    {
+      "id": "core",
+      "name": "core",
+      "kind": "model",
+      "target": "core",
+      "clips": [
+        {
+          "id": "core_warp",
+          "type": "model.draw",
+          "start": 502,
+          "end": 793,
+          "params": {
+            "asset": "red",
+            "blend_mode": "additive",
+            "anim_speed": 0.75,
+            "position": [
+              0.0,
+              0.0,
+              -0.15
+            ],
+            "rotation": [
+              0.0,
+              8.7615527,
+              45.0
+            ],
+            "spin_per_frame": [
+              0.0,
+              0.017453292,
+              0.0
+            ]
+          }
+        },
+        {
+          "id": "core_loop",
+          "type": "model.draw",
+          "start": 902,
+          "end": 1736,
+          "params": {
+            "asset": "red",
+            "blend_mode": "additive",
+            "anim_speed": 0.75,
+            "position": [
+              0.105,
+              0.0,
+              0.0
+            ],
+            "rotation": [
+              0.0,
+              1.9678687,
+              45.0
+            ],
+            "spin_per_frame": [
+              0.0,
+              0.0021816615,
+              0.0
+            ]
+          }
+        },
+        {
+          "id": "core_standby",
+          "type": "model.draw",
+          "start": 1736,
+          "end": null,
+          "params": {
+            "asset": "red",
+            "blend_mode": "additive",
+            "anim_speed": 0.75,
+            "position": [
+              0.105,
+              0.0,
+              0.0
+            ],
+            "rotation": [
+              0.0,
+              3.7873644,
+              45.0
+            ],
+            "spin_per_frame": [
+              0.0,
+              0.0021816615,
+              0.0
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "shield",
+      "name": "shield",
+      "kind": "model",
+      "target": "shield",
+      "clips": [
+        {
+          "id": "shield_warp",
+          "type": "model.draw",
+          "start": 502,
+          "end": 793,
+          "params": {
+            "asset": "red",
+            "blend_mode": "additive",
+            "anim_speed": 0.75,
+            "position": [
+              0.0,
+              0.0,
+              -0.15
+            ],
+            "rotation": [
+              0.0,
+              8.7615527,
+              45.0
+            ],
+            "spin_per_frame": [
+              0.0,
+              0.017453292,
+              0.0
+            ]
+          }
+        },
+        {
+          "id": "shield_loop",
+          "type": "model.draw",
+          "start": 902,
+          "end": 1736,
+          "params": {
+            "asset": "red",
+            "blend_mode": "additive",
+            "anim_speed": 0.75,
+            "position": [
+              0.105,
+              0.0,
+              0.0
+            ],
+            "rotation": [
+              0.0,
+              1.9678687,
+              45.0
+            ],
+            "spin_per_frame": [
+              0.0,
+              0.0021816615,
+              0.0
+            ]
+          }
+        },
+        {
+          "id": "shield_standby",
+          "type": "model.draw",
+          "start": 1736,
+          "end": null,
+          "params": {
+            "asset": "red",
+            "blend_mode": "additive",
+            "anim_speed": 0.75,
+            "position": [
+              0.105,
+              0.0,
+              0.0
+            ],
+            "rotation": [
+              0.0,
+              3.7873644,
+              45.0
+            ],
+            "spin_per_frame": [
+              0.0,
+              0.0021816615,
+              0.0
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "flame",
+      "name": "flame",
+      "kind": "model",
+      "target": "flame",
+      "clips": [
+        {
+          "id": "flame_warp",
+          "type": "model.draw",
+          "start": 502,
+          "end": 793,
+          "params": {
+            "asset": "red",
+            "blend_mode": "additive",
+            "anim_speed": 0.75,
+            "position": [
+              0.0,
+              0.0,
+              -0.15
+            ],
+            "rotation": [
+              0.0,
+              8.7615527,
+              45.0
+            ],
+            "spin_per_frame": [
+              0.0,
+              0.017453292,
+              0.0
+            ]
+          }
+        },
+        {
+          "id": "flame_loop",
+          "type": "model.draw",
+          "start": 902,
+          "end": 1736,
+          "params": {
+            "asset": "red",
+            "blend_mode": "additive",
+            "anim_speed": 0.75,
+            "position": [
+              0.105,
+              0.0,
+              0.0
+            ],
+            "rotation": [
+              0.0,
+              1.9678687,
+              45.0
+            ],
+            "spin_per_frame": [
+              0.0,
+              0.0021816615,
+              0.0
+            ]
+          }
+        },
+        {
+          "id": "flame_standby",
+          "type": "model.draw",
+          "start": 1736,
+          "end": null,
+          "params": {
+            "asset": "red",
+            "blend_mode": "additive",
+            "anim_speed": 0.75,
+            "position": [
+              0.105,
+              0.0,
+              0.0
+            ],
+            "rotation": [
+              0.0,
+              3.7873644,
+              45.0
+            ],
+            "spin_per_frame": [
+              0.0,
+              0.0021816615,
+              0.0
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "r_side",
+      "name": "r_side",
+      "kind": "model",
+      "target": "r_side",
+      "clips": [
+        {
+          "id": "side_warp",
+          "type": "model.draw",
+          "start": 502,
+          "end": 793,
+          "params": {
+            "asset": "red",
+            "blend_mode": "additive",
+            "anim_speed": 0.75,
+            "position": [
+              0.0,
+              0.0,
+              -0.15
+            ],
+            "rotation": [
+              0.0,
+              8.7615527,
+              85.0
+            ],
+            "spin_per_frame": [
+              0.0,
+              0.017453292,
+              0.0
+            ]
+          }
+        },
+        {
+          "id": "side_loop",
+          "type": "model.draw",
+          "start": 902,
+          "end": 1736,
+          "params": {
+            "asset": "red",
+            "anim_speed": 0.75,
+            "position": [
+              0.105,
+              0.0,
+              0.0
+            ],
+            "rotation": [
+              0.0,
+              7.8714347,
+              -10.0
+            ],
+            "spin_per_frame": [
+              0.0,
+              0.008726646,
+              0.0
+            ]
+          }
+        },
+        {
+          "id": "side_standby",
+          "type": "model.draw",
+          "start": 1736,
+          "end": null,
+          "params": {
+            "asset": "red",
+            "anim_speed": 0.75,
+            "position": [
+              0.105,
+              0.0,
+              0.0
+            ],
+            "rotation": [
+              0.0,
+              15.1494575,
+              -10.0
+            ],
+            "spin_per_frame": [
+              0.0,
+              0.008726646,
+              0.0
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "cam_aspect",
+      "name": "camera aspect",
+      "kind": "camera",
+      "clips": [
+        {
+          "id": "aspect_4_3",
+          "type": "camera.set",
+          "start": 0,
+          "end": 902,
+          "params": {
+            "aspect": 1.3333334
+          }
+        }
+      ]
+    },
+    {
+      "id": "cam_zoom",
+      "name": "camera zoom",
+      "kind": "camera",
+      "clips": [
+        {
+          "id": "warp_zoom",
+          "type": "camera.tween",
+          "start": 502,
+          "end": 793,
+          "keys": [
+            {
+              "at": 0,
+              "ease": "linear",
+              "values": {
+                "fov_y": 22.546017
+              }
+            },
+            {
+              "at": 291,
+              "values": {
+                "fov_y": 25.110188
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "warp_fx",
+      "name": "warp particles",
+      "kind": "fx",
+      "clips": [
+        {
+          "id": "ptc_oran",
+          "type": "emitter",
+          "start": 502,
+          "end": 793,
+          "params": {
+            "asset": "system",
+            "cell": "PTC_ORAN",
+            "spawn": "every_frame",
+            "count": 16,
+            "angle_step_deg": 22.5,
+            "phase_rate_deg": 32.0,
+            "phase_amplitude_deg": 360.0,
+            "radius_from": 10,
+            "radius_to": 630,
+            "reach_frames": 290,
+            "priority": 31,
+            "life": 60
+          }
+        }
+      ]
+    }
+  ],
+  "notes": "IIDX RED title/attract. Boot logo 0..502, warp-in 502..793, logo runs on to 902, attract loop to 1736, standby loop 720 frames. See docs/preset_states.md and IIDX/red_3d_screens.md."
+}

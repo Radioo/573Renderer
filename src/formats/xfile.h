@@ -22,12 +22,15 @@ struct Vec2 {
 
 struct Material {
     std::array<float, 4> diffuse = {1.0F, 1.0F, 1.0F, 1.0F};
+    std::array<float, 3> emissive = {0.0F, 0.0F, 0.0F};
     std::string texture;
     std::string ref;
 };
 
 struct Mesh {
     std::vector<Vec3> positions;
+    std::vector<Vec3> normals;
+    std::vector<uint32_t> normal_indices;
     std::vector<Vec2> uvs;
     std::vector<uint32_t> indices;
     std::vector<uint32_t> face_material;

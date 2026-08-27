@@ -333,3 +333,36 @@ TEST_CASE("setup view Export tooltip is reachable while the button is disabled",
     };
     harness.Run(test);
 }
+
+TEST_CASE("setup view hides the 16:9 stretch for a non 4:3 render size", "[gui][setup]") {
+    GuiTest::Harness harness;
+    App::Global().SetRenderSize(1280, 720);
+    App::Global().SetStretchWide(false);
+
+    ImGuiTest* test = harness.NewTest("setup_stretch_hidden");
+    test->TestFunc = [](ImGuiTestContext* ctx) {
+        ctx->SetRef("##setup");
+        GuiTest::FocusChild(ctx, "setup_card");
+        IM_CHECK(ctx->ItemExists("Stretch to 16:9") == false);
+    };
+    harness.Run(test);
+}
+
+TEST_CASE("setup view offers the 16:9 stretch and its filter for 4:3", "[gui][setup]") {
+    GuiTest::Harness harness;
+    App::Global().SetRenderSize(640, 480);
+    App::Global().SetStretchWide(false);
+
+    ImGuiTest* test = harness.NewTest("setup_stretch_shown");
+    test->TestFunc = [](ImGuiTestContext* ctx) {
+        ctx->SetRef("##setup");
+        GuiTest::FocusChild(ctx, "setup_card");
+        IM_CHECK(ctx->ItemExists("Stretch to 16:9"));
+        IM_CHECK(ctx->ItemExists("Scaling##stretch_filter") == false);
+        ctx->ItemClick("Stretch to 16:9");
+        IM_CHECK(App::Global().GetStretchWide());
+        IM_CHECK(ctx->ItemExists("Scaling##stretch_filter"));
+    };
+    harness.Run(test);
+    App::Global().SetStretchWide(false);
+}

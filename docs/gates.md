@@ -97,6 +97,98 @@ headless GUI suite necessarily drives ImGui directly (docs/gui_tests.md); it
 is the only test directory allowed to, and it tests the shell rather than
 violating it.
 
+### Host isolation (`check_host_isolation.py`)
+
+The OPPOSITE direction to the gui-isolation gate, and a narrower claim.
+`check_gui_isolation.py` keeps ImGui out of the engine; this one keeps the ENGINE
+HOSTS out of the scene preset editor: no `PresetHost::`, `Scene3dHost::` or
+`Gc2dHost::` may appear in `src/gui/timeline/**` or `src/gui/gui_preset_library.*`.
+Those files run on the GUI thread while the render thread is inside
+`PresetHost::RenderFrame`, and there is no mutex in `src/preset`, `src/scene3d` or
+`src/gc2d`; the editor therefore posts `PresetCmd`s through `App::State` and reads
+`App::PresetStatus` back, and `Backend::ApplyPresetCommand` applies them on the
+render thread at a frame boundary (docs/gui.md 3.5).
+
+The claim is deliberately SCOPED. `gui_scene3d_panel.cpp`, `gui_gc2d_panel.cpp` and
+the visibility predicates in `panel_registry.cpp` still call the hosts directly and
+keep that convention until a separate change; the gate covers only the editor and the
+library, so it starts clean and any hit inside that scope fails CI. The old Screens
+panel (`gui_preset_panel.cpp`), which did call `PresetHost::` from the GUI thread, was
+deleted in M7 and the library that replaced it is inside the scope.
+Adding a file to the scope means adding it to `SCOPES` in the script.
+
+Self-tested by `tools/ci/tests/test_host_isolation.py`, which builds throwaway git
+repositories: one editor file that only posts commands passes, one that calls each
+of the three hosts fails with the file, line and host named, a library file is in
+scope, and a panel outside the scope is ignored (`checked == 0`, so the test also
+proves the gate is not silently scanning nothing).
+
+### Generated layer verdicts (`gen_layer_verdicts.py`, build step, not a gate)
+
+`docs/preset_layers.md` is also read at BUILD time. A CMake custom command runs
+`tools/ci/gen_layer_verdicts.py docs/preset_layers.md <build>/generated/preset_layer_verdicts.cpp`
+and that generated file is compiled into `r573_app`, so the editor can print a layer's verdict
+beside a hidden part without shipping the markdown. It is not a gate and never fails a build on
+classification; it fails only when the markdown has no classification rows at all. The file
+lives in the build tree and is never committed. See docs/preset_document.md.
+
+### Preset layers (`check_preset_layers.py`) and preset states (`check_preset_states.py`)
+
+Both gates read the SAME input: the JSON the renderer itself dumps with
+`573Renderer.exe --preset-dump-defaults <tmp>` (`tools/ci/preset_dump.py` runs it
+into a temporary directory and loads `*/*.json`; `--dump <dir>` reuses an existing
+dump instead). They stopped regex-parsing `scene_presets_*.cpp` when the built-in
+presets became documents: the C++ these gates used to scrape no longer described
+what a preset draws, and M8 deleted those files outright.
+
+This is why both gates run in `tools/checks.sh` (which builds first) and NOT in
+the hosted `quality-gates` job, which has no C++ toolchain. What the hosted job
+does run is the gates' own pytest self-test, which needs no exe.
+
+- The layers gate collects, per document, every `sprite.draw` / `sprite.animate`
+  clip's (asset dir, cell or animation) and every `hidden_parts` entry, and checks
+  each against `docs/preset_layers.md`: drawn layers must have a `background`
+  verdict, hidden parts a `chrome` one, and a layer with no row at all fails.
+- The states gate collects every `markers[].label` and every option choice label
+  per document and checks `docs/preset_states.md` in both directions: a documented
+  state no preset exposes fails, a marker or choice with no row fails, and a row
+  naming a preset id no built-in provides fails. There is NO id rule of any kind
+  left, neither the original "the id must start with `iidx`" nor a `<build>-`
+  prefix: a row is recognised by the table it sits in (the one headed
+  `| preset | state |`, and `| preset | state still missing |` for the gaps) and is
+  keyed by document id alone, with the dump as the authority on which ids exist.
+  A prefix rule would have quietly skipped exactly the rows worth catching, since
+  a mistyped id is usually one that matches no prefix either.
+
+Both gates fail loudly on an empty input instead of passing vacuously: zero
+documents, zero sprite clips, or zero states each produce a FAILED line saying the
+gate would otherwise be blind. That replaced the old "declared versus parsed
+count" self-check, which existed for the same reason (a parser that silently
+matched nothing).
+
+A dump that exits non-zero is reported with its exit code and the tail of the
+renderer's own log. `Log::Init` hands the process a fresh console
+(`AllocConsole` plus `freopen("CONOUT$")`), so a pipe on the exe's stdout captures
+nothing at all and the first version of this printed `exited 2:` and two spaces.
+`preset_dump.py` therefore runs the exe WITH the dump directory as its working
+directory, which is where `renderer.log` is written, and reads it back from there;
+the log dies with the temporary dump instead of being left in whatever directory
+the gate was started from.
+
+`tools/ci/tests/test_preset_gates.py` (`uv run pytest` from `tools/ci`) is the
+gate self-test: it builds synthetic dump directories in a tmp dir and asserts each
+of those failure modes actually fails, plus the real problems (an unclassified
+layer, an undocumented marker, a documented state a preset lost, a docs row whose
+id carries no build prefix and matches no document). Two cases stand a fake
+renderer (a one-line `.bat` or `sh` script that exits non-zero, with and without
+writing a log) in for the exe, so the failure path is exercised without breaking
+the real one. A gate that cannot fail is worth nothing, so the self-test is what
+proves these two can.
+
+`tools/local/preset_sweep.py` reads the same dump: it renders every built-in of a
+build, once per marker (`--preset-test ... <marker frame + 60>`) and once per
+choice of the first option (`--preset-option <id>=<label>`), into `screenshots/`.
+
 ### Format (`clang-format --dry-run --Werror`)
 
 `.clang-format` codifies the style the codebase already uses: LLVM base,
@@ -224,6 +316,37 @@ three-layer per-directory config chain:
   TexUpload callback ABI is a fixed 9-parameter signature; the module
   configs re-pin the threshold to 8). These subtractions die per-file as
   files migrate into modules.
+- `src/preset/defaults/.clang-tidy` subtracts `readability-function-size` for
+  that directory alone. Those files are the 18 built-in preset documents
+  (docs/preset_document.md): one function per screen, whose whole body is a
+  single `return Document{...}` data literal, generated once from the converter M8
+  deleted (docs/preset_document.md, "How the defaults were produced"). The
+  line threshold measures control-flow complexity a human has to hold in their
+  head, and a data literal has none; splitting one into 60-line pieces would add
+  call indirection to a table. Every other check, including the 1000-line file
+  limit that forced the ending into two halves, still applies there.
+- `src/gui/timeline/.clang-tidy` subtracts `bugprone-exception-escape` for the
+  timeline editor alone. Every editor gesture defers its document mutation to the
+  end of the GUI frame as an `Editor::Edit` (`std::function<bool(Document&)>`,
+  docs/gui.md 3.5), and MSVC's `std::function` converting constructor is
+  CONDITIONALLY `noexcept` when the callable fits its small-object buffer. Those
+  lambdas capture clip and track ids by value, so clang-tidy walks the lambda's
+  copy constructor from inside a `noexcept` frame, finds `std::string`'s allocating
+  copy, and reports an escaping `bad_array_new_length` for every one of them. The
+  callables genuinely must own their captures - the locals they read are gone by the
+  time the edit runs - and nothing else in the tree hits this, because the other
+  `std::function` seams (`App::State::MutateLiveOverrides`, the progress callbacks)
+  take reference captures. Every other check applies there, including the function
+  size and cognitive-complexity thresholds, which is why the transport row, the track
+  header and the shortcut table are each split into three functions.
+- `src/support/math/.clang-tidy` subtracts
+  `cppcoreguidelines-pro-bounds-constant-array-index` for that directory alone.
+  It holds `float_trig.cpp`, the deterministic `Support::Sinf` / `Support::Cosf`
+  transcription of FreeBSD msun (docs/support.md, "Deterministic float
+  trigonometry"),
+  whose Payne-Hanek reduction indexes constant tables with computed indices by
+  design; every other `src/` directory already has that check off and
+  `src/support` is the one that re-enables it. Every other check applies there.
 - `clang-analyzer-optin.core.EnumCastOutOfRange` (an OPT-IN analyzer
   check) is subtracted at the ROOT config, not per-layer: it only ever
   fires on system-header patterns we cannot change - the D3D9 SDK's own
@@ -308,5 +431,22 @@ python tools/ci/check_gui_isolation.py
 git ls-files '*.cpp' '*.h' '*.hpp' | xargs clang-format --dry-run --Werror
 ```
 
-The DLL-dependent pixel tier runs separately (never hosted):
+The DLL-dependent pixel leg runs separately (never hosted):
 `python tools/local/render_regression.py` - see docs/local_regression.md.
+
+## The 2D blend equations are unit tested, pixel exact, with no GPU
+
+`GcAnim::FactorsFor(Blend)` and `GcAnim::TexelDiscarded(alpha)` are the single
+description of the 2D pipeline's per-pixel behaviour. `Gc2d::Renderer` translates
+them into D3D9 render states, and `gcanim_tests` composites with them on the CPU,
+so a blend change is checked against exact expected pixels without a device, a
+window, or any game data.
+
+The regression that test exists for: a logo cell drawn over a background must not
+punch a black rectangle through it. A fully transparent texel has to leave the
+destination byte-identical. That failed the moment the replace blend shipped
+without the alpha test, and it broke the IIDX 17 SIRIUS title screen.
+
+Build the synthetic package in the test rather than reaching for real game files:
+a package is a few `SysIdx::Cell` and `SysIdx::Record` values, and a test that
+needs a game install cannot run in CI.

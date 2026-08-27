@@ -5,6 +5,7 @@
   "description": "573Renderer - standalone AFP renderer + asset dumper for Konami IIDX/SDVX. vcpkg-driven dependency manifest.",
   "dependencies": [
     "catch2",
+    "nlohmann-json",
     "tl-expected",
     {
       "name": "imgui",

@@ -5,6 +5,7 @@
 #include "cli/cli.h"
 #include "game_profile.h"
 #include "game_runtime.h"
+#include "render/stretch.h"
 #include "render_backend.h"
 #include "settings/settings.h"
 #include "state/app_state.h"
@@ -60,15 +61,22 @@ const GameProfile::Profile* ResolveBootProfile(App::State& state, const std::str
 bool CreateRenderWindowAndDevice(App::State& state, int render_w, int render_h) {
     g_d3d.width = render_w > 0 ? render_w : 1920;
     g_d3d.height = render_h > 0 ? render_h : 1080;
-    LOG("Boot", "Render resolution: %dx%d", g_d3d.width, g_d3d.height);
-    HWND hwnd = AppWindow::Create(g_d3d.width, g_d3d.height);
+    const bool stretch = App::Global().GetStretchWide();
+    const Stretch::Size present = Stretch::Present(g_d3d.width, g_d3d.height, stretch);
+    g_d3d.present_width = present.w;
+    g_d3d.present_height = present.h;
+    g_d3d.stretch_filter = App::Global().GetStretchFilter();
+    LOG("Boot", "Render resolution: %dx%d, presented at %dx%d (%s)", g_d3d.width, g_d3d.height,
+        present.w, present.h,
+        (present.w != g_d3d.width) ? Stretch::FilterName(g_d3d.stretch_filter) : "1:1");
+    HWND hwnd = AppWindow::Create(present.w, present.h);
     if ((hwnd == nullptr) || !g_d3d.Init(hwnd)) {
         return FailBoot(state, "Render window / D3D9 init failed.");
     }
-    int rt_w = 0;
-    int rt_h = 0;
-    g_d3d.GetOffscreenSize(rt_w, rt_h);
-    AppWindow::SetRenderRtSize(rt_w, rt_h);
+    int frame_w = 0;
+    int frame_h = 0;
+    g_d3d.GetPresentSize(frame_w, frame_h);
+    AppWindow::SetRenderRtSize(frame_w, frame_h);
     return true;
 }
 
@@ -79,6 +87,8 @@ void SaveBootSettings(const std::string& game_dir, const GameProfile::Profile& p
     cfg.render_width = g_d3d.width;
     cfg.render_height = g_d3d.height;
     cfg.render_fps = App::Global().GetRenderFps();
+    cfg.stretch_16_9 = App::Global().GetStretchWide();
+    cfg.stretch_filter = (int)App::Global().GetStretchFilter();
     cfg.game_profile = profile.slug;
     Settings::SaveAtomic(cfg);
     App::Global().SetGameProfileSlug(profile.slug);

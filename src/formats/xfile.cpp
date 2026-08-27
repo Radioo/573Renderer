@@ -46,6 +46,33 @@ void ReadMeshGeometry(Lexer& lex, Mesh& mesh) {
     }
 }
 
+void ReadNormals(Lexer& lex, Mesh& mesh) {
+    const int nnormals = lex.Integer();
+    mesh.normals.clear();
+    mesh.normals.reserve((size_t)(nnormals > 0 ? nnormals : 0));
+    for (int i = 0; i < nnormals; i++) {
+        Vec3 n;
+        n.x = lex.Number();
+        n.y = lex.Number();
+        n.z = lex.Number();
+        mesh.normals.push_back(n);
+    }
+    const int nfaces = lex.Integer();
+    mesh.normal_indices.clear();
+    for (int i = 0; i < nfaces; i++) {
+        const int n = lex.Integer();
+        std::vector<uint32_t> poly;
+        poly.reserve((size_t)(n > 0 ? n : 0));
+        for (int k = 0; k < n; k++)
+            poly.push_back((uint32_t)lex.Integer());
+        for (int k = 2; k < n; k++) {
+            mesh.normal_indices.push_back(poly[0]);
+            mesh.normal_indices.push_back(poly[(size_t)k - 1]);
+            mesh.normal_indices.push_back(poly[(size_t)k]);
+        }
+    }
+}
+
 void ReadTextureCoords(Lexer& lex, Mesh& mesh) {
     const int n = lex.Integer();
     mesh.uvs.clear();
@@ -110,8 +137,8 @@ Material ReadMaterial(Lexer& lex) {
     lex.Number();
     for (int i = 0; i < 3; i++)
         lex.Number();
-    for (int i = 0; i < 3; i++)
-        lex.Number();
+    for (float& c : mat.emissive)
+        c = lex.Number();
     while (lex.Peek() != '}' && !lex.Eof()) {
         const std::string tok = lex.Token();
         if (tok == "TextureFilename") {
@@ -141,6 +168,11 @@ void ReadMesh(Lexer& lex, Frame& frame) {
             if (lex.Peek() != '{') lex.Token();
             lex.Expect('{');
             ReadTextureCoords(lex, mesh);
+            lex.Expect('}');
+        } else if (tok == "MeshNormals") {
+            if (lex.Peek() != '{') lex.Token();
+            lex.Expect('{');
+            ReadNormals(lex, mesh);
             lex.Expect('}');
         } else if (tok == "MeshMaterialList") {
             if (lex.Peek() != '{') lex.Token();

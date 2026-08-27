@@ -12,6 +12,8 @@ struct Config {
     int render_width = 1080;
     int render_height = 1920;
     int render_fps = 120;
+    bool stretch_16_9 = false;
+    int stretch_filter = 1;
     std::string game_profile;
 };
 

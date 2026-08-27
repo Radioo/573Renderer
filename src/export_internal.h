@@ -20,6 +20,7 @@ struct Session {
     int keyframe_interval = 0;
     int frames_captured = 0;
     int max_frames = 0;
+    int start_frame = 0;
     std::vector<int> prev_playheads;
     int idle_frames = 0;
 

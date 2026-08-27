@@ -161,6 +161,12 @@ bool Load(const std::string& dir, Package& out, std::string& err) {
     LOG("Gc2d", "package '%s': %zu cells, %zu records, %zu animations, %zu tiles", out.name.c_str(),
         out.index.cells.size(), out.index.records.size(), out.animation_names.size(),
         out.tiles.size());
+    std::string listed;
+    for (const std::string& name : out.animation_names) {
+        if (!listed.empty()) listed += ", ";
+        listed += name;
+    }
+    LOG("Gc2d", "package '%s' animations: %s", out.name.c_str(), listed.c_str());
     return true;
 }
 

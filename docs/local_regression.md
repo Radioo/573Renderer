@@ -66,9 +66,21 @@ It carries the ctest label `local_dll`, which the CI workflow excludes
 its R573_*_DIR env var is unset, so the target is safe to build everywhere.
 
 Run: `ctest --test-dir build -L local_dll` with R573_IIDX_DIR (and optionally
-R573_SDVX_DIR / R573_DDR_DIR) set.
+R573_SDVX_DIR / R573_DDR_DIR / R573_IIDX10_DIR) set.
 
 Contracts covered:
+- IIDX 10 screen presets (tests/local/iidx10_screen_data_tests.cpp, R573_IIDX10_DIR):
+  every animation a `sprite.animate` clip of a built-in IIDX 10 document names
+  exists in its package, and the one frame count the documents bake in - the game
+  over document's `length` of 180 - equals the real animation's length. The game
+  reads that at runtime, so this is what keeps the built-in documents
+  (`src/preset/defaults/`) honest. The game over test names
+  `data/graph/sys/gameover` / `GAMEOVER` as a literal because the document cannot:
+  that banner is classified chrome in docs/preset_layers.md, so no clip draws it,
+  yet its length is where the screen's 180 frames come from. No built-in declares a
+  `loop_start` / `loop_end` range, so there is no loop range to check against the
+  data; the M8 rewrite of this file dropped a loop over card-in loop ranges that
+  had always iterated zero times.
 - bm2dx qpro pattern-scan: `QproDll::Read` on the real bm2dx.dll - parses ok,
   >= 447 heads, first head is qp_kihon, every head is a `qp_*.ifs` name.
 - game profile auto-detection on the real installs (slug + legacy_afp).
@@ -106,3 +118,25 @@ and only assert on a machine with the dumps. They were previously hidden
 `[.real]` tags, which Catch's test discovery never registers - a manual-only
 path that silently returned green without data; the SKIP form replaced it
 so a data-less run is visibly a skip, not a pass.
+
+## Scene preset sweep
+
+`tools/local/preset_sweep.py` renders every built-in preset of a build, at every
+marker and in every option state, and fails if any of them shows a model whose
+transform never changes:
+
+```bash
+python tools/local/preset_sweep.py iidx11 <iidx-red-dir> --frames 120
+```
+
+It takes the preset list from the renderer's own document dump
+(`--preset-dump-defaults`, shared with the CI gates through
+`tools/ci/preset_dump.py`; `--dump <dir>` reuses an existing one), so it needs a
+built `bin/573Renderer.exe`. Shot names come from the document: one per marker
+(rendered at the marker frame plus 60) and one per choice of the first option,
+passed as `--preset-option <option-id>=<label>`. It prints the current preset and
+state as it goes, and writes one PNG per state into `screenshots/` (named
+`<preset>-state<N>-<marker>.png` when the preset has options) so every state can be
+reviewed by eye, which is the other half of the check the tool cannot make. A non-zero exit means at least one
+preset was built from a screen's INIT and misses the per-frame update that drives
+its models: see `docs/game_profiles.md` and the `game-scene-preset` skill.

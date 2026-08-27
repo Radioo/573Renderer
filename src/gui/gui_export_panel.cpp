@@ -1,10 +1,15 @@
 #include "gui_export_panel.h"
 #include "../native_dialog.h"
+#include "editor/export_range.h"
+#include "editor/preset_editor_state.h"
+#include "../export.h"
+#include "../export_capture.h"
 #include "../state/app_state.h"
 #include "../state/commands.h"
 #include "../video_encoder.h"
 #include "imgui.h"
 #include "media/media_format.h"
+#include "render/stretch.h"
 #include "state/live_controls.h"
 #include "state/telemetry.h"
 
@@ -12,6 +17,7 @@
 #include <cfloat>
 #include <cstdio>
 #include <cstring>
+#include <array>
 #include <string>
 #include <utility>
 #include <cmath>
@@ -24,22 +30,72 @@ char g_stem_buf[512] = {};
 std::string g_last_ifs;
 std::string g_last_anim;
 
-int g_fps = 60;
-int g_quality = 60;
-int g_keyframe_interval = 0;
-int g_max_frames = 0;
+const App::ExportRequest kDefaults{};
+
+int g_fps = kDefaults.fps;
+int g_quality = kDefaults.quality;
+int g_keyframe_interval = kDefaults.keyframe_interval;
+int g_max_frames = kDefaults.max_frames;
 bool g_limit_frames = false;
-int g_loop_count = 1;
-bool g_blend_loop = false;
-int g_blend_frames = 15;
-int g_format_idx = 0;
-bool g_prefer_hw = true;
+int g_loop_count = kDefaults.loop_count;
+bool g_blend_loop = kDefaults.blend_loop;
+int g_blend_frames = kDefaults.blend_frames;
+int g_format_idx = kDefaults.format;
+bool g_prefer_hw = kDefaults.prefer_hardware;
 
-int g_out_w = 0;
-int g_out_h = 0;
+bool g_use_doc_range = true;
 
-bool g_bg_transparent = true;
-float g_bg_rgb[3] = {0.13F, 0.14F, 0.17F};
+int g_out_w = kDefaults.width;
+int g_out_h = kDefaults.height;
+
+bool g_bg_transparent = kDefaults.bg_transparent;
+std::array<float, 3> g_bg_rgb = {kDefaults.bg_r, kDefaults.bg_g, kDefaults.bg_b};
+
+struct DocumentPlan {
+    bool loaded = false;
+    bool range_active = false;
+    int start = 0;
+    int frames = 0;
+    int fps = 60;
+};
+
+DocumentPlan CurrentDocumentPlan() {
+    DocumentPlan plan;
+    const App::PresetStatus status = App::Global().GetPresetStatus();
+    const Editor::State& editor = Editor::Global();
+    if (status.id.empty() || !editor.Loaded() || editor.Document().id != status.id) return plan;
+    plan.loaded = true;
+    plan.fps = std::max(1, status.fps);
+    const Editor::ExportRange range =
+        Editor::ClampRange(editor.GetView().export_range, status.length);
+    plan.range_active = range.active;
+    plan.start = range.active ? range.start : 0;
+    plan.frames = Editor::RangeFrames(range, status.length);
+    return plan;
+}
+
+void ApplyDocumentDefaults() {
+    const DocumentPlan plan = CurrentDocumentPlan();
+    if (!plan.loaded) return;
+    g_fps = plan.fps;
+    g_use_doc_range = true;
+}
+
+void DrawDocumentRange(const DocumentPlan& plan) {
+    if (!plan.loaded) return;
+    ImGui::Checkbox("Document range##exp_preset_range", &g_use_doc_range);
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("Export the range the ruler shows (Shift+drag on the ruler sets it),\n"
+                          "else the whole document. Turn it off to use the frame limit above.");
+    }
+    ImGui::SameLine();
+    if (plan.range_active) {
+        ImGui::TextDisabled("frames %d..%d (%d frames)", plan.start, plan.start + plan.frames - 1,
+                            plan.frames);
+    } else {
+        ImGui::TextDisabled("whole document (%d frames)", plan.frames);
+    }
+}
 
 void MaybeRegenerateStem(App::State& state) {
     std::string active = state.ActiveIfs();
@@ -121,6 +177,12 @@ void DrawFpsQualitySliders() {
                           "frames are skipped); drop to 30/60 for a\n"
                           "smaller file.");
     }
+    const DocumentPlan plan = CurrentDocumentPlan();
+    if (plan.loaded && !Editor::FpsRatioAllowed(plan.fps, g_fps)) {
+        ImGui::SameLine();
+        ImGui::TextColored(ImVec4(1.0F, 0.45F, 0.45F, 1.0F),
+                           "not an integer ratio of the document's %d fps", plan.fps);
+    }
     ImGui::SameLine();
     ImGui::SetNextItemWidth(-FLT_MIN);
     ImGui::SliderInt("##exp_q", &g_quality, 0, 100, "quality %d");
@@ -156,17 +218,17 @@ void DrawKeyframeIntervalControl(MediaSink::Format current_format) {
     }
 }
 
-void DrawFrameLimitControls() {
+void DrawFrameLimitControls(const ::Export::Capabilities& caps) {
     ImGui::Checkbox("Limit frames##exp_limit", &g_limit_frames);
     if (ImGui::IsItemHovered()) {
         ImGui::SetTooltip("When ON, stop the export after a fixed number of captured\n"
                           "frames (defaults to 60 = 1 second at 60 fps). When OFF\n"
-                          "(default), the export runs until the master animation's\n"
-                          "natural end-of-timeline.\n\n"
+                          "(default), the export runs until %s.\n\n"
                           "Use cases: clamp a long title to a short preview, capture\n"
-                          "a fixed-duration looped clip without waiting for AFP's\n"
+                          "a fixed-duration looped clip without waiting for the\n"
                           "end-of-timeline detector, or get a deterministic file\n"
-                          "size for tests.");
+                          "size for tests.",
+                          caps.natural_end);
     }
     ImGui::SameLine();
     ImGui::BeginDisabled(!g_limit_frames);
@@ -188,7 +250,18 @@ void DrawFrameLimitControls() {
     }
 }
 
-void DrawLoopControls() {
+void DrawLoopControls(const ::Export::Capabilities& caps) {
+    if (!caps.loop_count && !caps.blend_seam) {
+        ImGui::TextDisabled("Loop options do not apply to this content.");
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("A screen preset is composited from layers with different\n"
+                              "periods and a screen timer that changes speed, so it has no\n"
+                              "single loop boundary to count or crossfade. The export runs\n"
+                              "%s;\nuse 'Limit frames' for any other length.",
+                              caps.natural_end);
+        }
+        return;
+    }
     ImGui::SetNextItemWidth(120);
     if (ImGui::InputInt("Continuous loop count##exp_loops", &g_loop_count, 1, 5))
         g_loop_count = std::clamp(g_loop_count, 1, 1000);
@@ -366,6 +439,9 @@ void DrawOutputResolution(App::State& state) {
     state.GetRenderSize(rw, rh);
     if (rw <= 0) rw = 1920;
     if (rh <= 0) rh = 1080;
+    const Stretch::Size frame = Stretch::Present(rw, rh, state.GetStretchWide());
+    rw = frame.w;
+    rh = frame.h;
 
     DrawResolutionPresetCombo(rw, rh);
     int w_disp = 0;
@@ -491,9 +567,18 @@ void DrawHwAccelTooltip(MediaSink::Format current_format, bool hw_available, boo
     }
 }
 
-void DrawBackgroundAndHw(MediaSink::Format current_format, bool hw_available) {
+void DrawBackgroundAndHw(MediaSink::Format current_format, bool hw_available,
+                         const ::Export::Capabilities& caps) {
+    if (!caps.transparent_bg) g_bg_transparent = false;
+    ImGui::BeginDisabled(!caps.transparent_bg);
     ImGui::Checkbox("Transparent bg", &g_bg_transparent);
-    if (ImGui::IsItemHovered()) {
+    ImGui::EndDisabled();
+    if (!caps.transparent_bg) {
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+            ImGui::SetTooltip("This content composites an opaque background of its own,\n"
+                              "so there is no alpha to keep.");
+        }
+    } else if (ImGui::IsItemHovered()) {
         ImGui::SetTooltip("Enable to export a real alpha channel (AVIF\n"
                           "plays with transparency). Disable to composite\n"
                           "a solid colour under the animation - useful\n"
@@ -501,11 +586,16 @@ void DrawBackgroundAndHw(MediaSink::Format current_format, bool hw_available) {
                           "animated AVIF transparency well.");
     }
     ImGui::SameLine();
-    if (g_bg_transparent) ImGui::BeginDisabled();
+    const bool bg_colour_inert = g_bg_transparent || !caps.transparent_bg;
+    if (bg_colour_inert) ImGui::BeginDisabled();
     ImGui::SetNextItemWidth(160);
-    ImGui::ColorEdit3("##exp_bg_color", g_bg_rgb,
+    ImGui::ColorEdit3("##exp_bg_color", g_bg_rgb.data(),
                       ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
-    if (g_bg_transparent) ImGui::EndDisabled();
+    if (bg_colour_inert) ImGui::EndDisabled();
+    if (!caps.transparent_bg && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+        ImGui::SetTooltip("This screen is opaque, so it exports exactly what the\n"
+                          "preview shows and no background shows through.");
+    }
 
     const bool is_h264 = (current_format == MediaSink::Format::MP4_H264);
     const bool format_can_use_hw = (current_format == MediaSink::Format::AVIF ||
@@ -530,7 +620,13 @@ void PostStartRequest(App::State& state, MediaSink::Format current_format, bool 
     r.fps = g_fps;
     r.quality = g_quality;
     r.keyframe_interval = g_keyframe_interval;
-    r.max_frames = g_limit_frames ? g_max_frames : 0;
+    const DocumentPlan plan = CurrentDocumentPlan();
+    if (plan.loaded && g_use_doc_range) {
+        r.start_frame = plan.start;
+        r.max_frames = plan.frames;
+    } else {
+        r.max_frames = g_limit_frames ? g_max_frames : 0;
+    }
     r.loop_count = g_loop_count;
     r.blend_loop = g_blend_loop;
     r.blend_frames = g_blend_frames;
@@ -560,7 +656,10 @@ void DrawRevealButton(const std::string& path) {
 
 void DrawStartAndStatus(App::State& state, const App::ExportState& ex, bool busy,
                         MediaSink::Format current_format, bool hw_available) {
+    const DocumentPlan plan = CurrentDocumentPlan();
+    const bool ratio_ok = !plan.loaded || Editor::FpsRatioAllowed(plan.fps, g_fps);
     if (!busy) {
+        ImGui::BeginDisabled(!ratio_ok);
         if (ImGui::Button("Start export", ImVec2(120, 0))) {
             const bool format_can_use_hw = (current_format == MediaSink::Format::AVIF ||
                                             current_format == MediaSink::Format::WebM_AV1 ||
@@ -568,6 +667,12 @@ void DrawStartAndStatus(App::State& state, const App::ExportState& ex, bool busy
             const bool hw_applies = hw_available && format_can_use_hw;
             PostStartRequest(state, current_format, hw_applies);
             ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndDisabled();
+        if (!ratio_ok && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+            ImGui::SetTooltip("The export fps must be an integer multiple or divisor of the "
+                              "document's %d fps, else the screen would play at the wrong speed.",
+                              plan.fps);
         }
     } else {
         if (ImGui::Button("Cancel", ImVec2(120, 0))) {
@@ -627,6 +732,7 @@ void RenderModal() {
     }
     if (g_open_requested) {
         ImGui::OpenPopup("Export");
+        ApplyDocumentDefaults();
         g_open_requested = false;
     }
 
@@ -649,14 +755,16 @@ void RenderModal() {
     DrawFilenameAndFormat();
     DrawFpsQualitySliders();
     DrawOutputResolution(state);
-    DrawBackgroundAndHw(current_format, hw_available);
+    const ::Export::Capabilities caps = ::Export::ActiveCapabilities();
+    DrawBackgroundAndHw(current_format, hw_available, caps);
 
     ImGui::Spacing();
     bool close_for_pick = false;
     if (ImGui::CollapsingHeader("Advanced")) {
         DrawKeyframeIntervalControl(current_format);
-        DrawFrameLimitControls();
-        DrawLoopControls();
+        DrawDocumentRange(CurrentDocumentPlan());
+        DrawFrameLimitControls(caps);
+        DrawLoopControls(caps);
         close_for_pick = DrawCrop(state);
     }
     if (busy) ImGui::EndDisabled();

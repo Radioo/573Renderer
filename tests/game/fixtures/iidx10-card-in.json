@@ -1,0 +1,128 @@
+{
+  "schema": "573renderer/scene-preset",
+  "version": 1,
+  "id": "iidx10-card-in",
+  "name": "Card in",
+  "build": "iidx10",
+  "fps": 60,
+  "length": 3600,
+  "render": {
+    "width": 640,
+    "height": 480,
+    "opaque": true,
+    "shading": "lit_material",
+    "sprite_split_priority": 30
+  },
+  "camera": {
+    "eye": [
+      0.0,
+      0.0,
+      -1.0
+    ],
+    "at": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "up": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "fov_y": 1.0471976,
+    "near_z": 0.1,
+    "far_z": 500.0,
+    "aspect": "auto"
+  },
+  "lights": [
+    {
+      "direction": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "diffuse": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "specular": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "direction": [
+        -1.0,
+        -1.0,
+        -1.0
+      ],
+      "diffuse": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "specular": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    }
+  ],
+  "assets": {
+    "music": {
+      "kind": "scene3d",
+      "dir": "data/graph/texture/music"
+    },
+    "card": {
+      "kind": "package2d",
+      "dir": "data/graph/sys/card"
+    }
+  },
+  "options": [],
+  "rng_seed": 1,
+  "markers": [],
+  "tracks": [
+    {
+      "id": "bg",
+      "name": "CARD_BG",
+      "kind": "sprite",
+      "target": "CARD_BG",
+      "clips": [
+        {
+          "id": "bg_hold",
+          "type": "sprite.animate",
+          "start": 0,
+          "end": null,
+          "params": {
+            "asset": "card",
+            "animation": "CARD_BG",
+            "priority": 31,
+            "playback": "hold_last"
+          }
+        }
+      ]
+    },
+    {
+      "id": "music_bg",
+      "name": "music_bg",
+      "kind": "model",
+      "target": "music_bg",
+      "clips": [
+        {
+          "id": "music_draw",
+          "type": "model.draw",
+          "start": 0,
+          "end": null,
+          "params": {
+            "asset": "music",
+            "blend_mode": "additive",
+            "alpha": 0.5,
+            "anim_speed": 0.25
+          }
+        }
+      ]
+    }
+  ]
+}

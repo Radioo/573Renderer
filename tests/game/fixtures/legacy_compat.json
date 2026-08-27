@@ -1,0 +1,374 @@
+{
+  "iidx10-card-in": {
+    "countdown": {
+      "fade_from": 1.0,
+      "fade_per_frame": 0.0,
+      "ramp_below": 0,
+      "speed_base": 1.0,
+      "speed_per_frame": 0.0,
+      "start_frames": 3600
+    },
+    "hidden_movers": [
+      []
+    ],
+    "lead": "music_bg",
+    "phase_starts": [
+      0
+    ]
+  },
+  "iidx10-dan-select": {
+    "countdown": {
+      "fade_from": 1.0,
+      "fade_per_frame": 0.0,
+      "ramp_below": 0,
+      "speed_base": 1.0,
+      "speed_per_frame": 0.0,
+      "start_frames": 1200
+    },
+    "hidden_movers": [
+      []
+    ],
+    "lead": "cube_x",
+    "phase_starts": [
+      0
+    ]
+  },
+  "iidx10-expert-select": {
+    "countdown": {
+      "fade_from": 1.0,
+      "fade_per_frame": 0.0,
+      "ramp_below": 600,
+      "speed_base": 0.5,
+      "speed_per_frame": 0.004166666883975267,
+      "start_frames": 1800
+    },
+    "hidden_movers": [
+      []
+    ],
+    "lead": "ex01",
+    "phase_starts": [
+      0
+    ]
+  },
+  "iidx10-game-over": {
+    "countdown": {
+      "fade_from": 0.800000011920929,
+      "fade_per_frame": 0.004444444552063942,
+      "ramp_below": 180,
+      "speed_base": 1.600000023841858,
+      "speed_per_frame": -0.008888889104127884,
+      "start_frames": 180
+    },
+    "hidden_movers": [
+      []
+    ],
+    "lead": "music_bg",
+    "phase_starts": [
+      0
+    ]
+  },
+  "iidx10-login": {
+    "countdown": {
+      "fade_from": 1.0,
+      "fade_per_frame": 0.0,
+      "ramp_below": 0,
+      "speed_base": 1.0,
+      "speed_per_frame": 0.0,
+      "start_frames": 0
+    },
+    "hidden_movers": [
+      []
+    ],
+    "lead": "music_bg",
+    "phase_starts": [
+      0
+    ]
+  },
+  "iidx10-mode-select": {
+    "countdown": {
+      "fade_from": 1.0,
+      "fade_per_frame": 0.0,
+      "ramp_below": 0,
+      "speed_base": 1.0,
+      "speed_per_frame": 0.0,
+      "start_frames": 1200
+    },
+    "hidden_movers": [
+      []
+    ],
+    "lead": "cube_x",
+    "phase_starts": [
+      0
+    ]
+  },
+  "iidx10-music-select": {
+    "countdown": {
+      "fade_from": 1.0,
+      "fade_per_frame": 0.0006666666595265269,
+      "ramp_below": 600,
+      "speed_base": 0.25,
+      "speed_per_frame": 0.0024999999441206455,
+      "start_frames": 1800
+    },
+    "hidden_movers": [
+      []
+    ],
+    "lead": "music_bg",
+    "phase_starts": [
+      0
+    ]
+  },
+  "iidx10-music-select-samurai": {
+    "countdown": {
+      "fade_from": 1.0,
+      "fade_per_frame": 0.0006666666595265269,
+      "ramp_below": 600,
+      "speed_base": 0.25,
+      "speed_per_frame": 0.0024999999441206455,
+      "start_frames": 1800
+    },
+    "hidden_movers": [
+      []
+    ],
+    "lead": "samurai",
+    "phase_starts": [
+      0
+    ]
+  },
+  "iidx10-new-player": {
+    "countdown": {
+      "fade_from": 1.0,
+      "fade_per_frame": 0.0,
+      "ramp_below": 0,
+      "speed_base": 1.0,
+      "speed_per_frame": 0.0,
+      "start_frames": 1200
+    },
+    "hidden_movers": [
+      []
+    ],
+    "lead": "tran_box",
+    "phase_starts": [
+      0
+    ]
+  },
+  "iidx11-attract": {
+    "countdown": {
+      "fade_from": 1.0,
+      "fade_per_frame": 0.0,
+      "ramp_below": 0,
+      "speed_base": 1.0,
+      "speed_per_frame": 0.0,
+      "start_frames": 0
+    },
+    "hidden_movers": [
+      [
+        "core",
+        "shield",
+        "flame",
+        "r_side"
+      ],
+      [],
+      [
+        "core",
+        "shield",
+        "flame",
+        "r_side"
+      ],
+      [],
+      []
+    ],
+    "lead": "core",
+    "phase_starts": [
+      0,
+      502,
+      793,
+      902,
+      1736
+    ]
+  },
+  "iidx11-card-in": {
+    "countdown": {
+      "fade_from": 1.0,
+      "fade_per_frame": 0.0,
+      "ramp_below": 0,
+      "speed_base": 1.0,
+      "speed_per_frame": 0.0,
+      "start_frames": 3600
+    },
+    "hidden_movers": [
+      []
+    ],
+    "lead": "gate",
+    "phase_starts": [
+      0
+    ]
+  },
+  "iidx11-dan-select": {
+    "countdown": {
+      "fade_from": 1.0,
+      "fade_per_frame": 0.0,
+      "ramp_below": 0,
+      "speed_base": 1.0,
+      "speed_per_frame": 0.0,
+      "start_frames": 1200
+    },
+    "hidden_movers": [
+      []
+    ],
+    "lead": "dan_bg1",
+    "phase_starts": [
+      0
+    ]
+  },
+  "iidx11-ending": {
+    "countdown": {
+      "fade_from": 1.0,
+      "fade_per_frame": 0.0,
+      "ramp_below": 0,
+      "speed_base": 1.0,
+      "speed_per_frame": 0.0,
+      "start_frames": 0
+    },
+    "hidden_movers": [
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      []
+    ],
+    "lead": "core",
+    "phase_starts": [
+      0,
+      71,
+      440,
+      814,
+      1185,
+      1557,
+      1930,
+      2300,
+      2475,
+      2486,
+      2672,
+      2765,
+      2858,
+      2904,
+      2950,
+      3034,
+      3787,
+      4065
+    ]
+  },
+  "iidx11-expert-select": {
+    "countdown": {
+      "fade_from": 1.0,
+      "fade_per_frame": 0.0,
+      "ramp_below": 0,
+      "speed_base": 1.0,
+      "speed_per_frame": 0.0,
+      "start_frames": 2700
+    },
+    "hidden_movers": [
+      [],
+      [],
+      [],
+      []
+    ],
+    "lead": "core",
+    "phase_starts": [
+      0,
+      42,
+      400,
+      550
+    ]
+  },
+  "iidx11-login": {
+    "countdown": {
+      "fade_from": 1.0,
+      "fade_per_frame": 0.0,
+      "ramp_below": 0,
+      "speed_base": 1.0,
+      "speed_per_frame": 0.0,
+      "start_frames": 0
+    },
+    "hidden_movers": [
+      []
+    ],
+    "lead": "gate",
+    "phase_starts": [
+      0
+    ]
+  },
+  "iidx11-mode-select": {
+    "countdown": {
+      "fade_from": 1.0,
+      "fade_per_frame": 0.0,
+      "ramp_below": 0,
+      "speed_base": 1.0,
+      "speed_per_frame": 0.0,
+      "start_frames": 1200
+    },
+    "hidden_movers": [
+      [],
+      [],
+      [],
+      []
+    ],
+    "lead": "core",
+    "phase_starts": [
+      0,
+      15,
+      28,
+      40
+    ]
+  },
+  "iidx11-music-select": {
+    "countdown": {
+      "fade_from": 1.0,
+      "fade_per_frame": 0.0,
+      "ramp_below": 0,
+      "speed_base": 1.0,
+      "speed_per_frame": 0.0,
+      "start_frames": 3600
+    },
+    "hidden_movers": [
+      [],
+      []
+    ],
+    "lead": "core",
+    "phase_starts": [
+      0,
+      35
+    ]
+  },
+  "iidx11-new-player": {
+    "countdown": {
+      "fade_from": 1.0,
+      "fade_per_frame": 0.0,
+      "ramp_below": 0,
+      "speed_base": 1.0,
+      "speed_per_frame": 0.0,
+      "start_frames": 1200
+    },
+    "hidden_movers": [
+      []
+    ],
+    "lead": "gate",
+    "phase_starts": [
+      0
+    ]
+  }
+}

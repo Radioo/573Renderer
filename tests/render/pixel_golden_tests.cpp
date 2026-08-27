@@ -362,3 +362,23 @@ TEST_CASE("WARP pixel golden: the wide scene (blend modes, prim types, layer mul
     }
     CheckPixelGolden(warp, &RecordWideScene, "pixel_golden_wide.sha", "pixel_wide_actual.bgra");
 }
+
+TEST_CASE("the presented size is the crop and export space, not the render size") {
+    D3D9State d3d;
+    d3d.width = 640;
+    d3d.height = 480;
+    d3d.present_width = 854;
+    d3d.present_height = 480;
+
+    int w = 0;
+    int h = 0;
+    d3d.GetPresentSize(w, h);
+    CHECK(w == 854);
+    CHECK(h == 480);
+
+    d3d.present_width = 0;
+    d3d.present_height = 0;
+    d3d.GetPresentSize(w, h);
+    CHECK(w == 640);
+    CHECK(h == 480);
+}

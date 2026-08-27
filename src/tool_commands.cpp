@@ -4,7 +4,10 @@
 #include "qpro/qpro_scan.h"
 #include "support/log.h"
 #include "afp_ddr_test.h"
+#include "gc2d/gc_sheet.h"
 #include "scene3d/scene3d_test.h"
+#include "preset/preset_test.h"
+#include "preset/preset_tools.h"
 #include "arc_extract.h"
 #include "customize_extract.h"
 #include "qpro/qpro_dll.h"
@@ -76,6 +79,25 @@ int RunExtractQproJson(const Cli::ToolCommand& cmd) {
     return 0;
 }
 
+PresetTest::Job PresetJob(const Cli::ToolCommand& cmd) {
+    return PresetTest::Job{.game_dir = cmd.in_path,
+                           .preset_id = cmd.preset_id,
+                           .json_path = cmd.json_path,
+                           .out_path = cmd.out_path,
+                           .frames = cmd.frames,
+                           .options = cmd.options,
+                           .force = cmd.force,
+                           .bg_transparent = cmd.bg_transparent,
+                           .bg_rgb = cmd.bg_rgb};
+}
+
+int RunRetired(const Cli::ToolCommand& cmd) {
+    LOG("Tools", "%s was removed with the preset tweak file.", cmd.retired.c_str());
+    LOG("Tools", "Export a preset with --preset-export-json <build> <id> <out.json>, edit the "
+                 "JSON, then run it with --preset-json <file>.");
+    return 2;
+}
+
 int RunQproScan(const Cli::ToolCommand& cmd) {
     QproExtract::RunScan(cmd.in_path);
     QproExtract::ScanResult const sr = QproExtract::GetScanResult();
@@ -103,6 +125,20 @@ int Run(const Cli::ToolCommand& cmd) {
     switch (cmd.kind) {
     case Cli::ToolKind::Scene3dTest:
         return Scene3dTest::Run(cmd.in_path, cmd.out_path, cmd.frames);
+    case Cli::ToolKind::Gc2dSheet:
+        return Gc2dSheet::Run(cmd.in_path, cmd.out_path, cmd.frames);
+    case Cli::ToolKind::PresetTest:
+        return PresetTest::Run(PresetJob(cmd));
+    case Cli::ToolKind::PresetExport:
+        return PresetTest::RunExport(PresetJob(cmd));
+    case Cli::ToolKind::PresetDumpDefaults:
+        return PresetTools::DumpDefaults(cmd.out_path);
+    case Cli::ToolKind::PresetExportJson:
+        return PresetTools::ExportJson(cmd.build, cmd.preset_id, cmd.out_path);
+    case Cli::ToolKind::PresetValidate:
+        return PresetTools::Validate(cmd.in_path);
+    case Cli::ToolKind::RetiredFlag:
+        return RunRetired(cmd);
     case Cli::ToolKind::DdrTest:
         return RunDdrTest(cmd);
     case Cli::ToolKind::ExtractArc:

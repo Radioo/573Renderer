@@ -149,3 +149,35 @@ TEST_CASE("SameGameDir rejects different dirs and empty operands") {
     CHECK_FALSE(Settings::SameGameDir("D:\\Games", ""));
     CHECK_FALSE(Settings::SameGameDir("", ""));
 }
+
+TEST_CASE("settings round-trips the 16:9 stretch option and its filter index") {
+    const TempIni ini("r573_stretch.ini");
+    const std::string path = ini.path.string();
+    Settings::Config c;
+    c.game_dir = "C:/games/iidx10";
+    c.render_width = 640;
+    c.render_height = 480;
+    c.stretch_16_9 = true;
+    c.stretch_filter = 0;
+    REQUIRE(Settings::SaveAtomicTo(c, path));
+
+    const Settings::Config back = Settings::LoadFrom(path);
+    REQUIRE(back.stretch_16_9);
+    REQUIRE(back.stretch_filter == 0);
+
+    c.stretch_16_9 = false;
+    c.stretch_filter = 3;
+    REQUIRE(Settings::SaveAtomicTo(c, path));
+    const Settings::Config off = Settings::LoadFrom(path);
+    REQUIRE_FALSE(off.stretch_16_9);
+    REQUIRE(off.stretch_filter == 3);
+}
+
+TEST_CASE("an out-of-range stretch filter index is ignored rather than applied") {
+    const TempIni ini("r573_stretch_bad.ini");
+    ini.Write("stretch_16_9=1\nstretch_filter=99\n");
+
+    const Settings::Config c = Settings::LoadFrom(ini.path.string());
+    REQUIRE(c.stretch_16_9);
+    REQUIRE(c.stretch_filter == 1);
+}

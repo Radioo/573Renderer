@@ -64,3 +64,51 @@ silently clobbering `render_width`, `render_height`, and `game_profile` on
 disk every time it was clicked. One helper that rereads the entire state
 makes that class of bug impossible, and new persisted fields only need
 app_state + this helper, not every call site.
+
+## 16:9 stretch (`stretch_16_9`, `stretch_filter`)
+
+A 4:3 game on a 16:9 cabinet monitor is displayed stretched, not pillarboxed.
+`stretch_16_9` reproduces that: the render stays at the 4:3 size the game asks
+for and only the PRESENTED picture is widened.
+
+`Stretch::Present` (`src/render/stretch.h`) derives the presented size: it keeps
+the height and widens to 16:9, rounding the width UP TO AN EVEN NUMBER because
+yuv420p video encoding rejects odd dimensions. 640x480 becomes 854x480. The
+option only applies to landscape 4:3 (`w * 3 == h * 4`), so 1280x720, 1080x1920
+and the 520x704 qpro size are untouched and the setup screen hides the control
+for them.
+
+The pipeline is unchanged up to present time:
+
+- `offscreen_rt` stays at the render size, so everything the game draws and the
+  asset-extraction readbacks still work in native pixels;
+- a `present_rt` at the widened size exists only while stretching, and
+  `EndFrame` does `offscreen -> present` with the chosen filter, then a plain
+  copy `present -> backbuffer`;
+- the swap chain and the render window are created at the presented size, so the
+  preview window itself is 16:9.
+
+Exports read `ReadPresentBGRA`, which returns `present_rt` when stretching and
+falls back to the offscreen when not, so a capture is exactly the picture on
+screen.
+
+**The crop rect therefore lives in PRESENTED pixels, not render pixels.** It is
+applied to the frame `ReadPresentBGRA` hands back, so every other place that
+touches it has to agree: `AppWindow::SetRenderRtSize` is fed
+`D3D9State::GetPresentSize`, `Stretch::ClientToFrame` maps a click in the window
+onto that frame, `Stretch::FrameToTarget` maps the rect back onto the backbuffer
+for the on-screen overlay, and the export modal's output-resolution row derives
+its native size from `Stretch::Present` as well. Mapping picks into the RENDER
+size instead is what made a stretched 4:3 crop land on the wrong region: a click
+at the right edge of an 854-wide window resolved to x=640, so the exported crop
+was shifted left and about 75% of the intended width. The DDR loop detector shares that readback for the same reason: what it
+compares is what it encodes. `ReadOffscreenBGRA` stays native-resolution and is
+still what qpro extraction and the DDR test harness use.
+
+`stretch_filter` indexes `Stretch::Filter` (0 Nearest, 1 Linear, 2 Gaussian,
+3 Pyramidal) and maps to the `D3DTEXTUREFILTERTYPE` handed to `StretchRect`.
+Nearest and Linear are always available; Gaussian and Pyramidal are offered only
+when `D3DCAPS9::StretchRectFilterCaps` reports them, and the setup combo greys
+out the rest with a tooltip saying why. The index is parsed with a bounded
+non-negative check rather than the positive-only helper the other integers use,
+because 0 is a legal value (Nearest).

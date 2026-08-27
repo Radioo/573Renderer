@@ -159,6 +159,21 @@ unset, quality 60 if outside 0..100, loop_count 1 minimum, blend_frames 15
 default. All loop/blend/content-detector bookkeeping is reset explicitly
 because g_sess is reused across sessions.
 
+`StartSession` calls the backend's `BeginCapture` LAST, and **returns without
+publishing Capturing if the driver refused** (a driver that cannot bound the
+capture calls `FailSession`, which clears `sess.active`). Publishing Capturing
+over a failed session is what used to leave the modal stuck on "capturing 0"
+with the real reason already scrolled past in the log. With no backend at all
+the session fails the same way instead of dereferencing a null driver.
+
+The output filename comes from `MediaSink::DeriveExportStem(active, playing)`:
+the LAST path component of whatever is loaded, minus its extension, plus `_` and
+the playing animation. Directories are stripped because the scene browser
+publishes a full path for 2D packages and 3D scenes while the modern runtime
+publishes a bare file name - the exported file is named after the content
+either way (`0313_00.mp4`, not `F.mp4` or a whole path). The default format is
+`MediaSink::kDefaultFormat` (MP4 H.264).
+
 The SELECTED frame label (the one the user last clicked in the Labels list)
 is snapshotted ONCE at StartSession for both backends, so a label toggled
 mid-capture cannot retroactively change a running export. When a label is
@@ -707,3 +722,184 @@ Small Win32 wrapper kept here so its rationale is not lost:
   from UTF-16 happens exactly at the API boundary. IFileOpenDialog returns
   wide paths in CoTaskMemAlloc buffers, converted and freed immediately.
   Returns empty string on cancel or error.
+
+
+## Per-content capabilities (`Export::Capabilities`)
+
+Not every option in the export modal means something for every kind of content,
+so `ICaptureDriver::Caps()` reports what applies and the modal renders itself
+from that. The default is everything on, which is what the AFP drivers use, so
+adding the mechanism changed nothing for them.
+
+| flag | off means |
+|---|---|
+| `loop_count` | no loop boundary to count, hide the loop-count input |
+| `blend_seam` | no wrap to crossfade, hide the blend controls |
+| `transparent_bg` | the content composites its own opaque background; the checkbox is disabled and forced off |
+| `natural_end` | text naming what an unlimited export stops on; it is substituted into the "Limit frames" tooltip |
+
+When both loop flags are off the modal replaces the whole loop block with one
+disabled line explaining why, rather than showing dead controls.
+
+## Screen presets and 2D packages
+
+`Scene3dCaptureDriver` exports whatever preset is live. It seeks the preset to
+`sess.start_frame` (0 unless an export range is set, below) so a capture always
+starts where the request says, then captures a fixed number of frames and finalises
+- there is no loop detector because a preset has none to detect: it composites layers with different periods (a 240-tick model
+loop, a 640-frame sprite scroll, per-sprite animation lengths) under a screen
+timer that changes the model's speed partway through, so the composite has no
+single repeat boundary.
+
+The same driver also serves the 2D package browser, which has a timeline of its
+own: the selected animation's length. It rewinds with `Gc2dHost::SetFrame(0)` and
+captures one full loop. Only a browser with NOTHING loaded is refused.
+
+`BeginCapture` also RESUMES playback if it was paused, and `EndCapture` puts the
+pause back exactly as the user left it. A paused capture would otherwise record
+the same frame `planned_frames` times - and if the animation opens on a blank
+frame, as IIDX 10's `TITLE` does, every one of them is empty. The AFP drivers
+unpause for the same reason; they just never restore it.
+
+Both hosts DRAW THE CURRENT PLAYHEAD AND ADVANCE AFTERWARDS, which is what makes
+"rewind, then capture N frames" cover frames 0..N-1 exactly once.
+`Gc2dHost::RenderFrame` and `PresetHost::RenderFrame` used to advance first, so a
+capture ran 1..N-1 and then wrapped, putting the animation's own frame 0 at the
+END of the file and dropping frame N-1 - which read as "the exporter appends
+blank frames" whenever an animation opens on a blank frame. IIDX 10's `TITLE` is
+exactly that: its frame 0 draws a backdrop at 1% alpha and two bars parked just
+off-screen, so the wrapped frame encoded as fully transparent. Drawing before
+advancing also keeps `GetStatus().frame` equal to the frame that was just drawn,
+which is what the scene panel and the timeline show.
+
+`Export::PlannedFrames(max_frames, preset_frames, package_frames)` picks the
+length in that order of precedence: an explicit "Limit frames" always wins, then
+the preset's `NaturalFrames()`, then the loaded package's animation length. Zero
+on all three fails the export immediately with a message telling the user to set
+a frame limit, rather than capturing forever.
+
+`NaturalFrames()` is now the DOCUMENT's `length` and nothing else. The evaluator
+has one clock and the document states how many frames it has, so the exporter reads
+a number instead of deriving one from a countdown, a phase table and an asset. The
+converter M8 deleted (`Preset::FromScene`) applied the old derivation ONCE, when it
+turned a compiled table into a document, and the built-in documents carry the
+result as a plain number. The derivation was, in this order:
+
+1. The countdown length, when the screen has one. IIDX 10 music select is 1800
+   frames, a full 30 s including the end-of-timer speed-up.
+2. Otherwise, for a preset with PHASES, the last phase's start frame plus that
+   phase's own content: the longer of the lead model's animation loop
+   (`max_time / anim_speed`), the longest ramp in that phase, and the longest
+   animated 2D layer VISIBLE in that phase. IIDX RED's attract is
+   `1736 + 720 = 2456` frames, where 1736 is the frame TITLE_TAIKI takes over
+   and 720 is one pass of it; the ending is `4065 + 320 = 4385`.
+3. Otherwise the lead model's animation loop on its own.
+
+Step 2 is why this is not just the clip length. The attract preset used to export
+320 frames, the bare `max_time / anim_speed` of the red scene's clip, which cut
+off in the middle of the boot animation's genre list and never reached the
+warp-in at 502, let alone the attract loop at 902. A phased preset's length is
+its TIMELINE, and the 3D clip length has nothing to do with it.
+
+There is no `Restart()` entry point any more: `BeginCapture` calls
+`PresetHost::Seek(sess.start_frame)` (0 unless an export range is set), which is the
+one code path that restores the whole `EvalState` (RNG, particle pool, beat grids,
+per model spin accumulators, kick multipliers and 3D ticks, per sprite clocks, the
+option transition) and re-pushes the resolved frame into both hosts. The two reset
+paths that used to disagree, and the phase index and playheads that a restart could
+leave behind, are gone with the phase machine.
+
+The capture driver also pauses and resumes the PRESET now, not just the two engine
+hosts: with `EvalState` owning time, `Gc2dHost::SetPaused` and
+`Scene3dHost::SetPaused` no longer stop a preset, so `BeginCapture` calls
+`PresetHost::SetPaused(false)` and `EndCapture` puts the user's pause back.
+
+### The document tick, and what the display fps no longer does
+
+The export driver calls `RenderFrame(1 / TargetFps)` and the host delivers whole
+document frames at the document's `fps`. Live playback does the same, which is a
+behaviour change on high refresh rate setups: a preset used to run at ONE DOCUMENT
+FRAME PER RENDER FRAME, so a 120 fps display played every screen at double speed
+while its exports stayed correct. It now accumulates wall time and renders each
+document frame twice instead.
+
+The accumulator DRAINS in a loop, not one step per call (capped at 16 document
+frames per host frame so a stalled thread cannot fast-forward a screen). That is
+what makes an export at a lower fps than the document run in real time: at 30 fps
+out of a 60 fps document each captured frame advances two document frames. A
+`preset_host_tests` case pins it (`RenderFrame(1/30)` x 10 leaves frame 20).
+
+### Export range and the export fps rule
+
+An export can capture a SUB-RANGE. The in and out points live in the editor's view
+state (`Editor::View::export_range`, set by Shift+dragging the ruler, drawn as a
+bracket on it) and are session state, never a document key: they say what a user
+wants to capture now, not what the screen is. The export modal turns the range into
+`ExportRequest::start_frame` plus `max_frames`, and `BeginCapture` seeks there and
+plans `length - start_frame` frames.
+
+The export fps must be an integer multiple or divisor of `document.fps`
+(`Editor::FpsRatioAllowed`, used by the export modal to disable Start with a reason).
+With a ratio of 2 the driver advances two document frames per captured frame and the
+file plays at real speed; with 45 out of 60 the accumulator would alternate one and
+two frames and the result would judder. The modal also DEFAULTS its fps to
+`document.fps` when a document is loaded, so the common case needs no thought.
+
+## Export defaults have exactly ONE definition
+
+`App::ExportRequest`'s member initializers in `src/state/commands.h` ARE the
+defaults. The GUI panel seeds every one of its globals from a default-constructed
+`ExportRequest` (`const App::ExportRequest kDefaults{}` in
+`src/gui/gui_export_panel.cpp`), and `Cli::ToolCommand` does the same. There is no
+second set of literals anywhere, and `cli_tests` pins the two together.
+
+This is not tidiness, it is the reason a real bug survived three rounds of "fixed".
+The GUI held its own literals - `fps = 60`, `bg_rgb = {0.13, 0.14, 0.17}` - while
+`ExportRequest` said `fps = 30` and a black background. So a CLI export could not
+reproduce a GUI export, every headless verification passed, and the user's actual
+export stayed broken. If you add an export setting, it goes in `ExportRequest` and
+nowhere else.
+
+Note also that `Scene3dCaptureDriver::Caps().transparent_bg` is false, so the GUI
+FORCES `bg_transparent = false` for this backend regardless of the checkbox. Any
+test of that backend's export must therefore exercise the OPAQUE composite path;
+testing with `--export-bg transparent` tests a path the GUI can never take.
+
+## A game screen is opaque, so transparency has to be derived
+
+The IIDX 9 to 19 2D library has no alpha channel concept at all. Every layer is
+composited onto an opaque black screen, and plenty of its artwork is opaque black
+outside the visible shape: a lens flare is a glow painted on a black quad, and the
+game's default blend REPLACES that quad. On the cabinet that is invisible. In a
+transparent export it is a hard-edged black rectangle that tracks the sprite, and
+in an opaque export it punches the background colour out of the same rectangle.
+
+So a preset carries `opaque_screen` (true by default, because a game screen IS
+opaque), and when it is set the exporter derives the alpha channel from the
+finished frame: `alpha = max(r, g, b)`. Black becomes transparent, a glow keeps
+coverage proportional to its brightness, and nothing needs the source library to
+have alpha semantics it never had. `Frame::DeriveAlphaFromCoverage`.
+
+Verify this class of bug with a straight-edge detector over the WHOLE frame, and
+validate the detector against a frame you already know is broken before trusting
+a pass. A rectangle is a single-row or single-column step running most of the
+width or height; the flare's own streak and the boot art's bars also produce hard
+edges and are legitimate content, so look at what gets flagged.
+
+`573Renderer.exe --gc2d-sheet <package> <out> <samples>` writes `draws.txt`
+alongside the PNGs, listing every draw node the evaluator emits per sampled frame
+with its cell, blend mode, quad rect and alpha. That is what identifies which
+layer is responsible, instead of inferring it from pixels.
+
+Frames come from `ReadPresentBGRA`, so a stretched preview exports stretched.
+Because the export tick runs before `EndFrame`, that call resolves
+`offscreen -> present_rt` itself instead of reading last frame's copy.
+
+Headless equivalent, useful for batch renders and for testing this path:
+
+```bash
+573Renderer.exe --preset-export <game-dir> <preset-id> out.mp4 [frames]
+```
+
+Passing 0 frames uses the natural length. The container is picked from the
+output extension.

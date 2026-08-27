@@ -69,6 +69,11 @@ void ApplyPositiveInt(int& into, const std::string& v) {
     if (n > 0) into = n;
 }
 
+void ApplyIndex(int& into, const std::string& v, int max_value) {
+    const int n = ParseIntOrZero(v);
+    if (n >= 0 && n <= max_value) into = n;
+}
+
 void ApplyKey(Config& c, const std::string& key, const std::string& val) {
     if (key == "game_dir") {
         c.game_dir = val;
@@ -82,6 +87,10 @@ void ApplyKey(Config& c, const std::string& key, const std::string& val) {
         ApplyPositiveInt(c.render_height, val);
     } else if (key == "render_fps") {
         ApplyPositiveInt(c.render_fps, val);
+    } else if (key == "stretch_16_9") {
+        c.stretch_16_9 = IsTrueToken(val);
+    } else if (key == "stretch_filter") {
+        ApplyIndex(c.stretch_filter, val, 3);
     } else if (key == "game_profile") {
         c.game_profile = val;
     } else if (key == "master_scale") {
@@ -137,6 +146,8 @@ bool SaveAtomicTo(const Config& c, const std::string& ini_path) {
         f << "render_width=" << c.render_width << "\n";
         f << "render_height=" << c.render_height << "\n";
         f << "render_fps=" << c.render_fps << "\n";
+        f << "stretch_16_9=" << (c.stretch_16_9 ? "1" : "0") << "\n";
+        f << "stretch_filter=" << c.stretch_filter << "\n";
         f << "game_profile=" << c.game_profile << "\n";
         f << "master_scale=" << c.master_scale << "\n";
         f.flush();

@@ -26,6 +26,51 @@ any nonzero becomes 1. `--screenshot-frames` parses permissively
 tokens so trailing commas are harmless (paths with commas are unsupported;
 Konami's subbg_*.png never contain one).
 
+## Tool commands (src/cli/tool_command.cpp)
+
+`Cli::ParseToolCommand` runs BEFORE `Cli::Parse` and before main creates a
+window: if it returns a kind other than `None`, `ToolCommands::Run` executes it
+and the process exits with its return code (`src/main.cpp`, the block right
+after `CollectCliArgs`). The flags are matched in a fixed priority order, so a
+command line naming two of them runs the first one in that order. Positionals stop
+at the first token starting with `-`, everywhere: a flag is never swallowed as an
+output path or an id, so `--preset-export-json iidx11 <id> --force` still writes
+`<id>.json` rather than a file called `--force`.
+
+| flag | arguments | what it does |
+|---|---|---|
+| `--preset-dump-defaults` | `<out-dir>` | writes every built-in preset document as `<out-dir>/<build>/<id>.json`. No game data, no window, no D3D9 device. This is what the preset CI gates read (docs/gates.md). Exits 2 with no directory named, rather than writing a build tree into the working directory. |
+| `--preset-export-json` | `<build> <preset-id> [out.json]` | writes one document (built-in or user) as canonical JSON. Keyed by build plus id, so no game directory is involved. |
+| `--preset-validate` | `<file.json>` | prints every validation problem and exits 1 if any of them is an error, 2 if the file cannot be parsed at all, 0 otherwise. |
+| `--preset-test` | `<game-dir> [preset-id] [out.png] [frames]` | loads a preset, renders `frames` frames, writes a PNG, and exits 8 if nothing in the screen moves. |
+| `--preset-export` | `<game-dir> [preset-id] [out] [frames]` | the same load, driven through the export pipeline (`--export-bg` applies). |
+| `--preset-json` | `<file.json>` | with `--preset-test` / `--preset-export`: load that document instead of a registry id. The positional preset id is then omitted. |
+| `--force` | | load a document that has validation errors anyway; the evaluator skips the offending clips. Without it, `--preset-json` refuses a document with errors. |
+| `--preset-option` | `<option-id>=<choice>` | selects an option; repeatable, one per option. The choice is a label (`mode=EXPERT`) or an index (`mode=3`). It replaced the positional option-index argument, which could only ever reach the first option. |
+
+The motion check takes its BASELINE at the first rendered frame that has any
+visible model, not at frame 0. A screen whose 3D appears later (HAPPY SKY's staff
+roll shows the sky dome from frame 200) would otherwise be compared against an
+empty pose list and reported as having no 3D at all. With no visible model over
+the whole run the log says so and names the number of frames rendered, rather than
+claiming the preset contains no model.
+
+`--preset-tweaks` is gone with the tweak file. Naming it makes the process print
+what to do instead (export the JSON, edit it, run it with `--preset-json`) and
+exit 2, rather than silently ignoring the flag.
+
+`--preset-validate` and `--preset-json` check a file on its own, so they do NOT
+apply the "a user id may not equal a built-in id" rule: that rule exists so an id
+resolves to one document in a listing, and it is applied by the registry when the
+file sits in `presets/<build>/`. Exporting a built-in, editing it and running it
+with `--preset-json` therefore works without renaming it.
+
+Preset ids are resolved through `Preset::Doc::Registry` (built-ins plus
+`presets/<build>/*.json` next to the exe, docs/preset_document.md). With no id,
+`--preset-test` takes the first document of the fingerprinted build. The export
+profile comes from the document's `build` through
+`GameFingerprint::ProfileSlugFor`, not from a literal.
+
 ## RE context per option
 
 - `--animation-label`: mirrors SDVX scene lambdas calling

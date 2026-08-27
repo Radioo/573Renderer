@@ -1,7 +1,12 @@
 #pragma once
 
+#include "preset/asset_index.h"
+#include "preset/eval/frame_report.h"
+#include "preset/preset_preview.h"
+
 #include <chrono>
 #include <cstdint>
+#include <memory>
 #include <mutex>
 #include <string>
 #include <vector>
@@ -9,6 +14,8 @@
 namespace App {
 
 inline constexpr uint32_t kNoActiveStream = 0xFFFFFFFC;
+
+inline constexpr int kPresetReportTtlFrames = 8;
 
 struct SubLayerNode {
     std::string name;
@@ -48,6 +55,26 @@ struct Status {
     bool label_playback_active = false;
 };
 
+struct PresetTransition {
+    int option = -1;
+    int from = -1;
+    int to = -1;
+    int frames_left = 0;
+};
+
+struct PresetStatus {
+    std::string id;
+    int frame = 0;
+    int length = 0;
+    int fps = 60;
+    bool playing = false;
+    bool loop = true;
+    std::vector<int> option_choices;
+    PresetTransition transition;
+    std::shared_ptr<const Preset::AssetIndex> assets;
+    std::shared_ptr<const Preset::Eval::FrameReport> frame_report;
+};
+
 enum class ExportPhase : std::uint8_t {
     Idle,
     Capturing,
@@ -80,10 +107,22 @@ public:
     [[nodiscard]] ExportState GetExport() const;
     void SetExport(ExportState e);
 
+    [[nodiscard]] PresetStatus GetPreset() const;
+    void SetPreset(PresetStatus p);
+
+    [[nodiscard]] Preset::Preview::SnapshotPtr GetPresetPreview() const;
+    void SetPresetPreview(Preset::Preview::SnapshotPtr p);
+
+    void RequestPresetReport();
+    bool TakePresetReportRequest();
+
 private:
     mutable std::mutex mu_;
     Status status_;
     ExportState export_;
+    PresetStatus preset_;
+    Preset::Preview::SnapshotPtr preview_;
+    int report_ttl_ = 0;
 };
 
 }

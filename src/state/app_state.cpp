@@ -1,4 +1,8 @@
 #include "state/app_state.h"
+
+#include "preset/preset_preview.h"
+
+#include "render/stretch.h"
 #include "state/commands.h"
 
 #include "settings/settings.h"
@@ -34,6 +38,8 @@ bool SaveCurrentSettings() {
     c.render_fps = app.GetRenderFps();
     c.game_profile = app.GetGameProfileSlug();
     c.master_scale = app.GetMasterScale();
+    c.stretch_16_9 = app.GetStretchWide();
+    c.stretch_filter = (int)app.GetStretchFilter();
     return Settings::SaveAtomic(c);
 }
 
@@ -163,6 +169,22 @@ void State::SetRenderSize(int w, int h) {
     live_.SetRenderSize(w, h);
 }
 
+bool State::GetStretchWide() const {
+    return live_.GetStretchWide();
+}
+
+void State::SetStretchWide(bool on) {
+    live_.SetStretchWide(on);
+}
+
+Stretch::Filter State::GetStretchFilter() const {
+    return live_.GetStretchFilter();
+}
+
+void State::SetStretchFilter(Stretch::Filter filter) {
+    live_.SetStretchFilter(filter);
+}
+
 int State::GetRenderFps() const {
     return live_.GetRenderFps();
 }
@@ -253,6 +275,40 @@ void State::SetLiveState(const LiveState& s) {
 
 ExportState State::GetExport() const {
     return telemetry_.GetExport();
+}
+
+PresetStatus State::GetPresetStatus() const {
+    return telemetry_.GetPreset();
+}
+
+void State::SetPresetStatus(PresetStatus p) {
+    telemetry_.SetPreset(std::move(p));
+}
+
+Preset::Preview::SnapshotPtr State::GetPresetPreview() const {
+    return telemetry_.GetPresetPreview();
+}
+
+void State::SetPresetPreview(Preset::Preview::SnapshotPtr p) {
+    telemetry_.SetPresetPreview(std::move(p));
+}
+
+void State::ClearCloseRequest() {
+    close_requested_ = false;
+    close_confirmed_ = false;
+}
+
+void State::ConfirmClose() {
+    close_requested_ = false;
+    close_confirmed_ = true;
+}
+
+void State::RequestPresetFrameReport() {
+    telemetry_.RequestPresetReport();
+}
+
+bool State::TakePresetFrameReportRequest() {
+    return telemetry_.TakePresetReportRequest();
 }
 
 void State::SetExport(ExportState e) {

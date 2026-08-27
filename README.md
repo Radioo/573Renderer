@@ -35,6 +35,33 @@ build.bat
 CMake presets + vcpkg (manifest mode, pinned toolchain). Details, including
 the ffmpeg feature set and the x265-alpha overlay port: `docs/build.md`.
 
+## Editing a scene preset
+
+Every shipped screen is a JSON timeline document: tracks of clips on a frame axis,
+round-trippable, editable outside the app. Export one, edit it, run it:
+
+```
+573Renderer.exe --preset-export-json iidx11 iidx11-mode-select mode.json
+573Renderer.exe --preset-validate mode.json
+573Renderer.exe --preset-test <game-dir> out.png 120 --preset-json mode.json --preset-option mode=EXPERT
+```
+
+Drop a document in `presets/<build>/<id>.json` next to the exe and it shows up in
+the Screens list beside the built-in ones. The schema, the command catalog and the
+registry rules are in `docs/preset_document.md`; the CLI flags in `docs/cli.md`.
+
+## Looking at a 2D package
+
+Render every animation and every named cell of a pre-AFP IIDX package to one
+PNG each, so a layer can be classified by what it draws instead of by its name:
+
+```
+573Renderer.exe --gc2d-sheet "<iidx-red-dir>/data/graph/sys/mselect" screenshots/sheet_red_mselect 4
+```
+
+The third argument is how many frames to sample per animation. This is a required
+step before a layer may go into a scene preset: `docs/preset_layers.md`.
+
 ## Tests and verification
 
 ```

@@ -132,6 +132,23 @@ TEST_CASE("sysidx parses a synthetic index end to end") {
     REQUIRE(pkg.animation_names.at("intro") == 0);
 }
 
+TEST_CASE("an animation's declared length can outrun the records that draw it") {
+    SysIdx::Package pkg;
+    SysIdx::Record draw;
+    draw.type = SysIdx::kRecDrawCell;
+    draw.id = 0;
+    draw.t_start = 0;
+    draw.t_end = 30;
+    SysIdx::Record end;
+    end.type = SysIdx::kRecEndAnimation;
+    end.t_end = 90;
+    pkg.records.push_back(draw);
+    pkg.records.push_back(end);
+
+    CHECK(SysIdx::AnimationLength(pkg, 0) == 90);
+    CHECK(SysIdx::AnimationContentEnd(pkg, 0) == 30);
+}
+
 TEST_CASE("sysidx rejects a chunk chain that does not tile the file") {
     std::vector<uint8_t> file(16, 0);
     file[0] = 0xFF;

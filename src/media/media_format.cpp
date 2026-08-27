@@ -173,10 +173,14 @@ Format HardwareProbeFormat(Format f) {
 }
 
 std::string DeriveExportStem(const std::string& active_ifs, const std::string& playing_animation) {
-    if (active_ifs.empty()) return "export";
     std::string stem = active_ifs;
+    while (!stem.empty() && (stem.back() == '/' || stem.back() == '\\'))
+        stem.pop_back();
+    const std::size_t slash = stem.find_last_of("/\\");
+    if (slash != std::string::npos) stem.erase(0, slash + 1);
     const std::size_t dot = stem.find_last_of('.');
     if (dot != std::string::npos) stem.resize(dot);
+    if (stem.empty()) return "export";
     if (!playing_animation.empty()) stem += "_" + playing_animation;
     return stem;
 }

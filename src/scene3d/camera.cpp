@@ -4,6 +4,7 @@
 #include "scene3d/anim.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 
 namespace Scene3d {
@@ -14,6 +15,13 @@ constexpr float kPitchLimit = 1.5533431F;
 constexpr float kLookScale = 0.0035F;
 constexpr float kFastFactor = 5.0F;
 constexpr float kSlowFactor = 0.2F;
+
+void Normalize(std::array<float, 3>& v) {
+    const float len = std::sqrt((v[0] * v[0]) + (v[1] * v[1]) + (v[2] * v[2]));
+    if (len <= 1e-8F) return;
+    for (float& c : v)
+        c /= len;
+}
 
 }
 
@@ -92,6 +100,31 @@ XFile::Matrix FreeCameraView(const FreeCamera& cam) {
     rot_x[10] = cp;
 
     return Multiply(translate, Multiply(rot_y, rot_x));
+}
+
+XFile::Matrix LookAtView(const float eye[3], const float at[3], const float up[3]) {
+    std::array<float, 3> z = {at[0] - eye[0], at[1] - eye[1], at[2] - eye[2]};
+    Normalize(z);
+    std::array<float, 3> x = {(up[1] * z[2]) - (up[2] * z[1]), (up[2] * z[0]) - (up[0] * z[2]),
+                              (up[0] * z[1]) - (up[1] * z[0])};
+    Normalize(x);
+    const std::array<float, 3> y = {(z[1] * x[2]) - (z[2] * x[1]), (z[2] * x[0]) - (z[0] * x[2]),
+                                    (z[0] * x[1]) - (z[1] * x[0])};
+
+    XFile::Matrix m = XFile::Identity();
+    m[0] = x[0];
+    m[1] = y[0];
+    m[2] = z[0];
+    m[4] = x[1];
+    m[5] = y[1];
+    m[6] = z[1];
+    m[8] = x[2];
+    m[9] = y[2];
+    m[10] = z[2];
+    m[12] = -((x[0] * eye[0]) + (x[1] * eye[1]) + (x[2] * eye[2]));
+    m[13] = -((y[0] * eye[0]) + (y[1] * eye[1]) + (y[2] * eye[2]));
+    m[14] = -((z[0] * eye[0]) + (z[1] * eye[1]) + (z[2] * eye[2]));
+    return m;
 }
 
 void PlaceFreeCamera(FreeCamera& cam, const float center[3], float radius) {

@@ -14,6 +14,8 @@ XFile::Matrix Compose(const float scale[3], const float quat[4], const float pos
 
 XFile::Matrix SampleChannel(const XFile::AnimationChannel& channel, float time);
 
+int LoopTicks(const XFile::Scene& scene);
+
 void SampleLocals(const XFile::Scene& scene, float time, std::vector<XFile::Matrix>& locals);
 
 void ComputeWorlds(const XFile::Scene& scene, const std::vector<XFile::Matrix>& locals,

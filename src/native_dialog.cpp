@@ -8,6 +8,7 @@
 #include <shellapi.h>
 #include <shlobj_core.h>
 #include <shobjidl_core.h>
+#include <shtypes.h>
 #include <string>
 
 #pragma comment(lib, "ole32.lib")
@@ -90,6 +91,81 @@ std::string BrowseForFolder(HWND parent, const std::string& initial) {
     dlg->Release();
     if (we_inited) CoUninitialize();
     return result;
+}
+
+namespace {
+
+struct ComScope {
+    ComScope()
+        : inited(SUCCEEDED(
+              CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE))) {}
+    ~ComScope() {
+        if (inited) CoUninitialize();
+    }
+    ComScope(const ComScope&) = delete;
+    ComScope& operator=(const ComScope&) = delete;
+    ComScope(ComScope&&) = delete;
+    ComScope& operator=(ComScope&&) = delete;
+    bool inited = false;
+};
+
+void ApplyRequest(IFileDialog* dlg, const FileRequest& request) {
+    const std::wstring label = Utf8ToWide(request.filter_label);
+    const std::wstring pattern = Utf8ToWide(request.filter_pattern);
+    if (!label.empty() && !pattern.empty()) {
+        const COMDLG_FILTERSPEC filter{label.c_str(), pattern.c_str()};
+        dlg->SetFileTypes(1, &filter);
+    }
+    if (!request.title.empty()) dlg->SetTitle(Utf8ToWide(request.title).c_str());
+    if (!request.extension.empty()) dlg->SetDefaultExtension(Utf8ToWide(request.extension).c_str());
+    if (!request.initial_name.empty()) dlg->SetFileName(Utf8ToWide(request.initial_name).c_str());
+    if (request.initial_dir.empty()) return;
+    IShellItem* item = nullptr;
+    const std::wstring dir = Utf8ToWide(request.initial_dir);
+    if (SUCCEEDED(SHCreateItemFromParsingName(dir.c_str(), nullptr, IID_PPV_ARGS(&item))) &&
+        (item != nullptr)) {
+        dlg->SetFolder(item);
+        item->Release();
+    }
+}
+
+std::string ShowFileDialog(HWND parent, const FileRequest& request, const CLSID& id) {
+    const ComScope com;
+    IFileDialog* dlg = nullptr;
+    if (FAILED(CoCreateInstance(id, nullptr, CLSCTX_ALL, IID_PPV_ARGS(&dlg))) || dlg == nullptr) {
+        return {};
+    }
+    DWORD flags = 0;
+    dlg->GetOptions(&flags);
+    dlg->SetOptions(flags | FOS_FORCEFILESYSTEM);
+    ApplyRequest(dlg, request);
+
+    std::string result;
+    if (SUCCEEDED(dlg->Show(parent))) {
+        IShellItem* picked = nullptr;
+        if (SUCCEEDED(dlg->GetResult(&picked)) && (picked != nullptr)) {
+            PWSTR path = nullptr;
+            if (SUCCEEDED(picked->GetDisplayName(SIGDN_FILESYSPATH, &path)) && (path != nullptr)) {
+                result = WideToUtf8(path);
+                CoTaskMemFree(path);
+            }
+            picked->Release();
+        }
+    }
+    dlg->Release();
+    return result;
+}
+
+}
+
+std::string OpenFile(HWND parent, const FileRequest& request) {
+    if (g_overrides.open_file != nullptr) return g_overrides.open_file(request);
+    return ShowFileDialog(parent, request, CLSID_FileOpenDialog);
+}
+
+std::string SaveFile(HWND parent, const FileRequest& request) {
+    if (g_overrides.save_file != nullptr) return g_overrides.save_file(request);
+    return ShowFileDialog(parent, request, CLSID_FileSaveDialog);
 }
 
 bool RevealInFileManager(const std::string& path) {

@@ -1,7 +1,10 @@
 #pragma once
 
 #include "scene3d/camera.h"
+#include "scene3d/poly_grid.h"
+#include "scene3d/scene3d_render.h"
 
+#include <array>
 #include <string>
 #include <vector>
 
@@ -11,6 +14,32 @@ struct ModelInfo {
     std::string name;
     int blend_mode = 0;
     bool visible = true;
+    float time = 0.0F;
+    std::array<float, 3> position = {0.0F, 0.0F, 0.0F};
+    std::array<float, 3> rotation = {0.0F, 0.0F, 0.0F};
+    std::array<float, 3> scale = {1.0F, 1.0F, 1.0F};
+};
+
+struct ModelSetup {
+    std::string target;
+    std::string model;
+    int blend_mode = 0;
+    float alpha = 1.0F;
+    float anim_speed = 1.0F;
+    std::array<float, 3> position = {0.0F, 0.0F, 0.0F};
+    std::array<float, 3> rotation = {0.0F, 0.0F, 0.0F};
+    std::array<float, 3> scale = {1.0F, 1.0F, 1.0F};
+};
+
+struct Setup {
+    float ticks_per_second = 60.0F;
+    std::vector<ModelSetup> models;
+    std::vector<Scene3d::Light> lights;
+    Scene3d::Projection projection;
+    Scene3d::RenderStyle style = Scene3d::RenderStyle::TextureOnly;
+    std::array<float, 3> eye = {0.0F, 0.0F, -1.0F};
+    std::array<float, 3> at = {0.0F, 0.0F, 0.0F};
+    std::array<float, 3> up = {0.0F, 1.0F, 0.0F};
 };
 
 struct Status {
@@ -29,6 +58,48 @@ struct Status {
 };
 
 bool Load(const std::string& dir);
+
+bool LoadWithSetup(const std::string& dir, const Setup& setup);
+
+bool LoadUnion(const std::vector<std::string>& dirs, const Setup& setup);
+
+struct SceneInfo {
+    bool loaded = false;
+    float max_time = 0.0F;
+    std::vector<std::string> models;
+};
+
+SceneInfo DescribeScene(const std::string& dir);
+
+void SetModelTime(const std::string& model, float ticks);
+
+void SetModelSpeed(const std::string& model, float speed);
+
+void SetModelAlpha(const std::string& model, float alpha);
+
+void SetModelBlendByName(const std::string& model, int mode);
+
+void SetModelScale(const std::string& model, const std::array<float, 3>& scale);
+
+void SetModelVisibleByName(const std::string& model, bool visible);
+
+void SetProjection(const Scene3d::Projection& projection);
+
+void SetView(const std::array<float, 3>& eye, const std::array<float, 3>& at,
+             const std::array<float, 3>& up);
+
+void SetStyle(Scene3d::RenderStyle style);
+
+void SetLights(const std::vector<Scene3d::Light>& lights);
+
+void SetFog(const Scene3d::Fog& fog);
+
+void SetPolyGrid(Scene3d::PolyGrid grid);
+
+void SetMovieReporter(Scene3d::MovieReporter reporter);
+
+void SetModelTransform(const std::string& model, const std::array<float, 3>& position,
+                       const std::array<float, 3>& rotation);
 
 void Unload();
 

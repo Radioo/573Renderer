@@ -3,6 +3,8 @@
 #include "scene3d/anim.h"
 #include "formats/xfile.h"
 #include "scene3d/scene3d.h"
+#include "scene3d/scene3d_fog.h"
+#include "scene3d/scene3d_material.h"
 #include "support/log.h"
 
 #include <d3d9.h>
@@ -18,24 +20,21 @@ namespace Scene3d {
 
 namespace {
 
-constexpr DWORD kFvf = D3DFVF_XYZ | D3DFVF_TEX1;
-constexpr float kFovY = 1.0471976F;
-constexpr float kNearZ = 0.1F;
-constexpr float kFarZ = 500.0F;
+constexpr DWORD kFvf = D3DFVF_XYZ | D3DFVF_NORMAL | D3DFVF_TEX1;
 
 void ToD3D(const XFile::Matrix& src, D3DMATRIX& dst) {
     std::memcpy(&dst, src.data(), sizeof(float) * 16);
 }
 
-D3DMATRIX Perspective(float aspect) {
-    const float h = 1.0F / std::tan(kFovY * 0.5F);
+D3DMATRIX Perspective(const Projection& p, float aspect) {
+    const float h = 1.0F / std::tan(p.fov_y * 0.5F);
     const float w = h / aspect;
     D3DMATRIX m{};
     m._11 = w;
     m._22 = h;
-    m._33 = kFarZ / (kFarZ - kNearZ);
+    m._33 = p.far_z / (p.far_z - p.near_z);
     m._34 = 1.0F;
-    m._43 = -kNearZ * kFarZ / (kFarZ - kNearZ);
+    m._43 = -p.near_z * p.far_z / (p.far_z - p.near_z);
     return m;
 }
 
@@ -74,6 +73,7 @@ bool Renderer::Init(IDirect3DDevice9* device, const Scene& scene) {
     dev_ = device;
     if (dev_ == nullptr) return false;
 
+    poly_.Init(dev_);
     textures_.assign(scene.tiles.size(), nullptr);
     for (size_t i = 0; i < scene.tiles.size(); i++) {
         const auto& tile = scene.tiles[i];
@@ -98,6 +98,7 @@ bool Renderer::Init(IDirect3DDevice9* device, const Scene& scene) {
 }
 
 void Renderer::Release() {
+    poly_.Release();
     for (auto*& t : textures_) {
         if (t != nullptr) t->Release();
         t = nullptr;
@@ -106,34 +107,94 @@ void Renderer::Release() {
     dev_ = nullptr;
 }
 
+DWORD Renderer::ColorOp() const {
+    return (style_ == RenderStyle::LitMaterial) ? D3DTOP_MODULATE : D3DTOP_SELECTARG1;
+}
+
 void Renderer::ApplyBaseState() {
     dev_->SetVertexShader(nullptr);
     dev_->SetPixelShader(nullptr);
     dev_->SetFVF(kFvf);
-    dev_->SetRenderState(D3DRS_LIGHTING, FALSE);
-    dev_->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
-    dev_->SetRenderState(D3DRS_ZENABLE, TRUE);
+    dev_->SetRenderState(D3DRS_ZENABLE, D3DZB_USEW);
+    dev_->SetRenderState(D3DRS_FILLMODE, D3DFILL_SOLID);
+    dev_->SetRenderState(D3DRS_SHADEMODE, D3DSHADE_GOURAUD);
     dev_->SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
-    dev_->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
-    dev_->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
-    dev_->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
+    dev_->SetRenderState(D3DRS_CULLMODE,
+                         (style_ == RenderStyle::LitMaterial) ? D3DCULL_CCW : D3DCULL_NONE);
+    dev_->SetRenderState(D3DRS_ZFUNC, D3DCMP_LESSEQUAL);
+    dev_->SetRenderState(D3DRS_DITHERENABLE, FALSE);
+    dev_->SetRenderState(D3DRS_STENCILENABLE, FALSE);
+    dev_->SetRenderState(D3DRS_CLIPPING, TRUE);
+    dev_->SetRenderState(D3DRS_FOGENABLE, FALSE);
+    dev_->SetRenderState(D3DRS_CLIPPLANEENABLE, 0);
+    dev_->SetRenderState(D3DRS_VERTEXBLEND, D3DVBF_DISABLE);
+    dev_->SetRenderState(D3DRS_INDEXEDVERTEXBLENDENABLE, FALSE);
+    const BOOL lit = (style_ == RenderStyle::LitMaterial) ? TRUE : FALSE;
+    dev_->SetRenderState(D3DRS_LIGHTING, lit);
+    dev_->SetRenderState(D3DRS_AMBIENT, 0);
+    dev_->SetRenderState(D3DRS_COLORVERTEX, TRUE);
+    dev_->SetRenderState(D3DRS_SPECULARENABLE, FALSE);
+    dev_->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
     dev_->SetRenderState(D3DRS_ALPHATESTENABLE, TRUE);
-    dev_->SetRenderState(D3DRS_ALPHAREF, 1);
-    dev_->SetRenderState(D3DRS_ALPHAFUNC, D3DCMP_GREATEREQUAL);
-    dev_->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_SELECTARG1);
+    dev_->SetRenderState(D3DRS_ALPHAFUNC, D3DCMP_GREATER);
+    dev_->SetRenderState(D3DRS_ALPHAREF, 0);
+    dev_->SetRenderState(D3DRS_NORMALIZENORMALS, FALSE);
+    dev_->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_ONE);
+    dev_->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_ZERO);
+    dev_->SetRenderState(D3DRS_BLENDOP, D3DBLENDOP_ADD);
+    dev_->SetTextureStageState(0, D3DTSS_COLOROP, ColorOp());
     dev_->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_TEXTURE);
+    dev_->SetTextureStageState(0, D3DTSS_COLORARG2, D3DTA_CURRENT);
     dev_->SetTextureStageState(0, D3DTSS_ALPHAOP, D3DTOP_SELECTARG1);
     dev_->SetTextureStageState(0, D3DTSS_ALPHAARG1, D3DTA_TEXTURE);
-    dev_->SetSamplerState(0, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
+    dev_->SetTextureStageState(0, D3DTSS_ALPHAARG2, D3DTA_CURRENT);
+    dev_->SetTextureStageState(0, D3DTSS_TEXCOORDINDEX, 0);
+    dev_->SetTextureStageState(0, D3DTSS_TEXTURETRANSFORMFLAGS, D3DTTFF_DISABLE);
+    dev_->SetTextureStageState(1, D3DTSS_COLOROP, D3DTOP_DISABLE);
+    dev_->SetTextureStageState(1, D3DTSS_ALPHAOP, D3DTOP_DISABLE);
+    dev_->SetSamplerState(0, D3DSAMP_MINFILTER,
+                          (style_ == RenderStyle::LitMaterial) ? D3DTEXF_POINT : D3DTEXF_LINEAR);
     dev_->SetSamplerState(0, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
+    dev_->SetSamplerState(0, D3DSAMP_MIPFILTER, D3DTEXF_NONE);
     dev_->SetSamplerState(0, D3DSAMP_ADDRESSU, D3DTADDRESS_WRAP);
     dev_->SetSamplerState(0, D3DSAMP_ADDRESSV, D3DTADDRESS_WRAP);
+}
+
+void Renderer::ApplyLights(const std::vector<Light>& lights) {
+    for (DWORD i = 0; i < active_lights_; i++)
+        dev_->LightEnable(i, FALSE);
+    active_lights_ = (DWORD)lights.size();
+    for (DWORD i = 0; i < active_lights_; i++) {
+        if (!lights[i].enabled) {
+            dev_->LightEnable(i, FALSE);
+            continue;
+        }
+        D3DLIGHT9 light{};
+        light.Type = D3DLIGHT_DIRECTIONAL;
+        light.Diffuse = {.r = lights[i].diffuse[0],
+                         .g = lights[i].diffuse[1],
+                         .b = lights[i].diffuse[2],
+                         .a = 1.0F};
+        light.Specular = {.r = lights[i].specular[0],
+                          .g = lights[i].specular[1],
+                          .b = lights[i].specular[2],
+                          .a = 1.0F};
+        light.Ambient = {.r = lights[i].ambient[0],
+                         .g = lights[i].ambient[1],
+                         .b = lights[i].ambient[2],
+                         .a = 1.0F};
+        light.Direction = {
+            .x = lights[i].direction[0], .y = lights[i].direction[1], .z = lights[i].direction[2]};
+        dev_->SetLight(i, &light);
+        dev_->LightEnable(i, TRUE);
+    }
 }
 
 void Renderer::ApplyBlendMode(int mode) {
     if (mode == kBlendOpaque || mode == 1) {
         dev_->SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
         dev_->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
+        dev_->SetTextureStageState(0, D3DTSS_ALPHAOP, D3DTOP_SELECTARG1);
         return;
     }
     dev_->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
@@ -144,27 +205,52 @@ void Renderer::ApplyBlendMode(int mode) {
                          (mode == kBlendAlpha) ? D3DBLEND_INVSRCALPHA : D3DBLEND_ONE);
     dev_->SetRenderState(D3DRS_BLENDOP,
                          (mode == kBlendSubtract) ? D3DBLENDOP_REVSUBTRACT : D3DBLENDOP_ADD);
+    dev_->SetTextureStageState(0, D3DTSS_ALPHAOP, D3DTOP_MODULATE);
 }
 
-void Renderer::BindTile(int tile) {
+void Renderer::ApplyMaterial(const DrawChunk& chunk, float alpha) {
+    const MaterialColors colors = MaterialFor(chunk.diffuse, chunk.emissive, alpha);
+    D3DMATERIAL9 material{};
+    material.Diffuse = {.r = colors.diffuse[0],
+                        .g = colors.diffuse[1],
+                        .b = colors.diffuse[2],
+                        .a = colors.diffuse[3]};
+    material.Ambient = {.r = colors.ambient[0],
+                        .g = colors.ambient[1],
+                        .b = colors.ambient[2],
+                        .a = colors.ambient[3]};
+    material.Emissive = {.r = colors.emissive[0],
+                         .g = colors.emissive[1],
+                         .b = colors.emissive[2],
+                         .a = colors.emissive[3]};
+    dev_->SetMaterial(&material);
+}
+
+void Renderer::BindTile(int tile, int blend_mode) {
     IDirect3DTexture9* tex = nullptr;
     if (tile >= 0 && (size_t)tile < textures_.size()) tex = textures_[(size_t)tile];
     dev_->SetTexture(0, tex);
-    const DWORD op = (tex == nullptr) ? D3DTOP_SELECTARG2 : D3DTOP_SELECTARG1;
-    const DWORD arg = (tex == nullptr) ? D3DTA_DIFFUSE : D3DTA_TEXTURE;
-    dev_->SetTextureStageState(0, D3DTSS_COLOROP, op);
-    dev_->SetTextureStageState(0, (tex == nullptr) ? D3DTSS_COLORARG2 : D3DTSS_COLORARG1, arg);
-    dev_->SetTextureStageState(0, D3DTSS_ALPHAOP, op);
-    dev_->SetTextureStageState(0, (tex == nullptr) ? D3DTSS_ALPHAARG2 : D3DTSS_ALPHAARG1, arg);
+    if (tex != nullptr) {
+        dev_->SetTextureStageState(0, D3DTSS_COLOROP, ColorOp());
+        dev_->SetTextureStageState(
+            0, D3DTSS_ALPHAOP,
+            (blend_mode == kBlendOpaque || blend_mode == 1) ? D3DTOP_SELECTARG1 : D3DTOP_MODULATE);
+        return;
+    }
+    dev_->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_SELECTARG2);
+    dev_->SetTextureStageState(0, D3DTSS_ALPHAOP, D3DTOP_SELECTARG2);
 }
 
-void Renderer::Draw(const Scene& scene, float model_time, float camera_time, int width, int height,
+void Renderer::Draw(const Scene& scene, float camera_time, int width, int height,
                     const XFile::Matrix* view_override) {
     draw_calls_ = 0;
     if (dev_ == nullptr || height <= 0) return;
     ApplyBaseState();
+    ApplyLights(lights_);
 
-    const D3DMATRIX proj = Perspective((float)width / (float)height);
+    const float aspect =
+        (projection_.aspect > 0.0F) ? projection_.aspect : ((float)width / (float)height);
+    const D3DMATRIX proj = Perspective(projection_, aspect);
     dev_->SetTransform(D3DTS_PROJECTION, &proj);
 
     view_ = (view_override != nullptr) ? *view_override : ViewMatrix(scene, camera_time);
@@ -172,11 +258,25 @@ void Renderer::Draw(const Scene& scene, float model_time, float camera_time, int
     ToD3D(view_, view);
     dev_->SetTransform(D3DTS_VIEW, &view);
 
-    DrawPass(scene, model_time, false);
-    DrawPass(scene, model_time, true);
+    EnterFog();
+    DrawPass(scene, false);
+    DrawPass(scene, true);
+    poly_.Draw(style_ == RenderStyle::LitMaterial);
+    LeaveFog();
 }
 
-void Renderer::DrawPass(const Scene& scene, float time, bool blended) {
+void Renderer::EnterFog() {
+    if (!fog_.enabled) return;
+    for (const FogWrite& write : FogOnWrites(fog_))
+        dev_->SetRenderState((D3DRENDERSTATETYPE)write.state, write.value);
+}
+
+void Renderer::LeaveFog() {
+    for (const FogWrite& write : FogOffWrites())
+        dev_->SetRenderState((D3DRENDERSTATETYPE)write.state, write.value);
+}
+
+void Renderer::DrawPass(const Scene& scene, bool blended) {
     std::vector<XFile::Matrix> locals;
     std::vector<XFile::Matrix> worlds;
     for (const auto& model : scene.models) {
@@ -184,15 +284,17 @@ void Renderer::DrawPass(const Scene& scene, float time, bool blended) {
         const bool is_blended = model.blend_mode != kBlendOpaque && model.blend_mode != 1;
         if (is_blended != blended) continue;
         ApplyBlendMode(model.blend_mode);
-        SampleLocals(model.scene, time, locals);
+        SampleLocals(model.scene, model.time, locals);
         ComputeWorlds(model.scene, locals, worlds);
+        const XFile::Matrix placement = ModelTransform(model);
         for (const auto& chunk : model.chunks) {
             if (chunk.indices.empty()) continue;
             D3DMATRIX world;
-            ToD3D(worlds[(size_t)chunk.frame], world);
+            ToD3D(Multiply(worlds[(size_t)chunk.frame], placement), world);
             dev_->SetTransform(D3DTS_WORLD, &world);
 
-            BindTile(chunk.tile);
+            ApplyMaterial(chunk, model.alpha);
+            BindTile(chunk.tile, model.blend_mode);
 
             const auto verts = (UINT)(chunk.vertices.size() / kVertexFloats);
             const auto tris = (UINT)(chunk.indices.size() / 3);

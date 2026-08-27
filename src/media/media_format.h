@@ -15,6 +15,7 @@ enum class Format : std::uint8_t {
     MP4_HEVC_Alpha = 6,
 };
 constexpr int kFormatCount = 7;
+constexpr Format kDefaultFormat = Format::MP4_H264;
 
 [[nodiscard]] const char* FormatLabel(Format f);
 [[nodiscard]] const char* FormatToken(Format f);

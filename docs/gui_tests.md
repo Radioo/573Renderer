@@ -168,15 +168,24 @@ harness `#undef`s it after its includes.
 
 ## 6. Native dialogs are stubbed
 
-`NativeDialog::SetOverrides()` installs two function pointers consulted at the
-top of `BrowseForFolder` and `RevealInFileManager`. Without this a test that
-clicks **Browse...** would open a real modal folder picker and hang CI forever,
-and **Open folder** would spawn Explorer on the runner.
+`NativeDialog::SetOverrides()` installs four function pointers consulted at the
+top of `BrowseForFolder`, `RevealInFileManager`, `OpenFile` and `SaveFile`. Without
+this a test that clicks **Browse...**, **Import...** or **Export...** would open a
+real modal dialog and hang CI forever, and **Open folder** would spawn Explorer on
+the runner.
 
 The harness installs stubs in its constructor and clears them in its destructor.
-`GuiTest::SetBrowseResult()` seeds what the picker "returns" (empty string means
-the user cancelled, which is a case worth testing); `GuiTest::TakeRevealedPath()`
-reports what Explorer would have been asked to select.
+`GuiTest::SetBrowseResult()` seeds what the folder picker "returns" (empty string
+means the user cancelled, which is a case worth testing), `SetOpenFileResult()` and
+`SetSaveFileResult()` do the same for the file dialogs, and
+`GuiTest::TakeRevealedPath()` reports what Explorer would have been asked to select.
+The library tests point them at files under a temp directory, so an import or export
+reads and writes real files with no dialog on screen.
+
+The preset library's scan root is injected the same way:
+`Panels::PresetLibrary::SetUserRoot()` replaces `presets/` next to the executable
+with a temp folder, so a test can put a user document on disk and expect a User row
+without touching the developer's own presets.
 
 ## 7. Assertions: two frameworks, two threads
 
@@ -200,6 +209,14 @@ state (`g_dir_buf`, the resolution combo's `shown_idx`, `g_main_view`). Each
 command queue, and each destructor tears the ImGui context down, so tests do not
 depend on declaration order. The panel-local statics re-sync from state on the
 next frame (`SyncDirBufFromState` compares against the last observed value).
+
+The reset also clears `App::PresetStatus` and closes `Editor::Global()`, because
+both outlive an ImGui context: a document left loaded by one case made
+`Panels::Timeline::Active()` true in the next one, which drew the timeline editor
+over an AFP test and pushed a `ReplaceDocument` command in front of the command the
+test was reading. `BootLifecycle::SetLoadProgress` clears the minimum-hold timestamp
+for the same reason - without that, the loading overlay raised by one case's preset
+scan was still "active" for the first frames of the next case.
 
 One deliberate side effect: `PersistSetup` calls `App::SaveCurrentSettings()`,
 which writes `settings.ini` next to the running executable. For `gui_tests` that
@@ -247,7 +264,10 @@ publishes.
 
 ## 9. Coverage
 
-139 test cases across twelve files, one file per panel:
+One file per panel or editor surface. The counts below are the panels the first
+version of this suite covered; the scene preset editor files (`timeline_tests`,
+`timeline_editor_tests`, `clip_modal_tests`, `tween_ui_tests`, `library_tests`,
+`frame_inspector_tests`) grew with milestones M4 to M7:
 
 | file | cases | what it drives |
 |---|---|---|
@@ -262,6 +282,8 @@ publishes.
 | `qpro_panel_tests.cpp` | 11 | scan command, category gating, extract payload, picker cancel, fps clamp, scan-error state, the per-date part groups, All / None, a group checkbox, the issue list's clipboard copy |
 | `host_panel_tests.cpp` | 7 | 3D-scene and 2D-package panels while idle, the loading overlay over both views and its absence, the boot-error banner, Load disabled during boot |
 | `host_live_tests.cpp` | 7 | the 3D and 2D panels driving REAL loaded hosts: pause, speed, playhead, animation combo, animate-models, free camera, reset view, move speed, model visibility and blend mode, and the camera-checkbox gates |
+| `library_tests.cpp` | 22 | the preset library: the library owning the CENTER pane on the scene3d backend with nothing of it left under `main_view/pane_left`, an AFP backend keeping `##scene_filter` / `scene_scroll` in the centre with no `###lib_*` item anywhere, the `lib_scroll` list taking more than 40 percent of the pane height, Built-in / User / Other builds groups from a temp scan root, selecting a row loading the document and posting `PresetCmd::LoadDocument`, an unparseable import reporting its line and column and loading nothing, an import with a validation error loading and listing it, an import whose id is taken keeping the file that owns it, export then import byte-equal, Save writing `presets/<build>/<id>.json` and clearing the modified mark, Ctrl+S, the unsaved-changes prompt, New generating the id from the name, Duplicate, a built-in offering a user copy instead of saving in place, the problem list staying inside a short pane, an other-build row opening read-only with no `LoadDocument` posted and every editing control disabled, Duplicate turning it into an editable copy for this build, an unloadable user file appearing under "Files that did not load", and a close request prompting when dirty (Cancel keeps running, Discard confirms) but exiting straight away when clean |
+| `frame_inspector_tests.cpp` | 2 | the Inspector "Frame" tab naming the clip that won a conflicting value, and clicking that winner selecting the clip |
 | `window_tests.cpp` | 10 | `Gui::Init` device creation, the min-track-size clamp, `WM_ERASEBKGND`, `WM_SYSCOMMAND`/SC_KEYMENU, live resize, `WM_PAINT` + validation, the pump's WM_QUIT exit, lost-device recovery, and two BACKBUFFER PIXEL assertions |
 
 Every interactive widget in `src/gui` is now exercised. The four gaps the first

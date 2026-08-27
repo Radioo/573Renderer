@@ -12,7 +12,9 @@ constexpr int kMaxTextures = 12;
 constexpr int kAtlasWidth = 1024;
 constexpr int kAtlasTileHeight = 1024;
 
-constexpr uint16_t kFlagAlphaTrack = 0x0002;
+constexpr uint16_t kFlagBlend = 0x0002;
+constexpr uint16_t kBlendCodeMask = 0x0003;
+constexpr uint16_t kBlendCodeXor = 0x000C;
 constexpr uint16_t kFlagSubtract = 0x0010;
 
 constexpr int16_t kRecDrawCell = 0;
@@ -62,5 +64,7 @@ struct Package {
 bool Parse(std::span<const uint8_t> file, Package& out, std::string& err);
 
 int AnimationLength(const Package& pkg, size_t start_index);
+
+int AnimationContentEnd(const Package& pkg, size_t start_index);
 
 }

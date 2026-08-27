@@ -192,3 +192,92 @@ numbered frames on disk). MP4-H264 asserts the documented
 no-software-encoder error contract when the build lacks libx264 and NVENC is
 off; if a software H.264 encoder appears in a future ffmpeg bump the test
 passes through. Outputs go to the system temp dir, never the repo.
+
+## Movie decode (src/media/movie_source.cpp)
+
+`Movie::Source` is the DECODE side of `r573_media`, and it exists for one caller:
+the `poly.tile_grid` pass, which textures its quads with a game BGA movie
+(`docs/preset_document.md`). IIDX's `data\movie\*.4` files are MPEG-2 PROGRAM
+STREAMS (`00 00 01 BA` pack header), which libavformat demuxes as `mpegps` and
+libavcodec decodes as `mpeg2video`. Nothing about the class is IIDX specific: it
+opens whatever libavformat can open.
+
+`Open(path)` demuxes, picks the best video stream and starts a decoder, keeping
+every failure in `LastError()` and leaving `IsOpen()` false. `FrameRate()` is
+`av_guess_frame_rate`, so it is the FILE's own rate. `IndexAt(seconds)` turns a
+document time into that file's frame number. `SetOutputSize(w, h)` makes libswscale
+resample every decoded picture to the size the tiles' uv rectangle expects.
+`FrameAt(index)` returns the BGRA of that frame.
+
+`FrameAt` decodes FORWARD from wherever it is, and seeks back to the start and
+replays when asked for an earlier frame, which is what timeline scrubbing does.
+The decoded picture is cached, so the common case of a 30 fps movie under a 60 fps
+document costs one decode every other frame and a pointer return in between.
+
+`Position()` is the frame the source is actually HOLDING, which is not the frame
+that was asked for: past the end of the stream the request keeps climbing with
+document time while `Position()` stops at the last decoded frame. `PolyDraw` keys
+its texture upload on `Position()` for exactly that reason. Keyed on the requested
+index instead, every frame past the end of a movie looked like a new picture and
+re-locked and re-uploaded the same 512x512 texture for the rest of the screen.
+
+`FrameAt` takes an optional `StepFn(decoded, wanted)`, called once per decoded
+frame, and `PolyDraw::Fetch` uses it to drive the loading overlay. A normal
+advance is one decode and stays silent; a backwards scrub replays from frame 0,
+which is thousands of decodes on the render thread, so past `kQuietDecodeSteps`
+the callback opens the overlay and then reports "Replaying the tile movie, frame
+N / M" with a determinate fraction every `kReportEverySteps`. Past the end of the
+stream nothing decodes, so the callback never fires and the overlay never flashes.
+The overlay hooks are INJECTED (`Scene3d::MovieReporter`, wired by
+`Scene3dBackend::Boot` through `Scene3dHost::SetMovieReporter`) rather than read
+out of `App::Global()`, because the render layer does not depend upwards on the
+state layer (`docs/ownership.md`).
+
+`Broken()` latches when `sws_getCachedContext` cannot build a scaler. That failure
+is TERMINAL: `Store` returns false, `DecodeNext` refuses to keep going, and
+`FrameAt` returns an empty frame instead of a stale buffer. It used to return
+early from `Store` without advancing `current` while still reporting a decoded
+frame, so `FrameAt` burned all `kMaxDecodeSteps` (4096) attempts on every single
+request. `PolyDraw` treats a broken source the way it treats a missing file: it
+logs once and draws the tiles untextured.
+
+**At the end of the stream it HOLDS the last decoded picture.** That is the game,
+and it is worth writing down because it is a deletion rather than a design: IIDX
+12's player is the DirectX 9 SDK "Texture3D" DirectShow sample (the filter still
+names itself `DirectShow Texture3D Sample`), and the sample's own loop lives in a
+`CheckMovieStatus()` that watches `IMediaEvent` for `EC_COMPLETE` and calls
+`IMediaPosition::put_CurrentPosition(0)`. KONAMI stripped that function and its
+`WM_GRAPHNOTIFY` caller out. Both interfaces are still QueryInterface'd and are
+then only ever `Release()`d, so the `EC_COMPLETE` the renderer posts at end of
+stream is never drained: the graph stays running, `DoRenderSample` is simply never
+called again, and the D3D texture keeps the last picture until the screen exits.
+To re-verify this on a new build, take the globals filled by the second and third
+`QueryInterface` in the graph builder (the one carrying
+`"Could not add renderer filter to graph!  hr=0x%x"`) and enumerate every xref: if
+they are only the QI store, a `Release()` in the cleanup function and the CRT
+static-init and atexit thunk pair, the loop is still absent.
+
+The movie also runs on its OWN clock in the game. The player never reads
+`AvgTimePerFrame` and never sets a sync source, so `CBaseRenderer` schedules each
+sample by its presentation timestamp against the graph's default reference clock,
+decoupled from the 60 Hz game loop. `Movie::Source` reproduces that by mapping
+document SECONDS onto the file's own frame numbering rather than stepping one
+movie frame per document frame.
+
+`media_decode_tests` writes its own fixture: a 12-frame 96x64 `mpeg2video` program
+stream muxed with the `mpeg` muxer into the system temp dir, each frame a flat
+field one step brighter than the last. It needs no game install and no GPU. The
+frames are compared RELATIVELY (strictly brightening, identical on re-read)
+rather than against absolute levels, because the YUV to RGB conversion applies a
+limited-range expansion that has nothing to do with what is being tested. It pins
+the walk forward, the seek back, the hold past the end (byte-identical to the last
+frame, and never the first one again, which is what would happen if this looped),
+the seconds-to-index mapping, the scaled output and the missing-file path. It also
+pins the two contracts the tile pass leans on: `Position()` stops climbing at the
+last frame while the request does not, and `StepFn` fires once per decoded frame,
+replays 0..N on a backwards scrub, and fires NOT AT ALL once the stream has ended.
+The `Broken()` branch itself has no test: `sws_getCachedContext` only fails on
+inputs `Movie::Source` never produces (its destination format is fixed and its
+destination size is validated), so there is no seam to force it from outside
+without an injection point that would exist only for the test. What the tests do
+pin is that a stream which decodes normally never latches it.

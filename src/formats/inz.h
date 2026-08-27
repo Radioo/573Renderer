@@ -23,8 +23,23 @@ struct Manifest {
     std::vector<Pattern> patterns;
 };
 
+struct AtlasGrid {
+    int tile_width;
+    int tile_height;
+    int tiles_per_row;
+};
+
+struct Region {
+    int tile = -1;
+    float u_scale = 1.0F;
+    float u_bias = 0.0F;
+    float v_scale = 1.0F;
+    float v_bias = 0.0F;
+};
+
 bool Parse(const std::string& text, Manifest& out, std::string& err);
 
-const Pattern* FindPattern(const Manifest& manifest, const std::string& texture_name);
+Region ResolveRegion(const Manifest& manifest, const std::string& texture_name,
+                     const AtlasGrid& grid);
 
 }

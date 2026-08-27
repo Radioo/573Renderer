@@ -2,6 +2,8 @@
 
 #include "cli/cli.h"
 #include "cli/tool_command.h"
+#include "media/media_format.h"
+#include "state/commands.h"
 
 #include <string>
 #include <vector>
@@ -238,6 +240,97 @@ TEST_CASE("ParseToolCommand keeps the historical priority order and value rule")
     CHECK(Cli::ParseToolCommand(none).kind == Cli::ToolKind::None);
 }
 
+TEST_CASE("ParseToolCommand parses the headless preset document tools") {
+    const std::vector<std::string> dump = {"exe", "--preset-dump-defaults", "out/presets"};
+    Cli::ToolCommand c = Cli::ParseToolCommand(dump);
+    CHECK(c.kind == Cli::ToolKind::PresetDumpDefaults);
+    CHECK(c.out_path == "out/presets");
+
+    const std::vector<std::string> one = {"exe", "--preset-export-json", "iidx11", "iidx11-attract",
+                                          "attract.json"};
+    c = Cli::ParseToolCommand(one);
+    CHECK(c.kind == Cli::ToolKind::PresetExportJson);
+    CHECK(c.build == "iidx11");
+    CHECK(c.preset_id == "iidx11-attract");
+    CHECK(c.out_path == "attract.json");
+
+    const std::vector<std::string> validate = {"exe", "--preset-validate", "mine.json"};
+    c = Cli::ParseToolCommand(validate);
+    CHECK(c.kind == Cli::ToolKind::PresetValidate);
+    CHECK(c.in_path == "mine.json");
+}
+
+TEST_CASE("ParseToolCommand never takes a flag as a positional of a document tool") {
+    const std::vector<std::string> partial = {"exe", "--preset-export-json", "iidx11",
+                                              "iidx11-attract", "--force"};
+    Cli::ToolCommand c = Cli::ParseToolCommand(partial);
+    CHECK(c.kind == Cli::ToolKind::PresetExportJson);
+    CHECK(c.build == "iidx11");
+    CHECK(c.preset_id == "iidx11-attract");
+    CHECK(c.out_path == "iidx11-attract.json");
+
+    const std::vector<std::string> only_build = {"exe", "--preset-export-json", "iidx11",
+                                                 "--force"};
+    c = Cli::ParseToolCommand(only_build);
+    CHECK(c.build == "iidx11");
+    CHECK(c.preset_id.empty());
+    CHECK(c.out_path.empty());
+
+    const std::vector<std::string> dump = {"exe", "--preset-dump-defaults", "--force"};
+    c = Cli::ParseToolCommand(dump);
+    CHECK(c.kind == Cli::ToolKind::PresetDumpDefaults);
+    CHECK(c.out_path.empty());
+}
+
+TEST_CASE("ParseToolCommand takes a document file in place of a preset id") {
+    const std::vector<std::string> test = {"exe", "--preset-test", "D:/iidx", "--preset-json",
+                                           "mine.json"};
+    Cli::ToolCommand c = Cli::ParseToolCommand(test);
+    CHECK(c.kind == Cli::ToolKind::PresetTest);
+    CHECK(c.in_path == "D:/iidx");
+    CHECK(c.preset_id.empty());
+    CHECK(c.json_path == "mine.json");
+    CHECK_FALSE(c.force);
+
+    const std::vector<std::string> forced = {"exe",           "--preset-export", "D:/iidx",
+                                             "--preset-json", "mine.json",       "--force"};
+    c = Cli::ParseToolCommand(forced);
+    CHECK(c.kind == Cli::ToolKind::PresetExport);
+    CHECK(c.json_path == "mine.json");
+    CHECK(c.force);
+
+    const std::vector<std::string> with_output = {"exe", "--preset-test", "D:/iidx",  "out.png",
+                                                  "120", "--preset-json", "mine.json"};
+    c = Cli::ParseToolCommand(with_output);
+    CHECK(c.preset_id.empty());
+    CHECK(c.out_path == "out.png");
+    CHECK(c.frames == 120);
+    CHECK(c.json_path == "mine.json");
+}
+
+TEST_CASE("ParseToolCommand collects repeated preset options") {
+    const std::vector<std::string> args = {
+        "exe", "--preset-test",   "D:/iidx",     "iidx11-mode-select", "out.png",
+        "120", "--preset-option", "mode=EXPERT", "--preset-option",    "attack=1"};
+    const Cli::ToolCommand c = Cli::ParseToolCommand(args);
+    CHECK(c.kind == Cli::ToolKind::PresetTest);
+    CHECK(c.preset_id == "iidx11-mode-select");
+    CHECK(c.out_path == "out.png");
+    CHECK(c.frames == 120);
+    REQUIRE(c.options.size() == 2);
+    CHECK(c.options[0] == "mode=EXPERT");
+    CHECK(c.options[1] == "attack=1");
+}
+
+TEST_CASE("ParseToolCommand rejects the retired tweak file flag") {
+    const std::vector<std::string> args = {
+        "exe",     "--preset-test",   "D:/iidx",   "iidx11-attract",
+        "out.png", "--preset-tweaks", "tweaks.txt"};
+    const Cli::ToolCommand c = Cli::ParseToolCommand(args);
+    CHECK(c.kind == Cli::ToolKind::RetiredFlag);
+    CHECK(c.retired == "--preset-tweaks");
+}
+
 TEST_CASE("Parse handles every string-valued qpro flag") {
     const ParseResult r =
         Run({"--extract-qpro",        "out/qpro", "--qpro-parts",          "head,hand",
@@ -340,4 +433,22 @@ TEST_CASE("Parse defaults match the documented option table") {
     CHECK(r.opts.screenshot_prefix == "screenshots/auto_f");
     CHECK(r.opts.root_loop_mode == -1);
     CHECK(r.opts.seek_frame == -1);
+}
+
+TEST_CASE("every export default has exactly one definition, shared by the UI and the CLI") {
+    const App::ExportRequest canonical;
+    const Cli::ToolCommand tool;
+
+    REQUIRE(tool.bg_transparent == canonical.bg_transparent);
+    REQUIRE(tool.bg_rgb[0] == canonical.bg_r);
+    REQUIRE(tool.bg_rgb[1] == canonical.bg_g);
+    REQUIRE(tool.bg_rgb[2] == canonical.bg_b);
+
+    REQUIRE(canonical.fps == 60);
+    REQUIRE(canonical.format == MediaSink::ToIndex(MediaSink::kDefaultFormat));
+    REQUIRE(canonical.prefer_hardware);
+    REQUIRE(canonical.loop_count == 1);
+    REQUIRE(canonical.max_frames == 0);
+    REQUIRE(canonical.width == 0);
+    REQUIRE(canonical.height == 0);
 }

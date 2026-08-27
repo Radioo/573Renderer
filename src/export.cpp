@@ -100,6 +100,7 @@ void InitSessionFromRequest(Session& sess, const App::ExportRequest& req, D3D9St
     sess.quality = req.quality >= 0 && req.quality <= 100 ? req.quality : 60;
     sess.keyframe_interval = req.keyframe_interval > 0 ? req.keyframe_interval : 0;
     sess.max_frames = req.max_frames > 0 ? req.max_frames : 0;
+    sess.start_frame = req.start_frame > 0 ? req.start_frame : 0;
     sess.loop_count = req.loop_count > 0 ? req.loop_count : 1;
     sess.blend_loop = req.blend_loop;
     sess.blend_frames = req.blend_frames > 0 ? req.blend_frames : 15;
@@ -178,7 +179,12 @@ void StartSession(Session& sess, const App::ExportRequest& req, D3D9State& d3d) 
     }
     if (sess.label_active && !sess.label_name.empty()) ApplyLabelSuffixToOutput(sess);
 
+    if (Backend::Active() == nullptr) {
+        FailSession(sess, "No backend is running, so nothing can be captured.");
+        return;
+    }
     Backend::Active()->ExportDriver().BeginCapture(sess);
+    if (!sess.active) return;
 
     LogSessionStart(sess);
     Publish(sess, App::ExportPhase::Capturing);
@@ -380,9 +386,20 @@ void OnMainLoopTick(D3D9State& d3d) {
 bool IsCapturing() {
     return ActiveSession().active;
 }
+
+Capabilities ActiveCapabilities() {
+    if (Backend::Active() == nullptr) return {};
+    return Backend::Active()->ExportDriver().Caps();
+}
 int TargetFps() {
     const Session& sess = ActiveSession();
     return sess.fps > 0 ? sess.fps : 60;
+}
+
+int PlannedFrames(int max_frames, int preset_frames, int package_frames) {
+    if (max_frames > 0) return max_frames;
+    if (preset_frames > 0) return preset_frames;
+    return (package_frames > 0) ? package_frames : 0;
 }
 
 void HandleStartRequest(const App::ExportRequest& req, D3D9State& d3d) {

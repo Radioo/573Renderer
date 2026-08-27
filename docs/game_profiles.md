@@ -30,6 +30,50 @@ binary token stream to the text form (`src/formats/xfile_binary.cpp`) and reuses
 the existing parser rather than growing a second one. Token table and the
 transcoding pitfalls: `IIDX/binary_x_models.md`.
 
+## IIDX 12 (HAPPY SKY) - its own profile ahead of the generic IIDX row
+
+HAPPY SKY runs the same engine-free `scene3d` backend as RED and DistorteD at
+640x480, and its `sys/` textures are plain LZSS `.gcz` like RED's, not Blowfish
+like DistorteD's. It still needs a profile of its own for one reason: the
+directory-substring detection scans `kProfiles` in order and returns the FIRST
+match, and a folder called "IIDX 12 - HAPPY SKY" contains the generic "iidx"
+substring of the `iidx33` row. Before this profile existed, an auto-detected
+HAPPY SKY install booted as `afp_modern` at 1920x1080 and died looking for
+`avs2-core.dll`; `--profile iidx13` was the workaround. The `iidx12` row is
+therefore placed BEFORE the `iidx13` ("distorted") row and far ahead of the
+generic "iidx" one, with `dir_substring = "happy sky"`:
+
+| field | value |
+|---|---|
+| `name` | IIDX 12 |
+| `slug` | `iidx12` |
+| `dir_substring` | `happy sky` |
+| `backend_id` | `scene3d` |
+| `game_dll` | `bm2dx.exe` |
+| default render size | 640x480 |
+
+The matching `GameFingerprint::Build` row identifies the JAD executable:
+
+| field | value |
+|---|---|
+| `id` | `iidx12` |
+| `name` | IIDX 12 HAPPY SKY (JAD) |
+| `file` | `bm2dx.exe` |
+| `size` | 1105920 bytes |
+| `crc` | 0x122D2CC3 |
+| `profile_slug` | `iidx12` |
+
+`tests/game/game_profile_tests.cpp` pins both. The CRC case builds a synthetic
+1105920-byte file rather than depending on a game install: 1105916 bytes of `A`
+followed by the four bytes `AD E9 63 32`, which are the unique tail that drives
+CRC32 to 0x122D2CC3 (CRC32 is affine, so the last four bytes of a fixed prefix
+are solvable in closed form). Change the fill byte and the tail has to be
+recomputed. The same test also writes a wrong-CRC file of the right size and
+requires the patched-copy path to still resolve to `iidx12`.
+
+The 3D screen system itself, its model slots, the light setter identities and the
+re-find recipes live in `IIDX/happy_sky_3d_screens.md` in the notes repo.
+
 ## IIDX 13 (DistorteD) - same backend, Blowfish textures
 
 DistorteD shares the whole IIDX 17 stack below (`scene3d` backend, 640x480, GC
@@ -212,6 +256,16 @@ auto-detect-miss fallback to IIDX 33 was exactly the wrong-offsets crash
 above. Registry order drives the GUI dropdown display order; most-likely
 profiles go first. `AutoDetect` and `BySlug` return nullptr on no match. The
 registry is constructed at static init and never empty.
+
+A fingerprinted BUILD is not the same thing as a profile: `GameFingerprint::Build`
+(src/game_fingerprint.cpp) identifies the exact `bm2dx.exe` a scene preset was
+transcribed from, and carries a `profile_slug` naming the render profile its
+export runs through (`GameFingerprint::ProfileSlugFor`, used by
+`PresetTest::RunExport`). Both preset builds point at `iidx11`: 10th style and RED
+share one legacy D3D9 path, and there is no `iidx10` profile row to point at. A
+build with no `profile_slug` cannot be exported, and says so instead of exporting
+through someone else's profile, which is what the old `BySlug("iidx11")` literal
+did for every build.
 
 Adding a modern-AFP profile:
 
@@ -488,6 +542,34 @@ global):
 | afpu_data_struct        | 0x281F0 | same as IIDX 33                            |
 | afpu_render_context     | 0x28880 | same as IIDX 33                            |
 | afpu_set_screen_rect_fn | 0x18810 | IIDX 33 has 0x18550; body is identical     |
+
+pop'n music 29 (`kPopn29Offsets`; afp-core 2.14.28 / afp-utils 1.2.28 - the
+NEWEST afp build the renderer targets (IIDX 33 is 2.14.18, GITADORA DELTA
+2.14.26, T44 2.14.19), same XCd229cc / XE592acd export scheme and the same
+export counts (126 / 123). Every data-segment global moved. Derived exactly as
+the entries above: afp_set_afp_data (afp-core ord 0x000) has the IIDX-33 shape,
+so the callback table is the DESTINATION of its 35-qword copy loop and also the
+first argument of the rebind helper in the & 0x800 branch, and the render-flags
+dword is the & 0x800 gate itself - which again sits at table + 0x32C, the same
+relation IIDX 26 and IIDX 33 have. afpu_render_init (afp-utils ord 0x070)
+stores its argument into the render-context global on its first line and passes
+the data-struct global to afp_set_afp_data on its last. The set-screen-rect
+function was located through the afpu data struct's slot +0x70, the slot IIDX
+33's set-rect function occupies in ITS struct, and confirmed by body shape:
+it takes an int pointer, stores four ints into consecutive rect globals, ORs 1
+into a flag byte and zeroes a counter, with nothing else in the function. The
+neighbouring slot +0x68 in the same struct is afpu's get_near_far (it asserts
+with the literal `"get_near_far"` from `afpu-render.c`), which cross-checks the
+slot numbering):
+
+| field                   | value   | note                                     |
+|-------------------------|---------|-------------------------------------------|
+| afp_callback_table      | 0xF20A8 | in afp_set_afp_data                        |
+| afp_render_flags        | 0xF23D4 | = table + 0x32C, the & 0x800 gate          |
+| afp_nearfar_slot        | 0xF2110 | = table + 0x68                             |
+| afpu_data_struct        | 0x2B2D0 | in afpu_render_init                        |
+| afpu_render_context     | 0x2B8B8 | in afpu_render_init                        |
+| afpu_set_screen_rect_fn | 0x15790 | data-struct slot +0x70 + body-shape match  |
 
 ## AfpOrdinals - the afp-core ordinal map
 
@@ -941,3 +1023,363 @@ Gate set == GITADORA DELTA's exactly; per-gate provenance:
 - `skip_explicit_afp_set_afp_data = true` - the game never even imports
   afp-core 0x000; like gdxg it relies solely on afpu_render_init's internal
   rebind-path call.
+
+### pop'n music 29 - slug `popn29`, dir hint "popn"
+
+Game DLL popn.dll; default DLL names (avs2-core / afp-core / afp-utils) are
+correct. avs2-core 2.17.4 (same build IIDX 33 ships, so the default
+`AvsGeneration::Avs217` ordinal map applies), afp-core 2.14.28 / afp-utils
+1.2.28. Content is loose `.ifs` under `plain_data/tex/**` (there is no `data/`
+directory - `AfpModernBackend::LoadPersistentIfses` falls back to the game root
+and the boot scan walks the tree, so nothing special is needed).
+
+Native render is **1920x1080 at 120 Hz**, read off the game's InitD3D routine
+(find it via the `"InitD3D"` log-tag string; it also holds
+`"D3DFMT_A8R8G8B8 mode cnt: %d"` and `"RefreshRate:%.2f"`). The routine builds a
+12-byte `{width, height, refresh}` mode struct and fills the PREFERRED one with
+`780h, 438h, 78h` = 1920, 1080, 120 in three consecutive stores, then a fallback
+candidate list of `{1280, 800, 60}` and `{1280, 800, 59}` for cabinets that
+cannot do the preferred mode. The renderer needs no per-profile frame rate for
+this: `render_fps` already defaults to 120 globally and the per-frame advance is
+`dt = 1/fps`, so afp runs at real-time speed at any rate (docs/settings.md).
+
+The entire afp bring-up lives in ONE popn.dll function - find it via the xref to
+the afp_boot import. popn.dll imports afp-core and afp-utils BY ORDINAL, so IDA
+names the thunks `afp_core_<N>` / `afp_utils_<N>` where N is the PE ordinal and
+the renderer's ordinal is `N - 1`: afp_boot is `afp_core_3`, afp_set_stream_nr
+`afp_core_30`, afpu_boot `afp_utils_1`, afpu_render_init `afp_utils_113`. The
+sequence: afp_boot(ctx), afp_set_stream_nr(0x4000), afp_set_verbose(1) 1-arg,
+afp_set_flag(0x10, 0x10), afp_set_flag(8, 8) - MIRRORED args, so SET those bits,
+and no third 65537 call - afpu_boot(0, data) 2-arg with a NULL config node,
+afpu_render_init(cfg), the afpu memory-hook install (afpu suffix 000006, skipped
+by the renderer as on T44 and IIDX 26), D3D setup, afpu_set_config(1, 4096),
+then afpu_set_flag(4, 0) - note the `xor edx, edx`, a CLEAR - afpu_set_flag(8, 8),
+afpu_set_flag(16, 16), and finally afpu_set_config(2, 16). popn.dll never
+imports afp_set_afp_data (afp-core 0x000) at all, and never calls
+afpu_set_config(3, ...).
+
+The resulting gate set is identical to IIDX 26 Rootage's; per-gate provenance:
+
+- `call_afp_set_stream_nr = true` - game calls afp_set_stream_nr(0x4000). The
+  renderer passes its own 4096 (the shared value every profile uses); pop'n's
+  16384 is the cap on concurrently live streams, and the renderer creates a
+  handful.
+- `call_afp_stream_create_test = false` - diagnostic probe; afp-core 2.14.28's
+  afp_stream_create is 3-arg (confirmed by decompiling export suffix 000018), so
+  the renderer's 0-arg typedef would hand it register junk.
+- `call_afp_render_init = false` - the boot function never calls afp-core 0x00f.
+  popn.dll does import it, but only from a device-reset helper PAIR
+  (afp_render_init -> per-stream afp_do_update(2) -> afp_render_destroy), the
+  same shape T44 has.
+- `call_afpu_render_init = true` - game calls afpu_render_init(cfg).
+- `call_afpu_set_config = true` - game calls (1, 4096) and (2, 16). The renderer
+  passes (2, 10), its shared value; case 2 is the max_nr_masks resize.
+- `call_afpu_set_flag_setup = true` with
+  `afpu_set_flag_calls = {(4,0), (8,8), (16,16)}` - the game's exact pairs. The
+  first CLEARS afpu bit 4 where the renderer's default list sets it, so the
+  override is load-bearing.
+- `call_afpu_boot = true` - game calls afpu_boot(NULL, data). The renderer passes
+  its max_nr_masks=16 property in place of the NULL node.
+- `afpu_set_config_safe_clean_pos = true` - the game never calls set_config(3),
+  so pass 0 and leave the cleanup callback a no-op stub.
+- `call_afp_set_flag_setup = true` with
+  `afp_set_flag_calls = {(16,16), (8,8)}` - the game's exact mirrored pairs, no
+  65537 third call.
+- `apply_iidx_data_segment_patches = true` - kPopn29Offsets are correct; needed
+  for the poke + slot 12/13 re-patch.
+- `afp_set_afp_data_wide_args = false` - afpu_render_init's internal
+  afp_set_afp_data call is 1-arg (seen directly in its decompile).
+- `afp_set_verbose_wide_args = false` - game calls afp_set_verbose(1) 1-arg
+  (only ecx is set at the call site).
+- `legacy_afp` / `scan_arc_containers` / `scan_txp2_packages` stay false.
+- `skip_explicit_afp_set_afp_data = true` - like gdxg and T44 the game never
+  imports afp-core 0x000 and relies solely on afpu_render_init's internal
+  rebind-path call (0x800 left set).
+
+Ordinal map: spot-verified equal to IIDX 33's. These obfuscated builds keep the
+ARGUMENT-NAME literal in each export's null-check assert, which makes an ordinal
+checkable without comparing bodies: suffix 000046 rejects a null second argument
+named `"info"` and fills a 60-byte struct (afp_get_layer_info), 000066 rejects
+`"path"` and special-cases the `"aep:"` prefix (afp_mc_get_id_by_path), 000087
+rejects `"bitmap"` and logs `MovieClip=%s, bitmap=%s`
+(afp_play_work_load_bitmap). Two more were confirmed by body shape: 000011
+gathers visible streams into a list and hands it to the sort helper
+(afp_do_sort_render) and 00004b walks the stream table filtering on a u16 field
+and returns a count (afp_get_layers_by_nr). The game's own call sites confirm
+five more independently, since each is called with arguments only that function
+takes.
+
+## Scene presets (`src/preset/`) and build fingerprints (`src/game_fingerprint.h`)
+
+A game profile says which backend and resolution a game needs. A **scene preset**
+goes one level further: it is the recipe for reproducing ONE game screen exactly
+as the game draws it, for one identified build.
+
+`GameFingerprint::Identify` walks the game directory (three levels deep) looking
+for each known build's key file, and matches on size plus CRC32. An exact match
+gives the build id; a size-only match is reported as a patched copy and still
+resolves, because hooks and patch tools rewrite bytes in the executable. This is
+independent of the folder name, which the directory-substring detection in
+`game_profile.cpp` relies on and which users rename freely.
+
+A scene preset document (docs/preset_document.md) carries what the data files
+cannot: which model of which scene directory is drawn, its blend mode, tint alpha,
+animation speed and transform, the fixed camera and projection, the directional
+lights, the shading style and the 2D sprite layers, all of it on a frame axis with
+an explicit length. `PresetHost::LoadDocument` resolves the relative asset paths
+against the game root and drives `Scene3dHost` and `Gc2dHost` from the evaluator's
+per-frame push list.
+
+Two shading styles exist because the fixed-function setup is per engine build:
+
+- `TextureOnly` is the asset browser's own choice - unlit, `COLOROP =
+  SELECTARG1(TEXTURE)`, cull none. It is what the scene viewer has always done
+  and it is NOT a claim about any game's state.
+- `LitMaterial` is IIDX 10's actual D3D8 state block, decoded from the binary:
+  `LIGHTING` on with `AMBIENT` 0, `COLOROP = MODULATE(TEXTURE, DIFFUSE)`, a
+  `D3DMATERIAL9` per material subset, cull CCW, `ZFUNC LESSEQUAL`, `MINFILTER`
+  point. Full table and the per-screen values:
+  `IIDX/tenth_style_music_select.md` in the notes repo.
+
+Run one headless:
+
+```bash
+573Renderer.exe --preset-test <iidx10-install-dir> iidx10-music-select out.png 900
+```
+
+The build is identified from the directory, the preset id selects the screen
+(omit it for the build's first preset), and the frame count is how far along the
+document's frame axis the capture runs, so a late state such as the end-of-timer
+speed-up can be reached. `--preset-option <option-id>=<choice>` picks an option
+choice, which is how each of a screen's states is rendered for review.
+
+**The tool exits 8 when no visible model's transform changed over the capture.**
+Every one of these screens drives its models from a per-frame update, so a preset
+whose models never move was built from the screen's INIT alone and is wrong. The
+exit code exists because six of the nine IIDX RED presets shipped frozen: the
+init transform is a starting pose that the update overwrites on frame 1. It
+reports per model whether the transform moved and whether the model's own
+animation advanced, so a model that is animating in place is not mistaken for one
+the game is actually driving.
+
+Each animated sprite layer carries a `GcAnim::Timing`: the game's playback mode
+(loop, hold the last frame, or hide once the timeline ends) plus an optional
+`[loop_start, loop_end)` range for the screens that rewind a playhead themselves.
+`GcAnim::ResolveFrame` maps the layer's raw counter through it, so a one-shot
+that the game freezes stays frozen instead of snapping back to its first frame.
+The values are per screen and come out of the binary, never a guess: see the
+"Playback modes" section of `IIDX/tenth_style_music_select.md`.
+
+A preset may omit the 3D layer entirely, in which case `PresetHost` skips the 3D
+host and only the sprite layers and the countdown run. No IIDX 10 screen needs
+that yet: the game's model slots are global state that survives a screen change,
+so a screen whose own code never mentions a model can still be showing one it
+inherited. Which model a screen shows is a property of the PATH INTO it, and the
+preset has to carry the state the previous screen left behind - see
+`IIDX/tenth_style_card_in.md`. Registered IIDX 10 screens:
+
+| id | content | natural length |
+|---|---|---|
+| `iidx10-music-select` | `music_bg` 3D (opaque, rotated) + 6 sprite layers | 1800 frames |
+| `iidx10-music-select-samurai` | `samurai` 3D, unrotated + the same 6 layers | 1800 frames |
+| `iidx10-card-in` | `music_bg` 3D (blend 3, alpha 0.5) + 7 sprite layers | 3600 frames |
+| `iidx10-login` | `music_bg` 3D (alpha 0.8) + `LOGIN` | model timeline |
+| `iidx10-mode-select` | `cube_x` 3D, spinning, placed per selected mode + 3 sprite layers | 1200 frames |
+| `iidx10-dan-select` | `cube_x` 3D, orbiting + 2 sprite layers | 1200 frames |
+| `iidx10-expert-select` | `ex01` 3D, entry ramp + end ramp + 2 sprite layers | 1800 frames |
+| `iidx10-new-player` | `tran_box` 3D, orbiting + 3 sprite layers | 1200 frames |
+| `iidx10-game-over` | `music_bg` 3D fading out + `GAMEOVER` | 180 frames |
+
+The play screen also renders `music_bg`, for songs that have no movie, but it
+draws it with blend mode 4 - reverse subtract, destination minus source - so
+the model only darkens whatever the play HUD puts behind it. On its own it is
+black by construction, so there is no preset for it.
+
+That list is the complete set of IIDX 10 screens that render a model: it comes
+from every `SetVisible(slot, non-zero)` call in the binary, which is the only way
+a model becomes visible. The derivation is in `IIDX/tenth_style_3d_screens.md`.
+
+Per-frame behaviours the game recomputes are carried as data rather than baked
+into a screenshot-matching constant. A `model.motion` clip holds the orbit +
+fly-in the class-course and new-player screens apply to their slot transform, with
+a decaying `spin_kick`, next to the per-axis `spin_per_frame` of the `model.draw`
+clip - that is how mode select's cube keeps turning and how it lurches when the
+selection changes. The old intro block, a speed ramp over the first N frames
+(expert select spins its model backwards for 22 frames before settling), is now a
+`model.tween` on `anim_speed` plus a `camera.tween` on `fov_y`
+(docs/preset_document.md). All of them are transcriptions of the game's own
+formulas.
+
+### Preset options
+
+A document can expose `Preset::Doc::OptionSpec`s: a named list of choices the viewer can
+switch between, each supplying a model position. They exist because the game
+itself moves the model in response to the player - mode select places its cube
+somewhere different for every entry in the mode menu - so a single fixed
+placement would only ever be one sixth of that screen. `PresetHost::SetOption`
+runs the game's own transition when the choice changes (mode select lerps over 25
+frames and kicks the spin in the direction of the turntable move), the GUI draws
+one segmented control per option on the timeline editor's options track, and the CLI
+names the option and the choice (a label or an index, repeatable per option):
+
+```bash
+573Renderer.exe --preset-test <iidx10-install-dir> iidx10-mode-select out.png 120 --preset-option mode=EXPERT
+```
+
+A sprite clip can also list `hidden_parts`: names of cells or nested child
+animations INSIDE an animation that belong to the screen's chrome rather than its
+background. They are hidden unconditionally, with no toggle anywhere, which is how
+mode select's backdrop renders without the `MODE SELECT` title, the marquee and
+the `INFORMATION` bar that share its one `MODE_BG_LOOP` animation. Every one of
+those names needs a `chrome` row in `docs/preset_layers.md`.
+
+Built-in presets are split per build under `src/preset/defaults/`
+(`iidx10_defaults.cpp`, `iidx11_defaults.cpp`, `iidx11_select_defaults.cpp`, the
+two ending halves, `iidx12_defaults.cpp`, `iidx12_mode_defaults.cpp`,
+`iidx12_music_defaults.cpp`, `iidx12_dan_defaults.cpp`,
+`iidx12_ending_defaults.cpp` and `iidx12_2d_defaults.cpp`), each a function
+returning a `Preset::Doc::Document`;
+`defaults.cpp` aggregates them for `BuiltIns()`, and `Preset::Doc::Registry`
+resolves a build's list out of those plus the user documents in
+`presets/<build>/*.json` (docs/preset_document.md). Registered IIDX RED screens
+(`IIDX/red_3d_screens.md`):
+
+| id | content | natural length |
+|---|---|---|
+| `iidx11-music-select` | 4 of the `red` models, no 2D layer at all | 3600 frames |
+| `iidx11-mode-select` | `core` + `flame`, camera at z -0.25 | 1200 frames |
+| `iidx11-dan-select` | `dan_bg1` + `core` + `flame` over the `BG` hexagons | 1200 frames |
+| `iidx11-expert-select` | `core` + `flame` over `EXPERT_BG` | 2700 frames |
+| `iidx11-new-player` | `gate` over `CARD_BG` | 1200 frames |
+| `iidx11-attract` | the 4 logo models spinning over `TITLE` | 1200 frames |
+| `iidx11-card-in` | `gate` at the handover state over `CARD_BG` | 3600 frames |
+| `iidx11-login` | `gate` at alpha 0.8 + `LOGIN` | 1200 frames |
+| `iidx11-ending` | `core` + `flame` over the `END_BG1` cell | 1200 frames |
+
+Every IIDX 10 and RED preset carries the same two directional lights, `(1,1,1)` and
+`(-1,-1,-1)`, diffuse white, **ambient white and specular black**. That is what the
+title screen of each game writes every frame and nothing after it changes: the light
+array is 8 x 104-byte `D3DLIGHT8`, the boot init memsets it (so `Specular` stays
+black) and only three setters exist, at +4 diffuse, +36 ambient and +64 direction.
+Until 2026-08-19 the presets carried white SPECULAR and black ambient because the
+RED and IIDX 10 notes had named the +36 setter "specular"; specular is inert on both
+games (`D3DRS_SPECULARENABLE` is never enabled). The white ambient is inert as well:
+D3DX8's mesh loader writes every material's `Ambient` as `(0, 0, 0, 1)` and nothing
+in these games changes it, so the per-light ambient multiplies to nothing and the
+models are lit by diffuse and emissive alone; `Scene3d::MaterialFor` keeps the
+material ambient black for that reason (docs/preset_document.md, light.set). The
+correction therefore changes what the documents RECORD, not what they render. See
+`IIDX/red_3d_screens.md`, `IIDX/tenth_style_music_select.md` and docs/preset_golden.md.
+
+RED needs one thing IIDX 10 did not: its music select calls the projection setter
+with an EXPLICIT aspect (850/480) that does not match the 640x480 framebuffer, so
+the document's `camera.aspect` (`Preset::Doc::CameraSpec::aspect`, and
+`Scene3d::Projection::aspect`) overrides the derived-from-render-size default when
+it is a number rather than `"auto"`.
+
+Registered IIDX 12 HAPPY SKY screens (`IIDX/happy_sky_3d_screens.md`), built one
+milestone at a time per the plan in `docs/iidx12_scene_report.html`:
+
+| id | content | natural length |
+|---|---|---|
+| `iidx12-expert-select` | `ex_sky` additive over the breathing clear colour, two lights with white ambient, no 2D layer | 2760 frames |
+| `iidx12-mode-select` | `harfsky` opaque over a white clear, the 40-frame sin(t) camera fly-in as a key per frame, no 2D layer | 1201 frames |
+| `iidx12-music-select` | a `stage` option: NORMAL is `sky` opaque plus `muring` additive at alpha 0.2 under white linear fog over a white clear, EXTRA is `extra_bg` additive at double clip rate with fog off over the strobing black clear; no 2D layer | 1800 frames |
+| `iidx12-dan-select` | a `grade` option over six model draws from `dan` (two of them the same `dan_sea2` mesh), four lights at slots 0, 1, 2 and 5 with slots 3 and 4 off, `DAN_BG` behind the 3D at priority 30, `model.ease` and `camera.ease` per choice and an `AWA1` bubble emitter on the top grades | 1260 frames |
+| `iidx12-ending` | `sky` at alpha 0.5 in draw mode 2 from frame 200 under white 50-to-80 fog over a white clear, a `camera.motion` roll of 0.2 deg a frame on a camera that never moves, a `model.tween` speed ramp 1.0 to 7.975 over the last 279 frames, and a `poly.tile_grid` of nine BGA-movie quads with a `lattice` seed option; no 2D layer | 5112 frames |
+| `iidx12-attract` | 2D only: one sprite track running `TITLE` (hold last) 0..422, `LOGO_IN` (hold last) 423..543 and `TITLE_TAIKI` (loop) from 544, all from the `title` package at priority 15 over a black clear, with 39 hidden parts covering the wordmark, the advert block, the version marks and the coin blinker; no model, no light, no camera work | 2461 frames |
+| `iidx12-card-in` | 2D only: `CARD_BG` from the `card` package, hold last at priority 31 over a black clear, hiding only `T_REMAIN`; the background of card in, card out and new player invited alike | 3600 frames |
+
+HAPPY SKY is the first build whose presets carry a non-black `render.clear_color`
+and light `ambient`. The expert preset sees its sky plane from inside with the same
+850/480 lens RED uses (its camera is byte for byte HAPPY SKY's own extra-stage
+music-select camera) and keys its clear colour on the `render.settings` clip because
+the game recomputes it every frame; the mode select preset keeps the device's own
+640/480 aspect (`auto`), a negative fov literal and a static white clear.
+
+Class course select is the first preset to draw ONE mesh TWICE (its track `target`
+is an instance name and `model.draw`'s `model` is the mesh, docs/preset_document.md),
+the first with a 2D layer BEHIND the 3D on this build, the first to need the two
+geometric-ease commands, and the first with a `burst` emitter. Its `system` package
+supplies the `AWA1` bubble cell: the game's particle record names the cell `AWA1`
+and the leading `C` earlier reports read is the top byte (0x43) of the preceding
+float 335.0 in the same 32-byte record.
+
+The staff roll is the first preset to need a `poly` track at all, and the first
+whose content is not in the game's own asset tree: its tiles are textured with the
+BGA movie of whatever song was played last, so the document names the one file the
+game itself falls back to (`data/movie/08ra.4`) and the tiles degrade to untextured
+with a logged warning when it is missing. It is also the first preset with a
+stateful CAMERA (the up vector integrates and is never reset), the first to leave a
+game screen's 2D out entirely on a chrome verdict (docs/preset_layers.md), and the
+first whose `lattice` option exists because the game's own value is not
+reproducible rather than because the player picks it.
+
+The title attract and the card hall are the first HAPPY SKY presets with NO 3D at
+all, which is not a gap: `IIDX/happy_sky_re/screens/two_d_only.md` re-checked the
+xrefs of every model, camera, light, fog and clear-colour entry point against every
+function in the title, card, name-entry and game-over ranges and found none. So
+those documents carry no `scene3d` asset, no `lights` and no camera clip, and
+`PresetHost::LoadAssets` never starts the 3D host for them (`ReportMotion` in
+`--preset-test` reports "no visible 3D model" and exits 0 instead of the exit-8
+"nothing moves" failure, which is a models-only check). The attract is also the
+first preset to run three clips of three DIFFERENT animations through ONE sprite
+track, which is what the game does: `sub_438970` unregisters the previous layer and
+registers the next in the same slot, so each clip carries `time: restart` to match
+the fresh `record+8 = 0` playhead.
+
+Music select is also the first preset to need FOG (`scene.fog`) and the first to
+drive its clear colour from an integer machine rather than from tween keys
+(`render.clear_cycle`); both commands are in `docs/preset_document.md`. It is the
+only HAPPY SKY screen so far whose 3D branches on player state, and exactly one
+thing branches it: the extra-stage flag. Mode, difficulty, category, side, cursor
+row, 1P/2P/DP and the stage number change 2D chrome only, so the preset exposes a
+single `stage` option with an instant (zero frame) transition, because the game's
+own switch is an init-time branch and not a blend.
+
+Two more RED-only differences: it inherits TWO directional lights from the title
+update rather than one, and its attract and ending screens spin several models at
+DIFFERENT rates, so the spin and the motion are per `model.draw` clip instead of
+applying to the lead model only.
+
+A preset carries ONLY background layers. What each screen's chrome is, and how
+that was decided, is `docs/preset_layers.md`; the classification is machine
+checked by `tools/ci/check_preset_layers.py`. RED music select is the extreme
+case: it registers three animations and all three are UI, so its preset has no
+2D layer at all and the background IS the five-model emblem.
+
+Chrome that is BAKED INTO a background animation is removed per part with the
+`hidden_parts` of the `sprite.animate` clip, which names an animation or a cell
+and drops it anywhere in the record tree, nested children included.
+
+Every placed 2D layer runs on its OWN playhead rather than a shared clock, which
+is what the game does - each registered animation gets its own frame counter. The
+Inspector's Frame tab lists them with the clock each one has reached; they are shown
+read-only, because the document's clips own those clocks and the playhead is what
+moves them (docs/gui.md 3.5).
+
+That counter FREE-RUNS past the animation's length, exactly like the game's: the
+playback mode, not the counter, decides what gets drawn (`GcAnim::ResolveFrame`
+wraps it for a looping layer, pins it to the last frame for hold-last, and draws
+nothing for hide-after-end). So `Gc2dHost::SpriteStatus` reports both: `frame` is
+the RESOLVED frame the layer actually draws (-1 when nothing is drawn) and
+`playhead` is the raw counter. The slider is bound to the resolved frame and
+appends the raw counter to its label once the two diverge. Reporting the raw
+counter alone produced readings like `frame 454 / 359` on a 359-frame looping
+background that was really drawing frame 95, with the slider grab pinned to the
+end and any drag snapping the layer somewhere else.
+
+A layer's per-frame motion is not always a timeline. IIDX 10 music select draws
+the `BG_SKY` band as ONE static cell blitted twice at `640 - frame % 640` and
+`-(frame % 640)`, so it slides a pixel per frame and wraps at 640 without having
+any animation records at all. `SpritePlacement::scroll_x` / `scroll_wrap` model
+that, and `SpriteStatus` reports the resulting `scroll` offset alongside its
+`scroll_wrap`, so a scrolling layer's displacement is a resolved value like any
+other. A `sprite.scroll` clip authors it and the Frame tab reports it.
+
+In the GUI the same presets appear in the **preset library** in the left pane, under
+Browse, which is drawn whenever the scene3d backend is active. It groups the build's
+screens as Built-in, User and Other builds, loads one on click, and is where New,
+Duplicate, Import, Export, Save, Revert, Reset and Document properties live
+(docs/gui.md 3.6). The countdown slider is gone with the countdown: the end-of-timer
+ramp is a `model.tween` clip on the timeline and scrubbing the playhead shows it.

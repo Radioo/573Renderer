@@ -1,4 +1,5 @@
 #include "state/boot_lifecycle.h"
+#include <algorithm>
 #include "gpu_context.h"
 #include "state/live_controls.h"
 #include "support/crash_report.h"
@@ -8,6 +9,7 @@
 #include "state/app_state.h"
 #include "state/commands.h"
 #include "cli/cli.h"
+#include "render/stretch.h"
 #include "settings/settings.h"
 #include "gui/gui_thread.h"
 #include "gui/gui_window.h"
@@ -60,6 +62,8 @@ void SeedStateFromSettings(const Cli::Options& cli, const Settings::Config& sett
                                                          : settings.master_scale);
     App::Global().SetRenderSize(initial_rw, initial_rh);
     App::Global().SetRenderFps(cli.render_fps > 0 ? cli.render_fps : settings.render_fps);
+    App::Global().SetStretchWide(settings.stretch_16_9);
+    App::Global().SetStretchFilter((Stretch::Filter)std::clamp(settings.stretch_filter, 0, 3));
     std::string seed_slug;
     if (!cli.game_profile.empty()) {
         seed_slug = cli.game_profile;

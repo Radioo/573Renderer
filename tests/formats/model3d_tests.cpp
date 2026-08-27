@@ -120,7 +120,7 @@ TEST_CASE("gcz rejects a payload size that disagrees with the dimensions") {
     REQUIRE(err.find("disagrees") != std::string::npos);
 }
 
-TEST_CASE("inz parses slices and pattern rects and resolves by basename") {
+TEST_CASE("inz parses slices and pattern rects and drops the source extension") {
     const std::string text = "[image_file]\n"
                              "out/model/mode_bg/0,0\n"
                              "out/model/mode_bg/1,16\n"
@@ -139,13 +139,54 @@ TEST_CASE("inz parses slices and pattern rects and resolves by basename") {
     REQUIRE(m.slices[1].flag == 16);
 
     REQUIRE(m.patterns.size() == 2);
-    const Inz::Pattern* p = Inz::FindPattern(m, "cloud1.bmp");
-    REQUIRE(p != nullptr);
-    REQUIRE(p->x == 0);
-    REQUIRE(p->y == 256);
-    REQUIRE(p->w == 128);
-    REQUIRE(p->h == 64);
-    REQUIRE(Inz::FindPattern(m, "nope.bmp") == nullptr);
+    REQUIRE(m.patterns[0].name == "bill");
+    REQUIRE(m.patterns[1].name == "cloud1");
+    REQUIRE(m.patterns[1].x == 0);
+    REQUIRE(m.patterns[1].y == 256);
+    REQUIRE(m.patterns[1].w == 128);
+    REQUIRE(m.patterns[1].h == 64);
+}
+
+TEST_CASE("inz maps a full-tile pattern to an identity uv region") {
+    const std::string text = "[image_file]\n"
+                             "out/model/mode_bg/0,0\n"
+                             "out/model/mode_bg/1,16\n"
+                             "[pattern_list]\n"
+                             "/in/bill.bmp = 0,0,256,256\n"
+                             "/in/cloud1.bmp = 0,256,256,256\n";
+    Inz::Manifest m;
+    std::string err;
+    REQUIRE(Inz::Parse(text, m, err));
+
+    const Inz::AtlasGrid grid = {.tile_width = 256, .tile_height = 256, .tiles_per_row = 1};
+    const Inz::Region r = Inz::ResolveRegion(m, "cloud1.bmp", grid);
+    REQUIRE(r.tile == 1);
+    REQUIRE(r.u_scale == 1.0F);
+    REQUIRE(r.u_bias == 0.0F);
+    REQUIRE(r.v_scale == 1.0F);
+    REQUIRE(r.v_bias == 0.0F);
+}
+
+TEST_CASE("inz scales uvs into a sub-rect of the atlas tile") {
+    const std::string text = "[image_file]\n"
+                             "out/texture/music/0,0\n"
+                             "[pattern_list]\n"
+                             "/in/body.bmp = 0,0,8,8\n"
+                             "/in/body2.bmp = 8,0,8,8\n"
+                             "/in/glow.bmp = 16,0,8,8\n";
+    Inz::Manifest m;
+    std::string err;
+    REQUIRE(Inz::Parse(text, m, err));
+
+    const Inz::AtlasGrid grid = {.tile_width = 256, .tile_height = 256, .tiles_per_row = 1};
+    const Inz::Region r = Inz::ResolveRegion(m, "glow.bmp", grid);
+    REQUIRE(r.tile == 0);
+    REQUIRE(r.u_bias == 16.0F / 256.0F);
+    REQUIRE(r.u_scale == 8.0F / 256.0F);
+    REQUIRE(r.v_bias == 0.0F);
+    REQUIRE(r.v_scale == 8.0F / 256.0F);
+
+    REQUIRE(Inz::ResolveRegion(m, "nope.bmp", grid).tile == -1);
 }
 
 TEST_CASE("xfile parses a frame hierarchy with a textured mesh") {
