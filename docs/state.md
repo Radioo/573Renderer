@@ -81,9 +81,13 @@ AFP commands (`AfpCmd::Any`):
   frame to beat PlaceObject re-application from the timeline.
 - The former `CompanionIfs` locale-overlay struct (`<base>_j/_a/_k.ifs`
   inferred by naming rule, exclusive GUI selection) was removed with the
-  locale-overlay feature; the engine-level companion-package machinery it
-  used lives on for qpro (docs/qpro.md). The bm2dx engine fact survives in
-  docs/boot_and_render_loop.md "Companions".
+  locale-overlay feature. Its successor keeps NO per-IfsConfig state: the
+  loaded-alongside packages live in `EngineSession::overlays` (path +
+  pkg_id, engine-owned) and reach the GUI as `Status::overlay_ifs`, a plain
+  path list republished by the render thread whenever one is loaded or
+  unloaded and on every scene load. It is CLEARED in the hot-swap handler
+  because `UnloadContent` drops the packages themselves. The bm2dx engine
+  fact survives in docs/boot_and_render_loop.md "Companions".
 - `IfsConfig.sublayer_overrides` is distinct from `slots`: slots come from
   ProbeSlots (afplist + bitmap names + a Konami name list); sublayer
   overrides come from live child enumeration (recursive "parent/child"

@@ -168,8 +168,15 @@ zero raw `g_afp` calls:
 - `ApplyVariantSlots` / `ApplySublayerOverrides`: the per-frame re-apply
   passes (moved out of boot.cpp; see docs/boot_and_render_loop.md 4.4).
 - `ForceReplayMaster()`: the request handler that previously hard-wired
-  AfpManager in render_loop_requests.cpp. (`ToggleCompanion` was removed
-  along with the locale-overlay feature.)
+  AfpManager in render_loop_requests.cpp.
+- `LoadAlongside(ifs_path)` / `UnloadAlongside(ifs_path)`: mount (or drop) an
+  extra afpu package on top of the loaded one, then `ForceReplay` so the
+  BIND-ON-PLAY bindings resolve against it (docs/boot_and_render_loop.md 5).
+  Modern wraps `AfpManager::LoadOverlay` / `UnloadOverlay` and republishes
+  `Status::overlay_ifs`; DDR logs and does nothing, because libafp has no
+  afpu packages to overlay. These replace the old `ToggleCompanion`, which
+  took an index into a per-IFS locale list; the pair is keyed by PATH so any
+  number of unrelated IFSes can be stacked.
 
 Every DDR override of these is a no-op equal to the old implicit behavior
 (sentinel self-skip or null-fn-pointer skip on the unresolved DDR `g_afp`

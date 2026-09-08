@@ -48,6 +48,16 @@ void DdrRuntime::ForceReplayMaster() {
     LOG("Main", "force_replay ignored: DDR backend has no modern master stream");
 }
 
+void DdrRuntime::LoadAlongside(const std::string& ifs_path) {
+    LOG("Main", "load_alongside ignored for '%s': DDR backend has no afpu packages",
+        ifs_path.c_str());
+}
+
+void DdrRuntime::UnloadAlongside(const std::string& ifs_path) {
+    LOG("Main", "unload_alongside ignored for '%s': DDR backend has no afpu packages",
+        ifs_path.c_str());
+}
+
 bool DdrRuntime::LoadScene(const std::string& mount_path, const std::string& ifs_path) {
     auto& state = App::Global();
     AfpManager::UmountPackagesAndData(g_avs);

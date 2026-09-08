@@ -167,6 +167,20 @@ TEST_CASE("sublayer overrides record visibility") {
     CHECK(r.opts.sublayer_overrides[1].visible);
 }
 
+TEST_CASE("load-alongside collects paths in the order given") {
+    const ParseResult r = Run({"--ifs", "title.ifs", "--load-alongside", "title_j.ifs",
+                               "--load-alongside", "graphic/extra.ifs"});
+    REQUIRE(r.ok);
+    CHECK(r.opts.startup_ifs == "title.ifs");
+    CHECK(r.opts.alongside_ifs == std::vector<std::string>{"title_j.ifs", "graphic/extra.ifs"});
+}
+
+TEST_CASE("load-alongside needs a path") {
+    const ParseResult r = Run({"--load-alongside"});
+    CHECK_FALSE(r.ok);
+    CHECK_FALSE(r.err.empty());
+}
+
 TEST_CASE("submonitor options parse") {
     const ParseResult r =
         Run({"--submonitor-frames", "a.png,b.png,", "--submonitor-clip", "subbg_usr",

@@ -394,6 +394,7 @@ bool AfpManager::ReadLayerAdvanceCounter(const AfpFuncs& afp, uint32_t* counter)
 }
 
 void AfpManager::UnloadAllCompanions(EngineSession& es) {
+    es.overlays.clear();
     if (es.companions.empty()) return;
     LOG("AFP", "UnloadAllCompanions: releasing %zu companion package(s)", es.companions.size());
     auto copy = es.companions;
@@ -401,6 +402,40 @@ void AfpManager::UnloadAllCompanions(EngineSession& es) {
         UnloadCompanion(es, rec.pkg_id);
     }
     es.companions.clear();
+}
+
+bool AfpManager::LoadOverlay(EngineSession& es, const std::string& ifs_path) {
+    for (const auto& o : es.overlays) {
+        if (o.path == ifs_path) return true;
+    }
+    std::string const pkg_name = std::filesystem::path(ifs_path).stem().string();
+    uint32_t const pkg_id = LoadCompanion(es, ifs_path, pkg_name);
+    if (pkg_id == 0U) {
+        LOG("AFP", "LoadOverlay: '%s' failed", ifs_path.c_str());
+        return false;
+    }
+    LOG("AFP", "LoadOverlay: '%s' as pkg '%s' (pkg_id=0x%08x)", ifs_path.c_str(), pkg_name.c_str(),
+        (unsigned)pkg_id);
+    es.overlays.push_back({.path = ifs_path, .pkg_id = pkg_id});
+    return true;
+}
+
+void AfpManager::UnloadOverlay(EngineSession& es, const std::string& ifs_path) {
+    auto it =
+        std::ranges::find_if(es.overlays, [&](const OverlayIfs& o) { return o.path == ifs_path; });
+    if (it == es.overlays.end()) return;
+    uint32_t const pkg_id = it->pkg_id;
+    es.overlays.erase(it);
+    LOG("AFP", "UnloadOverlay: '%s' (pkg_id=0x%08x)", ifs_path.c_str(), (unsigned)pkg_id);
+    UnloadCompanion(es, pkg_id);
+}
+
+std::vector<std::string> AfpManager::OverlayPaths(const EngineSession& es) {
+    std::vector<std::string> out;
+    out.reserve(es.overlays.size());
+    for (const auto& o : es.overlays)
+        out.push_back(o.path);
+    return out;
 }
 
 std::string AfpManager::LastCompanionMountPoint() {

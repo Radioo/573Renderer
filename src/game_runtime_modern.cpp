@@ -68,7 +68,16 @@ void PublishSceneStatus(App::State& state, const std::string& ifs_path,
     st.labels.clear();
     for (auto& l : AfpManager::EnumerateLabels(g_afp))
         st.labels.push_back({.name = l.name, .frame = l.frame});
+    st.overlay_ifs = AfpManager::OverlayPaths(g_engine);
     state.SetStatus(st);
+}
+
+void PublishOverlayStatus() {
+    App::Status st = App::Global().GetStatus();
+    st.overlay_ifs = AfpManager::OverlayPaths(g_engine);
+    st.stream_id = AfpManager::StreamId();
+    st.playing_animation = AfpManager::AnimName();
+    App::Global().SetStatus(st);
 }
 
 void PublishReplayedStatus(uint32_t sid) {
@@ -204,6 +213,35 @@ void ModernRuntime::ForceReplayMaster() {
         st.label_playback_active = false;
         App::Global().SetStatus(st);
     }
+}
+
+void ModernRuntime::LoadAlongside(const std::string& ifs_path) {
+    auto& state = App::Global();
+    std::string const name = std::filesystem::path(ifs_path).filename().string();
+    state.BeginLoad(name);
+    state.UpdateLoadStage("Loading IFS alongside the current one");
+    if (!AfpManager::LoadOverlay(g_engine, ifs_path)) {
+        App::Status err = state.GetStatus();
+        err.last_error = "Failed to load " + name + " alongside the current IFS";
+        state.SetStatus(err);
+        state.EndLoad();
+        return;
+    }
+    state.UpdateLoadStage("Rebinding the animation");
+    AfpManager::ForceReplay(g_engine);
+    PublishOverlayStatus();
+    state.EndLoad();
+}
+
+void ModernRuntime::UnloadAlongside(const std::string& ifs_path) {
+    auto& state = App::Global();
+    state.BeginLoad(std::filesystem::path(ifs_path).filename().string());
+    state.UpdateLoadStage("Unloading IFS");
+    AfpManager::UnloadOverlay(g_engine, ifs_path);
+    state.UpdateLoadStage("Rebinding the animation");
+    AfpManager::ForceReplay(g_engine);
+    PublishOverlayStatus();
+    state.EndLoad();
 }
 
 bool ModernRuntime::LoadScene(const std::string& mount_path, const std::string& ifs_path) {

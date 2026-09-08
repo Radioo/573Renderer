@@ -17,6 +17,7 @@
 #include "../game_profile.h"
 #include "../native_dialog.h"
 #include "../state/app_state.h"
+#include "../backend/afp_commands.h"
 #include "../state/commands.h"
 #include "../support/log.h"
 #include "imgui.h"
@@ -133,12 +134,64 @@ bool SubtreeMatchesFilter(const IfsTreeNode& n, const std::string& lower_filter)
 }
 
 namespace {
-void RenderIfsTreeNode(App::State& state, const IfsTreeNode& node, const std::string& active_path,
-                       const std::string& lower_filter, bool tree_small) {
-    if (!SubtreeMatchesFilter(node, lower_filter)) return;
+
+struct IfsTreeCtx {
+    std::string active_path;
+    std::string lower_filter;
+    std::vector<std::string> overlays;
+    bool backend_has_overlays = false;
+    bool scene_loaded = false;
+    bool tree_small = false;
+};
+
+std::string FileNameOf(const std::string& path) {
+    size_t const cut = path.find_last_of("/\\");
+    return cut == std::string::npos ? path : path.substr(cut + 1);
+}
+
+bool IsOverlay(const IfsTreeCtx& ctx, const std::string& path) {
+    return std::ranges::find(ctx.overlays, path) != ctx.overlays.end();
+}
+
+const char* AlongsideBlockedReason(const IfsTreeCtx& ctx, const App::State::IfsEntry& entry) {
+    if (!ctx.backend_has_overlays) return "This game's backend cannot stack packages.";
+    if (!ctx.scene_loaded) return "Load an IFS first, then load others alongside it.";
+    if (entry.full_path == ctx.active_path) return "This IFS is the one already loaded.";
+    if (entry.from_arc) return "Only .ifs files can be loaded alongside.";
+    return nullptr;
+}
+
+void RenderEntryContextMenu(App::State& state, const IfsTreeCtx& ctx,
+                            const App::State::IfsEntry& entry) {
+    if (!ImGui::BeginPopupContextItem("entry_menu")) return;
+
+    if (IsOverlay(ctx, entry.full_path)) {
+        if (ImGui::MenuItem("Unload from alongside###browse_menu_unload_alongside")) {
+            state.PostCommand(AfpCmd::Wrap(AfpCmd::UnloadAlongside{.path = entry.full_path}));
+            LOG("Gui", "Unloading alongside IFS: '%s'", entry.full_path.c_str());
+        }
+        ImGui::EndPopup();
+        return;
+    }
+
+    const char* blocked = AlongsideBlockedReason(ctx, entry);
+    ImGui::BeginDisabled(blocked != nullptr);
+    if (ImGui::MenuItem("Load alongside###browse_menu_load_alongside")) {
+        state.PostCommand(AfpCmd::Wrap(AfpCmd::LoadAlongside{.path = entry.full_path}));
+        LOG("Gui", "Loading IFS alongside: '%s'", entry.full_path.c_str());
+    }
+    ImGui::EndDisabled();
+    if (blocked != nullptr && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+        ImGui::SetTooltip("%s", blocked);
+    }
+    ImGui::EndPopup();
+}
+
+void RenderIfsTreeNode(App::State& state, const IfsTreeNode& node, const IfsTreeCtx& ctx) {
+    if (!SubtreeMatchesFilter(node, ctx.lower_filter)) return;
 
     if (node.entry != nullptr) {
-        bool const is_active = (node.entry->full_path == active_path);
+        bool const is_active = (node.entry->full_path == ctx.active_path);
         ImGui::PushID(node.entry->full_path.c_str());
         if (ImGui::Selectable(node.segment.c_str(), is_active,
                               ImGuiSelectableFlags_SpanAllColumns)) {
@@ -148,24 +201,48 @@ void RenderIfsTreeNode(App::State& state, const IfsTreeNode& node, const std::st
                 LOG("Gui", "Loading IFS from tree selection: '%s'", node.entry->full_path.c_str());
             }
         }
+        RenderEntryContextMenu(state, ctx, *node.entry);
+        if (IsOverlay(ctx, node.entry->full_path)) {
+            ImGui::SameLine();
+            ImGui::TextColored(ImGui::GetStyleColorVec4(ImGuiCol_CheckMark), "alongside");
+        }
         ImGui::PopID();
         return;
     }
 
     ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_SpanAvailWidth;
-    if (!lower_filter.empty() || tree_small) flags |= ImGuiTreeNodeFlags_DefaultOpen;
+    if (!ctx.lower_filter.empty() || ctx.tree_small) flags |= ImGuiTreeNodeFlags_DefaultOpen;
 
     ImGui::PushID(node.segment.c_str());
     bool const open =
         ImGui::TreeNodeEx("##dir", flags, "%s   (%d)", node.segment.c_str(), node.file_count);
     if (open) {
         for (const auto& c : node.children) {
-            RenderIfsTreeNode(state, c, active_path, lower_filter, tree_small);
+            RenderIfsTreeNode(state, c, ctx);
         }
         ImGui::TreePop();
     }
     ImGui::PopID();
 }
+
+void RenderOverlayList(App::State& state, const std::vector<std::string>& overlays) {
+    if (overlays.empty()) return;
+    ImGui::Spacing();
+    ImGui::TextDisabled("Loaded alongside (%zu)", overlays.size());
+    for (const auto& path : overlays) {
+        ImGui::PushID(path.c_str());
+        if (ImGui::SmallButton("Unload###browse_overlay_unload")) {
+            state.PostCommand(AfpCmd::Wrap(AfpCmd::UnloadAlongside{.path = path}));
+            LOG("Gui", "Unloading alongside IFS: '%s'", path.c_str());
+        }
+        ImGui::SameLine();
+        ImGui::TextUnformatted(FileNameOf(path).c_str());
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", PrettifyPath(path).c_str());
+        ImGui::PopID();
+    }
+    ImGui::Separator();
+}
+
 }
 
 void RenderIfsPicker() {
@@ -195,14 +272,23 @@ void RenderIfsPicker() {
     for (auto& c : filter)
         c = (char)tolower((unsigned char)c);
 
+    IfsTreeCtx ctx;
+    ctx.active_path = active_path;
+    ctx.lower_filter = filter;
+    ctx.overlays = state.GetStatus().overlay_ifs;
+    ctx.backend_has_overlays = state.ActiveBackendId() == "afp_modern";
+    ctx.scene_loaded = state.GetStatus().scene_loaded;
+    ctx.tree_small = list.size() <= 20;
+
+    RenderOverlayList(state, ctx.overlays);
+
     ImGui::Spacing();
 
     ImGui::BeginChild("ifs_scroll", ImVec2(0, 0), 0, ImGuiWindowFlags_HorizontalScrollbar);
 
     IfsTreeNode const tree = BuildIfsTree(list);
-    const bool tree_small = list.size() <= 20;
     for (const auto& c : tree.children) {
-        RenderIfsTreeNode(state, c, active_path, filter, tree_small);
+        RenderIfsTreeNode(state, c, ctx);
     }
     ImGui::EndChild();
 }

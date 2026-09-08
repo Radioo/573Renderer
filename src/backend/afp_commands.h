@@ -28,6 +28,14 @@ struct SetPaused {
 
 struct ForceReplay {};
 
+struct LoadAlongside {
+    std::string path;
+};
+
+struct UnloadAlongside {
+    std::string path;
+};
+
 struct QproStartScan {};
 
 struct QproStartExtract {
@@ -39,7 +47,7 @@ struct QproStartExtract {
 };
 
 using Any = std::variant<SwitchAnimation, GotoLabel, SeekFrame, SetPaused, ForceReplay,
-                         QproStartScan, QproStartExtract>;
+                         LoadAlongside, UnloadAlongside, QproStartScan, QproStartExtract>;
 
 inline App::Command Wrap(Any cmd) {
     return App::Cmd::BackendCommand{.payload = std::move(cmd)};

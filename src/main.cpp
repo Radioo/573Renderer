@@ -15,6 +15,7 @@
 #include "gui/gui_window.h"
 #include "app_globals.h"
 #include "boot.h"
+#include "game_runtime.h"
 #include "render_loop.h"
 #include "qpro/qpro_dll.h"
 #include "cli/tool_command.h"
@@ -376,12 +377,26 @@ bool SeedStateAndStartGui(HINSTANCE hInstance, const Cli::Options& cli,
     return have_gui;
 }
 
+void LoadStartupOverlays(App::State& state, const Cli::Options& cli) {
+    for (const std::string& requested : cli.alongside_ifs) {
+        bool from_arc = false;
+        std::string const path = ResolveStartupIfs(state, requested, from_arc);
+        if (from_arc) {
+            LOG("Main", "--load-alongside '%s' skipped: only .ifs files can be overlaid",
+                requested.c_str());
+            continue;
+        }
+        Runtime::Active().LoadAlongside(path);
+    }
+}
+
 void MountStartupContent(App::State& state, const Cli::Options& cli) {
     bool startup_from_arc = false;
     std::string const startup_ifs = ResolveStartupIfs(state, cli.startup_ifs, startup_from_arc);
     bool const afp_ready = Backend::Active()->ContentReady();
     if (!startup_ifs.empty() && afp_ready) {
         if (MountAndLoadIfs(startup_ifs, startup_from_arc)) {
+            LoadStartupOverlays(state, cli);
             ApplyCliOverrides(cli);
         } else {
             LOG("Main", "startup IFS mount failed for '%s' - CLI overrides skipped",

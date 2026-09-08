@@ -21,6 +21,7 @@ struct Options {
     std::vector<SlotOverride> slot_overrides;
     std::vector<SubLayerOverride> sublayer_overrides;
     std::vector<std::string> submonitor_frames;
+    std::vector<std::string> alongside_ifs;
     std::string startup_ifs;
     std::string animation_name;
     std::string animation_label;

@@ -77,6 +77,16 @@ profile comes from the document's `build` through
   `afp_mc_control(.., 0xF09 deep_goto_play_label, label)` for backgrounds
   with intro+loop structure (bg_bpls5 jumps to "loop" so it starts with the
   BPL5 monitors lit instead of playing the intro).
+- `--load-alongside <path>`: the CLI face of Browse's "Load alongside"
+  context menu (docs/gui.md 3.1). Each path resolves through the same
+  catalog lookup as `--ifs` (bare name or full path) and is mounted as an
+  extra afpu package after the `--ifs` load, in the order given, so a later
+  one shadows an earlier one on a name clash - afpu's bitmap lookup is
+  last-loaded-wins. .arc entries are skipped with a log line, since only
+  afpu packages can be overlaid. Applied before `ApplyCliOverrides` so a
+  `--animation` switch binds against the overlays already mounted (section 5
+  BIND-ON-PLAY in docs/boot_and_render_loop.md); nothing happens on the DDR
+  backend, which has no afpu packages.
 - `--scale`: the GUI Master-scale row; SDVX-I-IV 720x1280 select_bg
   variants need 1.5 to fill 1080x1920 (ratio's field of truth: BG entry
   payload+28 in soundvoltex.dll).

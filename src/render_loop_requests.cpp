@@ -27,6 +27,7 @@ void HandleLoadContent(const App::Cmd::LoadContent& cmd) {
     st.playing_animation.clear();
     st.active_label.clear();
     st.label_playback_active = false;
+    st.overlay_ifs.clear();
     st.last_error.clear();
     App::Global().SetStatus(st);
 

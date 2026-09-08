@@ -1,13 +1,18 @@
 #include "gui_test_harness.h"
 
+#include "imgui.h"
 #include "imgui_te_context.h"
 #include "imgui_te_engine.h"
+#include "backend/afp_commands.h"
 #include "state/app_state.h"
 #include "state/commands.h"
+#include "state/telemetry.h"
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <any>
 #include <optional>
+#include <string>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -188,4 +193,120 @@ TEST_CASE("browse pane directory node collapses on click", "[gui][browse]") {
     harness.Run(test);
 
     CHECK_FALSE(App::Global().TakeCommand().has_value());
+}
+
+namespace {
+
+const AfpCmd::Any* TakeAfpCmd(std::optional<App::Command>& slot) {
+    slot = App::Global().TakeCommand();
+    if (!slot.has_value()) return nullptr;
+    const auto* backend = std::get_if<App::Cmd::BackendCommand>(&*slot);
+    if (backend == nullptr) return nullptr;
+    return std::any_cast<AfpCmd::Any>(&backend->payload);
+}
+
+void SetOverlays(std::vector<std::string> paths) {
+    App::Status status = App::Global().GetStatus();
+    status.overlay_ifs = std::move(paths);
+    App::Global().SetStatus(status);
+}
+
+}
+
+TEST_CASE("browse pane context menu loads an IFS alongside the active one", "[gui][browse]") {
+    GuiTest::Harness harness;
+    GuiTest::EnterReadyView("afp_modern", "sdvx7");
+    SeedCatalog();
+    GuiTest::LoadScene("bg_0001.ifs", 0, 300);
+
+    ImGuiTest* test = harness.NewTest("browse_load_alongside");
+    test->TestFunc = [](ImGuiTestContext* ctx) {
+        ClearFilter(ctx);
+        GuiTest::FocusChild(ctx, "ifs_scroll");
+        ctx->ItemClick("bg_0002.ifs/bg_0002.ifs", ImGuiMouseButton_Right);
+        ctx->Yield(3);
+        ctx->ItemClick("//$FOCUSED/###browse_menu_load_alongside");
+        ctx->Yield(3);
+    };
+    harness.Run(test);
+
+    std::optional<App::Command> slot;
+    const AfpCmd::Any* cmd = TakeAfpCmd(slot);
+    REQUIRE(cmd != nullptr);
+    const auto* load = std::get_if<AfpCmd::LoadAlongside>(cmd);
+    REQUIRE(load != nullptr);
+    CHECK(load->path == "bg_0002.ifs");
+}
+
+TEST_CASE("browse pane refuses to load the active IFS alongside itself", "[gui][browse]") {
+    GuiTest::Harness harness;
+    GuiTest::EnterReadyView("afp_modern", "sdvx7");
+    SeedCatalog();
+    GuiTest::LoadScene("bg_0001.ifs", 0, 300);
+
+    ImGuiTest* test = harness.NewTest("browse_alongside_active");
+    test->TestFunc = [](ImGuiTestContext* ctx) {
+        ClearFilter(ctx);
+        GuiTest::FocusChild(ctx, "ifs_scroll");
+        ctx->ItemClick("bg_0001.ifs/bg_0001.ifs", ImGuiMouseButton_Right);
+        ctx->Yield(3);
+        ctx->ItemClick("//$FOCUSED/###browse_menu_load_alongside");
+        ctx->Yield(3);
+        ctx->KeyPress(ImGuiKey_Escape);
+    };
+    harness.Run(test);
+
+    CHECK_FALSE(App::Global().TakeCommand().has_value());
+}
+
+TEST_CASE("browse pane unloads an already-loaded alongside IFS", "[gui][browse]") {
+    GuiTest::Harness harness;
+    GuiTest::EnterReadyView("afp_modern", "sdvx7");
+    SeedCatalog();
+    GuiTest::LoadScene("bg_0001.ifs", 0, 300);
+    SetOverlays({"bg_0002.ifs"});
+
+    ImGuiTest* test = harness.NewTest("browse_unload_alongside");
+    test->TestFunc = [](ImGuiTestContext* ctx) {
+        ClearFilter(ctx);
+        GuiTest::FocusChild(ctx, "ifs_scroll");
+        ctx->ItemClick("bg_0002.ifs/bg_0002.ifs", ImGuiMouseButton_Right);
+        ctx->Yield(3);
+        ctx->ItemClick("//$FOCUSED/###browse_menu_unload_alongside");
+        ctx->Yield(3);
+    };
+    harness.Run(test);
+
+    std::optional<App::Command> slot;
+    const AfpCmd::Any* cmd = TakeAfpCmd(slot);
+    REQUIRE(cmd != nullptr);
+    const auto* unload = std::get_if<AfpCmd::UnloadAlongside>(cmd);
+    REQUIRE(unload != nullptr);
+    CHECK(unload->path == "bg_0002.ifs");
+    SetOverlays({});
+}
+
+TEST_CASE("browse pane lists loaded alongside IFSes with an unload button", "[gui][browse]") {
+    GuiTest::Harness harness;
+    GuiTest::EnterReadyView("afp_modern", "sdvx7");
+    SeedCatalog();
+    GuiTest::LoadScene("bg_0001.ifs", 0, 300);
+    SetOverlays({"bg_0002.ifs"});
+
+    ImGuiTest* test = harness.NewTest("browse_overlay_list");
+    test->TestFunc = [](ImGuiTestContext* ctx) {
+        ctx->SetRef("##main");
+        GuiTest::FocusChild(ctx, "main_view/pane_left");
+        ctx->ItemClick("bg_0002.ifs/###browse_overlay_unload");
+        ctx->Yield(3);
+    };
+    harness.Run(test);
+
+    std::optional<App::Command> slot;
+    const AfpCmd::Any* cmd = TakeAfpCmd(slot);
+    REQUIRE(cmd != nullptr);
+    const auto* unload = std::get_if<AfpCmd::UnloadAlongside>(cmd);
+    REQUIRE(unload != nullptr);
+    CHECK(unload->path == "bg_0002.ifs");
+    SetOverlays({});
 }

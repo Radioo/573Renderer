@@ -545,8 +545,15 @@ These are the engine-behaviour facts encoded in the header comments:
   `afpu_package_control(6)` + `avs_fs_umount` of the per-companion
   mountpoint (`/afp_companion_N`, monotonic counter so two companions never
   collide even after an unload). The renderer's locale-overlay UI that used
-  this per-locale was REMOVED; `AfpManager::LoadCompanion` survives as the
-  generic co-present package loader for the qpro pipeline (docs/qpro.md).
+  this per-locale was REMOVED; `AfpManager::LoadCompanion` is now the
+  generic co-present package loader, used raw by the qpro pipeline
+  (docs/qpro.md) and through the named-overlay wrapper
+  (`LoadOverlay` / `UnloadOverlay` / `OverlayPaths`, keyed by IFS path and
+  recorded in `EngineSession::overlays`) by the Browse pane's "Load
+  alongside" menu and the `--load-alongside` CLI flag. Loading one is
+  pointless without a replay afterwards - see BIND-ON-PLAY below - so both
+  callers ForceReplay. `UnloadAllCompanions` empties the overlay list too,
+  since it releases every companion package.
 - **DestroyCurrentStream**: afp_stream_destroy type-5 cascades the whole
   master tree including every child clip attached via
   `afp_mc_attach_stream`. The composite extractor must call this BEFORE
@@ -680,9 +687,12 @@ Each `--flag` has a fired-once bool; the gating chain enforces
   SwitchAnimation short-circuits that case (to avoid blanking on
   double-clicks), so it is routed through ForceReplay instead (which clears
   the tracked name to bypass the short-circuit).
-- Companion toggle: exclusive selection + BeginLoad overlay + ForceReplay
-  afterwards so new bindings resolve (see section 5, BIND-ON-PLAY). An
-  empty AnimName means a bitmap-only package - nothing to replay.
+- load_alongside / unload_alongside: BeginLoad overlay + the mount/umount +
+  ForceReplay afterwards so new bindings resolve (see section 5,
+  BIND-ON-PLAY). An empty AnimName means a bitmap-only package - nothing to
+  replay, and ForceReplay no-ops on it. Loading the same path twice is a
+  no-op rather than a second mount; the GUI additionally hides the menu item
+  for a path already loaded.
 - qpro extract/scan requests run synchronously ON the render thread
   (thread affinity again; mounts ~2300 part IFSes; GUI thread stays
   responsive showing the overlay). Body assembly needs a >= 520x704 RT.

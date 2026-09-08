@@ -348,6 +348,12 @@ struct AfpCommandVisitor {
     void operator()([[maybe_unused]] const AfpCmd::ForceReplay& cmd) const {
         Runtime::Active().ForceReplayMaster();
     }
+    void operator()(const AfpCmd::LoadAlongside& cmd) const {
+        if (!cmd.path.empty()) Runtime::Active().LoadAlongside(cmd.path);
+    }
+    void operator()(const AfpCmd::UnloadAlongside& cmd) const {
+        if (!cmd.path.empty()) Runtime::Active().UnloadAlongside(cmd.path);
+    }
     void operator()([[maybe_unused]] const AfpCmd::QproStartScan& cmd) const {
         QproExtract::RunScan(App::Global().GameDir());
     }

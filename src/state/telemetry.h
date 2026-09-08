@@ -44,6 +44,8 @@ struct Status {
     };
     std::vector<McChild> mc_children;
 
+    std::vector<std::string> overlay_ifs;
+
     SubLayerNode mc_tree;
 
     double fps_measured = 0.0;

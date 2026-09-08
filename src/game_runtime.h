@@ -49,6 +49,10 @@ public:
 
     virtual void ForceReplayMaster() = 0;
 
+    virtual void LoadAlongside(const std::string& ifs_path) = 0;
+
+    virtual void UnloadAlongside(const std::string& ifs_path) = 0;
+
     virtual bool LoadScene(const std::string& mount_path, const std::string& ifs_path) = 0;
 
     virtual void UnloadScene() = 0;

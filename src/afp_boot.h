@@ -52,6 +52,12 @@ void UnloadCompanion(EngineSession& es, uint32_t pkg_id);
 
 void UnloadAllCompanions(EngineSession& es);
 
+bool LoadOverlay(EngineSession& es, const std::string& ifs_path);
+
+void UnloadOverlay(EngineSession& es, const std::string& ifs_path);
+
+std::vector<std::string> OverlayPaths(const EngineSession& es);
+
 int SwapClipBitmapFromCompanion(EngineSession& es, uint32_t pkg_id, uint32_t stream_id,
                                 const char* clip_name);
 

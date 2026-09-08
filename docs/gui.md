@@ -249,6 +249,20 @@ publishes no afplist names, no mc_tree, no slots, so those tree features simply 
 - On the scene3d backend the pane is the TOP half of the left column and the preset library
   (3.6) is the bottom half; both are separate child windows, so each scrolls alone.
 - File leaves post `load_new_ifs` requests carrying `from_arc` for DDR .arc-wrapped IFSes.
+- RIGHT-CLICK on a file leaf opens a context menu with **Load alongside** - it posts
+  `AfpCmd::LoadAlongside{path}` and mounts that IFS as an extra afpu package ON TOP of the
+  loaded one, so its bitmaps fill in names the main IFS does not carry (afpu lookup is
+  last-loaded-wins; see docs/boot_and_render_loop.md "Companions"). Rows already loaded that
+  way carry an accent `alongside` badge and their menu offers **Unload from alongside**
+  instead. The header area lists every loaded-alongside IFS with its own Unload button, from
+  `Status::overlay_ifs`.
+- The menu item is DISABLED (with a tooltip saying why) when nothing is loaded yet, when the
+  backend is not `afp_modern` (only it has afpu packages), when the row is the active IFS, or
+  when the row is a DDR .arc entry.
+- ORDER GOTCHA: `BeginPopupContextItem` binds to the LAST submitted item, so the context menu
+  must be opened directly after the row's `Selectable` and BEFORE the `alongside` badge's
+  `SameLine`/`TextColored` - anchoring it after the badge silently produced a menu that never
+  opened (caught by the `browse_unload_alongside` GUI test).
 
 ### 3.2 Scene pane (gui_scene_panel) - the clip hierarchy
 
@@ -1363,14 +1377,21 @@ Reached via the top-bar view switch (iidx33 only; registry MainTab entry).
   must never pass silently.
 - Uses ImGuiListClipper for the per-part checkbox lists (thousands of rows).
 
-## 9. Removed: locale overlay (companions UI)
+## 9. History: locale overlay became "Load alongside"
 
-The locale companion picker (`<base>_{j,a,k}.ifs` exclusive overlay selection) was removed as
-a feature: GUI card, `AfpCmd::ToggleCompanion`, `IGameRuntime::ToggleCompanion`,
-`App::CompanionIfs`, `IfsInspect::FindCompanions` are all gone. The ENGINE-level companion
-package machinery (`AfpManager::LoadCompanion` / `UnloadCompanion` / mount aliasing) remains -
-qpro loads its co-present part packages through it (docs/qpro.md), and the bm2dx locale
-name-shadowing facts stay documented in docs/boot_and_render_loop.md "Companions".
+The original locale companion picker was a GUI card that offered `<base>_{j,a,k}.ifs` as an
+EXCLUSIVE choice, inferred from that naming rule (`AfpCmd::ToggleCompanion`,
+`IGameRuntime::ToggleCompanion`, `App::CompanionIfs`, `IfsInspect::FindCompanions`). All of
+that is gone: nothing infers a locale, nothing is exclusive, and there is no dedicated card.
+
+What replaced it is the Browse pane's **Load alongside** context menu (3.1): ANY .ifs in the
+tree can be stacked on the loaded one, several at a time, and each is unloaded individually.
+The engine machinery underneath is the same as it always was
+(`AfpManager::LoadCompanion` / `UnloadCompanion` / mount aliasing), now with a named-overlay
+layer on top (`AfpManager::LoadOverlay` / `UnloadOverlay` / `OverlayPaths`, keyed by path).
+qpro still loads its co-present part packages through the raw companion calls
+(docs/qpro.md), and the bm2dx name-shadowing facts stay in
+docs/boot_and_render_loop.md "Companions".
 
 ## 3D scene viewer (IIDX 17 / 18)
 

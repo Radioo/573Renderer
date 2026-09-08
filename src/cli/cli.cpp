@@ -39,6 +39,10 @@ constexpr const char* kUsage =
     "  --ifs <path>            Load this IFS file at startup (absolute or\n"
     "                          relative path inside the game dir). Skips\n"
     "                          the GUI picker.\n"
+    "  --load-alongside <path> Load an extra IFS on top of --ifs, so its\n"
+    "                          bitmaps fill in names the main IFS is\n"
+    "                          missing (afpu lookup is last-loaded-wins).\n"
+    "                          Repeatable; loaded in the order given.\n"
     "  --animation <name>      After --ifs loads, switch to this named\n"
     "                          animation BEFORE any --export starts.\n"
     "                          Use this when the IFS ships multiple\n"
@@ -507,6 +511,13 @@ Handled HandleSubmonitorFrames(Cursor& c, Options& out, std::string& err) {
     return Handled::Ok;
 }
 
+Handled HandleLoadAlongside(Cursor& c, Options& out, std::string& err) {
+    std::string v;
+    if (!NextArg(c, "--load-alongside", v, err)) return Handled::Error;
+    out.alongside_ifs.push_back(std::move(v));
+    return Handled::Ok;
+}
+
 Handled HandleVariant(Cursor& c, Options& out, std::string& err) {
     std::string v;
     if (!NextArg(c, "--variant", v, err)) return Handled::Error;
@@ -541,7 +552,7 @@ Handled HandleShowSublayer(Cursor& c, Options& out, std::string& err) {
     return Handled::Ok;
 }
 
-constexpr std::array<SpecialOpt, 15> kSpecialOpts = {{
+constexpr std::array<SpecialOpt, 16> kSpecialOpts = {{
     {.name = "--render-size", .fn = HandleRenderSize},
     {.name = "--export-size", .fn = HandleExportSize},
     {.name = "--scale", .fn = HandleScale},
@@ -553,6 +564,7 @@ constexpr std::array<SpecialOpt, 15> kSpecialOpts = {{
     {.name = "--export-bg", .fn = HandleExportBg},
     {.name = "--screenshot-frames", .fn = HandleScreenshotFrames},
     {.name = "--submonitor-frames", .fn = HandleSubmonitorFrames},
+    {.name = "--load-alongside", .fn = HandleLoadAlongside},
     {.name = "--variant", .fn = HandleVariant},
     {.name = "--hide", .fn = HandleHide},
     {.name = "--hide-sublayer", .fn = HandleHideSublayer},

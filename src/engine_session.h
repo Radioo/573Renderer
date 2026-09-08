@@ -19,6 +19,11 @@ struct CompanionRecord {
     std::string mountpoint;
 };
 
+struct OverlayIfs {
+    std::string path;
+    uint32_t pkg_id = 0;
+};
+
 struct EngineSession {
     DllLoader avs_dll;
     DllLoader afp_dll;
@@ -38,5 +43,6 @@ struct EngineSession {
     std::string anim_name;
     std::vector<uint32_t> persistent_pkg_ids;
     std::vector<CompanionRecord> companions;
+    std::vector<OverlayIfs> overlays;
     int next_companion_idx = 0;
 };

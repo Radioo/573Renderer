@@ -22,6 +22,8 @@ public:
     void ApplyVariantSlots(uint32_t modern_stream_id) override;
     void ApplySublayerOverrides(uint32_t modern_stream_id) override;
     void ForceReplayMaster() override;
+    void LoadAlongside(const std::string& ifs_path) override;
+    void UnloadAlongside(const std::string& ifs_path) override;
     bool LoadScene(const std::string& mount_path, const std::string& ifs_path) override;
     void UnloadScene() override;
     void Shutdown() override;
@@ -63,6 +65,8 @@ public:
     void ApplyVariantSlots(uint32_t modern_stream_id) override;
     void ApplySublayerOverrides(uint32_t modern_stream_id) override;
     void ForceReplayMaster() override;
+    void LoadAlongside(const std::string& ifs_path) override;
+    void UnloadAlongside(const std::string& ifs_path) override;
     bool LoadScene(const std::string& mount_path, const std::string& ifs_path) override;
     void UnloadScene() override;
     void Shutdown() override;
