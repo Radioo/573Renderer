@@ -229,6 +229,9 @@ bool ModernRuntime::LoadScene(const std::string& mount_path, const std::string& 
     state.UpdateLoadStage("Loading package (textures, clips, geometry)");
     if (!AfpManager::LoadPackages(g_engine, pkg_hint)) {
         LOG("Init", "LoadPackages failed for %s", ifs_path.c_str());
+        App::Status err = state.GetStatus();
+        err.last_error = basename + " holds no AFP package (sound-only or non-graphics archive)";
+        state.SetStatus(err);
         state.EndLoad();
         return false;
     }

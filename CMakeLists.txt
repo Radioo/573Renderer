@@ -208,6 +208,7 @@ add_library(r573_app STATIC
     src/window.cpp
     src/avs_boot.cpp
     src/afp_boot.cpp
+    src/afp_package_id.cpp
     src/afp_packages.cpp
     src/afp_anim.cpp
     src/render_backend.cpp
@@ -408,6 +409,7 @@ target_link_libraries(formats_tests PRIVATE Catch2::Catch2WithMain r573_formats 
 catch_discover_tests(formats_tests DISCOVERY_MODE POST_BUILD PROPERTIES LABELS ci)
 
 add_executable(game_tests
+    tests/game/afp_package_id_tests.cpp
     tests/game/game_profile_tests.cpp
     tests/game/mc_control_tests.cpp
     tests/game/preset_json_tests.cpp
@@ -465,6 +467,7 @@ add_executable(game_tests
     src/game_revision.cpp
     src/game_fingerprint.cpp
     src/backend/afp_profiles.cpp
+    src/afp_package_id.cpp
     src/preset/preset_rng.cpp
     src/preset/eval/eval_tween.cpp
     src/preset/eval/eval_models.cpp

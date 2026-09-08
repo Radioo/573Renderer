@@ -32,7 +32,7 @@ void HandleLoadContent(const App::Cmd::LoadContent& cmd) {
 
     if (!Backend::Active()->LoadContent(cmd.path, cmd.from_arc)) {
         App::Status err = App::Global().GetStatus();
-        err.last_error = "Failed to load " + cmd.path;
+        if (err.last_error.empty()) err.last_error = "Failed to load " + cmd.path;
         App::Global().SetStatus(err);
     }
 }

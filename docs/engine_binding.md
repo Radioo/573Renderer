@@ -372,6 +372,28 @@ Ordinal table as loaded by `AfpuFuncs::Load` (afp-utils 1.2.19 export table):
 Load-gate: afpu_boot, afpu_shutdown, afpu_render_init, afpu_ngp_read_local,
 afpu_package_open_streams.
 
+### afpuloc_get_first_package_id (0x038) - the "no package" sentinel
+
+`afpuloc_get_first_package_id()` - afp-utils `XE592acd000038`. Returns the id of the first
+loaded package, or **0xFFFFFFFE** when afpu holds no package at all. Its sibling
+`afpuloc_get_package_id(name)` (0x037, `XE592acd000037`) returns the same 0xFFFFFFFE for an
+unknown name. Both are two-line wrappers: call the package-table lookup helper, return `*result`
+if non-null, else the literal `0xFFFFFFFE`. `afpu_package_control` (0x036) uses the same value as
+its "not found" return and logs `"%s package[%s] is not exist"` on that path, which is how the
+sentinel's meaning is confirmed rather than assumed.
+
+The renderer treats 0xFFFFFFFE (and 0) as "this archive has no AFP package" and fails the load
+with a message, instead of reporting success and drawing an empty screen
+(`AfpPackage::Resolve`, src/afp_package_id.cpp; see docs/boot_and_render_loop.md 4.3).
+
+**Re-finding it after a game update:** the export names are stable across versions
+(`XE592acd0000NN` where NN = ordinal - 1, because `DllLoader` resolves by mangled name, not by
+ordinal number), so ordinals do not need re-deriving per build. To re-verify the sentinel, search
+the afp-utils string table for `package[%s] is not exist` and read the function that references
+it; the two `afpuloc_get_*_package_id` wrappers are the small (< 0x30 byte) functions returning
+the same constant. Confirmed identical in IIDX 33 Sparkle Shower (afp-utils 1.2.19, named IDB) and
+pop'n music 29 (afp-utils 1.2.28); both export 128 functions with the same ordinal layout.
+
 ### afpuloc_get_package_info (0x03f)
 
 `afpuloc_get_package_info(pkg_id, sel)` - afp-utils `XE592acd00003f`. Returns a

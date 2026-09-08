@@ -1,5 +1,6 @@
 #include "afp_boot.h"
 #include "afp_funcs.h"
+#include "afp_package_id.h"
 #include "afpu_funcs.h"
 #include "avs_funcs.h"
 #include "engine_session.h"
@@ -189,38 +190,38 @@ bool AfpManager::LoadPackages(EngineSession& es, const std::string& pkg_hint) {
         LOG("AFP", "Loaded packages: %d", afpu.afpu_get_loaded_package_count());
     }
 
-    uint32_t pkg_id = (ngp_ret > 0) ? (uint32_t)ngp_ret : 0;
-    if (pkg_id == 0U) {
-        pkg_id = afpu.afpuloc_get_first_package_id();
+    const auto resolved = AfpPackage::Resolve(ngp_ret, afpu.afpuloc_get_first_package_id());
+    if (!resolved) {
+        LOG("AFP", "No AFP package in this archive - afpu resolved no package id");
+        return false;
     }
+    uint32_t const pkg_id = *resolved;
     LOG("AFP", "Using package ID: 0x%08x", pkg_id);
 
-    if ((pkg_id != 0U) && pkg_id != 0xFFFFFFFE) {
-        int const streams_ret = afpu.afpu_package_open_streams(pkg_id);
-        LOG("AFP", "afpu_package_open_streams returned: %d (0x%08x)", streams_ret,
-            (unsigned int)streams_ret);
+    int const streams_ret = afpu.afpu_package_open_streams(pkg_id);
+    LOG("AFP", "afpu_package_open_streams returned: %d (0x%08x)", streams_ret,
+        (unsigned int)streams_ret);
 
-        if (afpu.afpuloc_package_has_animation != nullptr) {
-            int const has_anim = afpu.afpuloc_package_has_animation(pkg_id);
-            LOG("AFP", "Package has animation: %d", has_anim);
-        }
-
-        if (afpu.afpu_package_dump != nullptr) afpu.afpu_package_dump();
-
-        es.pkg_id = pkg_id;
-
-        auto old_level = (afp.afp_get_create_level != nullptr) ? afp.afp_get_create_level() : 0;
-        if (afp.afp_set_create_level != nullptr) afp.afp_set_create_level(0);
-
-        std::vector<std::string> const names = BuildMasterCandidates(avs, pkg_hint);
-        TryPlayMasterAnimation(es, pkg_id, names);
-
-        if (es.stream_id == Runtime::kModernNoStream || (int)es.stream_id < 0) {
-            TryPlayBitmapFallback(es, pkg_hint);
-        }
-
-        if (afp.afp_set_create_level != nullptr) afp.afp_set_create_level(old_level);
+    if (afpu.afpuloc_package_has_animation != nullptr) {
+        int const has_anim = afpu.afpuloc_package_has_animation(pkg_id);
+        LOG("AFP", "Package has animation: %d", has_anim);
     }
+
+    if (afpu.afpu_package_dump != nullptr) afpu.afpu_package_dump();
+
+    es.pkg_id = pkg_id;
+
+    auto old_level = (afp.afp_get_create_level != nullptr) ? afp.afp_get_create_level() : 0;
+    if (afp.afp_set_create_level != nullptr) afp.afp_set_create_level(0);
+
+    std::vector<std::string> const names = BuildMasterCandidates(avs, pkg_hint);
+    TryPlayMasterAnimation(es, pkg_id, names);
+
+    if (es.stream_id == Runtime::kModernNoStream || (int)es.stream_id < 0) {
+        TryPlayBitmapFallback(es, pkg_hint);
+    }
+
+    if (afp.afp_set_create_level != nullptr) afp.afp_set_create_level(old_level);
 
     return true;
 }

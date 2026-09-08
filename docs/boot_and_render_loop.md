@@ -440,6 +440,19 @@ the floor and actually reached the device.
   opens - stale leftovers skew the indices and the wrong atlas's filter
   lands on the wrong slots. (This is the SDVX x=540 seam fix; BG atlases
   are NEAREST, UI atlases LINEAR.)
+- No-package failure: LoadPackages asks afpu which package the mount produced
+  (`afpu_ngp_read_local`'s id if the basename hint matched, else
+  `afpuloc_get_first_package_id`). 0xFFFFFFFE / 0 is afpu's own "not exist"
+  answer (docs/engine_binding.md), so the load FAILS and LoadScene sets
+  last_error to "<name> holds no AFP package (sound-only or non-graphics
+  archive)". Before this, LoadPackages returned true unconditionally, the IFS
+  went active with no stream, and the only clue was the LogPackageDirs probe
+  dump - whose "Cannot open dir /afp/packages/tex" and 0x80070002 lines are
+  normal probes, not errors, and read like an AVS failure. The case that
+  surfaced it: pop'n 29's plain_data/sd/system/system29.ifs, a SOUND archive
+  holding only system29.2dx + system29.def. Graphics IFS live under
+  plain_data/tex/. The generic "Failed to load <path>" in HandleLoadContent is
+  now only a fallback for when nothing more specific was set.
 - After LoadPackages: the "master" animation (first matching name in the
   package's afplist.xml) is the initial playing stream; labels are
   enumerated via afp_mc_set 0x101F/0x1020. `ifs_size_bytes` measures the
