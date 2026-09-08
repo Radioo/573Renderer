@@ -10,7 +10,7 @@ namespace GuiTest {
 
 class Harness {
 public:
-    Harness();
+    explicit Harness(unsigned dpi = 96);
     ~Harness();
     Harness(const Harness&) = delete;
     Harness& operator=(const Harness&) = delete;

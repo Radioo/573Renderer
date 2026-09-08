@@ -2,6 +2,7 @@
 
 #include "timeline/gui_tl_modals.h"
 
+#include "gui_dpi.h"
 #include "gui_panels.h"
 #include "gui_style.h"
 #include "imgui.h"
@@ -107,7 +108,8 @@ void ResetAppState() {
     Editor::Global().Close();
 }
 
-ImGuiContext* CreateUiContext() {
+ImGuiContext* CreateUiContext(unsigned dpi) {
+    Gui::Dpi::SetScaleFromDpi(dpi);
     ResetAppState();
     BrowseResult().clear();
     RevealedPath().clear();
@@ -119,7 +121,7 @@ ImGuiContext* CreateUiContext() {
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
     ImGuiIO& io = ImGui::GetIO();
-    io.DisplaySize = ImVec2(1600.0F, 900.0F);
+    io.DisplaySize = ImVec2(Gui::Dpi::S(1600.0F), Gui::Dpi::S(900.0F));
     io.DeltaTime = 1.0F / 60.0F;
     io.IniFilename = nullptr;
     io.LogFilename = nullptr;
@@ -146,7 +148,8 @@ void ServiceTextures() {
 
 }
 
-Harness::Harness() : ui_(CreateUiContext()), engine_(ImGuiTestEngine_CreateContext()) {
+Harness::Harness(unsigned dpi)
+    : ui_(CreateUiContext(dpi)), engine_(ImGuiTestEngine_CreateContext()) {
     ImGuiTestEngineIO& te_io = ImGuiTestEngine_GetIO(engine_);
     te_io.ConfigRunSpeed = ImGuiTestRunSpeed_Fast;
     te_io.ConfigNoThrottle = true;
@@ -166,6 +169,7 @@ Harness::~Harness() {
     ImGui::DestroyContext(ui_);
     ImGuiTestEngine_DestroyContext(engine_);
     NativeDialog::SetOverrides({});
+    Gui::Dpi::SetScaleFromDpi(96);
 }
 
 ImGuiTest* Harness::NewTest(const char* name) {

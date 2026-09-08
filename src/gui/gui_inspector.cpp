@@ -1,4 +1,5 @@
 #include "gui_panels_internal.h"
+#include "gui_dpi.h"
 #include "gui_style.h"
 #include "gui_widgets.h"
 #include "panel_registry.h"
@@ -104,7 +105,7 @@ void DrawLayerProperties(App::State& state, const Scene::Selection& sel,
         ImGui::TextColored(ImVec4(0.50F, 0.92F, 0.65F, 1.0F), "playing");
     }
     ImGui::Spacing();
-    if (ImGui::Button(is_playing ? "Replay" : "Play", ImVec2(110, 0))) {
+    if (ImGui::Button(is_playing ? "Replay" : "Play", ImVec2(Gui::Dpi::S(110.0F), 0.0F))) {
         state.PostCommand(AfpCmd::Wrap(AfpCmd::SwitchAnimation{.name = sel.name, .label = ""}));
     }
 }
@@ -221,7 +222,7 @@ void DrawContinuousLoopRow(App::State::LiveOverrides& ov, bool& changed) {
 
 void DrawTrimRow(App::State::LiveOverrides& ov, bool& changed) {
     ImGui::TextDisabled("Trim frames");
-    ImGui::SetNextItemWidth(120.0F);
+    ImGui::SetNextItemWidth(Gui::Dpi::S(120.0F));
     ImGui::InputInt("##live_trim", &ov.trim_frames, 0, 0);
     if (ImGui::IsItemDeactivatedAfterEdit()) {
         changed = true;
@@ -240,7 +241,7 @@ void DrawTrimRow(App::State::LiveOverrides& ov, bool& changed) {
 void DrawMasterScaleRow() {
     float scale = App::Global().GetMasterScale();
     ImGui::TextDisabled("Master scale");
-    ImGui::SetNextItemWidth(-124.0F);
+    ImGui::SetNextItemWidth(Gui::Dpi::S(-124.0F));
     if (ImGui::SliderFloat("##master_scale", &scale, 0.25F, 4.0F, "%.2fx")) {
         App::Global().SetMasterScale(scale);
         App::SaveCurrentSettings();
@@ -301,10 +302,10 @@ void DrawFilterMcNameRows(App::State::LiveOverrides& ov, bool& changed) {
                           "the child positions shown in the Scene tree.");
     }
     if (ov.show_mc_names) {
-        ImGui::Indent(24.0F);
+        ImGui::Indent(Gui::Dpi::S(24.0F));
         const char* kItems[2] = {"at clip pos", "column"};
         if (Gui::Segmented("##mc_name_type", kItems, 2, &ov.mc_name_type)) changed = true;
-        ImGui::Unindent(24.0F);
+        ImGui::Unindent(Gui::Dpi::S(24.0F));
     }
 }
 
@@ -413,7 +414,7 @@ void DrawMcNamesList(const App::Status& status) {
     ImGui::Spacing();
     ImGui::TextDisabled("MC names (%zu)", status.mc_children.size());
     Gui::PushMonoFont();
-    ImGui::BeginChild("mc_names_list", ImVec2(0, 140.0F), 1);
+    ImGui::BeginChild("mc_names_list", ImVec2(0.0F, Gui::Dpi::S(140.0F)), 1);
     for (const auto& c : status.mc_children) {
         if (c.have_pos) {
             ImGui::Text("%s  (%.0f, %.0f)", c.name.c_str(), c.x, c.y);

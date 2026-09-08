@@ -1,4 +1,5 @@
 #include "gui_scene3d_panel.h"
+#include "gui_dpi.h"
 
 #include "imgui.h"
 #include "scene3d/camera.h"
@@ -20,7 +21,7 @@ void DrawPlayback(const Scene3dHost::Status& st) {
     if (ImGui::Checkbox("Pause##s3d", &paused)) Scene3dHost::SetPaused(paused);
     ImGui::SameLine();
     float speed = st.speed;
-    ImGui::SetNextItemWidth(120);
+    ImGui::SetNextItemWidth(Gui::Dpi::S(120.0F));
     if (ImGui::SliderFloat("speed##s3d", &speed, 0.0F, 4.0F, "%.2fx")) {
         Scene3dHost::SetSpeed(speed);
     }
@@ -86,7 +87,7 @@ void DrawModelList() {
         bool vis = models[i].visible;
         if (ImGui::Checkbox("##vis", &vis)) Scene3dHost::SetModelVisible((int)i, vis);
         ImGui::SameLine();
-        ImGui::SetNextItemWidth(110);
+        ImGui::SetNextItemWidth(Gui::Dpi::S(110.0F));
         const bool blend_open = ImGui::BeginCombo("##blend", BlendLabel(models[i].blend_mode));
         const bool blend_hovered = ImGui::IsItemHovered();
         if (blend_open) {
@@ -125,7 +126,7 @@ void DrawCameraControls(const Scene3dHost::Status& st) {
     if (ImGui::Button("Reset view##s3d")) Scene3dHost::ResetCamera();
 
     auto& cam = Scene3dHost::MutCamera();
-    ImGui::SetNextItemWidth(140);
+    ImGui::SetNextItemWidth(Gui::Dpi::S(140.0F));
     ImGui::DragFloat("move speed##s3d", &cam.speed, 0.05F, 0.01F, 10000.0F, "%.2f /s");
 
     ImGui::Spacing();

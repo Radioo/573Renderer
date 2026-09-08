@@ -1,5 +1,6 @@
 #pragma once
 
+#include "editor/timeline_view.h"
 #include "preset/doc/preset_document.h"
 
 #include <cstdint>
@@ -19,7 +20,7 @@ enum class Zone : uint8_t {
     RightHandle,
 };
 
-Zone ZoneAt(float clip_x0, float clip_x1, float x);
+Zone ZoneAt(float clip_x0, float clip_x1, float x, float handle_px);
 
 enum class DragMode : uint8_t {
     None,
@@ -43,6 +44,8 @@ struct DragInput {
     std::string track_id = {};
     int playhead = -1;
     double px_per_frame = 1.0;
+    double snap_px = kSnapPx;
+    float label_gap = kLabelGapPx;
     bool snap = true;
 };
 

@@ -2,6 +2,7 @@
 
 #include "editor/preset_editor_state.h"
 #include "editor/tween_edits.h"
+#include "gui/gui_dpi.h"
 #include "imgui.h"
 #include "preset/doc/preset_commands.h"
 #include "preset/doc/preset_document.h"
@@ -108,7 +109,7 @@ FieldEvent DrawEaseRow(Doc::Document& document, const std::string& clip_id, int 
 
     std::array<double, 4> cp = key.cp.value_or(std::array<double, 4>{0.42, 0.0, 0.58, 1.0});
     RowLabel("control points");
-    ImGui::SetNextItemWidth(-30.0F);
+    ImGui::SetNextItemWidth(Gui::Dpi::S(-30.0F));
     if (ImGui::DragScalarN("###tl_tween_cp", ImGuiDataType_Double, cp.data(), 4, 0.005F)) {
         Editor::SetKeyBezier(document, clip_id, index, cp);
         event = std::max(event, FieldEvent::Changed);

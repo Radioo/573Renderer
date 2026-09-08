@@ -1,6 +1,7 @@
 #include "gui_tl_forms.h"
 
 #include "editor/clip_form.h"
+#include "gui/gui_dpi.h"
 #include "imgui.h"
 #include "preset/asset_index.h"
 #include "preset/doc/preset_commands.h"
@@ -24,18 +25,27 @@ namespace Doc = Preset::Doc;
 
 namespace {
 
-constexpr float kLabelWidth = 150.0F;
-constexpr float kResetColumn = 30.0F;
+constexpr float kLabelWidthDips = 150.0F;
+constexpr float kResetColumnDips = 30.0F;
+
+float LabelWidth() {
+    return Gui::Dpi::S(kLabelWidthDips);
+}
+
+float ResetColumn() {
+    return Gui::Dpi::S(kResetColumnDips);
+}
+
 constexpr ImVec4 kNoteWarning(1.0F, 0.75F, 0.35F, 1.0F);
 
 void DrawRowNote(ImGuiCol color, const char* text) {
-    ImGui::Indent(kLabelWidth);
+    ImGui::Indent(LabelWidth());
     ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(color));
     ImGui::PushTextWrapPos(0.0F);
     ImGui::TextUnformatted(text);
     ImGui::PopTextWrapPos();
     ImGui::PopStyleColor();
-    ImGui::Unindent(kLabelWidth);
+    ImGui::Unindent(LabelWidth());
 }
 
 FieldEvent Merge(FieldEvent a, FieldEvent b) {
@@ -69,7 +79,7 @@ std::vector<std::string> NamesFor(const FormContext& context, const std::string&
 FieldEvent DrawNameCombo(const char* id, std::string& value, const std::vector<std::string>& names,
                          bool loaded, const std::string& placeholder) {
     bool changed = false;
-    ImGui::SetNextItemWidth(-kResetColumn);
+    ImGui::SetNextItemWidth(-ResetColumn());
     if (ImGui::BeginCombo(id, value.empty() ? placeholder.c_str() : value.c_str())) {
         for (const std::string& name : names) {
             const bool active = name == value;
@@ -89,7 +99,7 @@ FieldEvent DrawStringRow(const char* id, std::string& value) {
     std::array<char, 128> buffer = {};
     const std::size_t copied = std::min(value.size(), buffer.size() - 1);
     std::copy_n(value.begin(), copied, buffer.begin());
-    ImGui::SetNextItemWidth(-kResetColumn);
+    ImGui::SetNextItemWidth(-ResetColumn());
     const bool changed = ImGui::InputText(id, buffer.data(), buffer.size());
     if (changed) value = buffer.data();
     return Outcome(changed);
@@ -104,7 +114,7 @@ FieldEvent DrawStringList(const char* id, std::vector<std::string>& value) {
     std::array<char, 256> buffer = {};
     const std::size_t copied = std::min(joined.size(), buffer.size() - 1);
     std::copy_n(joined.begin(), copied, buffer.begin());
-    ImGui::SetNextItemWidth(-kResetColumn);
+    ImGui::SetNextItemWidth(-ResetColumn());
     const bool changed = ImGui::InputTextWithHint(id, "(none)", buffer.data(), buffer.size());
     if (!changed) return Outcome(false);
     value.clear();
@@ -132,7 +142,7 @@ FieldEvent DrawAspect(const char* id, Doc::AspectSpec& value) {
     if (value.automatic) return changed ? FieldEvent::Committed : FieldEvent::None;
     ImGui::SameLine();
     auto number = (float)value.value;
-    ImGui::SetNextItemWidth(-kResetColumn);
+    ImGui::SetNextItemWidth(-ResetColumn());
     if (ImGui::DragFloat(id, &number, 0.01F, 0.0F, 0.0F, "%.7f")) {
         value.value = number;
         changed = true;
@@ -229,14 +239,14 @@ FieldEvent DrawScatter(const char* id, std::optional<Doc::Scatter>& value) {
     auto span = ImVec2((float)scatter.span[0], (float)scatter.span[1]);
     auto offset = ImVec2((float)scatter.offset[0], (float)scatter.offset[1]);
     RowLabel("span");
-    ImGui::SetNextItemWidth(-kResetColumn);
+    ImGui::SetNextItemWidth(-ResetColumn());
     if (ImGui::DragFloat2((std::string(id) + "_span").c_str(), &span.x, 1.0F)) {
         scatter.span = {span.x, span.y};
         event = Merge(event, FieldEvent::Changed);
     }
     event = Merge(event, Outcome(false));
     RowLabel("offset");
-    ImGui::SetNextItemWidth(-kResetColumn);
+    ImGui::SetNextItemWidth(-ResetColumn());
     if (ImGui::DragFloat2((std::string(id) + "_offset").c_str(), &offset.x, 1.0F)) {
         scatter.offset = {offset.x, offset.y};
         event = Merge(event, FieldEvent::Changed);
@@ -336,7 +346,7 @@ void RowLabel(const char* label) {
     if (label == nullptr || label[0] == '\0') return;
     ImGui::AlignTextToFramePadding();
     ImGui::TextUnformatted(label);
-    ImGui::SameLine(0.0F, std::max(6.0F, kLabelWidth - ImGui::CalcTextSize(label).x));
+    ImGui::SameLine(0.0F, std::max(Gui::Dpi::S(6.0F), LabelWidth() - ImGui::CalcTextSize(label).x));
 }
 
 const Preset::AssetEntry* FindAsset(const FormContext& context, const std::string& asset_id) {
@@ -356,14 +366,14 @@ FieldEvent DrawVec3Row(const char* id, const char* label, Doc::Vec3& value, floa
         RowLabel(label);
     }
     const std::array<const char*, 3> axes = {"_x", "_y", "_z"};
-    const float width = (ImGui::GetContentRegionAvail().x - kResetColumn -
+    const float width = (ImGui::GetContentRegionAvail().x - ResetColumn() -
                          (2.0F * ImGui::GetStyle().ItemInnerSpacing.x)) /
                         3.0F;
     FieldEvent event = FieldEvent::None;
     for (std::size_t i = 0; i < axes.size(); i++) {
         if (i > 0) ImGui::SameLine(0.0F, ImGui::GetStyle().ItemInnerSpacing.x);
         auto number = (float)value[i];
-        ImGui::SetNextItemWidth(std::max(48.0F, width));
+        ImGui::SetNextItemWidth(std::max(Gui::Dpi::S(48.0F), width));
         const bool changed = ImGui::DragFloat((std::string(id) + axes[i]).c_str(), &number, speed,
                                               0.0F, 0.0F, "%.4f");
         if (changed) value[i] = number;
@@ -381,7 +391,7 @@ FieldEvent DrawDoubleRow(const char* id, const char* label, double& value, float
         RowLabel(label);
     }
     auto number = (float)value;
-    ImGui::SetNextItemWidth(-kResetColumn);
+    ImGui::SetNextItemWidth(-ResetColumn());
     const bool changed = ImGui::DragFloat(id, &number, speed, 0.0F, 0.0F, "%.4f");
     if (changed) value = number;
     return Outcome(changed);
@@ -389,7 +399,7 @@ FieldEvent DrawDoubleRow(const char* id, const char* label, double& value, float
 
 FieldEvent DrawIntRow(const char* id, const char* label, int& value) {
     RowLabel(label);
-    ImGui::SetNextItemWidth(-kResetColumn);
+    ImGui::SetNextItemWidth(-ResetColumn());
     const bool changed = ImGui::DragInt(id, &value, 1.0F);
     return Outcome(changed);
 }
@@ -400,7 +410,7 @@ FieldEvent DrawEnumRow(const char* id, const char* label, int& value,
     if (names.empty()) return FieldEvent::None;
     value = std::clamp(value, 0, (int)names.size() - 1);
     bool changed = false;
-    ImGui::SetNextItemWidth(-kResetColumn);
+    ImGui::SetNextItemWidth(-ResetColumn());
     if (ImGui::BeginCombo(id, names[(std::size_t)value].c_str())) {
         for (std::size_t i = 0; i < names.size(); i++) {
             const bool active = std::cmp_equal(i, value);
@@ -426,13 +436,13 @@ FieldEvent DrawVec2Row(const char* id, const char* label, Doc::Vec2& value, floa
     }
     const std::array<const char*, 2> axes = {"_x", "_y"};
     const float width =
-        (ImGui::GetContentRegionAvail().x - kResetColumn - ImGui::GetStyle().ItemInnerSpacing.x) /
+        (ImGui::GetContentRegionAvail().x - ResetColumn() - ImGui::GetStyle().ItemInnerSpacing.x) /
         2.0F;
     FieldEvent event = FieldEvent::None;
     for (std::size_t i = 0; i < axes.size(); i++) {
         if (i > 0) ImGui::SameLine(0.0F, ImGui::GetStyle().ItemInnerSpacing.x);
         auto number = (float)value[i];
-        ImGui::SetNextItemWidth(std::max(48.0F, width));
+        ImGui::SetNextItemWidth(std::max(Gui::Dpi::S(48.0F), width));
         const bool changed = ImGui::DragFloat((std::string(id) + axes[i]).c_str(), &number, speed,
                                               0.0F, 0.0F, "%.4f");
         if (changed) value[i] = number;
@@ -575,7 +585,7 @@ FieldEvent DrawParamForm(const FormContext& context, Doc::Command& command) {
         event = Merge(event, DrawField(context, field, command));
         if (!Editor::AtCatalogDefault(command, field)) {
             const std::string reset = "R###tl_reset_" + std::string(field.id);
-            ImGui::SameLine(0.0F, 4.0F);
+            ImGui::SameLine(0.0F, Gui::Dpi::S(4.0F));
             if (ImGui::SmallButton(reset.c_str())) {
                 field.set(command, field.get(Doc::DefaultCommand(Doc::TypeOf(command))));
                 event = FieldEvent::Committed;

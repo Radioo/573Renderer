@@ -1,10 +1,12 @@
 #include "gui_style.h"
+#include "gui_dpi.h"
 #include "../support/log.h"
 #include "imgui.h"
 
 #include <windows.h>
 
 #include <initializer_list>
+#include <optional>
 #include <string>
 
 namespace Gui {
@@ -12,6 +14,7 @@ namespace Gui {
 namespace {
 
 Fonts g_fonts;
+std::optional<std::string> g_applied_accent_slug;
 
 constexpr ImVec4 kGround{0.063F, 0.067F, 0.078F, 1.00F};
 constexpr ImVec4 kRaised{0.086F, 0.094F, 0.114F, 1.00F};
@@ -155,6 +158,7 @@ void LoadFonts() {
 
 void ApplyStyle() {
     ImGuiStyle& s = ImGui::GetStyle();
+    s = ImGuiStyle();
     s.WindowRounding = 0.0F;
     s.FrameRounding = 0.0F;
     s.GrabRounding = 0.0F;
@@ -197,13 +201,16 @@ void ApplyStyle() {
     c[ImGuiCol_TextDisabled] = kTextDim;
     c[ImGuiCol_ModalWindowDimBg] = ImVec4(0.02F, 0.02F, 0.03F, 0.72F);
 
+    g_applied_accent_slug.reset();
     ApplyAccentColors(kAccentDefault);
+
+    s.ScaleAllSizes(Dpi::Scale());
+    s.FontScaleDpi = Dpi::Scale();
 }
 
 void ApplyAccentForProfile(const std::string& slug) {
-    static std::string s_applied{"\x01"};
-    if (slug == s_applied) return;
-    s_applied = slug;
+    if (g_applied_accent_slug.has_value() && *g_applied_accent_slug == slug) return;
+    g_applied_accent_slug = slug;
     ApplyAccentColors(AccentForSlug(slug));
 }
 

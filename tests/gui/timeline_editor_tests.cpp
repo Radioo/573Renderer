@@ -455,7 +455,7 @@ TEST_CASE("every clip bar holds its whole label, sub-lanes included", "[gui][tim
                 const float height = bar.RectFull.GetHeight();
                 IM_CHECK_GE(height, text + (2.0F * pad));
                 const float label =
-                    Editor::LaneLabelY(bar.RectFull.Min.y, height, text, !clip.keys.empty());
+                    Editor::LaneLabelY(bar.RectFull.Min.y, height, text, !clip.keys.empty(), 1.0F);
                 IM_CHECK_GE(label, bar.RectFull.Min.y);
                 IM_CHECK_LE(label + text, bar.RectFull.Max.y);
                 checked++;

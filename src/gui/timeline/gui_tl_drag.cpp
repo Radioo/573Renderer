@@ -5,6 +5,7 @@
 #include "editor/timeline_edits.h"
 #include "editor/timeline_view.h"
 #include "editor/tween_edits.h"
+#include "gui/gui_dpi.h"
 #include "imgui.h"
 #include "preset/doc/preset_document.h"
 
@@ -46,15 +47,17 @@ void DrawGuide(const Ctx& ctx, int frame) {
     char badge[24];
     snprintf(badge, sizeof(badge), "%d", frame);
     const ImVec2 size = ImGui::CalcTextSize(badge);
-    ctx.draw->AddRectFilled(ImVec2(x + 2.0F, ctx.lanes_top),
-                            ImVec2(x + 6.0F + size.x, ctx.lanes_top + size.y + 2.0F),
-                            ImGui::GetColorU32(ImGuiCol_PopupBg));
-    ctx.draw->AddText(ImVec2(x + 4.0F, ctx.lanes_top + 1.0F), accent, badge);
+    ctx.draw->AddRectFilled(
+        ImVec2(x + Gui::Dpi::S(2.0F), ctx.lanes_top),
+        ImVec2(x + Gui::Dpi::S(6.0F) + size.x, ctx.lanes_top + size.y + Gui::Dpi::S(2.0F)),
+        ImGui::GetColorU32(ImGuiCol_PopupBg));
+    ctx.draw->AddText(ImVec2(x + Gui::Dpi::S(4.0F), ctx.lanes_top + Gui::Dpi::S(1.0F)), accent,
+                      badge);
 }
 
 void DrawRefusal(const Ctx& ctx) {
     const float x = FrameToX(ctx, g_drag.start.start);
-    ctx.draw->AddCircleFilled(ImVec2(x, ctx.lanes_top + 6.0F), 4.0F,
+    ctx.draw->AddCircleFilled(ImVec2(x, ctx.lanes_top + Gui::Dpi::S(6.0F)), Gui::Dpi::S(4.0F),
                               ImGui::GetColorU32(ImVec4(1.0F, 0.45F, 0.45F, 0.9F)));
 }
 
@@ -78,6 +81,8 @@ Editor::DragInput MakeInput(const Ctx& ctx) {
     input.track_id = TrackUnder(ctx, io.MousePos.y);
     input.playhead = ctx.status.frame;
     input.px_per_frame = ctx.editor->GetView().px_per_frame;
+    input.snap_px = Gui::Dpi::S((float)Editor::kSnapPx);
+    input.label_gap = Gui::Dpi::S(Editor::kLabelGapPx);
     input.snap = ctx.editor->GetView().snap && !io.KeyAlt;
     return input;
 }

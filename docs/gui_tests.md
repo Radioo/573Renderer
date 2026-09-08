@@ -285,6 +285,8 @@ version of this suite covered; the scene preset editor files (`timeline_tests`,
 | `library_tests.cpp` | 22 | the preset library: the library owning the CENTER pane on the scene3d backend with nothing of it left under `main_view/pane_left`, an AFP backend keeping `##scene_filter` / `scene_scroll` in the centre with no `###lib_*` item anywhere, the `lib_scroll` list taking more than 40 percent of the pane height, Built-in / User / Other builds groups from a temp scan root, selecting a row loading the document and posting `PresetCmd::LoadDocument`, an unparseable import reporting its line and column and loading nothing, an import with a validation error loading and listing it, an import whose id is taken keeping the file that owns it, export then import byte-equal, Save writing `presets/<build>/<id>.json` and clearing the modified mark, Ctrl+S, the unsaved-changes prompt, New generating the id from the name, Duplicate, a built-in offering a user copy instead of saving in place, the problem list staying inside a short pane, an other-build row opening read-only with no `LoadDocument` posted and every editing control disabled, Duplicate turning it into an editable copy for this build, an unloadable user file appearing under "Files that did not load", and a close request prompting when dirty (Cancel keeps running, Discard confirms) but exiting straight away when clean |
 | `frame_inspector_tests.cpp` | 2 | the Inspector "Frame" tab naming the clip that won a conflicting value, and clicking that winner selecting the clip |
 | `window_tests.cpp` | 10 | `Gui::Init` device creation, the min-track-size clamp, `WM_ERASEBKGND`, `WM_SYSCOMMAND`/SC_KEYMENU, live resize, `WM_PAINT` + validation, the pump's WM_QUIT exit, lost-device recovery, and two BACKBUFFER PIXEL assertions |
+| `modal_layout_tests.cpp` | 3 x 3 | every editor modal (Add track, Clip properties, Document properties, Option properties) keeping its content inside the modal, run at 96, 144 and 192 DPI |
+| `dpi_scaling_tests.cpp` | 2 | the style/font scale factors at 96/144/192 DPI, and the top bar, status strip and timeline dock doubling in height at 192 while still holding their content |
 
 Every interactive widget in `src/gui` is now exercised. The four gaps the first
 version of this document listed are all closed; sections 12 to 14 record how.
@@ -473,3 +475,21 @@ strip, 4 timeline, 4 qpro, 3 setup, 2 scene pane, 1 2D package). Branch-carrying
 tooltips are driven through each branch rather than once. If you add a
 `SetTooltip`, add its assertion in the same change - `grep -rn SetTooltip src/`
 is the checklist.
+
+## 17. Running a case at a non-default DPI
+
+`GuiTest::Harness` takes a DPI: `GuiTest::Harness harness(192)`. The constructor calls
+`Gui::Dpi::SetScaleFromDpi(dpi)` BEFORE `LoadFonts()` / `ApplyStyle()` (both read the scale)
+and sizes `io.DisplaySize` to `S(1600) x S(900)`, so the context simulates a denser screen of
+the same physical size rather than a 1600x900 window with giant text. The destructor resets
+the scale to 96, so a case that forgets to reset cannot leak into the next one.
+
+Catch2's `GENERATE(96U, 144U, 192U)` re-runs a whole `TEST_CASE` per value; pair it with
+`INFO("display dpi " << dpi)` so a failure names the scale. That is how `modal_layout_tests`
+covers all three without duplicating the drive code.
+
+This is the net for the whole class of "hardcoded pixel size vs scaled text" bugs: a fixed
+modal width or child height silently overflows once the font grows, and only a
+content-fits-in-its-room assertion at a second DPI can see it. When you add a layout case
+that could be size-sensitive, run it at 192 too - and check the check can fail, by removing
+one `Gui::Dpi::S()` and watching it go red (docs/gui.md 2.1).

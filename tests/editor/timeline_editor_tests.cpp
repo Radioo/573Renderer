@@ -108,16 +108,16 @@ bool ModelVisible(const Doc::Document& document, int frame, const std::string& m
 }
 
 TEST_CASE("the ruler picks the finest spacing that keeps labels 56 px apart", "[editor][ruler]") {
-    CHECK(Editor::RulerStep(64.0) == 1);
-    CHECK(Editor::RulerStep(56.0) == 1);
-    CHECK(Editor::RulerStep(12.0) == 5);
-    CHECK(Editor::RulerStep(6.0) == 10);
-    CHECK(Editor::RulerStep(2.0) == 30);
-    CHECK(Editor::RulerStep(1.0) == 60);
-    CHECK(Editor::RulerStep(0.2) == 300);
-    CHECK(Editor::RulerStep(0.1) == 600);
-    CHECK(Editor::RulerStep(0.05) == 1800);
-    CHECK(Editor::RulerStep(0.001) == 1800);
+    CHECK(Editor::RulerStep(64.0, Editor::kLabelGapPx) == 1);
+    CHECK(Editor::RulerStep(56.0, Editor::kLabelGapPx) == 1);
+    CHECK(Editor::RulerStep(12.0, Editor::kLabelGapPx) == 5);
+    CHECK(Editor::RulerStep(6.0, Editor::kLabelGapPx) == 10);
+    CHECK(Editor::RulerStep(2.0, Editor::kLabelGapPx) == 30);
+    CHECK(Editor::RulerStep(1.0, Editor::kLabelGapPx) == 60);
+    CHECK(Editor::RulerStep(0.2, Editor::kLabelGapPx) == 300);
+    CHECK(Editor::RulerStep(0.1, Editor::kLabelGapPx) == 600);
+    CHECK(Editor::RulerStep(0.05, Editor::kLabelGapPx) == 1800);
+    CHECK(Editor::RulerStep(0.001, Editor::kLabelGapPx) == 1800);
 }
 
 TEST_CASE("a clip bar reads its label, or the command's own summary", "[editor][summary]") {
@@ -226,7 +226,7 @@ TEST_CASE("a track grows a sub-lane only when a modifier sits over a primary", "
 TEST_CASE("every lane is tall enough for the clip label at any font size", "[editor][lanes]") {
     for (const float text : {9.0F, 13.0F, 16.0F, 21.0F, 34.0F}) {
         for (const float pad : {0.0F, 3.0F, 6.0F}) {
-            const Editor::LaneMetrics metrics = Editor::LaneMetricsFor(text, pad);
+            const Editor::LaneMetrics metrics = Editor::LaneMetricsFor(text, pad, 1.0F);
             const float wanted = text + (2.0F * pad);
             CHECK(metrics.sub_clip >= wanted);
             CHECK(metrics.clip >= wanted);
@@ -235,7 +235,7 @@ TEST_CASE("every lane is tall enough for the clip label at any font size", "[edi
 
             for (const bool keyed : {false, true}) {
                 for (const float bar : {metrics.clip, metrics.sub_clip}) {
-                    const float y = Editor::LaneLabelY(100.0F, bar, text, keyed);
+                    const float y = Editor::LaneLabelY(100.0F, bar, text, keyed, 1.0F);
                     CHECK(y >= 100.0F);
                     CHECK(y + text <= 100.0F + bar);
                 }
@@ -252,11 +252,13 @@ TEST_CASE("the lanes never scroll past the last track", "[editor][view]") {
 }
 
 TEST_CASE("a clip bar's edges are resize handles and its middle moves", "[editor][drag]") {
-    CHECK(Editor::ZoneAt(100.0F, 200.0F, 102.0F) == Editor::Zone::LeftHandle);
-    CHECK(Editor::ZoneAt(100.0F, 200.0F, 150.0F) == Editor::Zone::Body);
-    CHECK(Editor::ZoneAt(100.0F, 200.0F, 197.0F) == Editor::Zone::RightHandle);
-    CHECK(Editor::ZoneAt(100.0F, 200.0F, 240.0F) == Editor::Zone::None);
-    CHECK(Editor::ZoneAt(100.0F, 108.0F, 104.0F) == Editor::Zone::Body);
+    CHECK(Editor::ZoneAt(100.0F, 200.0F, 102.0F, Editor::kClipHandlePx) ==
+          Editor::Zone::LeftHandle);
+    CHECK(Editor::ZoneAt(100.0F, 200.0F, 150.0F, Editor::kClipHandlePx) == Editor::Zone::Body);
+    CHECK(Editor::ZoneAt(100.0F, 200.0F, 197.0F, Editor::kClipHandlePx) ==
+          Editor::Zone::RightHandle);
+    CHECK(Editor::ZoneAt(100.0F, 200.0F, 240.0F, Editor::kClipHandlePx) == Editor::Zone::None);
+    CHECK(Editor::ZoneAt(100.0F, 108.0F, 104.0F, Editor::kClipHandlePx) == Editor::Zone::Body);
 }
 
 TEST_CASE("moving a clip keeps its duration", "[editor][drag]") {

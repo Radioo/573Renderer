@@ -1,6 +1,7 @@
 #include "gui_tl_preview.h"
 
 #include "gui/gui_window.h"
+#include "gui/gui_dpi.h"
 
 #include <d3d9.h>
 
@@ -19,8 +20,16 @@ namespace Panels::Timeline {
 
 namespace {
 
-constexpr float kCellW = 96.0F;
-constexpr float kCellH = 72.0F;
+constexpr float kCellWDips = 96.0F;
+constexpr float kCellHDips = 72.0F;
+
+float CellW() {
+    return Gui::Dpi::S(kCellWDips);
+}
+
+float CellH() {
+    return Gui::Dpi::S(kCellHDips);
+}
 
 struct Uploaded {
     IDirect3DTexture9* texture = nullptr;
@@ -101,18 +110,19 @@ void DrawPreviewStrip(const std::string& key) {
         if (i > 0) ImGui::SameLine();
         const ImVec2 origin = ImGui::GetCursorScreenPos();
         ImGui::InvisibleButton(("###tl_preview_" + std::to_string(i)).c_str(),
-                               ImVec2(kCellW, kCellH));
+                               ImVec2(CellW(), CellH()));
         ImDrawList* draw = ImGui::GetWindowDrawList();
-        const ImVec2 corner(origin.x + kCellW, origin.y + kCellH);
+        const ImVec2 corner(origin.x + CellW(), origin.y + CellH());
         draw->AddRect(origin, corner, ImGui::GetColorU32(ImGuiCol_Border));
         if (i < ready && g_uploaded[(std::size_t)i].texture != nullptr) {
             draw->AddImage((ImTextureID)(uintptr_t)g_uploaded[(std::size_t)i].texture,
-                           ImVec2(origin.x + 1.0F, origin.y + 1.0F),
-                           ImVec2(corner.x - 1.0F, corner.y - 1.0F));
+                           ImVec2(origin.x + Gui::Dpi::S(1.0F), origin.y + Gui::Dpi::S(1.0F)),
+                           ImVec2(corner.x - Gui::Dpi::S(1.0F), corner.y - Gui::Dpi::S(1.0F)));
         } else {
             const std::string label =
                 "sample " + std::to_string(i + 1) + " / " + std::to_string(total);
-            draw->AddText(ImVec2(origin.x + 6.0F, origin.y + (kCellH * 0.5F) - 6.0F),
+            draw->AddText(ImVec2(origin.x + Gui::Dpi::S(6.0F),
+                                 origin.y + (CellH() * 0.5F) - Gui::Dpi::S(6.0F)),
                           ImGui::GetColorU32(ImGuiCol_TextDisabled), label.c_str());
         }
     }

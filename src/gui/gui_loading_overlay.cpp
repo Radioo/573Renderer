@@ -1,4 +1,5 @@
 #include "gui_loading_overlay.h"
+#include "gui_dpi.h"
 #include "../state/boot_lifecycle.h"
 #include "../support/log.h"
 #include "imgui.h"
@@ -11,6 +12,8 @@
 namespace Panels::LoadingOverlay {
 
 namespace {
+
+constexpr float kBarWidthDips = 280.0F;
 
 void DrawSpinner(ImVec2 center, float radius, float t, ImU32 base_color) {
     ImDrawList* dl = ImGui::GetWindowDrawList();
@@ -53,8 +56,8 @@ std::string ShortTarget(const std::string& target) {
 }
 
 void DrawProgressBar(ImVec2 origin, float fraction, float t) {
-    const float kBarWidth = 280.0F;
-    const float kBarHeight = 8.0F;
+    const float kBarWidth = Gui::Dpi::S(kBarWidthDips);
+    const float kBarHeight = Gui::Dpi::S(8.0F);
     ImGui::SetCursorScreenPos(origin);
     if (fraction >= 0.0F) {
         ImGui::ProgressBar(fraction, ImVec2(kBarWidth, kBarHeight), "");
@@ -97,7 +100,7 @@ void DrawProgressDetailLine(const App::LoadProgress& progress, const ImVec2& cen
     }
     if (line != nullptr) {
         ImVec2 const cs = ImGui::CalcTextSize(line);
-        ImGui::SetCursorScreenPos(ImVec2(center.x - (cs.x * 0.5F), center.y + 92.0F));
+        ImGui::SetCursorScreenPos(ImVec2(center.x - (cs.x * 0.5F), center.y + Gui::Dpi::S(92.0F)));
         ImGui::TextColored(ImVec4(0.65F, 0.75F, 0.90F, 0.85F), "%s", line);
     }
 }
@@ -122,7 +125,8 @@ void Render(const App::LoadProgress& progress) {
     ImVec2 const center{cursor.x + (region.x * 0.5F), cursor.y + (region.y * 0.5F)};
 
     auto t = (float)ImGui::GetTime();
-    DrawSpinner(ImVec2(center.x, center.y - 28.0F), 22.0F, t, IM_COL32(255, 200, 100, 255));
+    DrawSpinner(ImVec2(center.x, center.y - Gui::Dpi::S(28.0F)), Gui::Dpi::S(22.0F), t,
+                IM_COL32(255, 200, 100, 255));
 
     std::string const target = ShortTarget(progress.target);
     char title[160];
@@ -132,17 +136,18 @@ void Render(const App::LoadProgress& progress) {
         snprintf(title, sizeof(title), "Loading");
     }
     ImVec2 const ts = ImGui::CalcTextSize(title);
-    ImGui::SetCursorScreenPos(ImVec2(center.x - (ts.x * 0.5F), center.y + 18.0F));
+    ImGui::SetCursorScreenPos(ImVec2(center.x - (ts.x * 0.5F), center.y + Gui::Dpi::S(18.0F)));
     ImGui::TextColored(ImVec4(1.0F, 1.0F, 1.0F, 1.0F), "%s", title);
 
     if (!progress.stage.empty()) {
         ImVec2 const ss = ImGui::CalcTextSize(progress.stage.c_str());
-        ImGui::SetCursorScreenPos(ImVec2(center.x - (ss.x * 0.5F), center.y + 44.0F));
+        ImGui::SetCursorScreenPos(ImVec2(center.x - (ss.x * 0.5F), center.y + Gui::Dpi::S(44.0F)));
         ImGui::TextColored(ImVec4(0.80F, 0.85F, 0.95F, 0.85F), "%s", progress.stage.c_str());
     }
 
-    const float kBarWidth = 280.0F;
-    DrawProgressBar(ImVec2(center.x - (kBarWidth * 0.5F), center.y + 72.0F), progress.fraction, t);
+    const float bar_w = Gui::Dpi::S(kBarWidthDips);
+    DrawProgressBar(ImVec2(center.x - (bar_w * 0.5F), center.y + Gui::Dpi::S(72.0F)),
+                    progress.fraction, t);
 
     DrawProgressDetailLine(progress, center);
 

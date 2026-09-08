@@ -1,4 +1,5 @@
 #include "gui_splitter.h"
+#include "gui_dpi.h"
 
 #include "imgui.h"
 
@@ -22,7 +23,7 @@ bool VSplitter(const char* id, float width, float height, float* left_w, float* 
     const ImVec2 p0 = ImGui::GetItemRectMin();
     const ImVec2 p1 = ImGui::GetItemRectMax();
     const float cx = (p0.x + p1.x) * 0.5F;
-    ImGui::GetWindowDrawList()->AddLine(ImVec2(cx, p0.y), ImVec2(cx, p1.y), col, 1.0F);
+    ImGui::GetWindowDrawList()->AddLine(ImVec2(cx, p0.y), ImVec2(cx, p1.y), col, Dpi::S(1.0F));
 
     if (active) {
         const float d = ImGui::GetIO().MouseDelta.x;
@@ -56,7 +57,7 @@ bool HSplitter(const char* id, float width, float height, float* top_h, float* b
     const ImVec2 p0 = ImGui::GetItemRectMin();
     const ImVec2 p1 = ImGui::GetItemRectMax();
     const float cy = (p0.y + p1.y) * 0.5F;
-    ImGui::GetWindowDrawList()->AddLine(ImVec2(p0.x, cy), ImVec2(p1.x, cy), col, 1.0F);
+    ImGui::GetWindowDrawList()->AddLine(ImVec2(p0.x, cy), ImVec2(p1.x, cy), col, Dpi::S(1.0F));
 
     if (hovered && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
         const float total = *top_h + *bottom_h;

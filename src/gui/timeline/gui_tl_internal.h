@@ -3,6 +3,7 @@
 #include "editor/preset_editor_state.h"
 #include "editor/timeline_drag.h"
 #include "editor/timeline_lanes.h"
+#include "gui/gui_dpi.h"
 #include "imgui.h"
 #include "preset/doc/preset_document.h"
 #include "preset/doc/preset_enum_names.h"
@@ -27,10 +28,26 @@ struct ClipRect {
     float y1 = 0.0F;
 };
 
-inline constexpr float kRulerH = 34.0F;
-inline constexpr float kScrollBarH = 12.0F;
-inline constexpr float kDashPitch = 8.0F;
-inline constexpr float kDashLength = 4.0F;
+inline constexpr float kRulerHDips = 34.0F;
+inline constexpr float kScrollBarHDips = 12.0F;
+inline constexpr float kDashPitchDips = 8.0F;
+inline constexpr float kDashLengthDips = 4.0F;
+
+inline float RulerH() {
+    return Gui::Dpi::S(kRulerHDips);
+}
+
+inline float ScrollBarH() {
+    return Gui::Dpi::S(kScrollBarHDips);
+}
+
+inline float DashPitch() {
+    return Gui::Dpi::S(kDashPitchDips);
+}
+
+inline float DashLength() {
+    return Gui::Dpi::S(kDashLengthDips);
+}
 
 struct Ctx {
     Editor::State* editor = nullptr;

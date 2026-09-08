@@ -2,6 +2,7 @@
 
 #include "editor/preset_editor_state.h"
 #include "editor/timeline_edits.h"
+#include "gui/gui_dpi.h"
 #include "imgui.h"
 #include "preset/doc/preset_validate.h"
 
@@ -17,6 +18,8 @@ namespace Doc = Preset::Doc;
 namespace {
 
 constexpr const char* kTitle = "Problems";
+constexpr float kModalWidth = 720.0F;
+constexpr float kScreenMargin = 48.0F;
 
 std::vector<Doc::Problem> g_problems;
 unsigned g_revision = 0;
@@ -66,7 +69,9 @@ void RenderProblems() {
     }
     ImGuiViewport* viewport = ImGui::GetMainViewport();
     ImGui::SetNextWindowPos(viewport->GetCenter(), ImGuiCond_Always, ImVec2(0.5F, 0.5F));
-    ImGui::SetNextWindowSizeConstraints(ImVec2(720, 0), ImVec2(720, viewport->WorkSize.y - 48.0F));
+    ImGui::SetNextWindowSizeConstraints(
+        Gui::Dpi::S(kModalWidth, 0.0F),
+        ImVec2(Gui::Dpi::S(kModalWidth), viewport->WorkSize.y - Gui::Dpi::S(kScreenMargin)));
     if (!ImGui::BeginPopupModal(kTitle, nullptr, ImGuiWindowFlags_AlwaysAutoResize)) return;
 
     const std::vector<Doc::Problem>& problems = CurrentProblems();

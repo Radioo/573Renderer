@@ -1,4 +1,5 @@
 #include "gui_icons.h"
+#include "gui_dpi.h"
 #include "gui_panels_internal.h"
 #include "gui_widgets.h"
 #include "../backend/afp_commands.h"
@@ -197,7 +198,7 @@ void RenderLayerRow(App::State& state, const std::string& active, const App::Sta
 
 void RenderAddSlotRow(App::IfsConfig& cfg) {
     static char buf[128] = {};
-    ImGui::SetNextItemWidth(-72.0F);
+    ImGui::SetNextItemWidth(Gui::Dpi::S(-72.0F));
     ImGui::InputTextWithHint("##new_slot", "add slot by clip path, e.g. coin", buf, sizeof(buf));
     ImGui::SameLine();
     if (ImGui::Button("Add", ImVec2(-FLT_MIN, 0)) && buf[0] != 0) {
@@ -264,7 +265,7 @@ void RenderScenePane() {
 
     const auto overrides = state.GetSublayerOverrides(active);
 
-    ImGui::BeginChild("scene_scroll", ImVec2(0, -38.0F), 0);
+    ImGui::BeginChild("scene_scroll", ImVec2(0.0F, Gui::Dpi::S(-38.0F)), 0);
     int idx = 0;
     for (const auto& name : cfg.anim_names)
         RenderLayerRow(state, active, status, cfg, overrides, lower_filter, name, idx++);

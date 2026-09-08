@@ -1,5 +1,6 @@
 #include "gui_widgets.h"
 #include "gui_style.h"
+#include "gui_dpi.h"
 
 #include "imgui.h"
 
@@ -9,7 +10,7 @@ bool Segmented(const char* id, const char* const* items, int count, int* current
     bool changed = false;
     ImGui::PushID(id);
     const ImGuiStyle& st = ImGui::GetStyle();
-    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(1.0F, st.ItemSpacing.y));
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(Dpi::S(1.0F), st.ItemSpacing.y));
     for (int i = 0; i < count; i++) {
         const float item_w = ImGui::CalcTextSize(items[i]).x + (st.FramePadding.x * 2.0F);
         if (i > 0) {
@@ -40,7 +41,7 @@ bool Segmented(const char* id, const char* const* items, int count, int* current
 void SectionHeader(const char* icon, const char* label, const char* suffix) {
     if (icon != nullptr) {
         ImGui::TextColored(ImGui::GetStyleColorVec4(ImGuiCol_CheckMark), "%s", icon);
-        ImGui::SameLine(0.0F, 6.0F);
+        ImGui::SameLine(0.0F, Dpi::S(6.0F));
     }
     PushHeaderFont();
     ImGui::TextUnformatted(label);

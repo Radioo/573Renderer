@@ -11,9 +11,9 @@ constexpr std::array<int, 8> kSteps = {1, 5, 10, 30, 60, 300, 600, 1800};
 
 }
 
-int RulerStep(double px_per_frame) {
+int RulerStep(double px_per_frame, float label_gap) {
     for (const int step : kSteps) {
-        if ((double)step * px_per_frame >= (double)kLabelGapPx) return step;
+        if ((double)step * px_per_frame >= (double)label_gap) return step;
     }
     return kSteps.back();
 }

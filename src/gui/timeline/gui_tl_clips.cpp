@@ -7,7 +7,9 @@
 #include "editor/timeline_drag.h"
 #include "editor/timeline_edits.h"
 #include "editor/timeline_lanes.h"
+#include "editor/timeline_view.h"
 #include "editor/tween_edits.h"
+#include "gui/gui_dpi.h"
 #include "imgui.h"
 #include "preset/doc/preset_commands.h"
 #include "preset/doc/preset_document.h"
@@ -25,14 +27,38 @@ namespace Doc = Preset::Doc;
 
 namespace {
 
-constexpr float kEventW = 4.0F;
-constexpr float kEventHitW = 12.0F;
-constexpr float kGateStripeH = 3.0F;
-constexpr float kProblemBarW = 4.0F;
+constexpr float kEventWDips = 4.0F;
+constexpr float kEventHitWDips = 12.0F;
+constexpr float kGateStripeHDips = 3.0F;
+constexpr float kProblemBarWDips = 4.0F;
 constexpr ImU32 kProblemError = IM_COL32(232, 96, 88, 255);
 constexpr ImU32 kProblemWarning = IM_COL32(232, 176, 72, 255);
-constexpr float kKeyInset = 5.0F;
-constexpr float kKeyHalf = 3.0F;
+constexpr float kKeyInsetDips = 5.0F;
+constexpr float kKeyHalfDips = 3.0F;
+
+float EventW() {
+    return Gui::Dpi::S(kEventWDips);
+}
+
+float EventHitW() {
+    return Gui::Dpi::S(kEventHitWDips);
+}
+
+float GateStripeH() {
+    return Gui::Dpi::S(kGateStripeHDips);
+}
+
+float ProblemBarW() {
+    return Gui::Dpi::S(kProblemBarWDips);
+}
+
+float KeyInset() {
+    return Gui::Dpi::S(kKeyInsetDips);
+}
+
+float KeyHalf() {
+    return Gui::Dpi::S(kKeyHalfDips);
+}
 
 struct Box {
     float x0 = 0.0F;
@@ -51,13 +77,13 @@ struct KeyDrag {
 KeyDrag g_key_drag;
 
 float KeyY(const Box& box) {
-    return box.y0 + std::min(3.0F, (box.y1 - box.y0) * 0.5F);
+    return box.y0 + std::min(Gui::Dpi::S(3.0F), (box.y1 - box.y0) * 0.5F);
 }
 
 float KeyX(const Ctx& ctx, const Doc::Clip& clip, const Box& box, int at) {
     const float x = FrameToX(ctx, clip.start + at);
-    if (box.x1 - box.x0 < 2.0F * kKeyInset) return x;
-    return std::clamp(x, box.x0 + kKeyInset, box.x1 - kKeyInset);
+    if (box.x1 - box.x0 < 2.0F * KeyInset()) return x;
+    return std::clamp(x, box.x0 + KeyInset(), box.x1 - KeyInset());
 }
 
 void DrawKeys(const Ctx& ctx, const Doc::Clip& clip, const Box& box, const Box& visible) {
@@ -68,15 +94,15 @@ void DrawKeys(const Ctx& ctx, const Doc::Clip& clip, const Box& box, const Box& 
         const float to = KeyX(ctx, clip, box, clip.keys[i + 1].at);
         if (to < visible.x0 || from > visible.x1) continue;
         ctx.draw->AddLine(ImVec2(std::max(from, visible.x0), ky),
-                          ImVec2(std::min(to, visible.x1), ky), line, 1.0F);
+                          ImVec2(std::min(to, visible.x1), ky), line, Gui::Dpi::S(1.0F));
     }
     for (std::size_t i = 0; i < clip.keys.size(); i++) {
         const float kx = KeyX(ctx, clip, box, clip.keys[i].at);
         if (kx < visible.x0 || kx > visible.x1) continue;
         const bool selected =
             ctx.editor->SelectedKey() == Editor::KeyRef{.clip_id = clip.id, .index = (int)i};
-        ctx.draw->AddQuadFilled(ImVec2(kx, ky - kKeyHalf), ImVec2(kx + kKeyHalf, ky),
-                                ImVec2(kx, ky + kKeyHalf), ImVec2(kx - kKeyHalf, ky),
+        ctx.draw->AddQuadFilled(ImVec2(kx, ky - KeyHalf()), ImVec2(kx + KeyHalf(), ky),
+                                ImVec2(kx, ky + KeyHalf()), ImVec2(kx - KeyHalf(), ky),
                                 selected ? ImGui::GetColorU32(ImGuiCol_CheckMark)
                                          : ImGui::GetColorU32(ImGuiCol_Text));
     }
@@ -88,6 +114,8 @@ void DragKey(Ctx& ctx, const Doc::Clip& clip) {
     input.cursor_frame = CursorFrame(ctx);
     input.playhead = ctx.status.frame;
     input.px_per_frame = ctx.editor->GetView().px_per_frame;
+    input.snap_px = Gui::Dpi::S((float)Editor::kSnapPx);
+    input.label_gap = Gui::Dpi::S(Editor::kLabelGapPx);
     input.snap = ctx.editor->GetView().snap && !ImGui::GetIO().KeyAlt;
     const int wanted =
         clip.start + g_key_drag.start_at + (input.cursor_frame - g_key_drag.grab_frame);
@@ -106,10 +134,10 @@ void KeyItems(Ctx& ctx, const Doc::Track& track, const Doc::Clip& clip, const Bo
     for (std::size_t i = 0; i < clip.keys.size(); i++) {
         const float kx = KeyX(ctx, clip, box, clip.keys[i].at);
         if (kx < visible.x0 || kx > visible.x1) continue;
-        ImGui::SetCursorScreenPos(ImVec2(kx - 5.0F, ky - 5.0F));
+        ImGui::SetCursorScreenPos(ImVec2(kx - Gui::Dpi::S(5.0F), ky - Gui::Dpi::S(5.0F)));
         ImGui::SetNextItemAllowOverlap();
         ImGui::InvisibleButton(("###tl_key_" + clip.id + "_" + std::to_string(i)).c_str(),
-                               ImVec2(10.0F, 10.0F));
+                               Gui::Dpi::S(10.0F, 10.0F));
         if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
             ctx.editor->PostRequest(Editor::Request{
                 .kind = Editor::RequestKind::ClipProperties, .clip_id = clip.id, .index = (int)i});
@@ -140,11 +168,11 @@ Box ClipBox(const Ctx& ctx, const Doc::Track& track, const Doc::Clip& clip, floa
     const Editor::LaneMetrics metrics = LaneSizes();
     Box box;
     box.y0 = lane == 0 ? y + ((row - metrics.clip) * 0.5F)
-                       : y + row + ((float)(lane - 1) * metrics.sub_lane) + 1.0F;
+                       : y + row + ((float)(lane - 1) * metrics.sub_lane) + Gui::Dpi::S(1.0F);
     box.y1 = box.y0 + (lane == 0 ? metrics.clip : metrics.sub_clip);
     box.x0 = FrameToX(ctx, clip.start);
-    box.x1 =
-        Editor::IsEvent(clip) ? box.x0 + kEventW : FrameToX(ctx, Editor::ClipEnd(clip, ctx.length));
+    box.x1 = Editor::IsEvent(clip) ? box.x0 + EventW()
+                                   : FrameToX(ctx, Editor::ClipEnd(clip, ctx.length));
     return box;
 }
 
@@ -156,38 +184,39 @@ void DrawBody(const Ctx& ctx, const Doc::Track& track, const Doc::Clip& clip, co
     ctx.draw->AddRectFilled(ImVec2(visible.x0, box.y0), ImVec2(visible.x1, box.y1), fill);
 
     if (track.locked) {
-        ctx.draw->AddRectFilled(ImVec2(visible.x0, box.y0), ImVec2(visible.x0 + 3.0F, box.y1),
+        ctx.draw->AddRectFilled(ImVec2(visible.x0, box.y0),
+                                ImVec2(visible.x0 + Gui::Dpi::S(3.0F), box.y1),
                                 ImGui::GetColorU32(ImGuiCol_TextDisabled));
     }
     const Editor::ClipProblems problems = Editor::ProblemsForClip(CurrentProblems(), clip.id);
     if (problems.Any()) {
         ctx.draw->AddRectFilled(ImVec2(visible.x0, box.y0),
-                                ImVec2(visible.x0 + kProblemBarW, box.y1),
+                                ImVec2(visible.x0 + ProblemBarW(), box.y1),
                                 problems.Failing() ? kProblemError : kProblemWarning);
     }
     if (clip.when.has_value()) {
         ctx.draw->AddRectFilled(ImVec2(visible.x0, box.y0),
-                                ImVec2(visible.x1, box.y0 + kGateStripeH),
+                                ImVec2(visible.x1, box.y0 + GateStripeH()),
                                 ImGui::GetColorU32(ImGuiCol_CheckMark));
     }
     if (!clip.end.has_value() && !Editor::IsEvent(clip)) {
-        ctx.draw->AddText(ImVec2(visible.x1 - 10.0F, box.y0 + 2.0F),
+        ctx.draw->AddText(ImVec2(visible.x1 - Gui::Dpi::S(10.0F), box.y0 + Gui::Dpi::S(2.0F)),
                           ImGui::GetColorU32(ImGuiCol_Text), ">");
     }
 
     DrawKeys(ctx, clip, box, visible);
 
     const bool keyed = !clip.keys.empty();
-    const std::string label =
-        Ellipsized(Editor::ClipSummary(clip, track.target), visible.x1 - visible.x0 - 8.0F);
-    ctx.draw->AddText(
-        ImVec2(visible.x0 + 5.0F,
-               Editor::LaneLabelY(box.y0, box.y1 - box.y0, ImGui::GetTextLineHeight(), keyed)),
-        ImGui::GetColorU32(ImGuiCol_WindowBg), label.c_str());
+    const std::string label = Ellipsized(Editor::ClipSummary(clip, track.target),
+                                         visible.x1 - visible.x0 - Gui::Dpi::S(8.0F));
+    ctx.draw->AddText(ImVec2(visible.x0 + Gui::Dpi::S(5.0F),
+                             Editor::LaneLabelY(box.y0, box.y1 - box.y0, ImGui::GetTextLineHeight(),
+                                                keyed, Gui::Dpi::Scale())),
+                      ImGui::GetColorU32(ImGuiCol_WindowBg), label.c_str());
 
     if (!ctx.editor->IsSelected(clip.id)) return;
     ctx.draw->AddRect(ImVec2(visible.x0, box.y0), ImVec2(visible.x1, box.y1),
-                      ImGui::GetColorU32(ImGuiCol_Text), 0.0F, 0, 2.0F);
+                      ImGui::GetColorU32(ImGuiCol_Text), 0.0F, 0, Gui::Dpi::S(2.0F));
 }
 
 std::string ProblemLines(const Doc::Clip& clip) {
@@ -225,7 +254,8 @@ void HandleClick(Ctx& ctx, const Doc::Track& track, const Doc::Clip& clip, const
         ctx.editor->Select(clip.id);
     }
 
-    const Editor::Zone zone = Editor::ZoneAt(visible.x0, visible.x1, io.MousePos.x);
+    const Editor::Zone zone =
+        Editor::ZoneAt(visible.x0, visible.x1, io.MousePos.x, Gui::Dpi::S(Editor::kClipHandlePx));
     if (ImGui::IsItemHovered() && zone != Editor::Zone::Body && zone != Editor::Zone::None) {
         ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
     }
@@ -350,7 +380,7 @@ void DrawClip(Ctx& ctx, const Doc::Track& track, const Doc::Clip& clip, float y)
 
     Box visible = box;
     visible.x0 = std::max(box.x0, ctx.lane_x);
-    visible.x1 = std::min(std::max(box.x1, visible.x0 + kEventW), right);
+    visible.x1 = std::min(std::max(box.x1, visible.x0 + EventW()), right);
 
     DrawBody(ctx, track, clip, box, visible);
     ctx.clip_rects.push_back(
@@ -359,7 +389,7 @@ void DrawClip(Ctx& ctx, const Doc::Track& track, const Doc::Clip& clip, float y)
     ImGui::SetCursorScreenPos(ImVec2(visible.x0, box.y0));
     ImGui::SetNextItemAllowOverlap();
     const std::string clip_id = "###tl_clip_" + clip.id;
-    const float hit_w = Editor::IsEvent(clip) ? kEventHitW : (visible.x1 - visible.x0);
+    const float hit_w = Editor::IsEvent(clip) ? EventHitW() : (visible.x1 - visible.x0);
     ImGui::InvisibleButton(clip_id.c_str(), ImVec2(hit_w, box.y1 - box.y0));
     HandleClick(ctx, track, clip, visible);
     KeyItems(ctx, track, clip, box, visible);

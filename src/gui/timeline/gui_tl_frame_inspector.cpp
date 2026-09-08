@@ -3,6 +3,7 @@
 #include "editor/frame_inspector_model.h"
 #include "editor/preset_editor_state.h"
 #include "editor/timeline_edits.h"
+#include "gui/gui_dpi.h"
 #include "gui/gui_style.h"
 #include "imgui.h"
 #include "preset/eval/frame_report.h"
@@ -95,12 +96,12 @@ void RenderFrameTab() {
     const Preset::Eval::FrameReport& report = *status.frame_report;
     Gui::PushMonoFont();
     ImGui::Text("frame %d / %d", report.frame, report.length);
-    ImGui::SameLine(0.0F, 12.0F);
+    ImGui::SameLine(0.0F, Gui::Dpi::S(12.0F));
     ImGui::TextDisabled("%.2f s at %d fps",
                         (double)report.frame / (double)(report.fps > 0 ? report.fps : 60),
                         report.fps);
     ImGui::PopFont();
-    ImGui::SameLine(0.0F, 12.0F);
+    ImGui::SameLine(0.0F, Gui::Dpi::S(12.0F));
     ImGui::TextDisabled("%s", status.playing ? "playing" : "paused");
     if (ImGui::IsItemHovered()) {
         ImGui::SetTooltip("What the evaluator resolved for the frame under the playhead, and "

@@ -225,6 +225,7 @@ add_library(r573_app STATIC
     src/gui/timeline/gui_tl_frame_inspector.cpp
     src/gui/panel_registry.cpp
     src/gui/gui_style.cpp
+    src/gui/gui_dpi.cpp
     src/gui/gui_widgets.cpp
     src/gui/gui_scene_panel.cpp
     src/gui/gui_inspector.cpp
@@ -668,6 +669,7 @@ add_executable(gui_tests
     tests/gui/frame_inspector_tests.cpp
     tests/gui/clip_modal_tests.cpp
     tests/gui/modal_layout_tests.cpp
+    tests/gui/dpi_scaling_tests.cpp
     tests/gui/timeline_editor_tests.cpp
     tests/gui/tween_ui_tests.cpp
     tests/gui/host_live_tests.cpp

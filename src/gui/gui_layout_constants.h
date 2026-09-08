@@ -16,6 +16,9 @@ constexpr float kTimelineH = 76.0f;
 constexpr float kPaneRowMinH = 120.0f;
 constexpr float kStatusStripH = 28.0f;
 
+constexpr int kDefaultWindowW = 1360;
+constexpr int kDefaultWindowH = 820;
+
 constexpr int kMinClientW =
     (int)(kPaneLeftMin + kPaneCenterMin + kPaneRightMin + 2.0f * kSplitterW) + 80;
 constexpr int kMinClientH = 600;

@@ -46,9 +46,9 @@ void CollectEdges(const Doc::Document& document, std::string_view ignore_clip_id
     }
 }
 
-std::vector<int> TickFrames(int length, double px_per_frame) {
+std::vector<int> TickFrames(int length, double px_per_frame, float label_gap) {
     std::vector<int> ticks;
-    const int step = RulerStep(px_per_frame);
+    const int step = RulerStep(px_per_frame, label_gap);
     for (int frame = 0; frame <= length; frame += step)
         ticks.push_back(frame);
     return ticks;
@@ -145,9 +145,9 @@ DragResult ResolveResize(const Doc::Document& document, const DragStart& drag,
 
 }
 
-Zone ZoneAt(float clip_x0, float clip_x1, float x) {
+Zone ZoneAt(float clip_x0, float clip_x1, float x, float handle_px) {
     if (x < clip_x0 || x > clip_x1) return Zone::None;
-    const float handle = std::min(kClipHandlePx, (clip_x1 - clip_x0) * 0.3F);
+    const float handle = std::min(handle_px, (clip_x1 - clip_x0) * 0.3F);
     if (x < clip_x0 + handle) return Zone::LeftHandle;
     if (x > clip_x1 - handle) return Zone::RightHandle;
     return Zone::Body;
@@ -160,7 +160,7 @@ Snap SnapFrame(const Doc::Document& document, int frame, const DragInput& input,
     if (!input.snap || input.px_per_frame <= 0.0) return result;
 
     const int length = DocumentLength(document);
-    const auto tolerance = (int)std::lround(kSnapPx / input.px_per_frame);
+    const auto tolerance = (int)std::lround(input.snap_px / input.px_per_frame);
 
     std::vector<int> playhead;
     if (input.playhead >= 0) playhead.push_back(input.playhead);
@@ -168,7 +168,7 @@ Snap SnapFrame(const Doc::Document& document, int frame, const DragInput& input,
     std::vector<int> keys;
     CollectEdges(document, ignore_clip_id, length, edges, keys);
     const std::vector<int> bounds{0, length};
-    const std::vector<int> ticks = TickFrames(length, input.px_per_frame);
+    const std::vector<int> ticks = TickFrames(length, input.px_per_frame, input.label_gap);
 
     const std::array<const std::vector<int>*, 5> groups = {&playhead, &edges, &keys, &bounds,
                                                            &ticks};

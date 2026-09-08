@@ -6,6 +6,7 @@
 #include "editor/timeline_edits.h"
 #include "editor/timeline_lanes.h"
 #include "editor/timeline_view.h"
+#include "gui/gui_dpi.h"
 #include "imgui.h"
 #include "preset/doc/preset_document.h"
 #include "state/app_state.h"
@@ -27,12 +28,12 @@ unsigned g_published = 0;
 
 void DrawScrollBar(Ctx& ctx) {
     Editor::View& view = ctx.editor->MutView();
-    const float y = ctx.lanes_bottom + 2.0F;
+    const float y = ctx.lanes_bottom + Gui::Dpi::S(2.0F);
     ImGui::SetCursorScreenPos(ImVec2(ctx.lane_x, y));
-    ImGui::InvisibleButton("###tl_scroll", ImVec2(std::max(1.0F, ctx.lane_w), kScrollBarH));
+    ImGui::InvisibleButton("###tl_scroll", ImVec2(std::max(1.0F, ctx.lane_w), ScrollBarH()));
 
     const float track_x1 = ctx.lane_x + ctx.lane_w;
-    ctx.draw->AddRectFilled(ImVec2(ctx.lane_x, y), ImVec2(track_x1, y + kScrollBarH),
+    ctx.draw->AddRectFilled(ImVec2(ctx.lane_x, y), ImVec2(track_x1, y + ScrollBarH()),
                             ImGui::GetColorU32(ImGuiCol_ScrollbarBg));
 
     const double visible = (double)ctx.lane_w / std::max(1.0e-6, view.px_per_frame);
@@ -40,8 +41,9 @@ void DrawScrollBar(Ctx& ctx) {
     const float thumb_x0 = ctx.lane_x + ((float)(view.scroll / span) * ctx.lane_w);
     const float thumb_x1 =
         ctx.lane_x + ((float)(std::min(span, view.scroll + visible) / span) * ctx.lane_w);
-    ctx.draw->AddRectFilled(ImVec2(thumb_x0, y + 2.0F),
-                            ImVec2(std::max(thumb_x1, thumb_x0 + 6.0F), y + kScrollBarH - 2.0F),
+    ctx.draw->AddRectFilled(ImVec2(thumb_x0, y + Gui::Dpi::S(2.0F)),
+                            ImVec2(std::max(thumb_x1, thumb_x0 + Gui::Dpi::S(6.0F)),
+                                   y + ScrollBarH() - Gui::Dpi::S(2.0F)),
                             ImGui::GetColorU32(ImGuiCol_ScrollbarGrab));
 
     if (!ImGui::IsItemActive()) return;
@@ -52,16 +54,17 @@ void DrawScrollBar(Ctx& ctx) {
 }
 
 void DrawHeaderSplitter(Ctx& ctx) {
-    ImGui::SetCursorScreenPos(ImVec2(ctx.lane_x - 3.0F, ctx.lanes_top));
-    ImGui::InvisibleButton("###tl_header_split",
-                           ImVec2(6.0F, std::max(1.0F, ctx.lanes_bottom - ctx.lanes_top)));
+    ImGui::SetCursorScreenPos(ImVec2(ctx.lane_x - Gui::Dpi::S(3.0F), ctx.lanes_top));
+    ImGui::InvisibleButton(
+        "###tl_header_split",
+        ImVec2(Gui::Dpi::S(6.0F), std::max(1.0F, ctx.lanes_bottom - ctx.lanes_top)));
     if (ImGui::IsItemHovered() || ImGui::IsItemActive()) {
         ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
     }
     if (!ImGui::IsItemActive()) return;
     Editor::View& view = ctx.editor->MutView();
-    view.header_w = std::clamp(view.header_w + ImGui::GetIO().MouseDelta.x, Editor::kHeaderWidthMin,
-                               Editor::kHeaderWidthMax);
+    view.header_w = std::clamp(view.header_w + (ImGui::GetIO().MouseDelta.x / Gui::Dpi::Scale()),
+                               Editor::kHeaderWidthMin, Editor::kHeaderWidthMax);
 }
 
 App::PresetStatus StatusFor(const Editor::State& editor, const Doc::Document& document,
@@ -104,7 +107,7 @@ void DrawTracks(Ctx& ctx) {
     DrawOptionsOverlay(ctx);
     ImGui::PopClipRect();
     ctx.draw->AddLine(ImVec2(ctx.lane_x, ctx.lanes_top), ImVec2(ctx.lane_x, ctx.lanes_bottom),
-                      ImGui::GetColorU32(ImGuiCol_Border), 1.0F);
+                      ImGui::GetColorU32(ImGuiCol_Border), Gui::Dpi::S(1.0F));
 }
 
 }
@@ -126,11 +129,11 @@ int CursorFrame(const Ctx& ctx) {
 }
 
 void DashedVertical(const Ctx& ctx, float x, float y0, float y1, ImU32 color) {
-    const auto steps = (int)std::floor((y1 - y0) / kDashPitch);
+    const auto steps = (int)std::floor((y1 - y0) / DashPitch());
     for (int i = 0; i <= steps; i++) {
-        const float from = y0 + ((float)i * kDashPitch);
-        ctx.draw->AddLine(ImVec2(x, from), ImVec2(x, std::min(from + kDashLength, y1)), color,
-                          1.0F);
+        const float from = y0 + ((float)i * DashPitch());
+        ctx.draw->AddLine(ImVec2(x, from), ImVec2(x, std::min(from + DashLength(), y1)), color,
+                          Gui::Dpi::S(1.0F));
     }
 }
 
@@ -235,12 +238,13 @@ void Render(float height) {
     const float total_w = ImGui::GetContentRegionAvail().x;
     Editor::View& view = editor.MutView();
     view.header_w = std::clamp(view.header_w, Editor::kHeaderWidthMin, Editor::kHeaderWidthMax);
+    const float header_px = Gui::Dpi::S(view.header_w);
     ctx.header_x = origin.x;
-    ctx.lane_x = origin.x + view.header_w;
-    ctx.lane_w = std::max(1.0F, total_w - view.header_w);
-    ctx.lanes_top = origin.y + kRulerH;
-    ctx.lanes_bottom =
-        std::max(ctx.lanes_top, origin.y + ImGui::GetContentRegionAvail().y - kScrollBarH - 4.0F);
+    ctx.lane_x = origin.x + header_px;
+    ctx.lane_w = std::max(1.0F, total_w - header_px);
+    ctx.lanes_top = origin.y + RulerH();
+    ctx.lanes_bottom = std::max(ctx.lanes_top, origin.y + ImGui::GetContentRegionAvail().y -
+                                                   ScrollBarH() - Gui::Dpi::S(4.0F));
     view.px_per_frame = Editor::ClampZoom(view.px_per_frame);
     view.scroll = Editor::ClampScroll(view.scroll, ctx.length, view.px_per_frame, ctx.lane_w);
 

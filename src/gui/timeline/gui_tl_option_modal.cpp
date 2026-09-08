@@ -3,6 +3,7 @@
 #include "editor/options_model.h"
 #include "editor/preset_editor_state.h"
 #include "gui_tl_forms.h"
+#include "gui/gui_dpi.h"
 #include "imgui.h"
 #include "preset/doc/preset_commands.h"
 #include "preset/doc/preset_document.h"
@@ -24,6 +25,7 @@ namespace Doc = Preset::Doc;
 namespace {
 
 constexpr const char* kTitle = "Option properties";
+constexpr float kModalWidth = 660.0F;
 constexpr float kScreenMargin = 60.0F;
 constexpr std::array<Doc::Ease, 5> kTransitionEases = {Doc::Ease::Hold, Doc::Ease::Linear,
                                                        Doc::Ease::EaseIn, Doc::Ease::EaseOut,
@@ -40,7 +42,7 @@ FieldEvent DrawTextRow(const char* id, const char* label, std::string& value) {
     RowLabel(label);
     std::array<char, 96> buffer = {};
     std::copy_n(value.begin(), std::min(value.size(), buffer.size() - 1), buffer.begin());
-    ImGui::SetNextItemWidth(-30.0F);
+    ImGui::SetNextItemWidth(Gui::Dpi::S(-30.0F));
     FieldEvent event = FieldEvent::None;
     if (ImGui::InputText(id, buffer.data(), buffer.size())) {
         value = buffer.data();
@@ -88,7 +90,7 @@ FieldEvent DrawChoiceValues(const Doc::Document& document, Doc::ChoiceSpec& choi
         Doc::ChoiceValue& value = choice.values[i];
         const std::string suffix = std::to_string(i);
         RowLabel(value.id.c_str());
-        ImGui::SetNextItemWidth(-60.0F);
+        ImGui::SetNextItemWidth(Gui::Dpi::S(-60.0F));
         if (auto* vector = std::get_if<Doc::Vec3>(&value.value)) {
             if (ImGui::DragScalarN(("###tl_option_value_" + suffix).c_str(), ImGuiDataType_Double,
                                    vector->data(), 3, 0.01F)) {
@@ -136,7 +138,7 @@ FieldEvent DrawChoices(Doc::Document& document, Doc::OptionSpec& option) {
         }
         ImGui::SameLine();
         std::string label = option.choices[i].label;
-        ImGui::SetNextItemWidth(220.0F);
+        ImGui::SetNextItemWidth(Gui::Dpi::S(220.0F));
         std::array<char, 64> buffer = {};
         std::copy_n(label.begin(), std::min(label.size(), buffer.size() - 1), buffer.begin());
         if (ImGui::InputText(("###tl_option_choice_label_" + suffix).c_str(), buffer.data(),
@@ -250,8 +252,9 @@ void RenderOptionModal() {
     }
     ImGuiViewport* viewport = ImGui::GetMainViewport();
     ImGui::SetNextWindowPos(viewport->GetCenter(), ImGuiCond_Always, ImVec2(0.5F, 0.5F));
-    ImGui::SetNextWindowSizeConstraints(ImVec2(660.0F, 0.0F),
-                                        ImVec2(660.0F, viewport->WorkSize.y - kScreenMargin));
+    ImGui::SetNextWindowSizeConstraints(
+        Gui::Dpi::S(kModalWidth, 0.0F),
+        ImVec2(Gui::Dpi::S(kModalWidth), viewport->WorkSize.y - Gui::Dpi::S(kScreenMargin)));
     if (!ImGui::BeginPopupModal(kTitle, nullptr, ImGuiWindowFlags_AlwaysAutoResize)) return;
     if (!editor.Loaded() || g_option < 0 ||
         std::cmp_greater_equal(g_option, editor.Document().options.size())) {
