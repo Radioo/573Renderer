@@ -1,5 +1,7 @@
 #include "formats/ddr_arc.h"
 
+#include "formats/avs_lz77.h"
+
 #include "support/expected.h"
 
 #include <algorithm>
@@ -95,52 +97,6 @@ bool Toc::HasIfs() const {
     return std::ranges::any_of(entries, [](const Entry& e) { return EndsWithCI(e.name, ".ifs"); });
 }
 
-std::vector<uint8_t> Lz77Decompress(std::span<const uint8_t> src, std::size_t expected_size) {
-    std::vector<uint8_t> out;
-    if (expected_size != 0) out.reserve(expected_size);
-
-    std::array<uint8_t, 0x1000> window{};
-    uint32_t pos = 0xFEE;
-
-    std::size_t si = 0;
-    uint32_t flags = 0;
-    int flagbits = 0;
-
-    while (si < src.size()) {
-        if (flagbits == 0) {
-            flags = src[si++];
-            flagbits = 8;
-            if (si >= src.size()) break;
-        }
-        const bool literal = (flags & 1U) != 0;
-        flags >>= 1U;
-        flagbits--;
-
-        if (literal) {
-            const uint8_t b = src[si++];
-            out.push_back(b);
-            window.at(pos) = b;
-            pos = (pos + 1) & 0xFFFU;
-        } else {
-            if (si + 1 >= src.size()) break;
-            const uint32_t token = (static_cast<uint32_t>(src[si]) << 8U) | src[si + 1];
-            si += 2;
-            const uint32_t distance = token >> 4U;
-            if (distance == 0) break;
-            const uint32_t length = (token & 0xFU) + 3;
-            const uint32_t from = (pos - distance) & 0xFFFU;
-            for (uint32_t i = 0; i < length; i++) {
-                const uint8_t c = window.at((from + i) & 0xFFFU);
-                out.push_back(c);
-                window.at(pos) = c;
-                pos = (pos + 1) & 0xFFFU;
-            }
-        }
-        if (expected_size != 0 && out.size() >= expected_size) break;
-    }
-    return out;
-}
-
 bool ParseToc(std::span<const uint8_t> data, Toc& out) {
     if (data.size() < kHeaderSize) return false;
     if (ReadU32LE(data, 0) != kMagic) return false;
@@ -196,7 +152,7 @@ std::vector<uint8_t> DecompressEntry(std::span<const uint8_t> file, const Entry&
     if (static_cast<std::size_t>(entry.data_offset) + need > file.size()) return {};
     const std::span<const uint8_t> raw = file.subspan(entry.data_offset, need);
     if (entry.stored()) return {raw.begin(), raw.end()};
-    return Lz77Decompress(raw, entry.decomp_size);
+    return AvsLz77::Decompress(raw, entry.decomp_size);
 }
 
 Support::Expected<std::vector<uint8_t>, std::string> ExtractFirstIfs(const std::string& path,
@@ -223,7 +179,7 @@ Support::Expected<std::vector<uint8_t>, std::string> ExtractFirstIfs(const std::
     if (!ReadExact(f.get(), raw)) return Support::Unexpected("truncated entry data: " + path);
 
     if (hit->stored()) return raw;
-    return Lz77Decompress(raw, hit->decomp_size);
+    return AvsLz77::Decompress(raw, hit->decomp_size);
 }
 
 }

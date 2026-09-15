@@ -1,15 +1,17 @@
 # r573_formats (src/formats/)
 
-Pure, stdlib-only container/codec parsers. No AVS/AFP, no D3D9, no logging -
+Pure container/codec parsers (stdlib plus tl-expected and hash-library). No
+AVS/AFP, no D3D9, no logging -
 this module builds and unit-tests standalone (`formats_tests`, CTest label
-`ci`), and everything in it is exercised by synthetic fixtures, never by
-Konami data.
+`ci`), and everything in it is exercised by synthetic fixtures. Real game data
+only enters through the `[real]` cases and the `local` / `local_dll` test
+executables (docs/local_regression.md).
 
 ## DDR .arc container (`ddr_arc.h`)
 
-DDR World (MDX) archive reader + AVS-LZ77 decompressor. Format and codec
-were reverse-engineered from gamemdx.dll / libavs-win64.dll and verified
-byte-exact against the real game's own output.
+DDR World (MDX) archive reader. Compressed entries go through the AVS-LZ77
+codec below. Format and codec were reverse-engineered from gamemdx.dll /
+libavs-win64.dll and verified byte-exact against the real game's own output.
 
 A `.arc` is a flat container, all fields u32 little-endian:
 
@@ -38,19 +40,195 @@ past the read head produce a synthetic `<name@0xNNN>` label instead of
 failing the whole arc. `ExtractFirstIfs` likewise reads only the matched
 entry's byte range, not the whole file.
 
-### AVS-LZ77 codec
+## AVS-LZ77 codec (`avs_lz77.h`)
 
-4096-byte sliding window; write position starts at `0xFEE`; the window
-pre-history is ZERO-filled (the game allocates the context with calloc -
-back-references into untouched window bytes legitimately produce zeros).
-Stream structure: one control byte carries 8 flags, consumed LSB-first;
-flag 1 = literal byte, flag 0 = match. A match is two bytes forming
+`AvsLz77::Decompress` and `AvsLz77::Compress`, shared by the arc reader and
+IFS texture images.
+
+Stream format: 4096-byte sliding window; write position starts at `0xFEE`;
+the window pre-history is ZERO-filled (the game allocates the context with
+calloc - back-references into untouched window bytes legitimately produce
+zeros). One control byte carries 8 flags, consumed LSB-first; flag 1 =
+literal byte, flag 0 = match. A match is two bytes forming
 `token = (b1 << 8) | b2`: `distance = token >> 4` (12-bit),
 `length = (token & 0xF) + 3`, copy source = `(write_pos - distance) & 0xFFF`,
 copied byte-by-byte through the window (so overlapping matches repeat
 recent output). `distance == 0` is the end-of-stream marker. The
 `expected_size` argument stops decompression early once that many bytes are
 out; 0 means run to the end-of-stream marker.
+
+The compressor reproduces avs2-core's encoder byte for byte (cstream
+operator 1; found through the `avs-cstream-lz77` source strings and the
+cstream_create export). It is a greedy binary-tree LZSS encoder:
+
+- Window 4096, longest match 18, a match needs at least 3 bytes. The text
+  buffer is 4113 bytes; its first 17 bytes are mirrored after byte 4096 so
+  comparisons never wrap.
+- One binary search tree per first byte (256 roots). Inserting a position
+  walks the tree comparing bytes 1..17 as a signed difference (right when
+  `>= 0`), keeps the first strictly longer match on the descent path, and
+  replaces the node outright on an 18-byte match. Equal-length ties are
+  decided by that walk, not by distance, so the tree must be rebuilt exactly.
+- Before the first item, positions `0xFEE-1` down to `0xFEE-18` are
+  inserted, then `0xFEE`: that is how matches into the zero pre-history
+  arise (five zero bytes compress to `00 01 22 00 00`).
+- Each item clamps the match to the remaining lookahead, emits a literal
+  when the match is 2 bytes or shorter, and slides the window by the item
+  length, deleting the oldest position and inserting the new one. After
+  input ends the window keeps sliding without new bytes, and stale bytes
+  past the input still take part in tie breaking.
+- The stream always ends by appending two zero bytes to the pending group
+  and writing that group, even when it holds no items, so input whose item
+  count is a multiple of 8 ends in `00 00 00`.
+- avs2-core misbehaves on an empty input (its lookahead counter wraps);
+  `Compress` returns the plain end-of-stream group `00 00 00` instead, which
+  decodes to nothing.
+
+Tests: `tests/formats/avs_lz77_tests.cpp` (`ci`) holds known-answer streams
+for literals, zero pre-history, overlap and tree tie breaking, plus
+round trips; `tests/local/avs_writer_contract_tests.cpp` (`local_dll`)
+compresses the same inputs with avs2-core's own cstream compressor and
+requires identical bytes.
+
+## Binary XML (`binary_xml.h`)
+
+`BinaryXml::Read` and `BinaryXml::Write` convert between avs2-core's binary
+property format and a `Document` of `Node`s, byte for byte. A node holds its
+type byte (the base type id plus `kArrayFlag`), its name, its value bytes as
+stored (big-endian, without length prefixes or padding; strings keep their
+NUL), its attributes and its children. Values are never decoded or
+re-encoded, so strings that are invalid in the declared encoding survive a
+round trip.
+
+Layout, as the writer emits it:
+
+- Header: `A0`, signature (`0x42` sixbit names, `0x45` byte-string names),
+  encoding byte, its complement, big-endian u32 node section length, node
+  section, big-endian u32 data section length, data section.
+- Node section: an element is its type byte, its name, one `0x2E` byte plus a
+  name per attribute, its child elements, then `0xFE`; `0xFF` follows the
+  root. The section is padded to 4 with zeros and its length includes the
+  padding.
+- Sixbit names: a length byte (1 to 36) and the characters of
+  `0-9 : A-Z _ a-z` as 6-bit indices packed MSB first. Byte-string names: a
+  length byte `n + 63` for 1 to 64 bytes, or a big-endian u16
+  `0x8000 + n - 65` up to 4096 bytes, then the raw bytes.
+- Attributes are written sorted by name bytes, and the reader sorts them the
+  same way, because avs2-core pairs attribute values with names in sorted
+  order.
+- Data section: each element's value, then its attributes' values, then its
+  children, recursively. `s8`/`u8`/`bool` values share 4-byte slots (a new
+  slot is appended when the running byte count is 0, later bytes fill it even
+  after other data was appended); `s16`/`u16`/`2s8`/`2u8`/`2b` share slots of
+  two words the same way. `bin`, `str`, attribute values and every array are a
+  u32 byte length, the bytes and zero padding to 4. Every other type is its
+  fixed size, zero padded to 4. `void` and the array marker type 47 have no
+  data.
+
+The format was reversed from avs2-core's property reader and writer (source
+strings `property-read-binary`/`property-write-binary`, the node type name
+table next to them).
+
+Tests: `tests/formats/binary_xml_tests.cpp` (`ci`) holds known-answer
+documents for nesting, attributes, arrays, byte and word slots and long names,
+plus malformed input; `tests/local/avs_writer_contract_tests.cpp`
+(`local_dll`) has avs2-core read our output for every storable type in both
+name forms and write it back, requiring identical bytes.
+
+## IFS archives (`ifs_archive.h`)
+
+`Ifs::Read` turns an IFS file into an `Archive`; `Ifs::Write` turns an
+`Archive` back into a file avs2-core's `imagefs` driver mounts. The archive
+keeps the header flags and time, the stored tree size, the manifest's binary
+XML signature and encoding, and a tree of `Entry` values in manifest order:
+
+- Directory: an `s32` node (its time) or a `void` node (the header time).
+- File: a `3s32` node (offset, size, time) or a `2s32` node (offset, size).
+  Local files carry their bytes; a file whose `u8` child `i` is non-zero
+  lives in a `_super_` image, keeps its stored offset and size, and carries no
+  bytes. Other child nodes of a file are kept verbatim.
+- Special: every other node, kept verbatim. That covers `_info_`, `_super_`
+  and any name the game's directory listing skips (a leading `_` followed by
+  anything other than `A`-`H`, `_` or a digit), plus nodes with attributes or
+  types imagefs rejects.
+
+Header, big-endian: `6C AD 8F 89`, u16 flags, u16 NOT flags, u32 time, u32
+tree size, u32 data offset, then a 16-byte MD5 when flags has `0x2`. The
+manifest follows the header and the data region starts at the data offset.
+
+What `Write` recomputes rather than copies:
+
+- File placement. When every local file still has its stored size and the
+  stored ranges do not overlap, files keep their stored offsets and the data
+  region keeps at least its stored length (this reproduces shipped files,
+  including the packer's gap filling and files with no end padding).
+  Otherwise the files are packed the way the game's main packer does it:
+  largest first (ties in manifest order), each placed at the first zero gap
+  where a 4-aligned start fits, else appended at the 16-aligned end; the
+  region ends 16-aligned.
+- `_info_` at the root: its `md5` child becomes the MD5 of the data region and
+  its `size` child the region length.
+- Data offset: the manifest end aligned to 16, with zero padding.
+- Header MD5 (flag `0x2`): the MD5 of the manifest region from the end of the
+  header to the data offset, padding included, which is what avs2-core
+  verifies.
+- Tree size: the larger of the stored value and the size the manifest needs:
+  `52 * nodes + large values + 630` for sixbit names, or
+  `56 * nodes + large values + 630 + per-name bytes` for byte-string names,
+  rounded with `(size + 8) & ~7`. Large values are those longer than 4 bytes,
+  counted rounded to 2 for `bin` and to 4 otherwise; per-name bytes are each
+  name length (at least 8) rounded to 4. avs2-core only needs the value to be
+  big enough.
+
+Entries keep their stored node names. `Ifs::EscapeName` (`ifs_names.h`) maps
+one path component to its node name the way imagefs does: letters stay, a
+leading digit gains a `_`, `_` doubles, and ` $+-.:@~` become `_A` to `_H`;
+any other character is refused (bytes of `0x80` and above make avs2-core read
+outside its table). `Ifs::HashedName` is the escaped lowercase hex MD5 of a
+logical name, which is how packages name their `tex/` images and animations.
+
+The format was reversed from avs2-core's `imagefs` driver (source string
+`vfs-driver-imagefs.c`, the driver descriptor carrying the magic
+`0xA94BEE7C`, and the mount function referencing `/imgfs`, `_super_` and
+`broken filetree: bad data offset(%x<%x)`). MD5 comes from the hash-library
+vcpkg port.
+
+Tests: `tests/formats/ifs_archive_tests.cpp` (`ci`) covers the packer, the
+header MD5, `_info_`, stored layout reuse, repacking, super image files and the
+tree size; `tests/local/ifs_round_trip_tests.cpp` (`local`, `R573_IIDX_DIR`) runs
+every IFS in the install through `Read`, `Write` and `Read` again, requires
+identical entries and binary XML entries that re-encode byte for byte, and
+reports how many files come out byte-identical.
+
+## Texture images (`texture_images.h`)
+
+`TextureImages::ReadList` reads `tex/texturelist.xml` into images: name, the
+texture's pixel format, and the size from `imgrect` (a `4u16` value, type 39,
+holding x0, x1, y0, y1 in half pixels), plus whether the list's `compress` attribute is
+`avslz`. An image's bytes live in the `tex/` entry named by
+`Ifs::HashedName(image name)`.
+
+`DecodeBlob` / `EncodeBlob` handle the three storage forms afp-utils' image
+reader accepts:
+
+- list not `avslz`: the entry is the pixels;
+- `avslz`, compressed size non-zero: big-endian u32 uncompressed size, u32
+  compressed size, then an AVS-LZ77 stream;
+- `avslz`, compressed size zero: the same header, then the pixels as they
+  are.
+
+`EncodeBlob` keeps the storage form it decoded, and recompresses with
+`AvsLz77::Compress`, which reproduces the game files byte for byte.
+
+`PixelsToBgra` / `BgraToPixels` convert stored pixels to 8-bit BGRA and back.
+Only `argb8888rev` is implemented, which is every texture IIDX 33 ships; its
+bytes already are B, G, R, A (the renderer's texture callback copies them
+straight into `D3DFMT_A8R8G8B8`). Other formats return an error naming the
+format.
+
+Tests: `tests/formats/texture_images_tests.cpp` (`ci`); the round trip gate
+(`tests/local/ifs_round_trip_tests.cpp`) decodes and re-encodes every texture
+image in the install.
 
 ## DXT / S3TC decode (`dxt_decode.h`)
 

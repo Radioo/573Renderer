@@ -31,6 +31,7 @@ find_package(FFMPEG REQUIRED COMPONENTS avcodec avformat avutil swscale)
 find_package(Catch2 3 CONFIG REQUIRED)
 find_package(tl-expected CONFIG REQUIRED)
 find_package(nlohmann_json CONFIG REQUIRED)
+find_package(unofficial-hash-library CONFIG REQUIRED)
 
 set(R573_MSVC_WARNING_FLAGS
     /W4
@@ -61,6 +62,16 @@ target_link_libraries(r573_support PUBLIC tl::expected PRIVATE r573::warnings)
 
 add_library(r573_formats STATIC
     src/formats/ddr_arc.cpp
+    src/formats/avs_lz77.cpp
+    src/formats/binary_xml_names.cpp
+    src/formats/binary_xml_read.cpp
+    src/formats/binary_xml_types.cpp
+    src/formats/binary_xml_write.cpp
+    src/formats/ifs_layout.cpp
+    src/formats/ifs_names.cpp
+    src/formats/ifs_read.cpp
+    src/formats/ifs_write.cpp
+    src/formats/texture_images.cpp
     src/formats/txp2.cpp
     src/formats/lzss.cpp
     src/formats/aes.cpp
@@ -78,7 +89,7 @@ add_library(r573_formats STATIC
     src/formats/frame_process.cpp
 )
 target_include_directories(r573_formats PUBLIC src)
-target_link_libraries(r573_formats PUBLIC tl::expected PRIVATE r573::warnings)
+target_link_libraries(r573_formats PUBLIC tl::expected PRIVATE unofficial::hash-library r573::warnings)
 
 add_library(r573_media_format STATIC
     src/media/media_format.cpp
@@ -381,6 +392,10 @@ include(Catch)
 
 add_executable(formats_tests
     tests/formats/ddr_arc_tests.cpp
+    tests/formats/avs_lz77_tests.cpp
+    tests/formats/binary_xml_tests.cpp
+    tests/formats/ifs_archive_tests.cpp
+    tests/formats/texture_images_tests.cpp
     tests/formats/txp2_tests.cpp
     tests/formats/model3d_tests.cpp
     tests/formats/model3d_real_tests.cpp
@@ -405,7 +420,8 @@ add_executable(formats_tests
     src/scene3d/scene3d_fog.cpp
     src/scene3d/scene3d_material.cpp
 )
-target_link_libraries(formats_tests PRIVATE Catch2::Catch2WithMain r573_formats r573_support r573::warnings)
+target_link_libraries(formats_tests PRIVATE Catch2::Catch2WithMain r573_formats r573_support
+                                           unofficial::hash-library r573::warnings)
 catch_discover_tests(formats_tests DISCOVERY_MODE POST_BUILD PROPERTIES LABELS ci)
 
 add_executable(game_tests
@@ -599,9 +615,17 @@ target_link_libraries(pixel_golden_tests PRIVATE Catch2::Catch2WithMain r573_ren
                                                  d3d9 r573::warnings)
 catch_discover_tests(pixel_golden_tests DISCOVERY_MODE POST_BUILD PROPERTIES LABELS ci)
 
+add_executable(ifs_round_trip_tests
+    tests/local/ifs_round_trip_tests.cpp
+)
+target_link_libraries(ifs_round_trip_tests PRIVATE Catch2::Catch2WithMain r573_formats r573_support
+                                                   r573::warnings)
+catch_discover_tests(ifs_round_trip_tests DISCOVERY_MODE POST_BUILD PROPERTIES LABELS local)
+
 add_executable(local_dll_tests
     tests/local/dll_contract_tests.cpp
     tests/local/iidx10_screen_data_tests.cpp
+    tests/local/avs_writer_contract_tests.cpp
     src/avs_boot.cpp
     src/avs_xml.cpp
     src/game_profile.cpp

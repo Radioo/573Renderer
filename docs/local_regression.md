@@ -90,6 +90,14 @@ Contracts covered:
   GatherMatchAttr("name") count, every name non-empty, ReadAtlasFilters values
   in the D3D range - the PropertyTree wrapper contract against the real
   property engine.
+- avs2-core writers (tests/local/avs_writer_contract_tests.cpp, R573_IIDX_DIR):
+  avs2-core 2.17's cstream compressor (operator 1, resolved by ordinal in the
+  test) must produce the same bytes as `AvsLz77::Compress` on synthetic
+  inputs from 1 byte to 300 KB, after a known-answer check that the DLL path
+  really compresses. Its binary property writer (`property_create`,
+  `property_insert_read`, `property_part_write` by ordinal) must write back
+  exactly what `BinaryXml::Write` produced for a document holding every
+  storable type and arrays, in both name forms.
 
 The tier has caught two real defects: (1) DDR auto-detection
 relied on "mdx" appearing in the install PATH - the live install moved to

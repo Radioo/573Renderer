@@ -80,6 +80,10 @@ owns them.
   `target_include_directories(... SYSTEM ...)` explicitly - that is what lets
   `/external:W0` silence third-party headers once the warnings target is
   linked.
+- `hash-library` (zlib licence) through the `unofficial::hash-library` config
+  target: its `MD5` class computes the IFS header and `_info_` digests in
+  `r573_formats` (docs/formats.md, "IFS archives"). The port installs its
+  headers flat, so the include is `<md5.h>`.
 - `vcpkg-overlays/` overrides registry ports. It ships an x265 overlay with
   `-DENABLE_ALPHA=ON` so ffmpeg's libx265 wrapper can emit HEVC-with-alpha
   (Safari-compatible transparent video); stock vcpkg x265 builds alpha OFF.
