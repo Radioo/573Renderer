@@ -13,6 +13,7 @@
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
         "CMAKE_COMPILE_WARNING_AS_ERROR": "ON",
         "VCPKG_TARGET_TRIPLET": "x64-windows-static",
+        "VCPKG_HOST_TRIPLET": "x64-windows",
         "VCPKG_MANIFEST_MODE": "ON",
         "VCPKG_OVERLAY_PORTS": "${sourceDir}/vcpkg-overlays"
       }

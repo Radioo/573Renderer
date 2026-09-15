@@ -22,6 +22,16 @@ inline void AppendU16(std::vector<uint8_t>& out, uint16_t value) {
     out.push_back(static_cast<uint8_t>(value & 0xFFU));
 }
 
+inline void WriteU16(std::span<uint8_t> bytes, std::size_t off, uint16_t value) {
+    bytes[off] = static_cast<uint8_t>(value >> 8U);
+    bytes[off + 1] = static_cast<uint8_t>(value & 0xFFU);
+}
+
+inline void WriteU32(std::span<uint8_t> bytes, std::size_t off, uint32_t value) {
+    for (std::size_t i = 0; i < 4; i++)
+        bytes[off + i] = static_cast<uint8_t>((value >> (24U - (8U * i))) & 0xFFU);
+}
+
 inline void AppendU32(std::vector<uint8_t>& out, uint32_t value) {
     out.push_back(static_cast<uint8_t>((value >> 24U) & 0xFFU));
     out.push_back(static_cast<uint8_t>((value >> 16U) & 0xFFU));

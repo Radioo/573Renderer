@@ -243,6 +243,180 @@ Tests: `tests/formats/texture_images_tests.cpp` (`ci`); the round trip gate
 (`tests/local/ifs_round_trip_tests.cpp`) decodes and re-encodes every texture
 image in the install.
 
+## AFP byte order scripts (`afp_byte_order.h`)
+
+IIDX 33 stores every animation (`afp/<name>`) big-endian, with its string
+table scrambled, next to a byte order script (`afp/bsi/<name>`). afp-core
+restores both in `afp_ext_command` op 8; `AfpByteOrder` mirrors that routine
+and its inverse.
+
+A script is an array of little-endian u16 words ending at the word `0x0000`.
+Each word holds a type in bits 13-15, loops in bits 7-12 and a skip in bits
+0-6. The cursor starts at byte 0. A word first advances it by `skip * 2` bytes.
+Type 0 then advances it by `loops * 256` more bytes; types 1, 2 and 3 reverse
+`loops + 1` consecutive elements of 2, 4 or 8 bytes; types 4 to 7 are fatal
+(`unknown byte order data type(%d).`).
+
+- `ReadScript` decodes a script into `Swap` runs (offset, element size,
+  count). `WriteScript` encodes runs the way KONAMI's converter did: adjacent
+  elements of one size merge into a run no matter which field they belong to,
+  a run splits at 64 elements or a change of size, a gap of up to 254 bytes
+  goes into the swap word's skip, a longer gap becomes one type 0 word
+  (`gap >> 8` in loops, the rest in skip), and the script ends right after the
+  last swapped element. Gaps above 16382 bytes are split into several type 0
+  words; no IIDX 33 file has one, so that part does not reproduce a known
+  converter output.
+- `Restore(stored, script)` does what op 8 does. Data whose first u32 passes
+  the little-endian magic test (`(u32 ^ 0xC1D0B2FF) & 0x7F7F7F00 == 0`), or
+  whose first three bytes are the old `PAF` magic (`50 46 41` or `D0 C6 C1`),
+  is not swapped; otherwise the byte-swapped u32 must pass
+  `& 0x7F7F7F00 == 0x41503200` (`??? this is not afp data`) and the script is
+  applied. The script is only read in that case, so native data never needs a
+  valid one. `PAF` data returns there. For `AP2` data with a data version (u16
+  at +8) other than 1, a string table starting with `0x80` is unscrambled by
+  subtracting `128 + i` from byte `i`; any other non-zero first byte is fatal
+  (`afp data string buffer unusual`). The result says whether the table was
+  scrambled.
+- `Store(native, swaps, scramble)` is the inverse: scramble a plain table if
+  asked (refused for data version 1, whose tables `Restore` never
+  unscrambles), then apply the swaps.
+
+Finders in afp-core: the swap routine references `no change byte order info`,
+`unknown byte order data type(%d).` and `??? this is not afp data`; the string
+routine references `afp data string buffer unusual`; the op 8 dispatcher is the
+export whose switch logs `%s(%d) unknown command`.
+
+Tests: `tests/formats/afp_byte_order_tests.cpp` (`ci`).
+
+## AFP animations (`afp_animation.h`)
+
+`AfpAnimation::Read` turns restored (native byte order, plain strings)
+animation data into an `Animation` that keeps no offsets, and `Write` builds
+the data again from the model while recording the byte width of every u16 and
+u32 it emits. `ReadStored` / `WriteStored` wrap both with `AfpByteOrder`, so
+they take and return the stored bytes and the script.
+
+What the model holds:
+
+- Header fields, exports, imports and the import initializer section
+  (`u16, u16 count`, then entries of `u16 tag, u16 frame, u32 code offset,
+  u32 code length`; entries with bytecode are refused as not modelled).
+- The string table in file order, including strings nothing references
+  (`aep_dummy` in almost every IIDX 33 file). Every Str field is an index into
+  it. A Str is written as `(off & 0xFFFC) | (off >> 16)` and read as
+  `(v & 0xFFFC) | ((v & 3) << 16)`.
+- Containers: labels, script labels (container flag `0x4`), frames as
+  (first tag, tag count) from the `first | count << 20` entry, and tags.
+  Container flags `0x1` and `0x2` add header fields whose layout is
+  unverified, so they are refused.
+- Typed tags: `DEFINE_SPRITE` (121, only the flags 1, offset 8 form),
+  `DO_ACTION` (122), `PLACE_OBJECT` (127), `REMOVE_OBJECT` (128), `IMAGE`
+  (131), `SHAPE` (132) and `PLACE_CAMERA` (136). Any other tag is kept as its
+  record bytes. The long tag record form (odd 22-bit size) is refused.
+- Placements follow afp-core's read order: flag word, depth, end frame, the
+  optional extended flag word, character, ratio, name, clip depth, blend,
+  align to 4, 2D matrix parts, colours in both forms, the clip action block,
+  the filter list, origin, origin z, host geometry id, short matrix forms,
+  class name, align to 4, translation z, 3x3 matrix, HSV, then the extended
+  fields (discarded words, curve set, colour controller, grid controller). A
+  field is present when its optional is set, so presence bits never disagree
+  with the data; `flags` and `extended_flags` hold only the bits that add no
+  bytes. `extended_flags` being set is what writes the extended flag word, so
+  `Write` refuses extended fields without it. The extended controller record
+  (`0x40`) is refused. afp-core's reader is found by the strings
+  `AFP_UNUSED_DEPTH used` and `place oblect class[%s] can not defined.`.
+- Bytecode stays bytes: the `0xFF` marker, flags, the optional string list,
+  then the code up to the end of its record. AP2 operands are big-endian in
+  both forms, so code is never swapped.
+- Filters: colour matrix (type 6, 84 bytes, or 88 with HSV) and lookup
+  (`0x67`, u16 length at +6 counted from +8, table from +12) are typed; any
+  other filter is kept as bytes. `Write` refuses a typed filter whose type
+  byte is wrong and an unknown filter that is empty or would read back as a
+  typed one, so every filter reads back as what was written.
+
+Bytes that must be zero (alignment, string padding, tag padding) are checked
+on read, and so are bytes no field accounts for, such as a clip action block
+or filter list longer than its events or filters. Bytes with no known meaning (`unread_*` fields, filter heads, the
+colour controller's colour) are kept as values.
+
+Writing uses one layout: the 56-byte header plus the 4-byte import
+initializer slot when there is one, exports, import headers, import entries,
+the import initializer section, the root container (header, labels, script
+labels, frames, tags with no gaps), then the string table, which must start
+with the empty string. Every tag's
+size includes its padding to 4. Offsets and sizes are all recomputed.
+
+Unknown tags and unknown filters write fine in native order, but nothing
+says which of their bytes to swap, so `Write` returns an error in
+`Native::swaps` and `WriteStored` refuses them instead of guessing.
+
+Two things in the stored form are not in the restored data, so the model
+carries them in `StoredForm`:
+
+- `strings_scrambled`: whether the table was scrambled.
+- `background_colour_swapped`: the four background colour bytes at +28 are
+  swapped as a u32 in most IIDX 33 files and left alone in the rest (every
+  animation of the numbered song packages and `qp_*` packages at the top of
+  `data/graphic`). Both forms restore to the same bytes. `ReadStored` sets it
+  from whether the script swaps +28.
+
+Tests: `tests/formats/afp_animation_tests.cpp` (`ci`); the round trip gate
+(`tests/local/ifs_round_trip_tests.cpp`) reads and rewrites every animation in
+the install.
+
+## GE2D shapes (`ge2d_shape.h`)
+
+`geo/<animation>_shape<N>` files hold the meshes `AP2_SHAPE` tags draw.
+afp-core only builds that name (`%s_shape%d`, `can not find geo id [%s]`);
+afp-utils loads, swaps and draws the shapes.
+
+Byte order comes from the package, never the shape: `PackageByteOrder` reads
+the package's 4-byte `magic` file. afp-utils swaps the shapes only when those
+bytes are `NGPF`; for `FPGN` it does not swap, and for any other value it logs
+`ngp data magic error[%x]` and does not swap either, so everything but `NGPF`
+means little-endian shapes. `Read` and `Write` take that order.
+
+Layout (offsets from the file start, 0 for an absent table):
+
+| Offset | Field |
+|---|---|
+| +0 | u32 magic `GE2D` |
+| +4, +8 | u32 values with no known reader, kept as `version` and `unread_value` |
+| +12 | u32 file size |
+| +16 | u32 flags; `0x4` adds the rect |
+| +20..+28 | u16 counts: vertices, UVs, vertex colours, texture names, primitives |
+| +30 | u16 with no known reader |
+| +32..+48 | u32 table offsets in the same order |
+| +52 | rect, 4 floats (min x, max x, min y, max y), with flag `0x4` |
+
+Vertices and UVs are float pairs, vertex colours 4 raw bytes, the name table
+u32 offsets of NUL-terminated names. A primitive is 16 bytes: kind, draw
+flags, two texture indices (one byte each), u16 index count, 2 bytes with no
+known reader, 4 colour bytes, u32 index array offset. The swap routine swaps
+every u16/u32/float field and the index arrays, and leaves the colour table,
+the primitive's bytes +0..+3 and +6..+11, the names and padding alone; the
+model keeps those as bytes, so a shape reads the same in both orders.
+
+`Shape` keeps no counts, offsets or size, and floats as raw bits. Because the
+model drops the layout, `Read` refuses anything the layout would carry beyond
+the tables: a non-zero offset for an empty table or index array, tables that
+overlap or share bytes, and non-zero bytes that no table, name or index array
+covers (padding included). `Write` lays
+the file out as the converter did: header, rect, name offset table, names
+(each padded with zeros to `(length + 4) & ~3`), vertices, UVs, vertex
+colours, primitives, index arrays (each padded to `(2 * count + 3) & ~3`);
+an empty table or index array gets offset 0.
+No IIDX 33 shape has vertex colours, so their place after the UVs is the one
+order that fits both the shipped files and afp-utils' own copy routine.
+
+Finders in afp-utils: the swap routine holds the only `0x47453244` immediate
+and asserts with `afpu-swap-data.c`; the package test is next to
+`ngp data magic error[%x]`; the size and copy routines are
+`afp_bin_geo_calc_size` and `afp_bin_geo_copy`.
+
+Tests: `tests/formats/ge2d_shape_tests.cpp` (`ci`); the round trip gate reads
+and rewrites every shape in the install.
+
 ## DXT / S3TC decode (`dxt_decode.h`)
 
 AFP textures arrive uncompressed (rgb565 / rgb888 / (a)rgb8888 / la88) or

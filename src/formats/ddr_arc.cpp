@@ -1,6 +1,7 @@
 #include "formats/ddr_arc.h"
 
 #include "formats/avs_lz77.h"
+#include "formats/little_endian.h"
 
 #include "support/expected.h"
 
@@ -24,12 +25,6 @@ namespace {
 constexpr uint32_t kMaxEntries = 1000000U;
 constexpr std::size_t kHeaderSize = 16;
 constexpr std::size_t kEntrySize = 16;
-
-uint32_t ReadU32LE(std::span<const uint8_t> data, std::size_t off) {
-    return static_cast<uint32_t>(data[off]) | (static_cast<uint32_t>(data[off + 1]) << 8U) |
-           (static_cast<uint32_t>(data[off + 2]) << 16U) |
-           (static_cast<uint32_t>(data[off + 3]) << 24U);
-}
 
 char ToLowerAscii(char c) {
     return (c >= 'A' && c <= 'Z') ? static_cast<char>(c - 'A' + 'a') : c;
@@ -63,10 +58,10 @@ void ParseEntries(std::span<const uint8_t> table, std::span<const uint8_t> names
     for (uint32_t i = 0; i < count; i++) {
         const std::size_t off = static_cast<std::size_t>(i) * kEntrySize;
         Entry ent;
-        ent.name_offset = ReadU32LE(table, off);
-        ent.data_offset = ReadU32LE(table, off + 4);
-        ent.decomp_size = ReadU32LE(table, off + 8);
-        ent.comp_len = ReadU32LE(table, off + 12);
+        ent.name_offset = LittleEndian::ReadU32(table, off);
+        ent.data_offset = LittleEndian::ReadU32(table, off + 4);
+        ent.decomp_size = LittleEndian::ReadU32(table, off + 8);
+        ent.comp_len = LittleEndian::ReadU32(table, off + 12);
         ent.name = ReadName(names, ent.name_offset);
         out.entries.push_back(std::move(ent));
     }
@@ -99,14 +94,14 @@ bool Toc::HasIfs() const {
 
 bool ParseToc(std::span<const uint8_t> data, Toc& out) {
     if (data.size() < kHeaderSize) return false;
-    if (ReadU32LE(data, 0) != kMagic) return false;
-    const uint32_t count = ReadU32LE(data, 8);
+    if (LittleEndian::ReadU32(data, 0) != kMagic) return false;
+    const uint32_t count = LittleEndian::ReadU32(data, 8);
     if (count == 0 || count > kMaxEntries) return false;
     const std::size_t table_end = kHeaderSize + (static_cast<std::size_t>(count) * kEntrySize);
     if (table_end > data.size()) return false;
 
-    out.version = ReadU32LE(data, 4);
-    out.comp_flag = ReadU32LE(data, 12);
+    out.version = LittleEndian::ReadU32(data, 4);
+    out.comp_flag = LittleEndian::ReadU32(data, 12);
     ParseEntries(data.subspan(kHeaderSize, static_cast<std::size_t>(count) * kEntrySize), data,
                  count, out);
     return true;
@@ -118,8 +113,8 @@ Support::Expected<Toc, std::string> ReadToc(const std::string& path) {
 
     std::array<uint8_t, kHeaderSize> hdr{};
     if (!ReadExact(f.get(), hdr)) return Support::Unexpected("truncated header: " + path);
-    if (ReadU32LE(hdr, 0) != kMagic) return Support::Unexpected("bad magic: " + path);
-    const uint32_t count = ReadU32LE(hdr, 8);
+    if (LittleEndian::ReadU32(hdr, 0) != kMagic) return Support::Unexpected("bad magic: " + path);
+    const uint32_t count = LittleEndian::ReadU32(hdr, 8);
     if (count == 0 || count > kMaxEntries)
         return Support::Unexpected("entry count out of range: " + path);
 
@@ -128,7 +123,8 @@ Support::Expected<Toc, std::string> ReadToc(const std::string& path) {
 
     uint32_t min_data = 0;
     for (uint32_t i = 0; i < count; i++) {
-        const uint32_t d = ReadU32LE(table, (static_cast<std::size_t>(i) * kEntrySize) + 4);
+        const uint32_t d =
+            LittleEndian::ReadU32(table, (static_cast<std::size_t>(i) * kEntrySize) + 4);
         if (d != 0 && (min_data == 0 || d < min_data)) min_data = d;
     }
     const auto table_end =
@@ -141,8 +137,8 @@ Support::Expected<Toc, std::string> ReadToc(const std::string& path) {
     head.resize(got);
 
     Toc out;
-    out.version = ReadU32LE(hdr, 4);
-    out.comp_flag = ReadU32LE(hdr, 12);
+    out.version = LittleEndian::ReadU32(hdr, 4);
+    out.comp_flag = LittleEndian::ReadU32(hdr, 12);
     ParseEntries(table, head, count, out);
     return out;
 }

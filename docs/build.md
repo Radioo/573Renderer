@@ -84,6 +84,12 @@ owns them.
   target: its `MD5` class computes the IFS header and `_info_` digests in
   `r573_formats` (docs/formats.md, "IFS archives"). The port installs its
   headers flat, so the include is `<md5.h>`.
+- `flatbuffers` (Apache 2.0): the preview host protocol (`src/preview/preview_host.fbs`,
+  docs/preview_host.md). CMake runs the port's `flatc` at build time into
+  `build/generated/preview_host_generated.h`. `flatc` is a host tool, so the
+  presets set `VCPKG_HOST_TRIPLET` to `x64-windows`; a build directory
+  configured before that setting existed needs `cmake --preset dev` once,
+  because regenerating from ninja does not re-read preset variables.
 - `vcpkg-overlays/` overrides registry ports. It ships an x265 overlay with
   `-DENABLE_ALPHA=ON` so ffmpeg's libx265 wrapper can emit HEVC-with-alpha
   (Safari-compatible transparent video); stock vcpkg x265 builds alpha OFF.

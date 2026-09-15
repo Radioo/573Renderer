@@ -1,5 +1,6 @@
 #pragma once
 
+#include "formats/ge2d_shape.h"
 #include "formats/ifs_archive.h"
 #include "formats/texture_images.h"
 
@@ -22,9 +23,23 @@ struct Counters {
     std::size_t images_lz77 = 0;
     std::size_t images_raw = 0;
     std::size_t images_plain = 0;
+    std::size_t animations = 0;
+    std::size_t animations_rewritten = 0;
+    std::size_t scripts_rewritten = 0;
+    std::size_t animations_with_unswapped_colour = 0;
+    std::vector<std::string> entries_not_identical;
+    std::size_t shapes = 0;
+    std::size_t shapes_rewritten = 0;
 };
 
-enum class ContentKind : uint8_t { WholeFile, BinaryXml, TextureImage };
+enum class ContentKind : uint8_t {
+    WholeFile,
+    BinaryXml,
+    TextureImage,
+    Animation,
+    ByteOrderScript,
+    Shape
+};
 
 struct FileRef {
     std::string path;
@@ -33,6 +48,8 @@ struct FileRef {
     ContentKind kind = ContentKind::WholeFile;
     TextureImages::Image image;
     bool compressed = false;
+    std::size_t script = 0;
+    Ge2dShape::ByteOrder shape_order = Ge2dShape::ByteOrder::Big;
 };
 
 struct Problems {

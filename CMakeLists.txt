@@ -62,6 +62,14 @@ target_link_libraries(r573_support PUBLIC tl::expected PRIVATE r573::warnings)
 
 add_library(r573_formats STATIC
     src/formats/ddr_arc.cpp
+    src/formats/afp_animation_bytes.cpp
+    src/formats/afp_animation_read.cpp
+    src/formats/afp_animation_stored.cpp
+    src/formats/afp_animation_write.cpp
+    src/formats/afp_bytecode.cpp
+    src/formats/afp_byte_order.cpp
+    src/formats/afp_placement_read.cpp
+    src/formats/afp_placement_write.cpp
     src/formats/avs_lz77.cpp
     src/formats/binary_xml_names.cpp
     src/formats/binary_xml_read.cpp
@@ -78,6 +86,7 @@ add_library(r573_formats STATIC
     src/formats/aes.cpp
     src/formats/blowfish.cpp
     src/formats/gcz.cpp
+    src/formats/ge2d_shape.cpp
     src/formats/sysidx.cpp
     src/formats/gcanim.cpp
     src/formats/inz.cpp
@@ -172,6 +181,67 @@ add_custom_command(
     VERBATIM
 )
 
+find_package(flatbuffers CONFIG REQUIRED)
+find_program(R573_FLATC flatc REQUIRED)
+set(R573_PREVIEW_SCHEMA "${CMAKE_SOURCE_DIR}/src/preview/preview_host.fbs")
+set(R573_PREVIEW_GENERATED "${CMAKE_BINARY_DIR}/generated/preview_host_generated.h")
+add_custom_command(
+    OUTPUT "${R573_PREVIEW_GENERATED}"
+    COMMAND "${R573_FLATC}" --cpp --scoped-enums -o "${CMAKE_BINARY_DIR}/generated" "${R573_PREVIEW_SCHEMA}"
+    DEPENDS "${R573_PREVIEW_SCHEMA}"
+    COMMENT "Generating the preview host protocol from preview_host.fbs"
+    VERBATIM
+)
+add_custom_target(r573_preview_schema DEPENDS "${R573_PREVIEW_GENERATED}")
+
+add_library(r573_preview_protocol STATIC
+    src/preview/preview_channel.cpp
+)
+add_dependencies(r573_preview_protocol r573_preview_schema)
+target_include_directories(r573_preview_protocol PUBLIC src "${CMAKE_BINARY_DIR}/generated")
+target_link_libraries(r573_preview_protocol
+    PUBLIC
+        r573_support
+        flatbuffers::flatbuffers
+    PRIVATE
+        r573::warnings
+)
+
+add_library(r573_afp_host STATIC
+    src/avs_boot.cpp
+    src/avs_xml.cpp
+    src/afp_boot.cpp
+    src/afp_packages.cpp
+    src/afp_package_id.cpp
+    src/afp_anim.cpp
+    src/mc_control.cpp
+    src/render_seh.cpp
+    src/backend/afp_profiles.cpp
+    src/game_profile.cpp
+    src/ifs_inspect.cpp
+    src/afp_d3d9.cpp
+    src/afp_d3d9_callbacks.cpp
+    src/afp_d3d9_commands.cpp
+    src/afp_d3d9_textures.cpp
+    src/render_executor.cpp
+    src/render_backend.cpp
+    src/warp_device.cpp
+    src/backend/afp_shaders.cpp
+    src/shared_frame.cpp
+    src/engine_dlls.cpp
+)
+target_include_directories(r573_afp_host PUBLIC src)
+target_link_libraries(r573_afp_host
+    PUBLIC
+        r573_support
+        r573_formats
+        r573_state
+        r573_render
+        d3d9.lib
+    PRIVATE
+        r573::warnings
+)
+
 add_library(r573_app STATIC
     "${R573_LAYER_VERDICTS}"
     src/tool_commands.cpp
@@ -202,33 +272,18 @@ add_library(r573_app STATIC
     src/gc2d/gc_render.cpp
     src/gc2d/gc_sprite.cpp
     src/game_revision.cpp
-    src/backend/afp_profiles.cpp
     src/backend/afp_family_backend.cpp
     src/backend/afp_family_frame.cpp
     src/backend/afp_capture_drivers.cpp
-    src/backend/afp_shaders.cpp
     src/backend/afp_modern_backend.cpp
     src/backend/afp_ddr_backend.cpp
     src/render_loop.cpp
     src/render_loop_requests.cpp
-    src/render_executor.cpp
     src/render_live.cpp
     src/game_runtime.cpp
     src/game_runtime_modern.cpp
     src/game_runtime_ddr.cpp
-    src/render_seh.cpp
     src/window.cpp
-    src/avs_boot.cpp
-    src/afp_boot.cpp
-    src/afp_package_id.cpp
-    src/afp_packages.cpp
-    src/afp_anim.cpp
-    src/render_backend.cpp
-    src/afp_d3d9.cpp
-    src/afp_d3d9_callbacks.cpp
-    src/afp_d3d9_commands.cpp
-    src/afp_d3d9_textures.cpp
-    src/mc_control.cpp
     src/gui/gui_window.cpp
     src/gui/gui_panels.cpp
     src/gui/gui_scene3d_panel.cpp
@@ -268,12 +323,9 @@ add_library(r573_app STATIC
     src/gui/gui_loading_overlay.cpp
     src/gui/gui_setup_view.cpp
     src/gui/gui_thread.cpp
-    src/ifs_inspect.cpp
     src/anim_inspect.cpp
-    src/avs_xml.cpp
     src/native_dialog.cpp
     src/export.cpp
-    src/game_profile.cpp
     src/arc_extract.cpp
     src/customize_extract.cpp
     src/qpro/qpro_dll.cpp
@@ -287,7 +339,6 @@ add_library(r573_app STATIC
     src/qpro/qpro_back.cpp
     src/qpro/qpro_composite_debug.cpp
     src/support/crash_report.cpp
-    src/warp_device.cpp
     src/afp_ddr_geo.cpp
     src/afp_ddr_render.cpp
     src/afp_ddr_textures.cpp
@@ -356,6 +407,7 @@ target_include_directories(r573_app SYSTEM PUBLIC ${FFMPEG_INCLUDE_DIRS})
 
 target_link_libraries(r573_app
     PUBLIC
+        r573_afp_host
         r573_support
         r573_formats
         r573_media
@@ -378,6 +430,12 @@ target_link_libraries(r573_app
         r573::warnings
 )
 
+add_executable(preview_host
+    src/preview/host/preview_host_main.cpp
+    src/preview/host/preview_host_session.cpp
+)
+target_link_libraries(preview_host PRIVATE r573_afp_host r573_preview_protocol r573::warnings)
+
 add_executable(renderer WIN32 src/main.cpp)
 target_link_libraries(renderer PRIVATE r573_app r573::warnings)
 
@@ -393,8 +451,11 @@ include(Catch)
 
 add_executable(formats_tests
     tests/formats/ddr_arc_tests.cpp
+    tests/formats/afp_animation_tests.cpp
+    tests/formats/afp_byte_order_tests.cpp
     tests/formats/avs_lz77_tests.cpp
     tests/formats/binary_xml_tests.cpp
+    tests/formats/ge2d_shape_tests.cpp
     tests/formats/ifs_archive_tests.cpp
     tests/formats/ifs_names_tests.cpp
     tests/formats/texture_images_tests.cpp
@@ -560,6 +621,7 @@ catch_discover_tests(state_tests DISCOVERY_MODE POST_BUILD PROPERTIES LABELS ci)
 add_executable(support_tests
     tests/support/support_tests.cpp
     tests/support/float_trig_tests.cpp
+    tests/support/com_ptr_tests.cpp
 )
 target_link_libraries(support_tests PRIVATE Catch2::Catch2WithMain r573_support r573::warnings)
 catch_discover_tests(support_tests DISCOVERY_MODE POST_BUILD PROPERTIES LABELS ci)
@@ -630,10 +692,9 @@ add_executable(local_dll_tests
     tests/local/dll_contract_tests.cpp
     tests/local/iidx10_screen_data_tests.cpp
     tests/local/avs_writer_contract_tests.cpp
-    src/avs_boot.cpp
-    src/avs_xml.cpp
-    src/game_profile.cpp
-    src/ifs_inspect.cpp
+    tests/local/memory_ifs_mount_tests.cpp
+    tests/local/afp_reload_tests.cpp
+    tests/local/preview_host_process_tests.cpp
     src/qpro/qpro_dll.cpp
     src/gc2d/gc_package.cpp
     src/preset/defaults/defaults.cpp
@@ -651,9 +712,27 @@ add_executable(local_dll_tests
     src/preset/defaults/iidx12_2d_defaults.cpp
 )
 target_include_directories(local_dll_tests PRIVATE src)
-target_link_libraries(local_dll_tests PRIVATE Catch2::Catch2WithMain r573_support r573_state
-                                              r573_formats r573::warnings)
+target_link_libraries(local_dll_tests PRIVATE Catch2::Catch2WithMain r573_afp_host r573_support
+                                              r573_state r573_formats r573::warnings)
+target_link_options(local_dll_tests PRIVATE "/WHOLEARCHIVE:$<TARGET_FILE:r573_afp_host>")
+target_link_libraries(local_dll_tests PRIVATE r573_preview_protocol)
+target_compile_definitions(local_dll_tests PRIVATE R573_PREVIEW_HOST_EXE="$<TARGET_FILE:preview_host>")
+add_dependencies(local_dll_tests preview_host)
 catch_discover_tests(local_dll_tests DISCOVERY_MODE POST_BUILD PROPERTIES LABELS local_dll)
+
+add_executable(preview_protocol_tests
+    tests/preview/preview_channel_tests.cpp
+)
+target_link_libraries(preview_protocol_tests PRIVATE Catch2::Catch2WithMain r573_preview_protocol
+                                                     r573::warnings)
+catch_discover_tests(preview_protocol_tests DISCOVERY_MODE POST_BUILD PROPERTIES LABELS ci)
+
+add_executable(shared_frame_tests
+    tests/local/shared_frame_tests.cpp
+)
+target_link_libraries(shared_frame_tests PRIVATE Catch2::Catch2WithMain r573_afp_host
+                                                 r573::warnings)
+catch_discover_tests(shared_frame_tests DISCOVERY_MODE POST_BUILD PROPERTIES LABELS local)
 
 add_executable(export_capture_tests
     tests/export/export_capture_tests.cpp

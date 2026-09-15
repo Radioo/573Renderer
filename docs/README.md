@@ -62,6 +62,8 @@ documents, which are THE source of truth. Start here to find the right one.
 | [state.md](state.md) | r573_state: App::State, the request queue, load progress, live overrides |
 | [cli.md](cli.md) | r573_cli: argv parsing, tool subcommands, option semantics |
 | [settings.md](settings.md) | r573_settings: settings.ini persistence |
+| [afp_host.md](afp_host.md) | r573_afp_host: the modern avs/afp boot, package, animation and draw code the preview host links, and its standalone link gate |
+| [preview_host.md](preview_host.md) | r573_preview_protocol: the IFS editor's preview host protocol (FlatBuffers schema, named pipe channel, client) |
 
 ## Process, build, and verification
 

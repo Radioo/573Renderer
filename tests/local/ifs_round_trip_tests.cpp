@@ -97,11 +97,23 @@ void PrintSummary(std::size_t archives, std::size_t not_ifs, const RoundTrip::Co
                              "{} plain), {} not byte-identical\n",
                              c.images, c.images_lz77, c.images_raw, c.images_plain,
                              c.images_rewritten);
+    std::cerr << std::format(
+        "[ifs round trip] {} animations re-encoded ({} with an unswapped background "
+        "colour), {} not byte-identical, {} byte order scripts not byte-identical\n",
+        c.animations, c.animations_with_unswapped_colour, c.animations_rewritten,
+        c.scripts_rewritten);
+    std::cerr << std::format("[ifs round trip] {} shapes re-encoded, {} not byte-identical\n",
+                             c.shapes, c.shapes_rewritten);
     std::cerr << std::format("[ifs round trip] layout recomputed identically in {} archives, tree "
                              "size in {}\n",
                              c.layouts_repacked_identically, c.tree_sizes_recomputed_identically);
     for (std::size_t i = 0; i < std::min(differing.size(), kListedDifferences); i++)
         std::cerr << std::format("[ifs round trip] not byte-identical: {}\n", differing[i]);
+    for (std::size_t i = 0; i < std::min(c.entries_not_identical.size(), kListedDifferences); i++) {
+        std::cerr << std::format(
+            "[ifs round trip] animation, script or shape not byte-identical: {}\n",
+            c.entries_not_identical[i]);
+    }
 }
 
 }
@@ -128,7 +140,11 @@ TEST_CASE("Every IFS in the install survives a round trip through our writers") 
         INFO(label);
         REQUIRE(archive.has_value());
         RoundTrip::Problems problems;
+        const std::size_t entries_listed = counters.entries_not_identical.size();
         const bool identical = CheckArchive(original, *archive, counters, problems);
+        for (std::size_t i = entries_listed; i < counters.entries_not_identical.size(); i++) {
+            counters.entries_not_identical[i] = label + " " + counters.entries_not_identical[i];
+        }
         for (const std::string& problem : problems.list)
             FAIL_CHECK(label << " " << problem);
         counters.identical_archives += identical ? 1U : 0U;

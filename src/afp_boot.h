@@ -2,6 +2,7 @@
 
 #include "afp_funcs.h"
 #include "afpu_funcs.h"
+#include "avs_boot.h"
 #include "avs_funcs.h"
 #include "backend/afp_profiles.h"
 #include "support/dll_loader.h"
@@ -25,6 +26,12 @@ void Shutdown(EngineSession& es);
 void DestroySceneStreams(AfpFuncs& afp);
 
 void UnloadPackages(EngineSession& es);
+
+bool LoadPackageFromMemory(EngineSession& es, const AvsManager::MemoryIfs& ifs,
+                           const std::string& package, const std::string& animation);
+
+bool ReloadPackageFromMemory(EngineSession& es, const AvsManager::MemoryIfs& ifs,
+                             const std::string& package, const std::string& animation);
 
 void UmountPackagesAndData(AvsFuncs& avs);
 

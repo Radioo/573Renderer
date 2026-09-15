@@ -1,11 +1,15 @@
 #include "ifs_round_trip_support.h"
 
+#include "formats/afp_animation.h"
 #include "formats/binary_xml.h"
+#include "formats/ge2d_shape.h"
 #include "formats/ifs_archive.h"
 #include "formats/texture_images.h"
 
 #include <cstddef>
+#include <format>
 #include <string>
+#include <variant>
 #include <vector>
 
 namespace RoundTrip {
@@ -77,9 +81,64 @@ void CollectBackFiles(const std::vector<Ifs::Entry>& entries, std::vector<const 
     }
 }
 
+const char* TagKind(const AfpAnimation::Tag& tag) {
+    if (std::holds_alternative<AfpAnimation::Sprite>(tag.body)) return "sprite";
+    if (std::holds_alternative<AfpAnimation::Action>(tag.body)) return "action";
+    if (std::holds_alternative<AfpAnimation::Placement>(tag.body)) return "placement";
+    if (std::holds_alternative<AfpAnimation::Remove>(tag.body)) return "remove";
+    if (std::holds_alternative<AfpAnimation::Image>(tag.body)) return "image";
+    if (std::holds_alternative<AfpAnimation::Shape>(tag.body)) return "shape";
+    if (std::holds_alternative<AfpAnimation::Camera>(tag.body)) return "camera";
+    return "unknown tag";
+}
+
+std::string ContainerDifference(const AfpAnimation::Container& a, const AfpAnimation::Container& b,
+                                const std::string& path) {
+    if (a.labels != b.labels) return path + " labels";
+    if (a.script_labels != b.script_labels) return path + " script labels";
+    if (a.frames != b.frames) return path + " frames";
+    if (a.tags.size() != b.tags.size()) return path + " tag count";
+    for (std::size_t i = 0; i < a.tags.size(); i++) {
+        if (a.tags[i] == b.tags[i]) continue;
+        std::string tag = std::format("{}/tag {} ({})", path, i, TagKind(a.tags[i]));
+        const auto* sprite_a = std::get_if<AfpAnimation::Sprite>(&a.tags[i].body);
+        const auto* sprite_b = std::get_if<AfpAnimation::Sprite>(&b.tags[i].body);
+        if (sprite_a != nullptr && sprite_b != nullptr && sprite_a->id == sprite_b->id)
+            return ContainerDifference(sprite_a->container, sprite_b->container, tag);
+        return tag;
+    }
+    return {};
+}
+
+std::string TopLevelDifference(const AfpAnimation::Animation& a, const AfpAnimation::Animation& b) {
+    if (a.strings != b.strings) return "string table";
+    if (a.exports != b.exports) return "exports";
+    if (a.imports != b.imports) return "imports";
+    if (a.import_initializers != b.import_initializers) return "import initializers";
+    if (a.stored_form != b.stored_form) return "stored form";
+    return "header";
+}
+
+std::string AnimationDifference(const Ifs::Entry& original, const Ifs::Entry& original_script,
+                                const Ifs::Entry& back, const Ifs::Entry& back_script) {
+    const auto a = AfpAnimation::ReadStored(original.bytes, original_script.bytes);
+    const auto b = AfpAnimation::ReadStored(back.bytes, back_script.bytes);
+    if (!a || !b) return "animation does not read back";
+    if (*a == *b) return {};
+    std::string where = ContainerDifference(a->root, b->root, "root");
+    if (where.empty()) where = TopLevelDifference(*a, *b);
+    return "animation differs at " + where;
+}
+
 std::string ContentDifference(const FileRef& file, const Ifs::Entry& back) {
     if (file.kind == ContentKind::WholeFile) {
         return back.bytes == file.original->bytes ? std::string() : "bytes differ";
+    }
+    if (file.kind == ContentKind::Shape) {
+        const auto a = Ge2dShape::Read(file.original->bytes, file.shape_order);
+        const auto b = Ge2dShape::Read(back.bytes, file.shape_order);
+        if (!a || !b) return "shape does not read back";
+        return *a == *b ? std::string() : "shape differs";
     }
     if (file.kind == ContentKind::BinaryXml) {
         const auto a = BinaryXml::Read(file.original->bytes);
@@ -116,7 +175,12 @@ void CompareArchives(const Ifs::Archive& original, const Ifs::Archive& back,
         return;
     }
     for (std::size_t i = 0; i < files.size(); i++) {
-        const std::string difference = ContentDifference(files[i], *back_files[i]);
+        if (files[i].kind == ContentKind::ByteOrderScript) continue;
+        const std::string difference =
+            files[i].kind == ContentKind::Animation
+                ? AnimationDifference(*files[i].original, *files[files[i].script].original,
+                                      *back_files[i], *back_files[files[i].script])
+                : ContentDifference(files[i], *back_files[i]);
         if (!difference.empty()) problems.Add(files[i].path, difference);
     }
 }

@@ -129,29 +129,42 @@ Per archive (sources in `tests/local/ifs_round_trip_{tests,reencode,compare}.cpp
 1. Read the archive and make a copy. In the copy, every binary XML entry is
    replaced by `BinaryXml::Write(BinaryXml::Read(bytes))`, and every texture
    image is decoded, converted to BGRA and back, and replaced by
-   `TextureImages::EncodeBlob` of the result (on all hardware threads). Other
-   entries are whole files and stay as they are.
+   `TextureImages::EncodeBlob` of the result (on all hardware threads). Every
+   `afp/<name>` that has an `afp/bsi/<name>` is read with
+   `AfpAnimation::ReadStored` and written back with `WriteStored`, replacing
+   both the animation and its byte order script. In a package with a `magic`
+   file, every `geo/` shape is read and written with `Ge2dShape` in the byte
+   order that file selects. Other entries are whole files and stay as they
+   are.
 2. Write the copy with `Ifs::Write` and read it back with `Ifs::Read`, which
    also verifies the manifest MD5.
 3. Fail on any difference in decoded content against the original: header
    flags and time, manifest signature, encoding and root type, the entry tree
    (kind, name, type, time, super image and its reference, extra nodes,
    special nodes; `_info_` values are derived and only its shape is compared),
-   binary XML documents as trees, images as storage form plus pixels, and
-   whole files as bytes. Failures name the archive and the full entry path.
+   binary XML documents as trees, images as storage form plus pixels,
+   animations as their decoded models (naming the first differing tag, down
+   through nested sprites), shapes as their decoded models, and whole files
+   as bytes. Failures name the archive and the full entry path.
 
 Reported without failing: archives that come out byte-identical, entries whose
-re-encoded bytes differ from the originals, and, from a second write with every
+re-encoded bytes differ from the originals (animations, scripts and shapes are
+also listed by name), and, from a second write with every
 stored offset and the tree size cleared, how many archives the packer and the
 tree size formula reproduce exactly. Progress goes to stderr for every file.
 
 Before trusting a pass, the gate was run with a one-byte pixel corruption
-injected into `EncodeBlob` on two real archives: it failed all 66 images.
+injected into `EncodeBlob` on two real archives: it failed all 66 images. The
+same was done for the newer checks on three archives: a placement depth
+changed in the animation writer failed all 84 affected animations, naming the
+tag, and one vertex bit flipped in the shape writer failed all 2013 shapes.
 
 Result on IIDX 33 (2026-09-15): 6194 files, 48 not IFS; all 6146 archives pass.
 10533 binary XML entries and 106371 texture images (106319 LZ77, 50 raw after
 the header, 2 in an uncompressed list; one texture list names an image twice)
-re-encode byte for byte. 6145 archives are byte-identical; the exception,
+re-encode byte for byte, and so do all 29110 animations with their byte
+order scripts (3852 of them store the header background colour unswapped) and
+all 273660 GE2D shapes. 6145 archives are byte-identical; the exception,
 `data/sound/16030-p0.ifs`, is 4 bytes shorter than its own data offset and the
 writer pads the region. Recomputing from scratch reproduces the tree size in
 6145 archives and every file offset in 6062. A full pass takes about 100

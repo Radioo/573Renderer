@@ -39,6 +39,52 @@ Reverse engineering of unknown placement flags and blend values runs alongside e
 - Restoring hashed entry names to logical names, MD5 name hashing for new entries, atlas packing, PNG import: those arrive with the first feature that adds new entries.
 - Any UI.
 
+## Milestone 2: AFP animations
+
+### Behaviour
+
+- A stored animation and its byte order script restore to native order the way afp-core's op 8 does, and a native animation stores back with a generated script.
+- Restored animations read into a model with no offsets: header, exports, imports, the string table in file order, containers, and typed tags for the seven the target build uses. Anything else stays as bytes and cannot be stored, since nothing says which bytes to swap.
+- Writing rebuilds every offset and records every field's byte width; the script comes from those widths with the converter's greedy rule.
+- Stored details the restored data cannot show (scrambled strings, the header background colour's byte order) live in the model as an explicit stored form.
+- The round trip gate re-encodes every animation and its script, fails on any model difference, and reports byte identity of both.
+
+### Seams and tests
+
+- `AfpByteOrder` and `AfpAnimation` in `r573_formats`, tested with synthetic fixtures under `ci`.
+- The `local` round trip gate covers every `afp/<name>` with an `afp/bsi/<name>`.
+
+## Milestone 3: GE2D shapes
+
+### Behaviour
+
+- A shape reads into a model with no offsets, in the byte order the package `magic` file selects, and writes back with every count, offset and size recomputed in the shipped table order.
+- Fields with no known meaning keep their values; floats keep their raw bits.
+- The round trip gate re-encodes every shape and fails on any model difference.
+
+### Seams and tests
+
+- `Ge2dShape` in `r573_formats`, tested with synthetic fixtures under `ci`.
+- The `local` round trip gate covers every `geo/` entry.
+
+## Milestone 4: preview host
+
+### Behaviour
+
+- IFS bytes held in memory mount through avs2-core's `ramfs` and `imagefs`, so a package loads without touching the disk.
+- A loaded package reloads under the same name: layers and streams are destroyed first, then the package, then the new bytes load and the animation seeks back to its frame. afp state (frame count, labels, playhead) proves the new content is live, never pixels.
+- The afp boot, mount, package, animation and D3D9 draw code the renderer already has moves into an `r573_afp_host` library that takes its session and GPU context explicitly and has no GUI, `App` or window dependency. The renderer links it and renders exactly as before.
+- The library renders one frame into an offscreen D3D9Ex texture whose shared handle another process can open.
+- A preview host executable boots a target build from its install directory and serves the editor over IPC: load or reload a package from bytes, pick an animation, seek to a frame, set the viewport size, and return the shared texture.
+
+### Seams and tests
+
+- Mount and reload are proved by `local_dll` tests against the target build.
+- The carve-out is proved by the existing pixel golden and byte-compare gates staying green.
+- The host protocol is tested with the host process launched by a `local_dll` test.
+
+- The host protocol is FlatBuffers over a named pipe (ADR 0007).
+
 ## Tickets
 
 - `issues/01-avs-lz77-module.md`
@@ -50,3 +96,11 @@ Reverse engineering of unknown placement flags and blend values runs alongside e
 - `issues/07-afp-byte-order.md` (milestone 2)
 - `issues/08-afp-animation-model.md` (milestone 2)
 - `issues/09-afp-round-trip-gate.md` (milestone 2)
+- `issues/10-ge2d-shapes.md` (milestone 3)
+- `issues/11-ge2d-round-trip-gate.md` (milestone 3)
+- `issues/12-ramfs-package-mount.md` (milestone 4)
+- `issues/13-package-reload.md` (milestone 4)
+- `issues/14-afp-host-library.md` (milestone 4)
+- `issues/15-shared-texture-target.md` (milestone 4)
+- `issues/16-preview-host-protocol.md` (milestone 4)
+- `issues/17-preview-host-executable.md` (milestone 4)

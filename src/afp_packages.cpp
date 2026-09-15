@@ -387,3 +387,31 @@ void AfpManager::UnloadPackages(EngineSession& es) {
     es.anim_name.clear();
     es.pkg_id = 0;
 }
+
+bool AfpManager::LoadPackageFromMemory(EngineSession& es, const AvsManager::MemoryIfs& ifs,
+                                       const std::string& package, const std::string& animation) {
+    if (!es.afp_booted) return false;
+    if (!AvsManager::MountMemoryIfs(es.avs, ifs)) return false;
+    int const read = es.afpu.afpu_ngp_read_local(package.c_str(), ifs.mountpoint.c_str(), 0);
+    LOG("AFP", "LoadPackageFromMemory('%s') read -> 0x%08x", package.c_str(), (unsigned)read);
+    if (read <= 0) {
+        AvsManager::UnmountMemoryIfs(es.avs, ifs);
+        return false;
+    }
+    for (const auto& filter : IfsInspect::ReadAtlasFilters(es.avs, ifs.mountpoint.c_str()))
+        AfpD3D9::EnqueueAtlasFilter(filter.mag_filter_d3d, filter.min_filter_d3d);
+    AvsManager::UnmountMemoryIfs(es.avs, ifs);
+    if (es.afpu.afpu_package_open_streams != nullptr)
+        es.afpu.afpu_package_open_streams(static_cast<uint32_t>(read));
+    es.pkg_id = static_cast<uint32_t>(read);
+    return SwitchAnimation(es, animation, true);
+}
+
+bool AfpManager::ReloadPackageFromMemory(EngineSession& es, const AvsManager::MemoryIfs& ifs,
+                                         const std::string& package, const std::string& animation) {
+    uint32_t frame = 0;
+    const bool had_frame = ReadMcPlayhead(es.afp, &frame, nullptr, nullptr);
+    UnloadPackages(es);
+    if (!LoadPackageFromMemory(es, ifs, package, animation)) return false;
+    return !had_frame || SeekFrame(es.afp, static_cast<int>(frame));
+}
