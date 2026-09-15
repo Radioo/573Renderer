@@ -1,31 +1,18 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "formats/avs_lz77.h"
+#include "binary_test_support.h"
 #include "formats/binary_xml.h"
-#include "formats/ifs_names.h"
 #include "formats/texture_images.h"
 
 #include <cstddef>
 #include <cstdint>
+#include <initializer_list>
 #include <string>
 #include <utility>
 #include <vector>
 
 namespace {
-
-BinaryXml::Node Leaf(uint8_t type, std::string name, std::vector<uint8_t> value = {}) {
-    BinaryXml::Node node;
-    node.type = type;
-    node.name = std::move(name);
-    node.value = std::move(value);
-    return node;
-}
-
-std::vector<uint8_t> Text(const std::string& s) {
-    std::vector<uint8_t> out(s.begin(), s.end());
-    out.push_back(0);
-    return out;
-}
 
 std::vector<uint8_t> U16s(std::initializer_list<uint16_t> values) {
     std::vector<uint8_t> out;
@@ -39,34 +26,42 @@ std::vector<uint8_t> U16s(std::initializer_list<uint16_t> values) {
 std::vector<uint8_t> Header(uint32_t uncompressed, uint32_t compressed) {
     std::vector<uint8_t> out;
     for (const uint32_t v : {uncompressed, compressed}) {
-        for (int shift = 24; shift >= 0; shift -= 8)
+        for (int shift = 24; shift >= 0; shift -= 8) {
             out.push_back(static_cast<uint8_t>((v >> static_cast<uint32_t>(shift)) & 0xFFU));
+        }
     }
     return out;
 }
 
 std::vector<uint8_t> Pixels(std::size_t count) {
     std::vector<uint8_t> out(count * 4);
-    for (std::size_t i = 0; i < out.size(); i++)
+    for (std::size_t i = 0; i < out.size(); i++) {
         out[i] = static_cast<uint8_t>((i % 7) * 31U);
+    }
     return out;
 }
 
 BinaryXml::Document TextureList(bool compressed) {
-    constexpr uint8_t kVoid = 1;
     constexpr uint8_t k2U16 = 19;
-    constexpr uint8_t k4U16 = 39;
+    using BinaryXml::Type::k4U16;
+    using BinaryXml::Type::kVoid;
     BinaryXml::Document doc;
-    doc.root = Leaf(kVoid, "texturelist");
-    if (compressed) doc.root.attributes.push_back(Leaf(BinaryXml::kAttributeType, "compress", Text("avslz")));
-    BinaryXml::Node texture = Leaf(kVoid, "texture");
-    texture.attributes.push_back(Leaf(BinaryXml::kAttributeType, "format", Text("argb8888rev")));
-    texture.attributes.push_back(Leaf(BinaryXml::kAttributeType, "name", Text("tex000")));
-    texture.children.push_back(Leaf(k2U16, "size", U16s({2048, 1024})));
-    BinaryXml::Node image = Leaf(kVoid, "image");
-    image.attributes.push_back(Leaf(BinaryXml::kAttributeType, "name", Text("bg03")));
-    image.children.push_back(Leaf(k4U16, "uvrect", U16s({2, 1642, 2, 1230})));
-    image.children.push_back(Leaf(k4U16, "imgrect", U16s({0, 1644, 0, 1232})));
+    doc.root = TestSupport::MakeNode(kVoid, "texturelist");
+    if (compressed) {
+        doc.root.attributes.push_back(TestSupport::MakeNode(BinaryXml::Type::kAttribute, "compress",
+                                                            TestSupport::TextBytes("avslz")));
+    }
+    BinaryXml::Node texture = TestSupport::MakeNode(kVoid, "texture");
+    texture.attributes.push_back(TestSupport::MakeNode(BinaryXml::Type::kAttribute, "format",
+                                                       TestSupport::TextBytes("argb8888rev")));
+    texture.attributes.push_back(TestSupport::MakeNode(BinaryXml::Type::kAttribute, "name",
+                                                       TestSupport::TextBytes("tex000")));
+    texture.children.push_back(TestSupport::MakeNode(k2U16, "size", U16s({2048, 1024})));
+    BinaryXml::Node image = TestSupport::MakeNode(kVoid, "image");
+    image.attributes.push_back(
+        TestSupport::MakeNode(BinaryXml::Type::kAttribute, "name", TestSupport::TextBytes("bg03")));
+    image.children.push_back(TestSupport::MakeNode(k4U16, "uvrect", U16s({2, 1642, 2, 1230})));
+    image.children.push_back(TestSupport::MakeNode(k4U16, "imgrect", U16s({0, 1644, 0, 1232})));
     texture.children.push_back(std::move(image));
     doc.root.children.push_back(std::move(texture));
     return doc;
@@ -95,7 +90,8 @@ TEST_CASE("ReadList rejects an image without an imgrect") {
 TEST_CASE("An LZ77 blob decodes and encodes back to the same bytes") {
     const std::vector<uint8_t> pixels = Pixels(64);
     const std::vector<uint8_t> packed = AvsLz77::Compress(pixels);
-    std::vector<uint8_t> blob = Header(static_cast<uint32_t>(pixels.size()), static_cast<uint32_t>(packed.size()));
+    std::vector<uint8_t> blob =
+        Header(static_cast<uint32_t>(pixels.size()), static_cast<uint32_t>(packed.size()));
     blob.insert(blob.end(), packed.begin(), packed.end());
     const auto decoded = TextureImages::DecodeBlob(blob, true);
     REQUIRE(decoded.has_value());
@@ -155,18 +151,4 @@ TEST_CASE("Unsupported pixel formats are reported by name") {
     REQUIRE_FALSE(bgra.has_value());
     CHECK(bgra.error().find("dxt5") != std::string::npos);
     CHECK_FALSE(TextureImages::BgraToPixels("rgb565", Pixels(1)).has_value());
-}
-
-TEST_CASE("EscapeName maps path characters to manifest node names") {
-    CHECK(Ifs::EscapeName("texturelist.xml") == "texturelist_Exml");
-    CHECK(Ifs::EscapeName("08023_pre.2dx") == "_08023__pre_E2dx");
-    CHECK(Ifs::EscapeName("a b$+-:@~") == "a_Ab_B_C_D_F_G_H");
-    CHECK_FALSE(Ifs::EscapeName("a*b").has_value());
-    CHECK_FALSE(Ifs::EscapeName(std::string("\x80")).has_value());
-    CHECK_FALSE(Ifs::EscapeName("").has_value());
-}
-
-TEST_CASE("HashedName is the escaped MD5 of the logical name") {
-    CHECK(Ifs::HashedName("bg03") == "bb595a0fb223760acd747d1bb1a277b0");
-    CHECK(Ifs::HashedName("texturelist.xml") == "_6b95ffa0055ad5753a317bc477207969");
 }

@@ -30,7 +30,7 @@ Reverse engineering of unknown placement flags and blend values runs alongside e
 
 ### Seams and tests
 
-- Every codec is a pure function over byte spans in the stdlib-only `r573_formats` module, tested with synthetic fixtures under the `ci` label.
+- Every codec is a pure function over byte spans in the `r573_formats` module (stdlib, tl-expected, and hash-library for MD5), tested with synthetic fixtures under the `ci` label.
 - A local test under the `local` label runs the round trip over every IFS below `R573_IIDX_DIR/data`, reporting the entry-level pass count and the whole-file identity count.
 - A local test under the `local_dll` label compares the binary XML and LZ77 writers against avs2-core's own writers on the same inputs.
 
@@ -47,3 +47,6 @@ Reverse engineering of unknown placement flags and blend values runs alongside e
 - `issues/04-texture-images.md`
 - `issues/05-round-trip-gate.md`
 - `issues/06-avs2-writer-comparison.md`
+- `issues/07-afp-byte-order.md` (milestone 2)
+- `issues/08-afp-animation-model.md` (milestone 2)
+- `issues/09-afp-round-trip-gate.md` (milestone 2)

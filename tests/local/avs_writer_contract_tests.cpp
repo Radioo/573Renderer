@@ -1,6 +1,7 @@
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include "../formats/binary_test_support.h"
 #include "avs_boot.h"
 #include "avs_funcs.h"
 #include "formats/avs_lz77.h"
@@ -26,8 +27,6 @@ constexpr int kCstreamFinish217 = 0x133;
 constexpr int kCstreamDestroy217 = 0x134;
 constexpr int kCompressOperator = 1;
 constexpr int kMaxFinishSteps = 64;
-constexpr int kPropertyCreate217 = 0x090;
-constexpr int kPropertyInsertRead217 = 0x094;
 constexpr int kPropertyPartWrite217 = 0x097;
 constexpr int kPropertyBinaryReadWrite = 0x1F | 0x08;
 constexpr int kPropertyLongNames = 0x1000;
@@ -68,52 +67,50 @@ std::vector<uint8_t> DllCompress(const Cstream& cs, std::span<const uint8_t> src
     return out;
 }
 
-struct PropertyApi {
-    void* (*create)(int flags, void* work, uint32_t work_size) = nullptr;
-    int (*insert_read)(void* property, void* node, int (*read)(uint32_t, void*, uint32_t),
-                       uint32_t ctx) = nullptr;
-    int (*part_write)(void* property, void* node, int (*write)(uint32_t, void*, uint32_t),
-                      uint32_t ctx) = nullptr;
+using PropertyPartWrite = int (*)(T_PROPERTY* property, T_PROPERTY_NODE* node, avs_reader_fn write,
+                                  int ctx);
+
+struct CallbackChannel {
+    std::span<const uint8_t> source;
+    std::size_t read_pos = 0;
+    std::vector<uint8_t> sink;
 };
 
-std::span<const uint8_t> g_read_source;
-std::size_t g_read_pos = 0;
-std::vector<uint8_t> g_write_sink;
+CallbackChannel& Channel() {
+    static CallbackChannel channel;
+    return channel;
+}
 
-int ReadFromSource(uint32_t, void* buffer, uint32_t size) {
-    const std::size_t count = std::min<std::size_t>(size, g_read_source.size() - g_read_pos);
-    std::copy_n(g_read_source.begin() + static_cast<std::ptrdiff_t>(g_read_pos), count,
-                static_cast<uint8_t*>(buffer));
-    g_read_pos += count;
+int ReadFromSource([[maybe_unused]] int context, void* buffer, int size) {
+    CallbackChannel& channel = Channel();
+    const std::size_t count =
+        std::min(static_cast<std::size_t>(size), channel.source.size() - channel.read_pos);
+    std::ranges::copy(channel.source.subspan(channel.read_pos, count),
+                      std::span(static_cast<uint8_t*>(buffer), count).begin());
+    channel.read_pos += count;
     return static_cast<int>(count);
 }
 
-int WriteToSink(uint32_t, void* buffer, uint32_t size) {
-    const auto* bytes = static_cast<const uint8_t*>(buffer);
-    g_write_sink.insert(g_write_sink.end(), bytes, bytes + size);
-    return static_cast<int>(size);
+int WriteToSink([[maybe_unused]] int context, void* buffer, int size) {
+    const std::span<const uint8_t> bytes(static_cast<const uint8_t*>(buffer),
+                                         static_cast<std::size_t>(size));
+    Channel().sink.insert(Channel().sink.end(), bytes.begin(), bytes.end());
+    return size;
 }
 
-std::vector<uint8_t> DllRewriteBinaryXml(const PropertyApi& api, std::span<const uint8_t> bytes,
-                                         bool long_names) {
+std::vector<uint8_t> DllRewriteBinaryXml(const AvsFuncs& avs, PropertyPartWrite part_write,
+                                         std::span<const uint8_t> bytes, bool long_names) {
     std::vector<uint8_t> work(kPropertyWorkBytes);
     const int flags = kPropertyBinaryReadWrite | (long_names ? kPropertyLongNames : 0);
-    void* property = api.create(flags, work.data(), static_cast<uint32_t>(work.size()));
+    T_PROPERTY* property =
+        avs.property_create(flags, work.data(), static_cast<unsigned int>(work.size()));
     REQUIRE(property != nullptr);
-    g_read_source = bytes;
-    g_read_pos = 0;
-    REQUIRE(api.insert_read(property, nullptr, &ReadFromSource, 0) >= 0);
-    g_write_sink.clear();
-    REQUIRE(api.part_write(property, nullptr, &WriteToSink, 0) >= 0);
-    return std::move(g_write_sink);
-}
-
-BinaryXml::Node Leaf(uint8_t type, std::string name, std::vector<uint8_t> value) {
-    BinaryXml::Node node;
-    node.type = type;
-    node.name = std::move(name);
-    node.value = std::move(value);
-    return node;
+    Channel().source = bytes;
+    Channel().read_pos = 0;
+    REQUIRE(avs.property_insert_read(property, nullptr, &ReadFromSource, 0) >= 0);
+    Channel().sink.clear();
+    REQUIRE(part_write(property, nullptr, &WriteToSink, 0) >= 0);
+    return std::move(Channel().sink);
 }
 
 std::vector<uint8_t> Pattern(std::size_t size, uint8_t seed) {
@@ -125,34 +122,41 @@ std::vector<uint8_t> Pattern(std::size_t size, uint8_t seed) {
 
 BinaryXml::Document EveryTypeDocument(uint8_t signature, uint8_t encoding) {
     constexpr std::array<uint8_t, 57> kSizes = {
-        0,  0,  1,  1,  2,  2,  4,  4,  8,  8,  0,  0,  4,  4,  4,  8,  2,  2,  4,
-        4,  8,  8,  16, 16, 8,  16, 3,  3,  6,  6,  12, 12, 24, 24, 12, 24, 4,  4,
-        8,  8,  16, 16, 32, 32, 16, 32, 0,  0,  16, 16, 16, 16, 1,  2,  3,  4,  16,
+        0, 0, 1,  1,  2,  2,  4,  4,  8, 8, 0,  0,  4,  4,  4,  8,  2,  2, 4,
+        4, 8, 8,  16, 16, 8,  16, 3,  3, 6, 6,  12, 12, 24, 24, 12, 24, 4, 4,
+        8, 8, 16, 16, 32, 32, 16, 32, 0, 0, 16, 16, 16, 16, 1,  2,  3,  4, 16,
     };
     constexpr std::array<uint8_t, 11> kArrayable = {2, 3, 4, 5, 6, 7, 8, 9, 14, 15, 52};
     BinaryXml::Document doc;
     doc.signature = signature;
     doc.encoding = encoding;
-    doc.root = Leaf(1, "root", {});
-    doc.root.attributes.push_back(Leaf(BinaryXml::kAttributeType, "zeta", {'z', 0}));
-    doc.root.attributes.push_back(Leaf(BinaryXml::kAttributeType, "alpha", {'a', 'b', 0}));
+    doc.root = TestSupport::MakeNode(1, "root", {});
+    doc.root.attributes.push_back(
+        TestSupport::MakeNode(BinaryXml::Type::kAttribute, "zeta", {'z', 0}));
+    doc.root.attributes.push_back(
+        TestSupport::MakeNode(BinaryXml::Type::kAttribute, "alpha", {'a', 'b', 0}));
     for (uint8_t type = 2; type <= 56; type++) {
-        if (type == 10 || type == 11 || type == BinaryXml::kAttributeType || type == 47) continue;
-        doc.root.children.push_back(
-            Leaf(type, "t" + std::to_string(type), Pattern(kSizes.at(type), type)));
+        if (type == 10 || type == 11 || type == BinaryXml::Type::kAttribute || type == 47) continue;
+        doc.root.children.push_back(TestSupport::MakeNode(type, "t" + std::to_string(type),
+                                                          Pattern(kSizes.at(type), type)));
     }
-    doc.root.children.push_back(Leaf(10, "blob", Pattern(5, 9)));
-    doc.root.children.push_back(Leaf(10, "empty_blob", {}));
-    doc.root.children.push_back(Leaf(11, "text", {'h', 'i', 0}));
-    doc.root.children.push_back(Leaf(11, "empty_text", {0}));
+    doc.root.children.push_back(TestSupport::MakeNode(10, "blob", Pattern(5, 9)));
+    doc.root.children.push_back(TestSupport::MakeNode(10, "empty_blob", {}));
+    doc.root.children.push_back(TestSupport::MakeNode(11, "text", {'h', 'i', 0}));
+    doc.root.children.push_back(TestSupport::MakeNode(11, "empty_text", {0}));
     for (const uint8_t type : kArrayable) {
-        doc.root.children.push_back(Leaf(static_cast<uint8_t>(type | BinaryXml::kArrayFlag),
-                                         "a" + std::to_string(type),
-                                         Pattern(kSizes.at(type) * 3U, type)));
+        doc.root.children.push_back(TestSupport::MakeNode(
+            static_cast<uint8_t>(type | BinaryXml::kArrayFlag), "a" + std::to_string(type),
+            Pattern(std::size_t{kSizes.at(type)} * 3U, type)));
     }
-    BinaryXml::Node nested = Leaf(1, "nested", {});
-    nested.attributes.push_back(Leaf(BinaryXml::kAttributeType, "name", {'n', 0}));
-    nested.children.push_back(Leaf(3, "tail", {0x7F}));
+    doc.root.children.push_back(TestSupport::MakeNode(11, "invalid_sjis", {0x83, 0xFF, 0x81, 0}));
+    if (signature == BinaryXml::kByteNames) {
+        doc.root.children.push_back(TestSupport::MakeNode(1, std::string(100, 'w'), {}));
+    }
+    BinaryXml::Node nested = TestSupport::MakeNode(1, "nested", {});
+    nested.attributes.push_back(
+        TestSupport::MakeNode(BinaryXml::Type::kAttribute, "name", {'n', 0}));
+    nested.children.push_back(TestSupport::MakeNode(3, "tail", {0x7F}));
     doc.root.children.push_back(std::move(nested));
     return doc;
 }
@@ -189,13 +193,14 @@ TEST_CASE("AvsLz77::Compress matches avs2-core's compressor byte for byte") {
     REQUIRE(cs.destroy != nullptr);
 
     const std::vector<uint8_t> letters = {'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'};
-    const std::vector<uint8_t> letters_packed = {0xFF, 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 0, 0, 0};
+    const std::vector<uint8_t> letters_packed = {0xFF, 'a', 'b', 'c', 'd', 'e',
+                                                 'f',  'g', 'h', 0,   0,   0};
     CHECK(DllCompress(cs, letters) == letters_packed);
 
     const std::vector<std::vector<uint8_t>> inputs = {
-        RandomBytes(1, 1, 256),      RandomBytes(17, 2, 3),       RandomBytes(4095, 3, 256),
-        RandomBytes(4096, 4, 4),     RandomBytes(4097, 5, 256),   RandomBytes(70000, 6, 256),
-        RandomBytes(50000, 7, 6),    std::vector<uint8_t>(9000, 0), RandomBytes(300000, 8, 2),
+        RandomBytes(1, 1, 256),   RandomBytes(17, 2, 3),         RandomBytes(4095, 3, 256),
+        RandomBytes(4096, 4, 4),  RandomBytes(4097, 5, 256),     RandomBytes(70000, 6, 256),
+        RandomBytes(50000, 7, 6), std::vector<uint8_t>(9000, 0), RandomBytes(300000, 8, 2),
     };
     for (const auto& input : inputs) {
         INFO("input size " << input.size());
@@ -212,15 +217,13 @@ TEST_CASE("BinaryXml::Write matches avs2-core's binary property writer") {
 
     DllLoader avs_dll;
     REQUIRE(avs_dll.Load((dir + "/modules/avs2-core.dll").c_str()));
-    PropertyApi api;
-    api.create = avs_dll.GetFunc<decltype(api.create)>(kPropertyCreate217, "property_create");
-    api.insert_read =
-        avs_dll.GetFunc<decltype(api.insert_read)>(kPropertyInsertRead217, "property_insert_read");
-    api.part_write =
-        avs_dll.GetFunc<decltype(api.part_write)>(kPropertyPartWrite217, "property_part_write");
-    REQUIRE(api.create != nullptr);
-    REQUIRE(api.insert_read != nullptr);
-    REQUIRE(api.part_write != nullptr);
+    AvsFuncs avs;
+    REQUIRE(avs.Load(avs_dll));
+    REQUIRE(avs.property_create != nullptr);
+    REQUIRE(avs.property_insert_read != nullptr);
+    const auto part_write =
+        avs_dll.GetFunc<PropertyPartWrite>(kPropertyPartWrite217, "property_part_write");
+    REQUIRE(part_write != nullptr);
 
     struct Variant {
         uint8_t signature;
@@ -236,7 +239,7 @@ TEST_CASE("BinaryXml::Write matches avs2-core's binary property writer") {
         const auto ours = BinaryXml::Write(EveryTypeDocument(signature, encoding));
         REQUIRE(ours.has_value());
         const std::vector<uint8_t> dll =
-            DllRewriteBinaryXml(api, *ours, signature == BinaryXml::kByteNames);
+            DllRewriteBinaryXml(avs, part_write, *ours, signature == BinaryXml::kByteNames);
         CHECK(dll.size() == ours->size());
         CHECK(dll == *ours);
     }

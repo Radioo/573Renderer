@@ -27,7 +27,7 @@ Support::Expected<void, std::string> Fail(const std::string& message) {
 
 class Writer {
 public:
-    explicit Writer(const Document& doc) : doc_(doc) {}
+    explicit Writer(const Document& doc) : doc_(&doc) {}
 
     Support::Expected<std::vector<uint8_t>, std::string> Run();
 
@@ -36,7 +36,7 @@ private:
     Support::Expected<void, std::string> WriteAttributes(const Node& node);
     Support::Expected<void, std::string> WriteValue(const Node& node);
 
-    const Document& doc_;
+    const Document* doc_;
     std::vector<uint8_t> nodes_;
     std::vector<uint8_t> data_;
     std::size_t byte_slot_ = 0;
@@ -88,16 +88,17 @@ Support::Expected<void, std::string> Writer::WriteAttributes(const Node& node) {
     std::vector<const Node*> sorted;
     sorted.reserve(node.attributes.size());
     for (const Node& attribute : node.attributes) {
-        if (attribute.type != kAttributeType) return Fail("attribute with a non-attribute type");
+        if (attribute.type != Type::kAttribute) return Fail("attribute with a non-attribute type");
         sorted.push_back(&attribute);
     }
-    std::ranges::stable_sort(sorted, {}, [](const Node* a) -> const std::string& { return a->name; });
+    std::ranges::stable_sort(sorted, {},
+                             [](const Node* a) -> const std::string& { return a->name; });
     for (std::size_t i = 0; i < sorted.size(); i++) {
         if (i > 0 && sorted[i]->name == sorted[i - 1]->name) {
             return Fail("duplicate attribute " + sorted[i]->name);
         }
-        nodes_.push_back(kAttributeType);
-        if (auto name = Detail::EncodeName(sorted[i]->name, doc_.signature, nodes_); !name) {
+        nodes_.push_back(Type::kAttribute);
+        if (auto name = Detail::EncodeName(sorted[i]->name, doc_->signature, nodes_); !name) {
             return name;
         }
         if (auto value = WriteValue(*sorted[i]); !value) return value;
@@ -106,11 +107,11 @@ Support::Expected<void, std::string> Writer::WriteAttributes(const Node& node) {
 }
 
 Support::Expected<void, std::string> Writer::WriteElement(const Node& node) {
-    if (!Detail::IsValidType(node.type) || node.type == kAttributeType) {
+    if (!Detail::IsValidType(node.type) || node.type == Type::kAttribute) {
         return Fail("invalid element type: " + node.name);
     }
     nodes_.push_back(node.type);
-    if (auto name = Detail::EncodeName(node.name, doc_.signature, nodes_); !name) return name;
+    if (auto name = Detail::EncodeName(node.name, doc_->signature, nodes_); !name) return name;
     if (auto value = WriteValue(node); !value) return value;
     if (auto attributes = WriteAttributes(node); !attributes) return attributes;
     for (const Node& child : node.children) {
@@ -121,15 +122,15 @@ Support::Expected<void, std::string> Writer::WriteElement(const Node& node) {
 }
 
 Support::Expected<std::vector<uint8_t>, std::string> Writer::Run() {
-    if (doc_.signature != kSixBitNames && doc_.signature != kByteNames) {
+    if (doc_->signature != kSixBitNames && doc_->signature != kByteNames) {
         return Support::Unexpected(std::string("unsupported binary xml signature"));
     }
-    if (auto root = WriteElement(doc_.root); !root) return Support::Unexpected(root.error());
+    if (auto root = WriteElement(doc_->root); !root) return Support::Unexpected(root.error());
     nodes_.push_back(Detail::kDocumentEnd);
     PadTo4(nodes_);
 
-    std::vector<uint8_t> out = {Detail::kMagic, doc_.signature, doc_.encoding,
-                                static_cast<uint8_t>(doc_.encoding ^ Detail::kEncodingComplement)};
+    std::vector<uint8_t> out = {Detail::kMagic, doc_->signature, doc_->encoding,
+                                static_cast<uint8_t>(doc_->encoding ^ Detail::kEncodingComplement)};
     out.reserve(out.size() + (2 * Detail::kLengthSize) + nodes_.size() + data_.size());
     BigEndian::AppendU32(out, static_cast<uint32_t>(nodes_.size()));
     out.insert(out.end(), nodes_.begin(), nodes_.end());

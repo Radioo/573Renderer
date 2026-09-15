@@ -11,6 +11,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace TextureImages {
@@ -22,7 +23,6 @@ constexpr std::string_view kAvsLz = "avslz";
 constexpr std::string_view kArgb8888Rev = "argb8888rev";
 constexpr std::size_t kBlobHeaderSize = 8;
 constexpr std::size_t kRectBytes = 8;
-constexpr uint8_t kFourU16 = 39;
 
 std::string AttributeText(const BinaryXml::Node& node, std::string_view name) {
     for (const BinaryXml::Node& attribute : node.attributes) {
@@ -35,23 +35,27 @@ std::string AttributeText(const BinaryXml::Node& node, std::string_view name) {
 }
 
 const BinaryXml::Node* Child(const BinaryXml::Node& node, std::string_view name) {
-    const auto found = std::ranges::find_if(node.children, [&](const BinaryXml::Node& c) { return c.name == name; });
+    const auto found = std::ranges::find_if(
+        node.children, [&](const BinaryXml::Node& c) { return c.name == name; });
     return found == node.children.end() ? nullptr : &*found;
 }
 
-Support::Expected<Image, std::string> ReadImage(const BinaryXml::Node& node, const std::string& format) {
+Support::Expected<Image, std::string> ReadImage(const BinaryXml::Node& node,
+                                                const std::string& format) {
     Image image;
     image.name = AttributeText(node, "name");
     image.format = format;
     const BinaryXml::Node* rect = Child(node, "imgrect");
-    if (rect == nullptr || rect->type != kFourU16 || rect->value.size() != kRectBytes) {
+    if (rect == nullptr || rect->type != BinaryXml::Type::k4U16 ||
+        rect->value.size() != kRectBytes) {
         return Support::Unexpected("image " + image.name + " has no usable imgrect");
     }
     const uint16_t x0 = BigEndian::ReadU16(rect->value, 0);
     const uint16_t x1 = BigEndian::ReadU16(rect->value, 2);
     const uint16_t y0 = BigEndian::ReadU16(rect->value, 4);
     const uint16_t y1 = BigEndian::ReadU16(rect->value, 6);
-    if (x1 < x0 || y1 < y0) return Support::Unexpected("image " + image.name + " has an inverted imgrect");
+    if (x1 < x0 || y1 < y0)
+        return Support::Unexpected("image " + image.name + " has an inverted imgrect");
     image.width = (x1 - x0) / 2U;
     image.height = (y1 - y0) / 2U;
     return image;
@@ -75,27 +79,32 @@ Support::Expected<List, std::string> ReadList(const BinaryXml::Document& texture
     return list;
 }
 
-Support::Expected<Blob, std::string> DecodeBlob(std::span<const uint8_t> bytes, bool list_compressed) {
+Support::Expected<Blob, std::string> DecodeBlob(std::span<const uint8_t> bytes,
+                                                bool list_compressed) {
     Blob blob;
     if (!list_compressed) {
         blob.pixels.assign(bytes.begin(), bytes.end());
         return blob;
     }
-    if (bytes.size() < kBlobHeaderSize) return Support::Unexpected(std::string("image blob shorter than its header"));
+    if (bytes.size() < kBlobHeaderSize)
+        return Support::Unexpected(std::string("image blob shorter than its header"));
     const std::size_t uncompressed = BigEndian::ReadU32(bytes, 0);
     const std::size_t compressed = BigEndian::ReadU32(bytes, 4);
     const std::span<const uint8_t> body = bytes.subspan(kBlobHeaderSize);
     if (compressed == 0) {
-        if (body.size() != uncompressed) return Support::Unexpected(std::string("raw image size disagrees with its header"));
+        if (body.size() != uncompressed)
+            return Support::Unexpected(std::string("raw image size disagrees with its header"));
         blob.storage = Storage::RawAfterHeader;
         blob.pixels.assign(body.begin(), body.end());
         return blob;
     }
-    if (body.size() != compressed) return Support::Unexpected(std::string("compressed image size disagrees with its header"));
+    if (body.size() != compressed)
+        return Support::Unexpected(std::string("compressed image size disagrees with its header"));
     blob.storage = Storage::Lz77;
     blob.pixels = AvsLz77::Decompress(body, uncompressed);
     if (blob.pixels.size() != uncompressed) {
-        return Support::Unexpected(std::string("image decompressed to a different size than its header"));
+        return Support::Unexpected(
+            std::string("image decompressed to a different size than its header"));
     }
     return blob;
 }
@@ -116,14 +125,16 @@ std::vector<uint8_t> EncodeBlob(const Blob& blob) {
 }
 
 Support::Expected<std::vector<uint8_t>, std::string> PixelsToBgra(std::string_view format,
-                                                                   std::span<const uint8_t> pixels) {
-    if (format != kArgb8888Rev) return Support::Unexpected("unsupported pixel format " + std::string(format));
+                                                                  std::span<const uint8_t> pixels) {
+    if (format != kArgb8888Rev)
+        return Support::Unexpected("unsupported pixel format " + std::string(format));
     return std::vector<uint8_t>(pixels.begin(), pixels.end());
 }
 
 Support::Expected<std::vector<uint8_t>, std::string> BgraToPixels(std::string_view format,
-                                                                   std::span<const uint8_t> bgra) {
-    if (format != kArgb8888Rev) return Support::Unexpected("unsupported pixel format " + std::string(format));
+                                                                  std::span<const uint8_t> bgra) {
+    if (format != kArgb8888Rev)
+        return Support::Unexpected("unsupported pixel format " + std::string(format));
     return std::vector<uint8_t>(bgra.begin(), bgra.end());
 }
 

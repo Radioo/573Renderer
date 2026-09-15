@@ -111,6 +111,52 @@ IfsInspect::AtlasFilter carried never-populated width/height fields
 Not covered here (needs a D3D device + full AFP boot): afp-core playhead /
 stream semantics. Those stay on the render-regression net above.
 
+## The IFS round trip gate (`local` label)
+
+`ifs_round_trip_tests` (tests/local/ifs_round_trip_tests.cpp) runs every
+`.ifs` under `R573_IIDX_DIR/data` through the IFS editor's writers. It needs no
+DLL and carries the ctest label `local`, which neither CI nor `checks.sh`
+selects (both run `-L ci`), because a full pass reads the whole install and
+recompresses every texture.
+
+```
+set R573_IIDX_DIR=<iidx33 install>
+ctest --test-dir build -L local --output-on-failure
+```
+
+Per archive (sources in `tests/local/ifs_round_trip_{tests,reencode,compare}.cpp`):
+
+1. Read the archive and make a copy. In the copy, every binary XML entry is
+   replaced by `BinaryXml::Write(BinaryXml::Read(bytes))`, and every texture
+   image is decoded, converted to BGRA and back, and replaced by
+   `TextureImages::EncodeBlob` of the result (on all hardware threads). Other
+   entries are whole files and stay as they are.
+2. Write the copy with `Ifs::Write` and read it back with `Ifs::Read`, which
+   also verifies the manifest MD5.
+3. Fail on any difference in decoded content against the original: header
+   flags and time, manifest signature, encoding and root type, the entry tree
+   (kind, name, type, time, super image and its reference, extra nodes,
+   special nodes; `_info_` values are derived and only its shape is compared),
+   binary XML documents as trees, images as storage form plus pixels, and
+   whole files as bytes. Failures name the archive and the full entry path.
+
+Reported without failing: archives that come out byte-identical, entries whose
+re-encoded bytes differ from the originals, and, from a second write with every
+stored offset and the tree size cleared, how many archives the packer and the
+tree size formula reproduce exactly. Progress goes to stderr for every file.
+
+Before trusting a pass, the gate was run with a one-byte pixel corruption
+injected into `EncodeBlob` on two real archives: it failed all 66 images.
+
+Result on IIDX 33 (2026-09-15): 6194 files, 48 not IFS; all 6146 archives pass.
+10533 binary XML entries and 106371 texture images (106319 LZ77, 50 raw after
+the header, 2 in an uncompressed list; one texture list names an image twice)
+re-encode byte for byte. 6145 archives are byte-identical; the exception,
+`data/sound/16030-p0.ifs`, is 4 bytes shorter than its own data offset and the
+writer pads the region. Recomputing from scratch reproduces the tree size in
+6145 archives and every file offset in 6062. A full pass takes about 100
+minutes on a 16-thread machine.
+
 ## The real-data format cases ([real] tag)
 
 `formats_tests` carries five cases tagged `[real]` that decode REAL game

@@ -1,44 +1,18 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "formats/binary_xml.h"
+#include "binary_test_support.h"
 
-#include <cstddef>
 #include <cstdint>
 #include <string>
-#include <utility>
 #include <vector>
 
 namespace {
 
-std::vector<uint8_t> FromHex(const std::string& hex) {
-    std::vector<uint8_t> out;
-    for (std::size_t i = 0; i + 1 < hex.size(); i += 2) {
-        out.push_back(static_cast<uint8_t>(std::stoul(hex.substr(i, 2), nullptr, 16)));
-    }
-    return out;
-}
-
-std::vector<uint8_t> Bytes(const std::string& s) {
-    return {s.begin(), s.end()};
-}
-
-std::vector<uint8_t> Text(const std::string& s) {
-    std::vector<uint8_t> out(s.begin(), s.end());
-    out.push_back(0);
-    return out;
-}
-
-BinaryXml::Node Element(uint8_t type, std::string name, std::vector<uint8_t> value = {}) {
-    BinaryXml::Node node;
-    node.type = type;
-    node.name = std::move(name);
-    node.value = std::move(value);
-    return node;
-}
-
-BinaryXml::Node Attribute(std::string name, const std::string& text) {
-    return Element(BinaryXml::kAttributeType, std::move(name), Text(text));
-}
+using TestSupport::FromHex;
+using TestSupport::MakeAttribute;
+using TestSupport::MakeNode;
+using TestSupport::TextBytes;
 
 const std::string kVoidRoot = "a04200ff000000080104df4d39feff0000000000";
 
@@ -61,21 +35,21 @@ const std::string kLongNames =
 
 BinaryXml::Document ByteWordSlotsDocument() {
     BinaryXml::Document doc;
-    doc.root = Element(1, "slots");
+    doc.root = MakeNode(1, "slots");
     auto& c = doc.root.children;
-    c.push_back(Element(3, "a", {0x01}));
-    c.push_back(Element(4, "b", {0xFF, 0xFE}));
-    c.push_back(Element(6, "c", {0, 0, 0, 7}));
-    c.push_back(Element(52, "d", {0x01}));
-    c.push_back(Element(17, "e", {0x10, 0x20}));
-    c.push_back(Element(2, "f", {0x80}));
-    c.push_back(Element(11, "g", Text("hi")));
-    c.push_back(Element(3, "h", {0x05}));
-    c.push_back(Element(3, "i", {0x06}));
-    c.push_back(Element(5, "j", {0x12, 0x34}));
-    c.push_back(Element(30, "k", {0, 0, 0, 1, 0xFF, 0xFF, 0xFF, 0xFE, 0, 0, 0, 3}));
-    c.push_back(Element(10, "l", {0xDE, 0xAD, 0xBE}));
-    c.push_back(Element(15, "m", {0x3F, 0xF8, 0, 0, 0, 0, 0, 0}));
+    c.push_back(MakeNode(3, "a", {0x01}));
+    c.push_back(MakeNode(4, "b", {0xFF, 0xFE}));
+    c.push_back(MakeNode(6, "c", {0, 0, 0, 7}));
+    c.push_back(MakeNode(52, "d", {0x01}));
+    c.push_back(MakeNode(17, "e", {0x10, 0x20}));
+    c.push_back(MakeNode(2, "f", {0x80}));
+    c.push_back(MakeNode(11, "g", TextBytes("hi")));
+    c.push_back(MakeNode(3, "h", {0x05}));
+    c.push_back(MakeNode(3, "i", {0x06}));
+    c.push_back(MakeNode(5, "j", {0x12, 0x34}));
+    c.push_back(MakeNode(30, "k", {0, 0, 0, 1, 0xFF, 0xFF, 0xFF, 0xFE, 0, 0, 0, 3}));
+    c.push_back(MakeNode(10, "l", {0xDE, 0xAD, 0xBE}));
+    c.push_back(MakeNode(15, "m", {0x3F, 0xF8, 0, 0, 0, 0, 0, 0}));
     return doc;
 }
 
@@ -94,7 +68,7 @@ TEST_CASE("Read a void root with a sixbit name") {
 
 TEST_CASE("Write a void root with a sixbit name") {
     BinaryXml::Document doc;
-    doc.root = Element(1, "root");
+    doc.root = MakeNode(1, "root");
     const auto bytes = BinaryXml::Write(doc);
     REQUIRE(bytes.has_value());
     CHECK(*bytes == FromHex(kVoidRoot));
@@ -108,13 +82,13 @@ TEST_CASE("Read attributes, arrays and nesting") {
     CHECK(root.name == "texturelist");
     REQUIRE(root.attributes.size() == 1);
     CHECK(root.attributes[0].name == "compress");
-    CHECK(root.attributes[0].value == Text("avslz"));
+    CHECK(root.attributes[0].value == TextBytes("avslz"));
     REQUIRE(root.children.size() == 1);
     const BinaryXml::Node& texture = root.children[0];
     REQUIRE(texture.attributes.size() == 2);
     CHECK(texture.attributes[0].name == "format");
     CHECK(texture.attributes[1].name == "name");
-    CHECK(texture.attributes[1].value == Text("tex000"));
+    CHECK(texture.attributes[1].value == TextBytes("tex000"));
     REQUIRE(texture.children.size() == 2);
     CHECK(texture.children[0].type == (BinaryXml::kArrayFlag | 5));
     CHECK(texture.children[0].value == std::vector<uint8_t>{0x08, 0x00, 0x04, 0x00});
@@ -131,10 +105,10 @@ TEST_CASE("Write sorts attributes by name and supports long names") {
     BinaryXml::Document doc;
     doc.signature = BinaryXml::kByteNames;
     doc.encoding = 0xA0;
-    doc.root = Element(11, "a.b-c", Text("x"));
-    doc.root.attributes.push_back(Attribute("z", "1"));
-    doc.root.attributes.push_back(Attribute("attr with space", "2"));
-    doc.root.children.push_back(Element(1, std::string(100, 'n')));
+    doc.root = MakeNode(11, "a.b-c", TextBytes("x"));
+    doc.root.attributes.push_back(MakeAttribute("z", "1"));
+    doc.root.attributes.push_back(MakeAttribute("attr with space", "2"));
+    doc.root.children.push_back(MakeNode(1, std::string(100, 'n')));
     const auto bytes = BinaryXml::Write(doc);
     REQUIRE(bytes.has_value());
     CHECK(*bytes == FromHex(kLongNames));
@@ -154,7 +128,7 @@ TEST_CASE("Read then write reproduces every fixture byte for byte") {
 TEST_CASE("String bytes invalid in the declared encoding survive a round trip") {
     BinaryXml::Document doc;
     doc.encoding = 0x80;
-    doc.root = Element(11, "s", {0x83, 0xFF, 0x81, 0x00});
+    doc.root = MakeNode(11, "s", {0x83, 0xFF, 0x81, 0x00});
     const auto bytes = BinaryXml::Write(doc);
     REQUIRE(bytes.has_value());
     const auto back = BinaryXml::Read(*bytes);
@@ -185,25 +159,25 @@ TEST_CASE("Read rejects malformed documents") {
     bad_node_length[7] = 0x40;
     CHECK_FALSE(BinaryXml::Read(bad_node_length).has_value());
 
-    CHECK_FALSE(BinaryXml::Read(Bytes("\xA0")).has_value());
+    CHECK_FALSE(BinaryXml::Read(std::vector<uint8_t>{0xA0}).has_value());
 }
 
 TEST_CASE("Write rejects names the chosen name form cannot hold") {
     BinaryXml::Document doc;
-    doc.root = Element(1, "has space");
+    doc.root = MakeNode(1, "has space");
     CHECK_FALSE(BinaryXml::Write(doc).has_value());
 
-    doc.root = Element(1, std::string(37, 'a'));
+    doc.root = MakeNode(1, std::string(37, 'a'));
     CHECK_FALSE(BinaryXml::Write(doc).has_value());
 
-    doc.root = Element(1, "");
+    doc.root = MakeNode(1, "");
     CHECK_FALSE(BinaryXml::Write(doc).has_value());
 }
 
 TEST_CASE("Write rejects duplicate attribute names") {
     BinaryXml::Document doc;
-    doc.root = Element(1, "root");
-    doc.root.attributes.push_back(Attribute("a", "1"));
-    doc.root.attributes.push_back(Attribute("a", "2"));
+    doc.root = MakeNode(1, "root");
+    doc.root.attributes.push_back(MakeAttribute("a", "1"));
+    doc.root.attributes.push_back(MakeAttribute("a", "2"));
     CHECK_FALSE(BinaryXml::Write(doc).has_value());
 }

@@ -11,4 +11,6 @@ namespace Ifs {
 
 [[nodiscard]] std::string HashedName(std::string_view logical_name);
 
+[[nodiscard]] bool IsSpecialName(std::string_view name);
+
 }

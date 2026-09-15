@@ -67,6 +67,7 @@ add_library(r573_formats STATIC
     src/formats/binary_xml_read.cpp
     src/formats/binary_xml_types.cpp
     src/formats/binary_xml_write.cpp
+    src/formats/ifs_digest.cpp
     src/formats/ifs_layout.cpp
     src/formats/ifs_names.cpp
     src/formats/ifs_read.cpp
@@ -395,6 +396,7 @@ add_executable(formats_tests
     tests/formats/avs_lz77_tests.cpp
     tests/formats/binary_xml_tests.cpp
     tests/formats/ifs_archive_tests.cpp
+    tests/formats/ifs_names_tests.cpp
     tests/formats/texture_images_tests.cpp
     tests/formats/txp2_tests.cpp
     tests/formats/model3d_tests.cpp
@@ -616,6 +618,8 @@ target_link_libraries(pixel_golden_tests PRIVATE Catch2::Catch2WithMain r573_ren
 catch_discover_tests(pixel_golden_tests DISCOVERY_MODE POST_BUILD PROPERTIES LABELS ci)
 
 add_executable(ifs_round_trip_tests
+    tests/local/ifs_round_trip_compare.cpp
+    tests/local/ifs_round_trip_reencode.cpp
     tests/local/ifs_round_trip_tests.cpp
 )
 target_link_libraries(ifs_round_trip_tests PRIVATE Catch2::Catch2WithMain r573_formats r573_support

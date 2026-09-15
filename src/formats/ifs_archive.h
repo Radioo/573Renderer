@@ -20,7 +20,7 @@ struct Entry {
     std::string name;
     uint8_t type = 0;
     int32_t time = 0;
-    uint8_t image = 0;
+    uint8_t super_index = 0;
     uint32_t stored_offset = 0;
     uint32_t stored_size = 0;
     std::vector<uint8_t> bytes;

@@ -23,6 +23,10 @@ constexpr int kRoots = 256;
 constexpr std::size_t kGroupBytes = 17;
 constexpr uint32_t kPosMask = 0xFFFU;
 
+std::size_t At(int index) {
+    return static_cast<std::size_t>(index);
+}
+
 class Encoder {
 public:
     explicit Encoder(std::span<const uint8_t> src)
@@ -73,8 +77,7 @@ void Encoder::Insert(int r) {
         p = child[p];
         int i = 1;
         for (; i < kMaxMatch; i++) {
-            cmp = static_cast<int>(text_[static_cast<std::size_t>(r + i)]) -
-                  static_cast<int>(text_[static_cast<std::size_t>(p + i)]);
+            cmp = static_cast<int>(text_[At(r) + At(i)]) - static_cast<int>(text_[At(p) + At(i)]);
             if (cmp != 0) break;
         }
         if (i > match_length_) {
@@ -155,7 +158,7 @@ int Encoder::EmitItem() {
 void Encoder::Slide(uint8_t c) {
     Delete(s_);
     text_[static_cast<std::size_t>(s_)] = c;
-    if (s_ < kMaxMatch - 1) text_[static_cast<std::size_t>(s_ + kWindow)] = c;
+    if (s_ < kMaxMatch - 1) text_[At(s_) + At(kWindow)] = c;
     s_ = (s_ + 1) & kWindowMask;
     r_ = (r_ + 1) & kWindowMask;
     Insert(r_);
@@ -179,7 +182,7 @@ void Encoder::Finish() {
 std::vector<uint8_t> Encoder::Run() {
     out_.reserve(src_.size() + (src_.size() / 8) + kGroupBytes);
     while (length_ < kMaxMatch && in_ < src_.size()) {
-        text_[static_cast<std::size_t>(r_ + length_)] = src_[in_];
+        text_[At(r_) + At(length_)] = src_[in_];
         in_++;
         length_++;
     }
@@ -204,7 +207,7 @@ std::vector<uint8_t> Encoder::Run() {
 
 std::vector<uint8_t> Decompress(std::span<const uint8_t> src, std::size_t expected_size) {
     std::vector<uint8_t> out;
-    if (expected_size != 0) out.reserve(expected_size);
+    out.reserve(std::min(expected_size, src.size() * static_cast<std::size_t>(kMaxMatch)));
 
     std::array<uint8_t, kWindow> window{};
     auto pos = static_cast<uint32_t>(kStart);

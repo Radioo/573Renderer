@@ -17,7 +17,7 @@ namespace {
 constexpr std::string_view kSixBitAlphabet =
     "0123456789:ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz";
 constexpr std::size_t kMaxSixBitLength = 36;
-constexpr std::size_t kMaxShortLongName = 64;
+constexpr std::size_t kMaxOneByteLengthName = 64;
 constexpr std::size_t kMaxLongName = 4096;
 constexpr std::size_t kShortLengthBias = 63;
 constexpr uint8_t kShortLengthMin = 0x40;
@@ -106,7 +106,7 @@ Support::Expected<void, std::string> EncodeLong(const std::string& name,
     if (name.empty() || name.size() > kMaxLongName) {
         return Support::Unexpected("long name length out of range: " + name);
     }
-    if (name.size() <= kMaxShortLongName) {
+    if (name.size() <= kMaxOneByteLengthName) {
         out.push_back(static_cast<uint8_t>(name.size() + kShortLengthBias));
     } else {
         const std::size_t wide = name.size() + kWideLengthBias;
@@ -119,14 +119,14 @@ Support::Expected<void, std::string> EncodeLong(const std::string& name,
 
 }
 
-Support::Expected<std::string, std::string>
-DecodeName(std::span<const uint8_t> bytes, std::size_t& pos, uint8_t signature) {
+Support::Expected<std::string, std::string> DecodeName(std::span<const uint8_t> bytes,
+                                                       std::size_t& pos, uint8_t signature) {
     if (pos >= bytes.size()) return Support::Unexpected(std::string("name overruns"));
     return signature == kByteNames ? DecodeLong(bytes, pos) : DecodeSixBit(bytes, pos);
 }
 
-Support::Expected<void, std::string>
-EncodeName(const std::string& name, uint8_t signature, std::vector<uint8_t>& out) {
+Support::Expected<void, std::string> EncodeName(const std::string& name, uint8_t signature,
+                                                std::vector<uint8_t>& out) {
     return signature == kByteNames ? EncodeLong(name, out) : EncodeSixBit(name, out);
 }
 

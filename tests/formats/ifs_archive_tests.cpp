@@ -1,10 +1,12 @@
 #include <catch2/catch_test_macros.hpp>
 
+#include "binary_test_support.h"
 #include "formats/binary_xml.h"
 #include "formats/ifs_archive.h"
 
 #include <md5.h>
 
+#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -15,11 +17,12 @@
 
 namespace {
 
-constexpr uint8_t kS32 = 6;
-constexpr uint8_t kU32 = 7;
-constexpr uint8_t kU8 = 3;
-constexpr uint8_t kBin = 10;
-constexpr uint8_t k3S32 = 30;
+using BinaryXml::Type::k3S32;
+using BinaryXml::Type::kBin;
+using BinaryXml::Type::kS32;
+using BinaryXml::Type::kU32;
+using BinaryXml::Type::kU8;
+using TestSupport::MakeNode;
 constexpr std::size_t kHeaderWithMd5 = 36;
 
 uint32_t ReadU32BE(std::span<const uint8_t> b, std::size_t off) {
@@ -42,21 +45,13 @@ std::vector<uint8_t> Filled(std::size_t size, uint8_t seed) {
     return out;
 }
 
-BinaryXml::Node Value(uint8_t type, std::string name, std::vector<uint8_t> value) {
-    BinaryXml::Node node;
-    node.type = type;
-    node.name = std::move(name);
-    node.value = std::move(value);
-    return node;
-}
-
 Ifs::Entry InfoEntry() {
     Ifs::Entry info;
     info.kind = Ifs::EntryKind::Special;
     info.name = "_info_";
-    info.special = Value(1, "_info_", {});
-    info.special.children.push_back(Value(kBin, "md5", std::vector<uint8_t>(16, 0)));
-    info.special.children.push_back(Value(kU32, "size", {0, 0, 0, 0}));
+    info.special = MakeNode(1, "_info_", {});
+    info.special.children.push_back(MakeNode(kBin, "md5", std::vector<uint8_t>(16, 0)));
+    info.special.children.push_back(MakeNode(kU32, "size", {0, 0, 0, 0}));
     return info;
 }
 
@@ -204,14 +199,14 @@ TEST_CASE("Write lays files out again once a size no longer matches") {
 TEST_CASE("Files stored in a super image keep their reference and carry no bytes") {
     Ifs::Archive archive = SampleArchive();
     Ifs::Entry external = FileEntry("pre", {}, 11);
-    external.image = 1;
+    external.super_index = 1;
     external.stored_offset = 50;
     external.stored_size = 10;
-    external.extra_nodes.push_back(Value(kU8, "i", {1}));
+    external.extra_nodes.push_back(MakeNode(kU8, "i", {1}));
     archive.entries.push_back(std::move(external));
     const Ifs::Archive back = ReadBack(archive);
     const Ifs::Entry& pre = Find(back.entries, "pre");
-    CHECK(pre.image == 1);
+    CHECK(pre.super_index == 1);
     CHECK(pre.stored_offset == 50);
     CHECK(pre.stored_size == 10);
     CHECK(pre.bytes.empty());
@@ -223,4 +218,19 @@ TEST_CASE("Tree size covers the manifest and keeps a larger stored value") {
     Ifs::Archive roomy = SampleArchive();
     roomy.tree_size = 5000;
     CHECK(ReadBack(roomy).tree_size == 5000);
+}
+
+TEST_CASE("Write repacks a stored layout that does not fit in 32 bits") {
+    Ifs::Archive archive = ReadBack(SampleArchive());
+    archive.entries[2].stored_offset = 0xFFFFFFF0U;
+    const Ifs::Archive back = ReadBack(archive);
+    CHECK(back.entries[2].stored_offset == 112);
+    CHECK(back.stored_data_size == 144);
+}
+
+TEST_CASE("Read rejects an archive whose manifest MD5 does not match") {
+    auto bytes = Ifs::Write(SampleArchive());
+    REQUIRE(bytes.has_value());
+    (*bytes)[20] ^= 0xFFU;
+    CHECK_FALSE(Ifs::Read(*bytes).has_value());
 }

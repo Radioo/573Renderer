@@ -92,6 +92,10 @@ requires identical bytes.
 
 ## Binary XML (`binary_xml.h`)
 
+`BinaryXml::Type` names the node type ids the code uses (`kVoid`, `kS32`,
+`k3S32`, `k4U16`, `kAttribute`, ...); the full table of 56 ids and their sizes
+is in `binary_xml_types.cpp`.
+
 `BinaryXml::Read` and `BinaryXml::Write` convert between avs2-core's binary
 property format and a `Document` of `Node`s, byte for byte. A node holds its
 type byte (the base type id plus `kArrayFlag`), its name, its value bytes as
@@ -145,8 +149,9 @@ XML signature and encoding, and a tree of `Entry` values in manifest order:
 - Directory: an `s32` node (its time) or a `void` node (the header time).
 - File: a `3s32` node (offset, size, time) or a `2s32` node (offset, size).
   Local files carry their bytes; a file whose `u8` child `i` is non-zero
-  lives in a `_super_` image, keeps its stored offset and size, and carries no
-  bytes. Other child nodes of a file are kept verbatim.
+  lives in a `_super_` image (`Entry::super_index`), keeps its stored offset
+  and size, and carries no bytes. Other child nodes of a file are kept
+  verbatim.
 - Special: every other node, kept verbatim. That covers `_info_`, `_super_`
   and any name the game's directory listing skips (a leading `_` followed by
   anything other than `A`-`H`, `_` or a digit), plus nodes with attributes or
@@ -155,6 +160,11 @@ XML signature and encoding, and a tree of `Entry` values in manifest order:
 Header, big-endian: `6C AD 8F 89`, u16 flags, u16 NOT flags, u32 time, u32
 tree size, u32 data offset, then a 16-byte MD5 when flags has `0x2`. The
 manifest follows the header and the data region starts at the data offset.
+
+`Read` verifies that MD5 the way avs2-core's mount does: over the region from
+the end of the header to the data offset, with any bytes missing from a
+truncated file counted as zeros (`ifs_digest.h`). A mismatch is an error,
+because the game refuses to mount such a file.
 
 What `Write` recomputes rather than copies:
 
@@ -165,7 +175,9 @@ What `Write` recomputes rather than copies:
   Otherwise the files are packed the way the game's main packer does it:
   largest first (ties in manifest order), each placed at the first zero gap
   where a 4-aligned start fits, else appended at the 16-aligned end; the
-  region ends 16-aligned.
+  region ends 16-aligned. Offsets are checked in 64 bits: a stored layout
+  whose ranges would pass 4 GB is laid out again, and a data region that would
+  pass 4 GB makes `Write` return an error.
 - `_info_` at the root: its `md5` child becomes the MD5 of the data region and
   its `size` child the region length.
 - Data offset: the manifest end aligned to 16, with zero padding.
@@ -180,7 +192,8 @@ What `Write` recomputes rather than copies:
   name length (at least 8) rounded to 4. avs2-core only needs the value to be
   big enough.
 
-Entries keep their stored node names. `Ifs::EscapeName` (`ifs_names.h`) maps
+Entries keep their stored node names. `Ifs::IsSpecialName` holds the listing
+rule above. `Ifs::EscapeName` (`ifs_names.h`) maps
 one path component to its node name the way imagefs does: letters stay, a
 leading digit gains a `_`, `_` doubles, and ` $+-.:@~` become `_A` to `_H`;
 any other character is refused (bytes of `0x80` and above make avs2-core read

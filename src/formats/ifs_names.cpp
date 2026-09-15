@@ -4,6 +4,7 @@
 
 #include <md5.h>
 
+#include <cstddef>
 #include <string>
 #include <string_view>
 
@@ -13,6 +14,7 @@ namespace {
 
 constexpr std::string_view kEscapedCharacters = " $+-.:@~";
 constexpr std::string_view kEscapeLetters = "ABCDEFGH";
+constexpr std::string_view kListableAfterUnderscore = "ABCDEFGH_0123456789";
 
 bool IsAsciiLetter(char c) {
     return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z');
@@ -49,6 +51,11 @@ Support::Expected<std::string, std::string> EscapeName(std::string_view componen
 std::string HashedName(std::string_view logical_name) {
     MD5 md5;
     return *EscapeName(md5(logical_name.data(), logical_name.size()));
+}
+
+bool IsSpecialName(std::string_view name) {
+    return name.size() >= 2 && name[0] == '_' &&
+           kListableAfterUnderscore.find(name[1]) == std::string_view::npos;
 }
 
 }

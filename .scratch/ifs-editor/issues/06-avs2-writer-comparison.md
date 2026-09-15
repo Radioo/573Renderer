@@ -9,7 +9,7 @@ A `local_dll` test that loads avs2-core from `R573_IIDX_DIR` and compares its bi
 ## Acceptance
 
 - Binary XML: documents written by us, read and written back by avs2-core, compare byte for byte.
-- LZ77: game image payloads compressed by both compare byte for byte.
+- LZ77: synthetic payloads from 1 byte to 300 KB compressed by both compare byte for byte.
 - Skips when the install is not set.
 
 ## Comments

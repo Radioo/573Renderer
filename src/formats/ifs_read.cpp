@@ -2,7 +2,9 @@
 
 #include "formats/big_endian.h"
 #include "formats/binary_xml.h"
+#include "formats/ifs_digest.h"
 #include "formats/ifs_layout.h"
+#include "formats/ifs_names.h"
 #include "support/expected.h"
 
 #include <algorithm>
@@ -20,10 +22,10 @@ namespace {
 constexpr std::size_t kTimeSlot = 8;
 constexpr const char* kImageNodeName = "i";
 
-using Detail::kS32Type;
-using Detail::kThreeS32Type;
-using Detail::kTwoS32Type;
-using Detail::kVoidType;
+using BinaryXml::Type::k2S32;
+using BinaryXml::Type::k3S32;
+using BinaryXml::Type::kS32;
+using BinaryXml::Type::kVoid;
 
 struct ReadContext {
     std::span<const uint8_t> data;
@@ -47,21 +49,22 @@ ConvertChildren(const std::vector<BinaryXml::Node>& nodes, const ReadContext& ct
 
 Support::Expected<void, std::string> FillFile(const BinaryXml::Node& node, const ReadContext& ctx,
                                               Entry& file) {
-    const std::size_t needed = node.type == kThreeS32Type ? 12 : 8;
+    const std::size_t needed = node.type == k3S32 ? 12 : 8;
     if (node.value.size() != needed) {
         return Support::Unexpected("file node " + node.name + " has a malformed value");
     }
     file.kind = EntryKind::File;
     file.stored_offset = BigEndian::ReadU32(node.value, 0);
     file.stored_size = BigEndian::ReadU32(node.value, 4);
-    file.time = node.type == kThreeS32Type ? static_cast<int32_t>(BigEndian::ReadU32(node.value, kTimeSlot))
-                                           : ctx.header_time;
+    file.time = node.type == k3S32 ? static_cast<int32_t>(BigEndian::ReadU32(node.value, kTimeSlot))
+                                   : ctx.header_time;
     file.extra_nodes = node.children;
     const auto image = std::ranges::find_if(file.extra_nodes, [](const BinaryXml::Node& child) {
-        return child.name == kImageNodeName && child.type == Detail::kU8Type;
+        return child.name == kImageNodeName && child.type == BinaryXml::Type::kU8;
     });
-    if (image != file.extra_nodes.end() && image->value.size() == 1) file.image = image->value[0];
-    if (file.image != 0) return {};
+    if (image != file.extra_nodes.end() && image->value.size() == 1)
+        file.super_index = image->value[0];
+    if (file.super_index != 0) return {};
     const std::size_t end = std::size_t{file.stored_offset} + file.stored_size;
     if (end > ctx.data.size()) {
         return Support::Unexpected("file " + node.name + " lies outside the data region");
@@ -76,17 +79,17 @@ Support::Expected<Entry, std::string> ConvertNode(const BinaryXml::Node& node,
     Entry entry;
     entry.name = node.name;
     entry.type = node.type;
-    const bool plain = node.attributes.empty() && !Detail::IsSpecialName(node.name);
-    if (plain && (node.type == kVoidType || (node.type == kS32Type && node.value.size() == 4))) {
+    const bool plain = node.attributes.empty() && !IsSpecialName(node.name);
+    if (plain && (node.type == kVoid || (node.type == kS32 && node.value.size() == 4))) {
         entry.kind = EntryKind::Directory;
-        entry.time = node.type == kS32Type ? static_cast<int32_t>(BigEndian::ReadU32(node.value, 0))
-                                           : ctx.header_time;
+        entry.time = node.type == kS32 ? static_cast<int32_t>(BigEndian::ReadU32(node.value, 0))
+                                       : ctx.header_time;
         auto children = ConvertChildren(node.children, ctx);
         if (!children) return Support::Unexpected(children.error());
         entry.children = std::move(*children);
         return entry;
     }
-    if (plain && (node.type == kTwoS32Type || node.type == kThreeS32Type)) {
+    if (plain && (node.type == k2S32 || node.type == k3S32)) {
         if (auto filled = FillFile(node, ctx, entry); !filled) {
             return Support::Unexpected(filled.error());
         }
@@ -118,6 +121,12 @@ Support::Expected<Archive, std::string> Read(std::span<const uint8_t> bytes) {
         Detail::kHeaderSize + ((archive.flags & kFlagManifestMd5) != 0 ? Detail::kMd5Size : 0);
     if (bytes.size() < header_end || data_offset < header_end) {
         return Support::Unexpected(std::string("IFS header is truncated or inconsistent"));
+    }
+    if ((archive.flags & kFlagManifestMd5) != 0) {
+        const Detail::Digest digest = Detail::ManifestMd5(bytes, header_end, data_offset);
+        if (!std::equal(digest.begin(), digest.end(), bytes.begin() + Detail::kHeaderSize)) {
+            return Support::Unexpected(std::string("IFS manifest MD5 does not match its header"));
+        }
     }
     const std::size_t manifest_end = std::min(data_offset, bytes.size());
     auto manifest = BinaryXml::Read(bytes.subspan(header_end, manifest_end - header_end));

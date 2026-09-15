@@ -2,19 +2,18 @@
 
 #include "formats/big_endian.h"
 #include "formats/binary_xml.h"
+#include "formats/ifs_digest.h"
 #include "formats/ifs_layout.h"
 #include "support/expected.h"
 
-#include <md5.h>
-
 #include <algorithm>
-#include <array>
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <initializer_list>
+#include <limits>
 #include <span>
 #include <string>
-#include <unordered_map>
 #include <vector>
 
 namespace Ifs {
@@ -22,36 +21,41 @@ namespace Ifs {
 namespace {
 
 constexpr uint32_t kDataAlignment = 16;
+constexpr uint64_t kMaxDataBytes = std::numeric_limits<uint32_t>::max() - kDataAlignment;
 constexpr const char* kInfoMd5 = "md5";
 constexpr const char* kInfoSize = "size";
 
-using Offsets = std::unordered_map<const Entry*, uint32_t>;
+using BinaryXml::Type::k3S32;
+
+struct Placement {
+    const Entry* file = nullptr;
+    uint32_t offset = 0;
+};
 
 struct PlacedData {
-    Offsets offsets;
+    std::vector<Placement> placements;
     std::vector<uint8_t> bytes;
 };
 
-std::array<uint8_t, Detail::kMd5Size> Md5(std::span<const uint8_t> bytes) {
-    MD5 md5;
-    md5.add(bytes.data(), bytes.size());
-    std::array<uint8_t, Detail::kMd5Size> digest{};
-    md5.getHash(digest.data());
-    return digest;
+const Placement* FindPlacement(const PlacedData& placed, const Entry* file) {
+    const auto found =
+        std::ranges::lower_bound(placed.placements, file, std::ranges::less{}, &Placement::file);
+    return found != placed.placements.end() && found->file == file ? &*found : nullptr;
 }
 
 void CollectLocalFiles(const std::vector<Entry>& entries, std::vector<const Entry*>& out) {
     for (const Entry& entry : entries) {
-        if (entry.kind == EntryKind::File && entry.image == 0) out.push_back(&entry);
+        if (entry.kind == EntryKind::File && entry.super_index == 0) out.push_back(&entry);
         if (entry.kind == EntryKind::Directory) CollectLocalFiles(entry.children, out);
     }
 }
 
 bool StoredLayoutFits(const std::vector<const Entry*>& files) {
-    std::vector<const Entry*> by_offset = files;
     for (const Entry* file : files) {
         if (file->bytes.size() != file->stored_size) return false;
+        if (uint64_t{file->stored_offset} + file->stored_size > kMaxDataBytes) return false;
     }
+    std::vector<const Entry*> by_offset = files;
     std::ranges::sort(by_offset, {}, &Entry::stored_offset);
     for (std::size_t i = 1; i < by_offset.size(); i++) {
         const uint64_t previous_end =
@@ -61,32 +65,43 @@ bool StoredLayoutFits(const std::vector<const Entry*>& files) {
     return true;
 }
 
-PlacedData PlaceFiles(const Archive& archive) {
+Support::Expected<Detail::Layout, std::string> LayOut(const Archive& archive,
+                                                      const std::vector<const Entry*>& files) {
+    if (StoredLayoutFits(files)) {
+        Detail::Layout layout;
+        layout.data_size = archive.stored_data_size;
+        for (const Entry* file : files) {
+            layout.offsets.push_back(file->stored_offset);
+            layout.data_size = std::max(layout.data_size, file->stored_offset + file->stored_size);
+        }
+        return layout;
+    }
+    uint64_t total = 0;
+    std::vector<uint32_t> sizes;
+    sizes.reserve(files.size());
+    for (const Entry* file : files) {
+        total += uint64_t{file->bytes.size()} + kDataAlignment;
+        if (total > kMaxDataBytes) {
+            return Support::Unexpected(std::string("IFS data region would exceed 4 GB"));
+        }
+        sizes.push_back(static_cast<uint32_t>(file->bytes.size()));
+    }
+    return Detail::PackLargestFirst(sizes);
+}
+
+Support::Expected<PlacedData, std::string> PlaceFiles(const Archive& archive) {
     std::vector<const Entry*> files;
     CollectLocalFiles(archive.entries, files);
+    auto layout = LayOut(archive, files);
+    if (!layout) return Support::Unexpected(layout.error());
     PlacedData placed;
-    uint32_t data_size = 0;
-    if (StoredLayoutFits(files)) {
-        data_size = archive.stored_data_size;
-        for (const Entry* file : files) {
-            placed.offsets[file] = file->stored_offset;
-            data_size = std::max(data_size, file->stored_offset + file->stored_size);
-        }
-    } else {
-        std::vector<uint32_t> sizes;
-        sizes.reserve(files.size());
-        for (const Entry* file : files)
-            sizes.push_back(static_cast<uint32_t>(file->bytes.size()));
-        const Detail::Layout layout = Detail::PackLargestFirst(sizes);
-        for (std::size_t i = 0; i < files.size(); i++)
-            placed.offsets[files[i]] = layout.offsets[i];
-        data_size = layout.data_size;
+    placed.bytes.assign(layout->data_size, 0);
+    for (std::size_t i = 0; i < files.size(); i++) {
+        placed.placements.push_back({.file = files[i], .offset = layout->offsets[i]});
+        std::ranges::copy(files[i]->bytes,
+                          placed.bytes.begin() + static_cast<std::ptrdiff_t>(layout->offsets[i]));
     }
-    placed.bytes.assign(data_size, 0);
-    for (const Entry* file : files) {
-        std::ranges::copy(file->bytes,
-                          placed.bytes.begin() + static_cast<std::ptrdiff_t>(placed.offsets[file]));
-    }
+    std::ranges::sort(placed.placements, std::ranges::less{}, &Placement::file);
     return placed;
 }
 
@@ -99,11 +114,11 @@ std::vector<uint8_t> BigEndianBytes(std::initializer_list<uint32_t> values) {
 
 BinaryXml::Node InfoNode(const Entry& entry, const PlacedData& placed) {
     BinaryXml::Node node = entry.special;
-    const std::array<uint8_t, Detail::kMd5Size> digest = Md5(placed.bytes);
+    const Detail::Digest digest = Detail::Md5(placed.bytes);
     for (BinaryXml::Node& child : node.children) {
-        if (child.name == kInfoMd5 && child.type == Detail::kBinType) {
+        if (child.name == kInfoMd5 && child.type == BinaryXml::Type::kBin) {
             child.value.assign(digest.begin(), digest.end());
-        } else if (child.name == kInfoSize && child.type == Detail::kU32Type) {
+        } else if (child.name == kInfoSize && child.type == BinaryXml::Type::kU32) {
             child.value = BigEndianBytes({static_cast<uint32_t>(placed.bytes.size())});
         }
     }
@@ -118,16 +133,17 @@ BinaryXml::Node ManifestNode(const Entry& entry, const PlacedData& placed, bool 
     node.type = entry.type;
     node.name = entry.name;
     if (entry.kind == EntryKind::Directory) {
-        if (entry.type == Detail::kS32Type) node.value = BigEndianBytes({static_cast<uint32_t>(entry.time)});
+        if (entry.type == BinaryXml::Type::kS32)
+            node.value = BigEndianBytes({static_cast<uint32_t>(entry.time)});
         for (const Entry& child : entry.children)
             node.children.push_back(ManifestNode(child, placed, false));
         return node;
     }
-    const auto found = placed.offsets.find(&entry);
-    const uint32_t offset = found != placed.offsets.end() ? found->second : entry.stored_offset;
+    const Placement* placement = FindPlacement(placed, &entry);
+    const uint32_t offset = placement != nullptr ? placement->offset : entry.stored_offset;
     const uint32_t size =
-        found != placed.offsets.end() ? static_cast<uint32_t>(entry.bytes.size()) : entry.stored_size;
-    node.value = entry.type == Detail::kThreeS32Type
+        placement != nullptr ? static_cast<uint32_t>(entry.bytes.size()) : entry.stored_size;
+    node.value = entry.type == k3S32
                      ? BigEndianBytes({offset, size, static_cast<uint32_t>(entry.time)})
                      : BigEndianBytes({offset, size});
     node.children = entry.extra_nodes;
@@ -137,25 +153,26 @@ BinaryXml::Node ManifestNode(const Entry& entry, const PlacedData& placed, bool 
 }
 
 Support::Expected<std::vector<uint8_t>, std::string> Write(const Archive& archive) {
-    const PlacedData placed = PlaceFiles(archive);
+    const auto placed = PlaceFiles(archive);
+    if (!placed) return Support::Unexpected(placed.error());
     BinaryXml::Document manifest;
     manifest.signature = archive.manifest_signature;
     manifest.encoding = archive.manifest_encoding;
     manifest.root.type = archive.root_type;
     manifest.root.name = Detail::kRootName;
     for (const Entry& entry : archive.entries)
-        manifest.root.children.push_back(ManifestNode(entry, placed, true));
-    const auto kbin = BinaryXml::Write(manifest);
-    if (!kbin) return Support::Unexpected("IFS manifest: " + kbin.error());
+        manifest.root.children.push_back(ManifestNode(entry, *placed, true));
+    const auto manifest_bytes = BinaryXml::Write(manifest);
+    if (!manifest_bytes) return Support::Unexpected("IFS manifest: " + manifest_bytes.error());
 
     const bool with_md5 = (archive.flags & kFlagManifestMd5) != 0;
     const auto header_end =
         static_cast<uint32_t>(Detail::kHeaderSize + (with_md5 ? Detail::kMd5Size : 0));
     const uint32_t data_offset =
-        Detail::AlignTo(header_end + static_cast<uint32_t>(kbin->size()), kDataAlignment);
+        Detail::AlignTo(header_end + static_cast<uint32_t>(manifest_bytes->size()), kDataAlignment);
 
     std::vector<uint8_t> out;
-    out.reserve(data_offset + placed.bytes.size());
+    out.reserve(data_offset + placed->bytes.size());
     BigEndian::AppendU32(out, Detail::kSignature);
     BigEndian::AppendU16(out, archive.flags);
     BigEndian::AppendU16(out, static_cast<uint16_t>(archive.flags ^ Detail::kFlagComplement));
@@ -163,14 +180,13 @@ Support::Expected<std::vector<uint8_t>, std::string> Write(const Archive& archiv
     BigEndian::AppendU32(out, std::max(archive.tree_size, Detail::TreeSize(manifest)));
     BigEndian::AppendU32(out, data_offset);
     out.resize(header_end, 0);
-    out.insert(out.end(), kbin->begin(), kbin->end());
+    out.insert(out.end(), manifest_bytes->begin(), manifest_bytes->end());
     out.resize(data_offset, 0);
     if (with_md5) {
-        const auto region = std::span(out).subspan(header_end, data_offset - header_end);
-        const std::array<uint8_t, Detail::kMd5Size> digest = Md5(region);
+        const Detail::Digest digest = Detail::ManifestMd5(out, header_end, data_offset);
         std::ranges::copy(digest, out.begin() + static_cast<std::ptrdiff_t>(Detail::kHeaderSize));
     }
-    out.insert(out.end(), placed.bytes.begin(), placed.bytes.end());
+    out.insert(out.end(), placed->bytes.begin(), placed->bytes.end());
     return out;
 }
 

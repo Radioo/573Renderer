@@ -77,11 +77,13 @@ Support::Expected<Node, std::string> Reader::ParseElement(uint8_t type, int dept
     if (!name) return Support::Unexpected(name.error());
     node.name = std::move(*name);
     for (;;) {
-        if (pos_ >= bytes_.size()) return Support::Unexpected(std::string("node stream ends early"));
+        if (pos_ >= bytes_.size())
+            return Support::Unexpected(std::string("node stream ends early"));
         const uint8_t next = bytes_[pos_++];
         if (next == Detail::kNodeEnd) break;
-        if (!Detail::IsValidType(next)) return Support::Unexpected(std::string("invalid node type"));
-        if (next == kAttributeType) {
+        if (!Detail::IsValidType(next))
+            return Support::Unexpected(std::string("invalid node type"));
+        if (next == Type::kAttribute) {
             Node attribute;
             attribute.type = next;
             auto attribute_name = Detail::DecodeName(bytes_, pos_, doc_.signature);
@@ -104,13 +106,14 @@ Support::Expected<Node, std::string> Reader::ParseElement(uint8_t type, int dept
 Support::Expected<void, std::string> Reader::ParseNodes() {
     if (pos_ >= bytes_.size()) return Fail("missing root node");
     const uint8_t type = bytes_[pos_++];
-    if (!Detail::IsValidType(type) || type == kAttributeType) return Fail("invalid root node");
+    if (!Detail::IsValidType(type) || type == Type::kAttribute) return Fail("invalid root node");
     auto root = ParseElement(type, 0);
     if (!root) return Fail(root.error());
     doc_.root = std::move(*root);
-    if (pos_ >= bytes_.size() || bytes_[pos_++] != Detail::kDocumentEnd) {
+    if (pos_ >= bytes_.size() || bytes_[pos_] != Detail::kDocumentEnd) {
         return Fail("missing document end marker");
     }
+    pos_++;
     if (Detail::PaddedTo4(pos_ - Detail::kHeaderSize) != node_length_) {
         return Fail("node section length disagrees with its content");
     }
