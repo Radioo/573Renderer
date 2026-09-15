@@ -37,6 +37,13 @@ documents, which are THE source of truth. Start here to find the right one.
 | [media_formats.md](media_formats.md) | export formats: the Format enum, tokens/extensions, stability contract, the CI encode net |
 | [formats.md](formats.md) | pure parsers: IFS/arc containers, LZ77, DXT decode, BGRA frame ops |
 
+## IFS editor
+
+| doc | read it when |
+|-----|--------------|
+| [../CONTEXT.md](../CONTEXT.md) | you need the editor's vocabulary: IFS, entry, package, project, clip, depth, placement, script, library call |
+| [adr/](adr/) | you want to know why the editor is shaped the way it is: project file, round trip, Qt, DLL viewport, preview host |
+
 ## Scene presets
 
 | doc | read it when |
