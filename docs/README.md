@@ -64,6 +64,8 @@ documents, which are THE source of truth. Start here to find the right one.
 | [settings.md](settings.md) | r573_settings: settings.ini persistence |
 | [afp_host.md](afp_host.md) | r573_afp_host: the modern avs/afp boot, package, animation and draw code the preview host links, and its standalone link gate |
 | [preview_host.md](preview_host.md) | r573_preview_protocol: the IFS editor's preview host protocol (FlatBuffers schema, named pipe channel, client) |
+| [document.md](document.md) | r573_document: the Qt-free editor document model, entry roles, the inspector fields and the timeline depth rows |
+| [editor.md](editor.md) | ifs_editor: the Qt 6 editor application, its separate CMake project, Qt plugin deployment and window layout |
 
 ## Process, build, and verification
 
@@ -72,6 +74,6 @@ documents, which are THE source of truth. Start here to find the right one.
 | [build.md](build.md) | building: CMake presets, vcpkg, line endings, ffmpeg features |
 | [ci.md](ci.md) | what CI runs and why |
 | [gates.md](gates.md) | every quality gate: no-comments, tidy config chain, file length, format pins, gui isolation, machine paths |
-| [local_regression.md](local_regression.md) | the local byte-compare net, machine-local baselines, and the local_dll real-DLL contract tier |
+| [local_regression.md](local_regression.md) | the local byte-compare net, machine-local baselines, and the local_dll real-DLL contract suite |
 | [tidy_migration.md](tidy_migration.md) | the clang-tidy whole-tree migration (3113 -> 0 findings): method, fixit tooling, and per-check gotchas |
 | [comment_migration.md](comment_migration.md) | the comment-knowledge migration: method, the source-file-to-doc knowledge map, and the open questions it surfaced |

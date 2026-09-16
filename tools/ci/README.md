@@ -17,6 +17,7 @@ uv run check_no_comments.py
 uv run check_banned_chars.py
 uv run check_machine_paths.py
 uv run check_gui_isolation.py
+uv run check_qt_isolation.py
 uv run check_host_isolation.py
 uv run check_preset_layers.py
 uv run check_preset_states.py
@@ -31,6 +32,7 @@ uv run run_tidy.py
 | `check_banned_chars.py` | em/en dashes, smart quotes, non-breaking spaces and their HTML entities |
 | `check_machine_paths.py` | an absolute drive-letter path in a tracked file |
 | `check_gui_isolation.py` | ImGui symbols outside `src/gui/` and `tests/gui/` |
+| `check_qt_isolation.py` | Qt symbols in `src/` or `tests/`, which belong to the editor project alone |
 | `check_host_isolation.py` | `PresetHost::` / `Scene3dHost::` / `Gc2dHost::` inside `src/gui/timeline/` or `src/gui/gui_preset_library.*` |
 | `check_preset_layers.py` | a 2D layer a built-in preset draws with no `background` row in `docs/preset_layers.md`, or a hidden part with no `chrome` row |
 | `check_preset_states.py` | a preset marker or option choice with no row in `docs/preset_states.md`, and a documented state no preset exposes |

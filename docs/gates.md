@@ -97,6 +97,20 @@ headless GUI suite necessarily drives ImGui directly (docs/gui_tests.md); it
 is the only test directory allowed to, and it tests the shell rather than
 violating it.
 
+### Qt isolation (`check_qt_isolation.py`)
+
+The same shape as the gui-isolation gate, for the other toolkit. Qt headers,
+`Q_OBJECT`, `Qt::` and the common `Q*` types may appear only under `editor/`;
+`src/**` and `tests/**` are scanned and must stay clean. The editor's document
+model (docs/document.md) and the preview protocol live in `src/` precisely so
+they can be tested in the renderer's `ci` suite, which links no Qt at all, and
+so the same code could serve a different front end. The gui-isolation gate now
+scans `editor/` too, so the two gates together keep ImGui out of the editor and
+Qt out of everything the renderer builds.
+
+The codebase was clean when the gate was introduced, so it starts with no
+baseline and any hit fails CI.
+
 ### Host isolation (`check_host_isolation.py`)
 
 The OPPOSITE direction to the gui-isolation gate, and a narrower claim.
@@ -428,6 +442,7 @@ pip install clang-format==19.1.7 libclang==18.1.1
 python tools/ci/check_file_length.py
 python tools/ci/check_no_comments.py
 python tools/ci/check_gui_isolation.py
+python tools/ci/check_qt_isolation.py
 git ls-files '*.cpp' '*.h' '*.hpp' | xargs clang-format --dry-run --Werror
 ```
 

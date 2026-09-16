@@ -25,6 +25,7 @@ constexpr uint8_t kBin = 10;
 constexpr uint8_t kStr = 11;
 constexpr uint8_t k2S8 = 16;
 constexpr uint8_t k2U8 = 17;
+constexpr uint8_t k2U16 = 19;
 constexpr uint8_t k2S32 = 20;
 constexpr uint8_t k3S32 = 30;
 constexpr uint8_t k4U16 = 39;

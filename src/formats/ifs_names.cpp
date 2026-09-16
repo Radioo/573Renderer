@@ -48,6 +48,35 @@ Support::Expected<std::string, std::string> EscapeName(std::string_view componen
     return out;
 }
 
+Support::Expected<std::string, std::string> UnescapeName(std::string_view node_name) {
+    if (node_name.empty()) return Support::Unexpected(std::string("empty IFS name"));
+    std::string out;
+    out.reserve(node_name.size());
+    std::size_t i = 0;
+    if (node_name.front() == '_' && node_name.size() > 1 && IsDigit(node_name[1])) i = 1;
+    while (i < node_name.size()) {
+        const char c = node_name[i];
+        if (IsAsciiLetter(c) || IsDigit(c)) {
+            out.push_back(c);
+            i++;
+            continue;
+        }
+        const std::string bad = "not an escaped IFS name: " + std::string(node_name);
+        if (c != '_' || i + 1 >= node_name.size()) return Support::Unexpected(bad);
+        const char next = node_name[i + 1];
+        if (next == '_') {
+            out.push_back('_');
+        } else if (const std::size_t index = kEscapeLetters.find(next);
+                   index != std::string_view::npos) {
+            out.push_back(kEscapedCharacters[index]);
+        } else {
+            return Support::Unexpected(bad);
+        }
+        i += 2;
+    }
+    return out;
+}
+
 std::string HashedName(std::string_view logical_name) {
     MD5 md5;
     return *EscapeName(md5(logical_name.data(), logical_name.size()));

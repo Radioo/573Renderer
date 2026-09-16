@@ -152,11 +152,11 @@ the dependency-light pure-logic suites - `gui_tests` links `r573_app`, and with
 it FFmpeg and D3D9, so adding it there would trade a large rebuild for coverage
 of code that is not doing raw buffer decoding.
 
-## Local-only tiers
+## Local-only suites
 
 Tests that need the proprietary game DLLs or real game data can never run
 hosted. They are excluded by CTest label (`ctest -LE local_dll` in CI); the
-DLL-dependent tiers run manually on the owner machine.
+DLL-dependent suites run manually on the owner machine.
 
 ## Local aggregate gate: tools/checks.sh
 

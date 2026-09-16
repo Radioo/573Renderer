@@ -221,6 +221,12 @@ holding x0, x1, y0, y1 in half pixels), plus whether the list's `compress` attri
 `avslz`. An image's bytes live in the `tex/` entry named by
 `Ifs::HashedName(image name)`.
 
+A `texture` is an atlas: attributes for its format, filters and wrap modes, a
+`size` child, and one `image` child per image. An `image` carries `uvrect` and
+`imgrect`, both `4u16` in half pixels, where `uvrect` is the image rect inset by
+one pixel on each side. The repo notes record the shape measured over the whole
+install; the editor writes it back the same way (docs/document.md).
+
 `DecodeBlob` / `EncodeBlob` handle the three storage forms afp-utils' image
 reader accepts:
 
@@ -363,6 +369,50 @@ carries them in `StoredForm`:
 Tests: `tests/formats/afp_animation_tests.cpp` (`ci`); the round trip gate
 (`tests/local/ifs_round_trip_tests.cpp`) reads and rewrites every animation in
 the install.
+
+## AFP scripts (`afp_script.h`)
+
+`AfpScript::Read` walks the bytecode an `AP2_DO_ACTION` tag or a clip action
+block carries, and `AfpScript::Write` puts the instructions back. The pair is
+byte exact: every instruction keeps its operand bytes as they were, so a script
+the editor does not understand survives a round trip untouched.
+
+A script does not end at its `END` opcode. afp-core stops executing there, but
+the tag is padded after it, so `Read` keeps whatever follows as the script's
+trailing bytes and `Write` puts them back. Dropping them looks harmless and is
+not: 442107 of the install's 463562 scripts carry padding, and without it every
+one of them re-encodes a byte short.
+
+The opcode set is the one afp-core's interpreter implements, and the names are
+the ones its own action data table logs with. Anything outside that set is an
+error rather than a guess, because afp-core would skip it with
+`unknown action(0x%02x:%s)` and the editor must not write a script the game
+cannot run:
+
+| Opcode | Name | Operand |
+|---|---|---|
+| `0x00` | `END` | none; execution stops and the rest of the tag is padding |
+| `0x0D` | `POP` | none |
+| `0x0E` | `GET_VARIABLE` | none |
+| `0x1E` | `CALL_FUNCTION` | none |
+| `0x2F` | `SET_MEMBER` | none |
+| `0x32` | `CALL_METHOD` | none |
+| `0x3F` | `STORE_REGISTER` | u8 count then that many register numbers |
+| `0x43` | `PUSH` | u8 count then that many items |
+| `0x47` | `GOTO_FRAME2` | u8 flags, and a big-endian u16 frame bias when bit `0x2` is set |
+
+A PUSH item is a u8 type and a fixed number of operand bytes that depends only
+on the type. The full table is in the repo notes; what the reader needs is that
+every type has a known length, so an item whose meaning the editor does not
+model still measures the right number of bytes and writes back unchanged. The
+string types (8 and 9) index the script's own string list, which
+`AfpAnimation::Bytecode::strings` already resolves to string table ids.
+
+Tests: `tests/formats/afp_script_tests.cpp` (`ci`) covers a library call, every
+operand length, the end opcode, and the scripts the reader must refuse;
+`tests/local/afp_script_survey_tests.cpp` (`local`) reads every script in the
+install, requires all of them to write back byte for byte, and re-measures the
+opcode and call counts the notes record.
 
 ## GE2D shapes (`ge2d_shape.h`)
 
@@ -654,3 +704,17 @@ IIDX 10 packs several small swatches into one tile (`music`'s single 24x8
 the whole tile - the "bright cyan panels" symptom. RE evidence, the full
 per-scene survey, and how to re-find the code in a new build:
 `IIDX/model_scene_texture_atlas.md` in the notes repo.
+
+## IFS name escaping (`ifs_names.h`)
+
+`Ifs::EscapeName` maps one logical path component to its manifest node name and
+`Ifs::UnescapeName` maps it back: letters and digits stay, a leading digit gains
+a `_`, `_` doubles, and ` $+-.:@~` become `_A` to `_H`. Unescaping refuses
+anything that is not an escaped name, which includes the special names
+(`_info_`, `_super_`), so a caller that keeps the stored name on failure gets
+the right answer for those. The pair is a bijection: the leading `_` is a
+digit marker only when the next character is a digit, and `__` is the only way
+an escaped name holds a `_`.
+
+The editor's document model shows unescaped names and keys everything off
+unescaped paths (docs/document.md).

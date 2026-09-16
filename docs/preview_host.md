@@ -76,3 +76,51 @@ Test: `tests/local/preview_host_process_tests.cpp` (`local_dll`) starts
 checks the frame count and `loop` label, seeks to frame 300, resizes to
 640x360, renders, opens the shared texture on its own D3D9Ex device, then
 closes the pipe and checks that the host exits with code 0.
+
+## The client (`PreviewClient::Host`)
+
+`src/preview/preview_client.h` is the editor's half of the protocol and has no
+Qt in it, so it is testable and reusable outside the application.
+
+`Host::Start(Options)` picks a pipe name unique to the process and the call
+(`\.\pipe\r573_preview_<pid>_<n>`), starts `preview_host.exe` with
+`CREATE_NO_WINDOW`, then connects. A host that never connects is killed and
+reported as an error, so a broken build cannot leave a process behind. The
+destructor closes the pipe, gives the host five seconds to exit and terminates
+it if it does not.
+
+One method per request: `Boot`, `LoadPackage`, `SelectAnimation`, `Seek`,
+`Resize`, `Render`. Each builds its FlatBuffer, calls through
+`PreviewChannel::Client` and decodes the reply into a plain struct
+(`Loaded{frame_count, labels}`, `Frame{shared_handle, width, height, frame}`).
+A `Failure` reply becomes an error carrying the request name and the host's
+message; a hung or dead host becomes a channel error naming the request that
+was outstanding, which `LastRequest()` also keeps.
+
+`LoadPackage` takes a `reload` flag rather than deciding for itself, because
+only the caller knows whether this package is already open in the host.
+
+Test: the `local_dll` case in `tests/local/preview_host_process_tests.cpp`
+drives a real host through the client end to end, and two smaller cases check
+that a refused request surfaces the host's message with the request name, and
+that starting against a missing executable fails instead of hanging.
+
+## Reading the frame back (`SharedTexture::Reader`)
+
+`src/preview/shared_texture.h` is how a process that is not the host turns a
+`Frame` reply into pixels. `Reader::Create()` makes its own D3D9Ex device on
+the desktop window; `Read(handle, width, height)` opens the host's texture on
+that device, copies it into a `D3DPOOL_SYSTEMMEM` surface with
+`GetRenderTargetData`, locks it and returns tightly packed BGRA rows. The
+opened texture and the staging surface are kept until the handle or the size
+changes, so scrubbing a timeline re-opens nothing.
+
+The host's own flush is what makes this correct: `SharedFrame::Copy` blocks on
+a one-pixel lockable render target after the `StretchRect`, so by the time the
+editor gets the reply the shared texture holds the finished frame. A reader
+that skips that flush sees an empty texture, which is what happens if a test
+fills the shared texture directly instead of going through `SharedFrame::Copy`.
+
+Tests: `tests/local/shared_texture_tests.cpp` (`local`) draws a known colour on
+one device and reads it back on another, and the `local_dll` host process test
+reads the real rendered frame and requires it to be more than zeros.

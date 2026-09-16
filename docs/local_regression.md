@@ -4,7 +4,7 @@
 discipline the refactor uses (the "stash-dance"): run
 the reference scenarios, SHA-256 every dumped frame and encoded output, and
 compare against a locally blessed baseline. It is the P10 "one command on your
-machine validates" precursor - the L3/L4 tier the hosted CI can never run
+machine validates" precursor - the L3/L4 suites the hosted CI can never run
 because it needs the game DLLs, game data, and a real GPU.
 
 ## Scenarios
@@ -57,7 +57,7 @@ Temp render output goes to a `%TEMP%` work dir (deleted afterwards);
   this tool replaces it for the common "did my change perturb rendering at
   all" check against the blessed build.
 
-## The local_dll contract tier (P10)
+## The local_dll contract suite (P10)
 
 `local_dll_tests` (tests/local/dll_contract_tests.cpp) runs assertions against
 the REAL game DLLs and data - the contracts our unit tests and parsers assume.
@@ -99,7 +99,7 @@ Contracts covered:
   exactly what `BinaryXml::Write` produced for a document holding every
   storable type and arrays, in both name forms.
 
-The tier has caught two real defects: (1) DDR auto-detection
+The suite has caught two real defects: (1) DDR auto-detection
 relied on "mdx" appearing in the install PATH - the live install moved to
 a folder without it and detection silently failed; AutoDetect now falls back to
 looking for the profile's own GAME DLL (bm2dx.dll / soundvoltex.dll /
@@ -169,6 +169,75 @@ all 273660 GE2D shapes. 6145 archives are byte-identical; the exception,
 writer pads the region. Recomputing from scratch reproduces the tree size in
 6145 archives and every file offset in 6062. A full pass takes about 100
 minutes on a 16-thread machine.
+
+## The edit loop against a real host (`local_dll` label)
+
+`tests/local/document_edit_tests.cpp` is the proof that an edit made through
+the editor's own writers is what afp-core ends up running. It opens
+`graphic/1/title.ifs` as a `Document::File`, loads it in a real preview host,
+then moves the placement live at frame 300 on the first depth that covers it and
+adds a label `edited` at frame 100. After `WriteAnimation` and `Encode` the
+package is loaded again with the reload flag, and the check is afp-core's own
+answer: the frame count is still 840 and the labels come back as `edited` at 100
+and `loop` at 240, in frame order. Pixels are never compared; the engine's label
+list is the ground truth.
+
+The same case then undoes the edit through `Document::History` and loads the
+restored document again, which is the proof that undo reaches the engine and not
+just the model: afp-core goes back to the one `loop` label at 240, and the
+history reports the document as saved again because the undo landed back on the
+depth it was opened at.
+
+## The texture list shape (`local` label)
+
+`texture_list_shape_tests` (tests/local/texture_list_shape_tests.cpp) reads every
+`tex/texturelist.xml` in the install and pins the shape an `image` node has, so
+the editor can write a new one that matches. It is what found that an image
+carries `uvrect` as well as `imgrect`, and what the inset between them is: of
+106372 images, 106370 order the children `uvrect` then `imgrect` and 2 the other
+way, and 106322 have `uvrect` inset one pixel inside `imgrect` while 50 have the
+two equal.
+
+Writing an image without that `uvrect` would have looked correct in every test
+that only reads back what the editor wrote, which is exactly why the shape is
+measured against the shipped data instead.
+
+## The script walker over every script in the install (`local` label)
+
+`afp_script_survey_tests` (tests/local/afp_script_survey_tests.cpp) reads every
+`AP2_DO_ACTION` tag and every placement clip action in all 6146 IFS files,
+walks the bytecode with `AfpScript::Read`, and requires two things: that no
+script fails to read, and that every one of them writes back byte for byte. It
+also pins the numbers the repo notes record, so a reader change that quietly
+loses a call shows up as a count that moved.
+
+Result on IIDX 33 (2026-09-16): 6146 files, 463562 scripts, none unreadable,
+none rewritten. The opcodes are the eight the notes list, and the calls are all
+on one built-in object, `aeplib`: `aep_set_set_frame` 413915,
+`aep_set_rect_mask` 55808, `deepGotoAndPlay` 9966, `aep_set_frame_control`
+6236, `gotoAndPlay` 3323, `stop` 263, `deepStop` 117, `gotoAndStop` 20.
+
+The gate earned its keep immediately: the first run reported 442107 scripts
+rewritten, which is how the padding after `END` was found.
+
+## The document model against a shipped package (`local` label)
+
+`document_outline_local_tests` (tests/local/document_outline_tests.cpp) opens
+`R573_IIDX_DIR/data/graphic/1/title.ifs`, builds a `Document::Outline` and
+checks the parts a synthetic package cannot prove: that the outline reports no
+problems for a real package, that the animation listed as `title` is named and
+described with 840 frames and the `loop` label at frame 240, and that the first
+texture describes as `argb8888rev` with a non-zero width. It needs no DLL.
+
+## The shared texture reader (`local` label)
+
+`shared_texture_tests` (tests/local/shared_texture_tests.cpp) needs a GPU but no
+game: it fills an offscreen render target on one D3D9Ex device, publishes it
+with `SharedFrame::Copy`, and reads the pixels back through
+`SharedTexture::Reader` on a second device, which is exactly what the editor
+does with a frame the preview host rendered. The `local_dll` host process case
+runs the same reader against a real rendered frame and requires it to be more
+than zeros, so a host that answers with an empty texture fails.
 
 ## The real-data format cases ([real] tag)
 

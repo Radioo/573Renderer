@@ -50,6 +50,8 @@ public:
 
     [[nodiscard]] const std::string& LastRequest() const { return last_request_; }
 
+    void Close() { pipe_.Close(); }
+
 private:
     Pipe pipe_;
     unsigned timeout_ms_;

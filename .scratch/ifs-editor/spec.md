@@ -85,6 +85,64 @@ Reverse engineering of unknown placement flags and blend values runs alongside e
 
 - The host protocol is FlatBuffers over a named pipe (ADR 0007).
 
+## Milestone 5: editor shell
+
+### Behaviour
+
+- A Qt 6 Widgets application, separate from the renderer, built by its own CMake project against a dynamic vcpkg triplet (ADR 0003), linking the shared format and protocol code again.
+- It starts the preview host, boots a target build in it, and shuts it down when the editor closes; a host that dies is reported with the request that killed it, and the editor keeps the document.
+- Layout is the chosen one: viewport in the centre, package tree on the left, inspector on the right, timeline across the bottom, in dockable panels whose arrangement is remembered between runs.
+- Opening an IFS shows its entries as a tree, with an inspector for the selected entry, and picking an animation shows it in the viewport at the frame the timeline is on.
+- The viewport draws the shared texture the host renders into, and follows the panel size.
+
+### Seams and tests
+
+- The host client (launch, requests, shutdown) is Qt-free in `r573_preview_protocol`, tested under `local_dll`.
+- Document and panel logic stays out of the Qt widgets so it can be tested without a window; widget code is thin.
+
+## Milestone 6: editing baked data
+
+Everything here edits baked data in place. Authored content (ADR 0006's
+project file, keyframes, own and detach) is milestone 7 and nothing in this
+milestone may assume it exists.
+
+### Behaviour
+
+- A change to the open document is applied to the model, encoded through the
+  same writers the round trip gate uses, reloaded in the preview host and
+  seeked back to the frame the timeline is on, which is the loop ADR 0004
+  asks for. Nothing is written to disk until the user saves.
+- Saving writes the IFS with `Ifs::Write`. Saving over the opened file and
+  saving to a new path are both possible, and an unsaved document is visible
+  in the window title and refuses to be closed silently.
+- Every change is one undoable edit with a name the user recognises, and undo
+  and redo restore the document and the viewport.
+- Selecting a depth at a frame selects its placement, and the inspector edits
+  the fields the target build supports: translation, scale, rotate and skew,
+  the 3D matrix, colour multiply and add, blend, HSV, the rotation origin and
+  the instance name. A field the placement does not carry can be added and one
+  it carries can be dropped, because presence is what the format stores.
+- A placement that came from an unknown tag or carries unknown data is shown
+  and never edited.
+- Labels can be added, renamed, moved and removed on the timeline ruler.
+- A library call is edited as one item: the aeplib function and its constant
+  arguments, never as bytecode text.
+- Structure edits: add and remove a depth over a frame range, add and remove
+  frames of a clip, and add, replace and remove whole entries of the IFS.
+- The 3D camera of a clip is edited as position and focal length, with the
+  same reload loop.
+
+### Seams and tests
+
+- Every edit is a function over the document model in `r573_document`, with no
+  Qt and no host in it, tested under `ci`. The window applies an edit, asks
+  for the bytes and hands them to the host.
+- The undo stack holds documents, not widget state, so an undone edit is
+  proved by comparing models rather than by what a panel shows.
+- A `local_dll` test drives the whole loop on a shipped package: change a
+  placement, encode, reload, seek, render, and check afp-core reports the
+  frame count and labels the edited model has.
+
 ## Tickets
 
 - `issues/01-avs-lz77-module.md`
@@ -104,3 +162,14 @@ Reverse engineering of unknown placement flags and blend values runs alongside e
 - `issues/15-shared-texture-target.md` (milestone 4)
 - `issues/16-preview-host-protocol.md` (milestone 4)
 - `issues/17-preview-host-executable.md` (milestone 4)
+- `issues/18-preview-client.md` (milestone 5)
+- `issues/19-editor-shell.md` (milestone 5)
+- `issues/20-package-tree.md` (milestone 5)
+- `issues/21-viewport.md` (milestone 5)
+- `issues/22-timeline-depth-rows.md` (milestone 5)
+- `issues/23-edit-loop-and-save.md` (milestone 6)
+- `issues/24-placement-editing.md` (milestone 6)
+- `issues/25-undo-and-redo.md` (milestone 6)
+- `issues/26-labels-and-library-calls.md` (milestone 6)
+- `issues/27-structure-edits.md` (milestone 6)
+- `issues/28-camera.md` (milestone 6)

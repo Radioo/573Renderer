@@ -1,57 +1,34 @@
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 
-#include "preview/preview_channel.h"
-#include "preview_host_generated.h"
+#include "preview/preview_client.h"
+#include "preview/shared_texture.h"
 #include "support/com_ptr.h"
 #include "support/env.h"
-
-#include <flatbuffers/buffer.h>
-#include <flatbuffers/flatbuffer_builder.h>
-#include <flatbuffers/verifier.h>
 
 #include <windows.h>
 
 #include <d3d9.h>
 
+#include <algorithm>
 #include <bit>
+#include <cstddef>
 #include <cstdint>
 #include <filesystem>
-#include <format>
 #include <fstream>
 #include <ios>
 #include <iterator>
-#include <span>
+#include <memory>
 #include <string>
-#include <utility>
 #include <vector>
 
 namespace {
 
-constexpr unsigned kConnectMs = 20000;
-constexpr unsigned kReplyMs = 120000;
 constexpr uint32_t kSeekFrame = 300;
 constexpr uint32_t kViewWidth = 640;
 constexpr uint32_t kViewHeight = 360;
-
-std::vector<uint8_t> Finished(const flatbuffers::FlatBufferBuilder& builder) {
-    const std::span<const uint8_t> bytes(builder.GetBufferPointer(), builder.GetSize());
-    return {bytes.begin(), bytes.end()};
-}
-
-template <typename Make> std::vector<uint8_t> Request(PreviewProtocol::Request type, Make make) {
-    flatbuffers::FlatBufferBuilder builder;
-    const auto body = make(builder);
-    builder.Finish(PreviewProtocol::CreateRequestMessage(builder, type, body.Union()));
-    return Finished(builder);
-}
-
-const PreviewProtocol::ReplyMessage* Verified(const std::vector<uint8_t>& reply) {
-    flatbuffers::Verifier verifier(reply.data(), reply.size());
-    REQUIRE(verifier.VerifyBuffer<PreviewProtocol::ReplyMessage>(nullptr));
-    const auto* message = flatbuffers::GetRoot<PreviewProtocol::ReplyMessage>(reply.data());
-    if (const auto* failure = message->reply_as_Failure()) FAIL(failure->message()->str());
-    return message;
-}
+constexpr uint32_t kTitleFrames = 840;
+constexpr uint32_t kLoopFrame = 240;
 
 std::vector<uint8_t> ReadHostFile(const std::filesystem::path& path) {
     std::ifstream in(path, std::ios::binary);
@@ -79,90 +56,68 @@ bool OpensOnAnotherDevice(uint64_t handle_bits, uint32_t width, uint32_t height)
 
 }
 
-TEST_CASE("The preview host boots, loads a package from bytes, seeks and shares its frame") {
+TEST_CASE("The client drives a real preview host through a package, a seek and a frame") {
     const std::string dir = Support::EnvVar("R573_IIDX_DIR").value_or("");
     if (dir.empty()) SKIP("R573_IIDX_DIR not set");
 
-    const std::string pipe_name =
-        std::format(R"(\\.\pipe\r573_preview_host_test_{})", GetCurrentProcessId());
-    const std::string narrow_command =
-        std::format(R"("{}" "{}")", R573_PREVIEW_HOST_EXE, pipe_name);
-    std::wstring command(narrow_command.begin(), narrow_command.end());
-    STARTUPINFOW startup = {};
-    startup.cb = sizeof(startup);
-    PROCESS_INFORMATION process = {};
-    REQUIRE(CreateProcessW(nullptr, command.data(), nullptr, nullptr, FALSE, CREATE_NO_WINDOW,
-                           nullptr, nullptr, &startup, &process) != FALSE);
+    auto host =
+        PreviewClient::Host::Start(PreviewClient::Options{.host_exe = R573_PREVIEW_HOST_EXE});
+    REQUIRE(host.has_value());
 
-    auto pipe = PreviewChannel::Connect(pipe_name, kConnectMs);
-    REQUIRE(pipe.has_value());
-    PreviewChannel::Client client(std::move(*pipe), kReplyMs);
-
-    const auto booted =
-        client.Call(Request(PreviewProtocol::Request::Boot,
-                            [&](flatbuffers::FlatBufferBuilder& b) {
-                                return PreviewProtocol::CreateBoot(b, b.CreateString(dir),
-                                                                   b.CreateString("iidx33"));
-                            }),
-                    "Boot");
+    const auto booted = (*host)->Boot(dir, "iidx33");
+    const std::string boot_error = booted.has_value() ? std::string() : booted.error();
+    INFO(boot_error);
     REQUIRE(booted.has_value());
-    CHECK(Verified(*booted)->reply_as_Done() != nullptr);
 
     const std::vector<uint8_t> ifs = ReadHostFile(dir + "/data/graphic/1/title.ifs");
     REQUIRE(!ifs.empty());
-    const auto loaded_reply =
-        client.Call(Request(PreviewProtocol::Request::LoadPackage,
-                            [&](flatbuffers::FlatBufferBuilder& b) {
-                                return PreviewProtocol::CreateLoadPackage(
-                                    b, b.CreateString("title"), b.CreateString("title"),
-                                    b.CreateVector(ifs), false);
-                            }),
-                    "LoadPackage");
-    REQUIRE(loaded_reply.has_value());
-    const auto* loaded = Verified(*loaded_reply)->reply_as_Loaded();
-    REQUIRE(loaded != nullptr);
-    CHECK(loaded->frame_count() == 840);
-    REQUIRE(loaded->labels() != nullptr);
-    REQUIRE(loaded->labels()->size() == 1);
-    CHECK(loaded->labels()->Get(0)->name()->str() == "loop");
-    CHECK(loaded->labels()->Get(0)->frame() == 240);
+    const auto loaded = (*host)->LoadPackage("title", "title", ifs, false);
+    const std::string load_error = loaded.has_value() ? std::string() : loaded.error();
+    INFO(load_error);
+    REQUIRE(loaded.has_value());
+    CHECK(loaded->frame_count == kTitleFrames);
+    REQUIRE(loaded->labels.size() == 1);
+    CHECK(loaded->labels[0].name == "loop");
+    CHECK(loaded->labels[0].frame == kLoopFrame);
 
-    const auto sought = client.Call(Request(PreviewProtocol::Request::Seek,
-                                            [&](flatbuffers::FlatBufferBuilder& b) {
-                                                return PreviewProtocol::CreateSeek(b, kSeekFrame);
-                                            }),
-                                    "Seek");
-    REQUIRE(sought.has_value());
-    CHECK(Verified(*sought)->reply_as_Done() != nullptr);
+    REQUIRE((*host)->Seek(kSeekFrame).has_value());
+    REQUIRE((*host)->Resize(kViewWidth, kViewHeight).has_value());
+    const auto frame = (*host)->Render();
+    REQUIRE(frame.has_value());
+    CHECK(frame->width == kViewWidth);
+    CHECK(frame->height == kViewHeight);
+    CHECK(frame->frame == kSeekFrame);
+    CHECK(OpensOnAnotherDevice(frame->shared_handle, frame->width, frame->height));
 
-    const auto resized =
-        client.Call(Request(PreviewProtocol::Request::Resize,
-                            [&](flatbuffers::FlatBufferBuilder& b) {
-                                return PreviewProtocol::CreateResize(b, kViewWidth, kViewHeight);
-                            }),
-                    "Resize");
-    REQUIRE(resized.has_value());
-    CHECK(Verified(*resized)->reply_as_Done() != nullptr);
+    auto reader = SharedTexture::Reader::Create();
+    REQUIRE(reader.has_value());
+    const auto pixels = reader->Read(frame->shared_handle, frame->width, frame->height);
+    const std::string pixel_error = pixels.has_value() ? std::string() : pixels.error();
+    INFO(pixel_error);
+    REQUIRE(pixels.has_value());
+    REQUIRE(pixels->size() == static_cast<std::size_t>(frame->width) * frame->height * 4);
+    CHECK(std::ranges::any_of(*pixels, [](uint8_t value) { return value != 0; }));
 
-    const auto rendered = client.Call(Request(PreviewProtocol::Request::Render,
-                                              [&](flatbuffers::FlatBufferBuilder& b) {
-                                                  return PreviewProtocol::CreateRender(b);
-                                              }),
-                                      "Render");
-    REQUIRE(rendered.has_value());
-    const auto* frame = Verified(*rendered)->reply_as_Frame();
-    REQUIRE(frame != nullptr);
-    CHECK(frame->width() == kViewWidth);
-    CHECK(frame->height() == kViewHeight);
-    CHECK(frame->frame() == kSeekFrame);
-    CHECK(frame->shared_handle() != 0);
-    CHECK(OpensOnAnotherDevice(frame->shared_handle(), frame->width(), frame->height()));
+    const auto reloaded = (*host)->LoadPackage("title", "title", ifs, true);
+    REQUIRE(reloaded.has_value());
+    CHECK(reloaded->frame_count == kTitleFrames);
+}
 
-    client = PreviewChannel::Client(PreviewChannel::Pipe(), kReplyMs);
-    CHECK(WaitForSingleObject(process.hProcess, 30000) == WAIT_OBJECT_0);
-    DWORD exit_code = 1;
-    GetExitCodeProcess(process.hProcess, &exit_code);
-    CHECK(exit_code == 0);
-    CloseHandle(process.hThread);
-    CloseHandle(process.hProcess);
+TEST_CASE("The client reports a host that refuses a request") {
+    const std::string dir = Support::EnvVar("R573_IIDX_DIR").value_or("");
+    if (dir.empty()) SKIP("R573_IIDX_DIR not set");
+
+    auto host =
+        PreviewClient::Host::Start(PreviewClient::Options{.host_exe = R573_PREVIEW_HOST_EXE});
+    REQUIRE(host.has_value());
+    const auto booted = (*host)->Boot(dir, "not_a_build");
+    REQUIRE_FALSE(booted.has_value());
+    CHECK(booted.error().find("not_a_build") != std::string::npos);
+    CHECK((*host)->LastRequest() == "Boot");
+}
+
+TEST_CASE("Starting a client fails when the host executable is missing") {
+    const auto host = PreviewClient::Host::Start(
+        PreviewClient::Options{.host_exe = "no_such_preview_host.exe", .connect_timeout_ms = 1000});
+    REQUIRE_FALSE(host.has_value());
 }

@@ -65,8 +65,8 @@ step before a layer may go into a scene preset: `docs/preset_layers.md`.
 ## Tests and verification
 
 ```
-ctest --test-dir build -L ci          # hosted-CI tier (no game data needed)
-ctest --test-dir build -L local_dll   # real-DLL contract tier (needs R573_*_DIR env vars)
+ctest --test-dir build -L ci          # hosted-CI suite (no game data needed)
+ctest --test-dir build -L local_dll   # real-DLL contract suite (needs R573_*_DIR env vars)
 python tools/local/render_regression.py   # 3-game byte-compare net (machine-local baselines)
 ```
 

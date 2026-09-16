@@ -1,0 +1,50 @@
+set(R573_EDITOR_SUPPORT_SOURCES
+    src/support/log.cpp
+    src/support/dll_loader.cpp
+    src/support/env.cpp
+    src/support/math/float_trig.cpp
+)
+
+set(R573_EDITOR_FORMATS_SOURCES
+    src/formats/afp_animation_bytes.cpp
+    src/formats/afp_animation_read.cpp
+    src/formats/afp_animation_stored.cpp
+    src/formats/afp_animation_write.cpp
+    src/formats/afp_byte_order.cpp
+    src/formats/afp_bytecode.cpp
+    src/formats/afp_placement_read.cpp
+    src/formats/afp_script.cpp
+    src/formats/afp_placement_write.cpp
+    src/formats/avs_lz77.cpp
+    src/formats/binary_xml_names.cpp
+    src/formats/binary_xml_read.cpp
+    src/formats/binary_xml_types.cpp
+    src/formats/binary_xml_write.cpp
+    src/formats/ge2d_shape.cpp
+    src/formats/ifs_digest.cpp
+    src/formats/ifs_layout.cpp
+    src/formats/ifs_names.cpp
+    src/formats/ifs_read.cpp
+    src/formats/ifs_write.cpp
+    src/formats/texture_images.cpp
+)
+
+set(R573_EDITOR_DOCUMENT_SOURCES
+    src/document/document.cpp
+    src/document/animation_strings.cpp
+    src/document/entries.cpp
+    src/document/entry_edit.cpp
+    src/document/frame_edit.cpp
+    src/document/history.cpp
+    src/document/label_edit.cpp
+    src/document/library_call.cpp
+    src/document/placement_edit.cpp
+    src/document/outline.cpp
+    src/document/timeline.cpp
+)
+
+set(R573_EDITOR_PREVIEW_SOURCES
+    src/preview/preview_channel.cpp
+    src/preview/preview_client.cpp
+    src/preview/shared_texture.cpp
+)

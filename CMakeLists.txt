@@ -68,6 +68,7 @@ add_library(r573_formats STATIC
     src/formats/afp_animation_write.cpp
     src/formats/afp_bytecode.cpp
     src/formats/afp_byte_order.cpp
+    src/formats/afp_script.cpp
     src/formats/afp_placement_read.cpp
     src/formats/afp_placement_write.cpp
     src/formats/avs_lz77.cpp
@@ -194,8 +195,31 @@ add_custom_command(
 )
 add_custom_target(r573_preview_schema DEPENDS "${R573_PREVIEW_GENERATED}")
 
+add_library(r573_shared_texture STATIC
+    src/preview/shared_texture.cpp
+)
+target_include_directories(r573_shared_texture PUBLIC src)
+target_link_libraries(r573_shared_texture PUBLIC r573_support d3d9.lib PRIVATE r573::warnings)
+
+add_library(r573_document STATIC
+    src/document/document.cpp
+    src/document/animation_strings.cpp
+    src/document/entries.cpp
+    src/document/entry_edit.cpp
+    src/document/frame_edit.cpp
+    src/document/history.cpp
+    src/document/label_edit.cpp
+    src/document/library_call.cpp
+    src/document/placement_edit.cpp
+    src/document/outline.cpp
+    src/document/timeline.cpp
+)
+target_include_directories(r573_document PUBLIC src)
+target_link_libraries(r573_document PUBLIC r573_formats PRIVATE r573::warnings)
+
 add_library(r573_preview_protocol STATIC
     src/preview/preview_channel.cpp
+    src/preview/preview_client.cpp
 )
 add_dependencies(r573_preview_protocol r573_preview_schema)
 target_include_directories(r573_preview_protocol PUBLIC src "${CMAKE_BINARY_DIR}/generated")
@@ -468,6 +492,7 @@ add_executable(formats_tests
     tests/formats/xfile_binary_tests.cpp
     src/gc2d/gc_package.cpp
     src/gc2d/gc_sprite.cpp
+    tests/formats/afp_script_tests.cpp
     tests/formats/gc_sprite_tests.cpp
     tests/formats/frame_process_tests.cpp
     tests/formats/dxt_decode_tests.cpp
@@ -695,6 +720,7 @@ add_executable(local_dll_tests
     tests/local/memory_ifs_mount_tests.cpp
     tests/local/afp_reload_tests.cpp
     tests/local/preview_host_process_tests.cpp
+    tests/local/document_edit_tests.cpp
     src/qpro/qpro_dll.cpp
     src/gc2d/gc_package.cpp
     src/preset/defaults/defaults.cpp
@@ -715,10 +741,54 @@ target_include_directories(local_dll_tests PRIVATE src)
 target_link_libraries(local_dll_tests PRIVATE Catch2::Catch2WithMain r573_afp_host r573_support
                                               r573_state r573_formats r573::warnings)
 target_link_options(local_dll_tests PRIVATE "/WHOLEARCHIVE:$<TARGET_FILE:r573_afp_host>")
-target_link_libraries(local_dll_tests PRIVATE r573_preview_protocol)
+target_link_libraries(local_dll_tests PRIVATE r573_preview_protocol r573_shared_texture
+                                                 r573_document)
 target_compile_definitions(local_dll_tests PRIVATE R573_PREVIEW_HOST_EXE="$<TARGET_FILE:preview_host>")
 add_dependencies(local_dll_tests preview_host)
 catch_discover_tests(local_dll_tests DISCOVERY_MODE POST_BUILD PROPERTIES LABELS local_dll)
+
+add_executable(shared_texture_tests
+    tests/local/shared_texture_tests.cpp
+)
+target_link_libraries(shared_texture_tests PRIVATE Catch2::Catch2WithMain r573_shared_texture
+                                                   r573_afp_host r573::warnings)
+catch_discover_tests(shared_texture_tests DISCOVERY_MODE POST_BUILD PROPERTIES LABELS local)
+
+add_executable(texture_list_shape_tests
+    tests/local/texture_list_shape_tests.cpp
+)
+target_link_libraries(texture_list_shape_tests PRIVATE Catch2::Catch2WithMain r573_formats
+                                                       r573_support r573::warnings)
+catch_discover_tests(texture_list_shape_tests DISCOVERY_MODE POST_BUILD PROPERTIES LABELS local)
+
+add_executable(afp_script_survey_tests
+    tests/local/afp_script_survey_tests.cpp
+)
+target_link_libraries(afp_script_survey_tests PRIVATE Catch2::Catch2WithMain r573_formats
+                                                      r573_support r573::warnings)
+catch_discover_tests(afp_script_survey_tests DISCOVERY_MODE POST_BUILD PROPERTIES LABELS local)
+
+add_executable(document_outline_local_tests
+    tests/local/document_outline_tests.cpp
+)
+target_link_libraries(document_outline_local_tests PRIVATE Catch2::Catch2WithMain r573_document
+                                                           r573_support r573::warnings)
+catch_discover_tests(document_outline_local_tests DISCOVERY_MODE POST_BUILD PROPERTIES LABELS local)
+
+add_executable(document_tests
+    tests/document/document_tests.cpp
+    tests/document/frame_edit_tests.cpp
+    tests/document/history_tests.cpp
+    tests/document/label_edit_tests.cpp
+    tests/document/library_call_tests.cpp
+    tests/document/outline_tests.cpp
+    tests/document/placement_edit_tests.cpp
+    tests/document/timeline_tests.cpp
+)
+target_include_directories(document_tests PRIVATE tests/document)
+target_link_libraries(document_tests PRIVATE Catch2::Catch2WithMain r573_document r573_support
+                                             r573::warnings)
+catch_discover_tests(document_tests DISCOVERY_MODE POST_BUILD PROPERTIES LABELS ci)
 
 add_executable(preview_protocol_tests
     tests/preview/preview_channel_tests.cpp
