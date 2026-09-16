@@ -4,6 +4,7 @@
 
 #include "document/document.h"
 #include "document/authored.h"
+#include "document/clip.h"
 #include "document/history.h"
 #include "document/inspector.h"
 #include "document/playback.h"
@@ -28,6 +29,9 @@ class CDockManager;
 }
 
 class QAction;
+class QComboBox;
+class QScrollArea;
+class QWidget;
 class QPoint;
 class QTableWidget;
 class QTableWidgetItem;
@@ -102,6 +106,11 @@ private:
     ReadOnlyRows(const std::vector<Document::Field>& fields);
     void RenderFrame();
     void SeekTo(uint32_t frame);
+    void SeekViewport(uint32_t frame);
+    QWidget* BuildTimelinePanel(QScrollArea* timeline_area);
+    void FillClips();
+    void ChooseClip(int index);
+    void ShowClipTimeline();
     void TogglePlay();
     void StepPlayback();
     void StopPlayback();
@@ -123,6 +132,7 @@ private:
     Timeline* timeline_ = nullptr;
     QTimer* resize_timer_ = nullptr;
     QTimer* play_timer_ = nullptr;
+    QComboBox* clip_box_ = nullptr;
     QAction* play_action_ = nullptr;
     QAction* loop_action_ = nullptr;
     QAction* undo_action_ = nullptr;
@@ -145,6 +155,8 @@ private:
     std::optional<uint32_t> depth_;
     uint32_t frame_count_ = 0;
     uint32_t frame_ = 0;
+    uint32_t root_frame_ = 0;
+    Document::ClipId clip_;
     bool filling_inspector_ = false;
     std::optional<SharedTexture::Reader> reader_;
     QString last_error_;

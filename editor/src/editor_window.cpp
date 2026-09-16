@@ -8,6 +8,7 @@
 
 #include "document/authored.h"
 #include "document/camera_edit.h"
+#include "document/clip_edit.h"
 #include "document/document.h"
 #include "document/outline.h"
 #include "document/history.h"
@@ -169,6 +170,7 @@ void Window::BuildPanels() {
     auto* timeline_area = new QScrollArea;
     timeline_area->setWidget(timeline_);
     timeline_area->setWidgetResizable(true);
+    QWidget* timeline_panel = BuildTimelinePanel(timeline_area);
 
     play_timer_ = new QTimer(this);
     connect(play_timer_, &QTimer::timeout, this, &Window::StepPlayback);
@@ -182,7 +184,7 @@ void Window::BuildPanels() {
     ads::CDockAreaWidget* centre = docks_->setCentralWidget(MakePanel(tr("Viewport"), viewport_));
     docks_->addDockWidget(ads::LeftDockWidgetArea, MakePanel(tr("Package"), package_tree_), centre);
     docks_->addDockWidget(ads::RightDockWidgetArea, MakePanel(tr("Inspector"), inspector_), centre);
-    docks_->addDockWidget(ads::BottomDockWidgetArea, MakePanel(tr("Timeline"), timeline_area),
+    docks_->addDockWidget(ads::BottomDockWidgetArea, MakePanel(tr("Timeline"), timeline_panel),
                           centre);
 }
 
@@ -371,34 +373,6 @@ void Window::ShowSelectedEntry() {
     ShowAnimation(details->name);
 }
 
-void Window::ShowAnimation(const std::string& name) {
-    StopPlayback();
-    animation_name_ = name;
-    if (!host_.Running()) {
-        viewport_->ShowMessage(
-            tr("Choose a game install to preview %1").arg(QString::fromStdString(name)));
-        return;
-    }
-    const auto encoded = file_->Encode();
-    if (!encoded) {
-        ReportOnce(QString::fromStdString(encoded.error()));
-        return;
-    }
-    const auto loaded = host_.ShowAnimation(package_name_, name, *encoded);
-    if (!loaded) {
-        ReportOnce(QString::fromStdString(loaded.error()));
-        return;
-    }
-    frame_count_ = loaded->frame_count;
-    frame_ = 0;
-    const auto details = file_->Describe(animation_path_);
-    if (details && details->animation) {
-        timeline_->ShowAnimation(loaded->frame_count, details->animation->depths,
-                                 details->animation->labels);
-    }
-    ResizeViewport();
-}
-
 void Window::ChooseDepth(uint32_t depth) {
     depth_ = depth;
     ShowFrame();
@@ -421,42 +395,8 @@ void Window::ShowFrame() {
                         .frame = frame_,
                         .owned = owned,
                         .key_property = key_property_.toStdString(),
-                        .key_frame = key_frame_}));
-}
-
-namespace {
-
-Support::Expected<void, std::string> SetCallArgument(AfpAnimation::Animation& animation,
-                                                     uint16_t depth, uint32_t frame,
-                                                     std::size_t index, const std::string& value) {
-    const auto tag = Document::LivePlacementTag(animation.root, depth, frame);
-    if (!tag) return Support::Unexpected(std::string("that depth holds nothing on this frame"));
-    auto* placement = std::get_if<AfpAnimation::Placement>(&animation.root.tags[*tag].body);
-    if (placement == nullptr || !placement->clip_actions)
-        return Support::Unexpected(std::string("that placement carries no script"));
-    for (AfpAnimation::ClipEvent& event : placement->clip_actions->events) {
-        std::optional<Document::LibraryCall> call =
-            Document::ReadLibraryCall(animation, event.bytecode);
-        if (!call || index >= call->arguments.size()) continue;
-        call->arguments[index].text = value;
-        auto written = Document::WriteLibraryCall(animation, event.bytecode, *call);
-        if (!written) return Support::Unexpected(written.error());
-        event.bytecode = std::move(*written);
-        return {};
-    }
-    return Support::Unexpected(std::string("that script is not a library call"));
-}
-
-Support::Expected<void, std::string> SetCameraOn(AfpAnimation::Animation& animation, uint32_t frame,
-                                                 const std::string& field,
-                                                 const std::string& value) {
-    const auto tag = Document::CameraTag(animation.root, frame);
-    if (!tag) return Support::Unexpected(std::string("this frame places no camera"));
-    auto* camera = std::get_if<AfpAnimation::Camera>(&animation.root.tags[*tag].body);
-    if (camera == nullptr) return Support::Unexpected(std::string("that tag is not a camera"));
-    return Document::SetCameraField(*camera, field, value);
-}
-
+                        .key_frame = key_frame_,
+                        .clip = clip_}));
 }
 
 bool Window::EditAnimation(const QString& name, const AnimationChange& change) {
@@ -496,6 +436,7 @@ void Window::ApplyFieldEdit(QTableWidgetItem* item) {
     const std::string field = name->text().toStdString();
     const std::string value = item->text().toStdString();
     const uint32_t frame = frame_;
+    const Document::ClipId clip = clip_;
 
     if (edits == Document::EditTarget::KeyValue) {
         if (!ApplyKeyEdit(item->text())) ShowFrame();
@@ -503,8 +444,8 @@ void Window::ApplyFieldEdit(QTableWidgetItem* item) {
     }
     if (edits == Document::EditTarget::Camera) {
         EditAnimation(tr("%1 on frame %2").arg(name->text()).arg(frame),
-                      [field, value, frame](AfpAnimation::Animation& animation) {
-                          return SetCameraOn(animation, frame, field, value);
+                      [clip, field, value, frame](AfpAnimation::Animation& animation) {
+                          return Document::EditCameraField(animation, clip, frame, field, value);
                       });
         return;
     }
@@ -515,24 +456,17 @@ void Window::ApplyFieldEdit(QTableWidgetItem* item) {
         if (!argument) return;
         const std::size_t index = *argument;
         EditAnimation(tr("%1 on depth %2").arg(name->text()).arg(*depth_),
-                      [index, value, depth, frame](AfpAnimation::Animation& animation) {
-                          return SetCallArgument(animation, depth, frame, index, value);
+                      [clip, index, value, depth, frame](AfpAnimation::Animation& animation) {
+                          return Document::EditCallArgument(animation, clip, depth, frame, index,
+                                                            value);
                       });
         return;
     }
     if (edits != Document::EditTarget::Placement) return;
     EditAnimation(tr("%1 on depth %2").arg(name->text()).arg(*depth_),
-                  [field, value, depth, frame](AfpAnimation::Animation& animation) {
-                      const auto tag = Document::LivePlacementTag(animation.root, depth, frame);
-                      if (!tag)
-                          return Support::Expected<void, std::string>(Support::Unexpected(
-                              std::string("that depth holds nothing on this frame")));
-                      auto* placement =
-                          std::get_if<AfpAnimation::Placement>(&animation.root.tags[*tag].body);
-                      if (placement == nullptr)
-                          return Support::Expected<void, std::string>(
-                              Support::Unexpected(std::string("that tag is not a placement")));
-                      return Document::SetPlacementField(animation, *placement, field, value);
+                  [clip, field, value, depth, frame](AfpAnimation::Animation& animation) {
+                      return Document::EditPlacementField(animation, clip, depth, frame, field,
+                                                          value);
                   });
 }
 
@@ -628,6 +562,7 @@ void Window::ShowPackageMenu(const QPoint& where) {
 
 void Window::ShowTimelineMenu(const QPoint& where, uint32_t frame, const QString& label) {
     if (!file_ || animation_path_.empty()) return;
+    const Document::ClipId clip = clip_;
     QMenu menu(this);
     QAction* add = menu.addAction(tr("Add a label at frame %1...").arg(frame));
     QAction* rename = label.isEmpty() ? nullptr : menu.addAction(tr("Rename %1...").arg(label));
@@ -654,7 +589,10 @@ void Window::ShowTimelineMenu(const QPoint& where, uint32_t frame, const QString
         authored ? menu.addAction(tr("Edit the script of depth %1...").arg(*depth_)) : nullptr;
     menu.addSeparator();
     const auto animation = file_->ReadAnimation(animation_path_);
-    const bool has_camera = animation && Document::CameraTag(animation->root, frame).has_value();
+    const AfpAnimation::Container* shown =
+        animation ? Document::FindClip(*animation, clip) : nullptr;
+    const bool has_camera = shown != nullptr && Document::CameraTag(*shown, frame).has_value();
+    const auto clip_frames = static_cast<int>(shown != nullptr ? shown->frames.size() : 0);
     QAction* add_camera =
         has_camera ? nullptr : menu.addAction(tr("Add a camera on frame %1...").arg(frame));
     QAction* remove_camera =
@@ -680,51 +618,54 @@ void Window::ShowTimelineMenu(const QPoint& where, uint32_t frame, const QString
                                             std::numeric_limits<uint16_t>::max(), 1, &answered);
         if (!answered) return;
         const auto number = static_cast<uint16_t>(id);
-        EditAnimation(tr("Add camera %1").arg(id), [frame, number](AfpAnimation::Animation& clip) {
-            return Document::AddCamera(clip, frame, number);
-        });
+        EditAnimation(tr("Add camera %1").arg(id),
+                      [clip, frame, number](AfpAnimation::Animation& edited) {
+                          return Document::AddCamera(edited, clip, frame, number);
+                      });
         return;
     }
     if (chosen == remove_camera) {
-        EditAnimation(
-            tr("Remove the camera on frame %1").arg(frame),
-            [frame](AfpAnimation::Animation& clip) { return Document::RemoveCamera(clip, frame); });
+        EditAnimation(tr("Remove the camera on frame %1").arg(frame),
+                      [clip, frame](AfpAnimation::Animation& edited) {
+                          return Document::RemoveCamera(edited, clip, frame);
+                      });
         return;
     }
 
     if (chosen == insert_frame) {
         EditAnimation(tr("Insert frame %1").arg(frame),
-                      [frame](AfpAnimation::Animation& animation) {
-                          return Document::InsertFrame(animation, frame);
+                      [clip, frame](AfpAnimation::Animation& edited) {
+                          return Document::InsertFrame(edited, clip, frame);
                       });
         return;
     }
     if (chosen == remove_frame) {
         EditAnimation(tr("Remove frame %1").arg(frame),
-                      [frame](AfpAnimation::Animation& animation) {
-                          return Document::RemoveFrame(animation, frame);
+                      [clip, frame](AfpAnimation::Animation& edited) {
+                          return Document::RemoveFrame(edited, clip, frame);
                       });
         return;
     }
     if (chosen == add_depth) {
         bool answered = false;
-        const int last = QInputDialog::getInt(this, tr("Add a depth"), tr("Last frame"),
-                                              static_cast<int>(frame), static_cast<int>(frame),
-                                              static_cast<int>(frame_count_), 1, &answered);
+        const int last =
+            QInputDialog::getInt(this, tr("Add a depth"), tr("Last frame"), static_cast<int>(frame),
+                                 static_cast<int>(frame),
+                                 std::max(clip_frames - 1, static_cast<int>(frame)), 1, &answered);
         if (!answered) return;
         const auto depth = static_cast<uint16_t>(*depth_);
         const auto until = static_cast<uint32_t>(last);
         EditAnimation(tr("Add depth %1").arg(*depth_),
-                      [depth, frame, until](AfpAnimation::Animation& animation) {
-                          return Document::AddDepth(animation, depth, 0, frame, until);
+                      [clip, depth, frame, until](AfpAnimation::Animation& edited) {
+                          return Document::AddDepth(edited, clip, depth, 0, frame, until);
                       });
         return;
     }
     if (chosen == remove_depth) {
         const auto depth = static_cast<uint16_t>(*depth_);
         EditAnimation(tr("Remove depth %1").arg(*depth_),
-                      [depth, frame](AfpAnimation::Animation& animation) {
-                          return Document::RemoveDepth(animation, depth, frame);
+                      [clip, depth, frame](AfpAnimation::Animation& edited) {
+                          return Document::RemoveDepth(edited, clip, depth, frame);
                       });
         return;
     }
@@ -736,8 +677,8 @@ void Window::ShowTimelineMenu(const QPoint& where, uint32_t frame, const QString
         if (!answered || name.isEmpty()) return;
         const std::string text = name.toStdString();
         EditAnimation(tr("Add label %1").arg(name),
-                      [text, frame](AfpAnimation::Animation& animation) {
-                          return Document::AddLabel(animation, text, frame);
+                      [clip, text, frame](AfpAnimation::Animation& edited) {
+                          return Document::AddLabel(edited, clip, text, frame);
                       });
         return;
     }
@@ -749,20 +690,21 @@ void Window::ShowTimelineMenu(const QPoint& where, uint32_t frame, const QString
         if (!answered || renamed.isEmpty()) return;
         const std::string text = renamed.toStdString();
         EditAnimation(tr("Rename %1").arg(label),
-                      [named, text](AfpAnimation::Animation& animation) {
-                          return Document::RenameLabel(animation, named, text);
+                      [clip, named, text](AfpAnimation::Animation& edited) {
+                          return Document::RenameLabel(edited, clip, named, text);
                       });
         return;
     }
     if (chosen == move) {
-        EditAnimation(tr("Move %1").arg(label), [named, frame](AfpAnimation::Animation& animation) {
-            return Document::MoveLabel(animation, named, frame);
-        });
+        EditAnimation(tr("Move %1").arg(label),
+                      [clip, named, frame](AfpAnimation::Animation& edited) {
+                          return Document::MoveLabel(edited, clip, named, frame);
+                      });
         return;
     }
     if (chosen == remove) {
-        EditAnimation(tr("Remove %1").arg(label), [named](AfpAnimation::Animation& animation) {
-            return Document::RemoveLabel(animation, named);
+        EditAnimation(tr("Remove %1").arg(label), [clip, named](AfpAnimation::Animation& edited) {
+            return Document::RemoveLabel(edited, clip, named);
         });
     }
 }
@@ -789,27 +731,6 @@ void Window::ShowRestored() {
     Reload();
 }
 
-void Window::Reload() {
-    if (!host_.Running() || animation_name_.empty() || !file_) return;
-    const auto encoded = file_->Encode();
-    if (!encoded) {
-        ReportOnce(QString::fromStdString(encoded.error()));
-        return;
-    }
-    const auto loaded = host_.Reload(package_name_, animation_name_, *encoded);
-    if (!loaded) {
-        ReportOnce(QString::fromStdString(loaded.error()));
-        return;
-    }
-    frame_count_ = loaded->frame_count;
-    const auto details = file_->Describe(animation_path_);
-    if (details && details->animation) {
-        timeline_->ShowAnimation(loaded->frame_count, details->animation->depths,
-                                 details->animation->labels);
-    }
-    SeekTo(frame_);
-}
-
 void Window::ResizeViewport() {
     if (!host_.Running() || animation_name_.empty()) return;
     const auto resized = host_.Resize(static_cast<uint32_t>(viewport_->width()),
@@ -819,60 +740,6 @@ void Window::ResizeViewport() {
         return;
     }
     RenderFrame();
-}
-
-void Window::SeekTo(uint32_t frame) {
-    frame_ = frame;
-    timeline_->SetFrame(frame);
-    if (!host_.Running()) return;
-    const auto sought = host_.Seek(frame);
-    if (!sought) {
-        ReportOnce(QString::fromStdString(sought.error()));
-        StopPlayback();
-        return;
-    }
-    RenderFrame();
-    if (depth_ && !Playing()) ShowFrame();
-}
-
-bool Window::Playing() const {
-    return play_timer_ != nullptr && play_timer_->isActive();
-}
-
-void Window::TogglePlay() {
-    if (Playing()) {
-        StopPlayback();
-        return;
-    }
-    if (!file_ || animation_path_.empty() || frame_count_ == 0) return;
-    const auto animation = file_->ReadAnimation(animation_path_);
-    if (!animation) {
-        ReportOnce(QString::fromStdString(animation.error()));
-        return;
-    }
-    const double rate = Document::FrameRate(*animation);
-    play_timer_->setInterval(Document::FrameIntervalMs(rate));
-    play_timer_->start();
-    play_action_->setText(tr("&Pause"));
-    statusBar()->showMessage(tr("Playing %1 at %2 fps")
-                                 .arg(QString::fromStdString(animation_name_))
-                                 .arg(rate, 0, 'g', 4));
-}
-
-void Window::StepPlayback() {
-    const Document::Step step = Document::Advance(
-        Document::Playback{.frame_count = frame_count_, .looping = loop_action_->isChecked()},
-        frame_);
-    SeekTo(step.frame);
-    if (!step.playing) StopPlayback();
-}
-
-void Window::StopPlayback() {
-    if (play_timer_ == nullptr) return;
-    const bool was_playing = play_timer_->isActive();
-    play_timer_->stop();
-    play_action_->setText(tr("&Play"));
-    if (was_playing) ShowFrame();
 }
 
 void Window::RenderFrame() {

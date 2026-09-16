@@ -214,6 +214,18 @@ placement differed so the next fix does not have to be guessed. It is a `local`
 test because it needs the install and takes minutes; `document_tests` covers the
 same operations on clips built in code.
 
+## Where an animation's content lives (`local` label)
+
+`afp_clip_nesting_survey_tests` (tests/local/afp_clip_nesting_survey_tests.cpp)
+counts how much of every animation sits in its root and how much in its
+sprites, where sprite definitions sit among the root's frames, how sprite label
+tables are ordered, and how many sprites have cameras, labels and export names.
+It is what made sprites the next thing the editor had to reach: on IIDX 33, 69%
+of all placements are inside sprites. It is also what found that 145900 of
+171786 sprite definitions sit inside root frame 0, which is the reason
+`Document::RemoveFrame` keeps definitions. Run it on a new build before assuming
+either still holds.
+
 ## The frame rate an animation asks for (`local` label)
 
 `afp_fps_survey_tests` (tests/local/afp_fps_survey_tests.cpp) reads every

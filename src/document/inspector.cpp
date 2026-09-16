@@ -2,6 +2,7 @@
 
 #include "document/authored.h"
 #include "document/camera_edit.h"
+#include "document/clip.h"
 #include "document/keyframe_edit.h"
 #include "document/keyframes.h"
 #include "document/library_call.h"
@@ -60,11 +61,11 @@ void AppendPlacement(std::vector<InspectedRow>& rows, const AfpAnimation::Animat
     }
 }
 
-void AppendCamera(std::vector<InspectedRow>& rows, const AfpAnimation::Animation& animation,
+void AppendCamera(std::vector<InspectedRow>& rows, const AfpAnimation::Container& clip,
                   uint32_t frame) {
-    const std::optional<std::size_t> tag = CameraTag(animation.root, frame);
+    const std::optional<std::size_t> tag = CameraTag(clip, frame);
     if (!tag) return;
-    const auto* camera = std::get_if<AfpAnimation::Camera>(&animation.root.tags[*tag].body);
+    const auto* camera = std::get_if<AfpAnimation::Camera>(&clip.tags[*tag].body);
     if (camera == nullptr) return;
     for (const Field& field : CameraFields(*camera)) {
         rows.push_back(InspectedRow{.field = field,
@@ -78,14 +79,19 @@ void AppendCamera(std::vector<InspectedRow>& rows, const AfpAnimation::Animation
 std::vector<InspectedRow> InspectFrame(const AfpAnimation::Animation& animation,
                                        const Selection& selection) {
     std::vector<InspectedRow> rows;
+    const AfpAnimation::Container* clip = FindClip(animation, selection.clip);
+    if (clip == nullptr) {
+        rows.push_back(Plain("Clip", MissingClipMessage(selection.clip)));
+        return rows;
+    }
     const bool owned = selection.owned != nullptr;
     if (owned) AppendOwned(rows, selection);
 
     if (selection.depth) {
         const std::optional<std::size_t> tag =
-            LivePlacementTag(animation.root, *selection.depth, selection.frame);
+            LivePlacementTag(*clip, *selection.depth, selection.frame);
         const auto* placement =
-            tag ? std::get_if<AfpAnimation::Placement>(&animation.root.tags[*tag].body) : nullptr;
+            tag ? std::get_if<AfpAnimation::Placement>(&clip->tags[*tag].body) : nullptr;
         if (placement == nullptr) {
             rows.push_back(
                 Plain("Depth", std::to_string(*selection.depth) + " holds nothing here"));
@@ -93,7 +99,7 @@ std::vector<InspectedRow> InspectFrame(const AfpAnimation::Animation& animation,
             AppendPlacement(rows, animation, *placement, owned);
         }
     }
-    AppendCamera(rows, animation, selection.frame);
+    AppendCamera(rows, *clip, selection.frame);
     return rows;
 }
 

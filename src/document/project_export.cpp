@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <string>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -73,7 +74,7 @@ Support::Expected<void, std::string> ExportProject(File& file, Project& project,
             if (depth.animation == path) owned.push_back(&depth);
         }
         std::ranges::sort(owned, {}, [](const AuthoredDepth* depth) {
-            return std::pair{depth->depth, depth->first_frame};
+            return std::tuple{depth->clip.sprite, depth->depth, depth->first_frame};
         });
 
         for (const AuthoredDepth* depth : owned) {

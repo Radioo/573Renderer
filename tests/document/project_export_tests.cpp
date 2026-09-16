@@ -2,6 +2,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "document/authored.h"
+#include "document/clip.h"
 #include "document/document.h"
 #include "document/keyframes.h"
 #include "document/placement_edit.h"
@@ -117,7 +118,7 @@ std::vector<uint32_t> FramesPlacing(const AfpAnimation::Container& clip, uint16_
 Document::Project Owning(const Document::File& file, Document::Ease ease) {
     const auto animation = file.ReadAnimation(Path());
     REQUIRE(animation.has_value());
-    auto owned = Document::OwnDepth(*animation, Path(), kOwned, 0);
+    auto owned = Document::OwnDepth(*animation, Document::ClipId{}, Path(), kOwned, 0);
     REQUIRE(owned.has_value());
     if (ease != Document::Ease::Hold) {
         REQUIRE(Document::SetKeyframeEase(owned->authored.tracks.front(), 0, ease, {}).has_value());

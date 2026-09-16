@@ -1,5 +1,6 @@
 #include <catch2/catch_test_macros.hpp>
 
+#include "document/clip.h"
 #include "document/animation_strings.h"
 #include "document/label_edit.h"
 #include "formats/afp_animation.h"
@@ -34,42 +35,42 @@ std::vector<std::string> LabelNames(const AfpAnimation::Animation& animation) {
 
 TEST_CASE("A label is added at a frame and sorted the way the lookup reads it") {
     AfpAnimation::Animation animation = Clip();
-    REQUIRE(Document::AddLabel(animation, "start", 0).has_value());
-    REQUIRE(Document::AddLabel(animation, "end", 3).has_value());
+    REQUIRE(Document::AddLabel(animation, Document::ClipId{}, "start", 0).has_value());
+    REQUIRE(Document::AddLabel(animation, Document::ClipId{}, "end", 3).has_value());
     CHECK(LabelNames(animation) == std::vector<std::string>{"end", "loop", "start"});
 
     AfpAnimation::Animation linear = Clip();
     linear.flags = kLinearLabelLookup;
-    REQUIRE(Document::AddLabel(linear, "start", 0).has_value());
-    REQUIRE(Document::AddLabel(linear, "end", 3).has_value());
+    REQUIRE(Document::AddLabel(linear, Document::ClipId{}, "start", 0).has_value());
+    REQUIRE(Document::AddLabel(linear, Document::ClipId{}, "end", 3).has_value());
     CHECK(LabelNames(linear) == std::vector<std::string>{"start", "loop", "end"});
 }
 
 TEST_CASE("A label a clip cannot hold is refused") {
     AfpAnimation::Animation animation = Clip();
-    CHECK_FALSE(Document::AddLabel(animation, "loop", 1).has_value());
-    CHECK_FALSE(Document::AddLabel(animation, "", 1).has_value());
-    CHECK_FALSE(Document::AddLabel(animation, "late", 4).has_value());
+    CHECK_FALSE(Document::AddLabel(animation, Document::ClipId{}, "loop", 1).has_value());
+    CHECK_FALSE(Document::AddLabel(animation, Document::ClipId{}, "", 1).has_value());
+    CHECK_FALSE(Document::AddLabel(animation, Document::ClipId{}, "late", 4).has_value());
     CHECK(animation.root.labels.size() == 1);
 }
 
 TEST_CASE("A label is renamed, moved and removed by the name the game looks it up by") {
     AfpAnimation::Animation animation = Clip();
-    REQUIRE(Document::MoveLabel(animation, "loop", 1).has_value());
+    REQUIRE(Document::MoveLabel(animation, Document::ClipId{}, "loop", 1).has_value());
     CHECK(animation.root.labels.front().frame == 1);
-    CHECK_FALSE(Document::MoveLabel(animation, "loop", 9).has_value());
-    CHECK_FALSE(Document::MoveLabel(animation, "nothing", 1).has_value());
+    CHECK_FALSE(Document::MoveLabel(animation, Document::ClipId{}, "loop", 9).has_value());
+    CHECK_FALSE(Document::MoveLabel(animation, Document::ClipId{}, "nothing", 1).has_value());
 
-    REQUIRE(Document::RenameLabel(animation, "loop", "again").has_value());
+    REQUIRE(Document::RenameLabel(animation, Document::ClipId{}, "loop", "again").has_value());
     CHECK(LabelNames(animation) == std::vector<std::string>{"again"});
     CHECK(std::ranges::find(animation.strings, "loop") == animation.strings.end());
-    CHECK_FALSE(Document::RenameLabel(animation, "loop", "other").has_value());
+    CHECK_FALSE(Document::RenameLabel(animation, Document::ClipId{}, "loop", "other").has_value());
 
-    REQUIRE(Document::RemoveLabel(animation, "again").has_value());
+    REQUIRE(Document::RemoveLabel(animation, Document::ClipId{}, "again").has_value());
     CHECK(animation.root.labels.empty());
     CHECK(animation.strings.size() == 1);
     CHECK(animation.strings.front().empty());
-    CHECK_FALSE(Document::RemoveLabel(animation, "again").has_value());
+    CHECK_FALSE(Document::RemoveLabel(animation, Document::ClipId{}, "again").has_value());
 }
 
 TEST_CASE("Compacting keeps every string the animation still refers to") {

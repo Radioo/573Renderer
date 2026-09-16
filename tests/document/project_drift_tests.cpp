@@ -2,6 +2,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "document/authored.h"
+#include "document/clip.h"
 #include "document/document.h"
 #include "document/atlas_write.h"
 #include "document/project.h"
@@ -62,7 +63,7 @@ Document::File Package() {
 Document::Project Owning(const Document::File& file) {
     const auto animation = file.ReadAnimation(Path());
     REQUIRE(animation.has_value());
-    auto owned = Document::OwnDepth(*animation, Path(), 1, 0);
+    auto owned = Document::OwnDepth(*animation, Document::ClipId{}, Path(), 1, 0);
     const std::string error = owned.has_value() ? std::string() : owned.error();
     INFO(error);
     REQUIRE(owned.has_value());

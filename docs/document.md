@@ -280,7 +280,11 @@ an IFS still opens, edits and saves with no project at all.
 manifest a person can open in an editor is worth more than a compact one. It
 holds the format number it was written in, the target build, the path of the
 IFS, and under `owns` the depths the project has authored: for each one the
-animation, the depth, the frame range and its tracks. A keyframe writes its
+animation, the depth, the frame range and its tracks, and a `sprite` number when
+the depth is inside a sprite rather than the root. The key is left out for a
+root depth, so a manifest written before sprites could be owned still reads, as
+owning root depths, and a `sprite` that is not a 16-bit whole number is refused.
+A keyframe writes its
 curve only when its ease is `bezier`, so a manifest of ordinary keyframes stays
 readable. `document/project_content.h` does that half on its own so neither file
 grows without bound. `ReadProject` refuses anything it does not recognise rather
@@ -333,8 +337,8 @@ because the timing function stops being a function of time otherwise; `y1` and
 ## Own and detach (`document/authored.h`)
 
 `OwnDepth` takes the span of a depth around a frame and splits it in two. The
-`AuthoredDepth` is what the project keeps: the animation, the depth, the frame
-range, and one `Track` per property, keyed on exactly the frames that set it,
+`AuthoredDepth` is what the project keeps: the animation, the clip the depth is
+in, the depth, the frame range, and one `Track` per property, keyed on exactly the frames that set it,
 every ease `hold`. The `BakedDepth` is what the IFS keeps and the project does
 not: the create placement with its animatable properties cleared, the flags
 every update carries, and the frames whose update sets no property.
@@ -347,6 +351,14 @@ the export tests pin that by exporting twice and comparing bytes.
 
 `AuthoredPlacements` is the one function that turns keyframes back into
 placements, used by export and by detach alike, so the two cannot disagree.
+
+`OwnDepth` takes the clip to own a depth in, and `BakedFor` and `WriteAuthored`
+read the clip off the `AuthoredDepth`, so a sprite depth is captured from and
+written back into its own sprite. A sprite that is gone is refused with the
+same message the clip edits use rather than being written into the root. The
+promise own makes is the same for both: the `local` survey owns every span in
+the install, root and sprite alike, writes it straight back and requires the
+whole animation to come back identical.
 
 **Keying only the frames a property is set on is the measured shape of the
 data, not a simplification.** Over IIDX 33, 234363 spans set the same properties
@@ -465,7 +477,7 @@ manifest cannot go stale against the image on disk.
 
 `ExportProject` writes every depth a project owns into its IFS. It works one
 animation at a time, taking the animations in name order and the depths within
-one animation in depth then frame order, so the result does not depend on the
+one animation in clip, then depth, then frame order, with the root first, so the result does not depend on the
 order the user owned things in. For each depth it derives the baked half from
 the animation as it currently stands, asks `AuthoredPlacements` for the
 placements, and writes them; a depth it cannot write names itself in the error
@@ -477,6 +489,51 @@ Exporting the same project a second time changes nothing, which is what proves
 the baked half can be re-derived; without it the project could not store only
 the authored half. A depth the project does not own is not touched at all,
 because export only ever writes the spans it was given.
+
+## Clips (`document/clip.h`, `document/clip_edit.h`)
+
+A clip is the root of an animation or one of its sprites, named by a `ClipId`
+whose `sprite` is empty for the root. It is never a path: shipped sprites are
+only defined in the root, so the root and its sprites are every clip there is.
+That matters because the sprites are most of the content. Surveyed over IIDX 33,
+69% of all placements are inside sprites, every animation has more placements in
+its sprites than in its root, and sprites carry their own labels and more of the
+cameras than roots do.
+
+`Clips` lists an animation's clips with the root first and the sprites in the
+order they are defined, each with its export name when an export entry names
+it, and `ClipLabel` is how a person reads one. `FindClip` resolves an id and
+`RequireClip` does the same with a message naming the sprite when it is gone,
+which is what every edit uses, so an edit aimed at a sprite that no longer
+exists is refused instead of landing in the root. `DescribeClip` is the frame
+count, labels and depth rows of one clip, and `Outline::Describe` is the root
+case of it.
+
+Every edit that works on a clip takes the `ClipId` as its second argument:
+the structure edits, the label edits and the camera edits, and the three in
+`clip_edit.h` that the inspector's cells reach (a placement field, a library
+call argument, a camera field). A sprite's label table is kept in the same order
+as the root's, by name unless the header asks for a linear lookup, because the
+survey found shipped sprite tables sorted that way too. A label or a depth is
+bounded by the frame count of its own clip, not the root's.
+
+`InspectFrame` reads the clip its `Selection` names, so a sprite's placements
+and cameras show when the sprite is picked, and a sprite that has gone shows one
+row saying so and nothing to edit.
+
+### Removing a frame keeps the definitions in it
+
+`RemoveFrame` drops only the per-frame commands in the frame (place, remove,
+frame action, camera and start sound) and keeps the rest, merging what is left
+into the frame that takes the removed one's place, or into the one before it
+when the last frame goes. It used to drop every tag in the frame, and that was
+destructive: 145900 of the 171786 shipped sprite definitions sit inside root
+frame 0's range, so removing root frame 0 deleted most of an animation's
+sprites. afp-core handles definition tags when it initializes rather than as
+frame commands, which is why keeping them and moving them to a neighbouring
+frame does not change what the animation defines. A tag the model does not know
+is kept too, unless its code is start sound, because a frame edit has no
+business deleting what it cannot read.
 
 ## Playback (`document/playback.h`)
 

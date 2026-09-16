@@ -149,13 +149,8 @@ void Window::CloseProject() {
 }
 
 const Document::AuthoredDepth* Window::AuthoredAt(uint16_t depth, uint32_t frame) const {
-    for (const Document::AuthoredDepth& owned : authored_) {
-        if (owned.animation == animation_path_ && owned.depth == depth &&
-            frame >= owned.first_frame && frame <= owned.last_frame) {
-            return &owned;
-        }
-    }
-    return nullptr;
+    const std::optional<std::size_t> at = AuthoredIndexAt(depth, frame);
+    return at ? &authored_[*at] : nullptr;
 }
 
 void Window::SaveProject() {
@@ -298,8 +293,8 @@ void Window::OwnSelectedDepth(uint32_t frame) {
         ReportProblem(QString::fromStdString(animation.error()));
         return;
     }
-    auto owned =
-        Document::OwnDepth(*animation, animation_path_, static_cast<uint16_t>(*depth_), frame);
+    auto owned = Document::OwnDepth(*animation, clip_, animation_path_,
+                                    static_cast<uint16_t>(*depth_), frame);
     if (!owned) {
         ReportProblem(QString::fromStdString(owned.error()));
         return;
@@ -325,10 +320,7 @@ void Window::DetachSelectedDepth() {
         if (!baked) return Written(Support::Unexpected(baked.error()));
         return Document::WriteAuthored(clip, taken, *baked);
     });
-    std::erase_if(authored_, [&taken](const Document::AuthoredDepth& one) {
-        return one.animation == taken.animation && one.depth == taken.depth &&
-               one.first_frame == taken.first_frame;
-    });
+    std::erase_if(authored_, [&taken](const Document::AuthoredDepth& one) { return one == taken; });
     SaveProject();
     RefreshState();
     ShowFrame();

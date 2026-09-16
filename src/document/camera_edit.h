@@ -1,5 +1,6 @@
 #pragma once
 
+#include "document/clip.h"
 #include "document/outline.h"
 #include "formats/afp_animation.h"
 #include "support/expected.h"
@@ -23,10 +24,10 @@ namespace Document {
 [[nodiscard]] Support::Expected<void, std::string>
 SetCameraField(AfpAnimation::Camera& camera, std::string_view name, std::string_view value);
 
-[[nodiscard]] Support::Expected<void, std::string> AddCamera(AfpAnimation::Animation& animation,
-                                                             uint32_t frame, uint16_t id);
+[[nodiscard]] Support::Expected<void, std::string>
+AddCamera(AfpAnimation::Animation& animation, ClipId clip, uint32_t frame, uint16_t id);
 
 [[nodiscard]] Support::Expected<void, std::string> RemoveCamera(AfpAnimation::Animation& animation,
-                                                                uint32_t frame);
+                                                                ClipId clip, uint32_t frame);
 
 }

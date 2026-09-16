@@ -2,6 +2,7 @@
 
 #include "document/field_values.h"
 #include "document/outline.h"
+#include "document/clip.h"
 #include "document/tags.h"
 #include "formats/afp_animation.h"
 #include "support/expected.h"
@@ -64,26 +65,32 @@ Support::Expected<void, std::string> SetCameraField(AfpAnimation::Camera& camera
     return Support::Unexpected(std::string(name) + " is not an editable camera field");
 }
 
-Support::Expected<void, std::string> AddCamera(AfpAnimation::Animation& animation, uint32_t frame,
-                                               uint16_t id) {
-    if (frame >= animation.root.frames.size())
+Support::Expected<void, std::string> AddCamera(AfpAnimation::Animation& animation, ClipId clip,
+                                               uint32_t frame, uint16_t id) {
+    auto found = RequireClip(animation, clip);
+    if (!found) return Support::Unexpected(found.error());
+    AfpAnimation::Container& target = **found;
+    if (frame >= target.frames.size())
         return Support::Unexpected("the clip has no frame " + std::to_string(frame));
-    if (CameraTag(animation.root, frame))
+    if (CameraTag(target, frame))
         return Support::Unexpected("frame " + std::to_string(frame) + " already places a camera");
 
     AfpAnimation::Camera camera;
     camera.id = id;
     camera.position = std::array<int32_t, 3>{};
     camera.focal_length = 0;
-    InsertTag(animation.root, frame, AfpAnimation::Tag{camera});
+    InsertTag(target, frame, AfpAnimation::Tag{camera});
     return {};
 }
 
-Support::Expected<void, std::string> RemoveCamera(AfpAnimation::Animation& animation,
+Support::Expected<void, std::string> RemoveCamera(AfpAnimation::Animation& animation, ClipId clip,
                                                   uint32_t frame) {
-    const std::optional<std::size_t> found = CameraTag(animation.root, frame);
-    if (!found) return Support::Unexpected("frame " + std::to_string(frame) + " places no camera");
-    EraseTag(animation.root, *found);
+    auto found = RequireClip(animation, clip);
+    if (!found) return Support::Unexpected(found.error());
+    AfpAnimation::Container& target = **found;
+    const std::optional<std::size_t> tag = CameraTag(target, frame);
+    if (!tag) return Support::Unexpected("frame " + std::to_string(frame) + " places no camera");
+    EraseTag(target, *tag);
     return {};
 }
 

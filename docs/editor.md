@@ -248,6 +248,33 @@ is refreshed once when playback stops. Playback also stops when the animation
 changes, when a document is opened, when an edit is made and when a seek fails,
 so it can never keep running against something that is no longer there.
 
+The timeline panel has a clip box above the rows. Picking an animation fills it
+with the animation's clips, the root first, and picking a sprite shows that
+sprite's depths, labels and frames on the timeline and its placements and
+cameras in the inspector. Placement fields, library call arguments, cameras,
+labels and the structure edits all apply to the clip that is picked.
+
+The viewport keeps showing the root animation while a sprite is picked, and the
+status bar says so, because the preview host can only load a package-level
+animation and cannot yet show a sprite on its own (ticket 43). So the window
+keeps two frames: `frame_`, the frame of the picked clip that the timeline and
+inspector follow, and `root_frame_`, the frame the viewport shows. Scrubbing a
+sprite moves only the first; scrubbing the root moves both. A reload seeks the
+viewport back to `root_frame_` and rebuilds the timeline for the picked clip,
+and if that sprite no longer exists after an edit or an undo the box refills and
+falls back to the root. Playback plays the root and is offered only while the
+root is picked.
+
+Owning, detaching, keyframes and scripts work in whichever clip is picked. The
+window matches an owned depth by animation, clip, depth and frame range, so a
+sprite depth and a root depth with the same number are never confused, and
+detaching removes exactly the record that was detached rather than anything
+that shares its depth and first frame.
+
+Scrubbing now refreshes the inspector whether or not a depth is picked, so the
+camera rows of the frame under the playhead follow the playhead; before, they
+only did while a depth was picked.
+
 `File > Save` writes the encoded document over the opened path and `Save as...`
 asks for a new one. Whether the document is unsaved comes from the history, not
 from the document: the title carries `(unsaved)` while the current position in

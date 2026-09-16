@@ -23,7 +23,8 @@ Document::AuthoredDepth Depth() {
                                    .first_frame = 0,
                                    .last_frame = 8,
                                    .tracks = {track},
-                                   .script = std::nullopt};
+                                   .script = std::nullopt,
+                                   .clip = {}};
 }
 
 const Document::Track& TrackOf(const Document::AuthoredDepth& depth, const std::string& property) {

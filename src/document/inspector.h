@@ -1,6 +1,7 @@
 #pragma once
 
 #include "document/authored.h"
+#include "document/clip.h"
 #include "document/outline.h"
 #include "formats/afp_animation.h"
 
@@ -24,6 +25,7 @@ struct Selection {
     const AuthoredDepth* owned = nullptr;
     std::string key_property;
     std::optional<uint32_t> key_frame;
+    ClipId clip;
 };
 
 [[nodiscard]] std::vector<InspectedRow> InspectFrame(const AfpAnimation::Animation& animation,

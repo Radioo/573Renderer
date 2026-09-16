@@ -1,7 +1,8 @@
 #include "document/outline.h"
 
+#include "document/clip.h"
+
 #include "document/entries.h"
-#include "document/timeline.h"
 #include "formats/afp_animation.h"
 #include "formats/binary_xml.h"
 #include "formats/ifs_archive.h"
@@ -10,7 +11,6 @@
 #include "support/expected.h"
 
 #include <algorithm>
-#include <cstdint>
 #include <span>
 #include <string>
 #include <string_view>
@@ -269,15 +269,7 @@ Support::Expected<Details, std::string> Outline::Describe(const Ifs::Archive& ar
         return Support::Unexpected(node->path + " has no byte order script at " + script_path);
     const auto animation = AfpAnimation::ReadStored(entry->bytes, script->bytes);
     if (!animation) return Support::Unexpected(node->path + ": " + animation.error());
-    AnimationDetails read{.frame_count = static_cast<uint32_t>(animation->root.frames.size()),
-                          .labels = {},
-                          .depths = DepthRows(animation->root)};
-    for (const AfpAnimation::Label& label : animation->root.labels) {
-        const std::string name =
-            label.name < animation->strings.size() ? animation->strings[label.name] : std::string();
-        read.labels.push_back(AnimationLabel{.name = name, .frame = label.frame});
-    }
-    details.animation = std::move(read);
+    details.animation = DescribeClip(*animation, ClipId{});
     return details;
 }
 

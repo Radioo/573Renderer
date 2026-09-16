@@ -1,6 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "document/authored.h"
+#include "document/clip.h"
 #include "document/inspector.h"
 #include "document/keyframes.h"
 #include "formats/afp_animation.h"
@@ -39,7 +40,8 @@ Document::AuthoredDepth Owned() {
                                    .first_frame = 0,
                                    .last_frame = 2,
                                    .tracks = {track},
-                                   .script = std::nullopt};
+                                   .script = std::nullopt,
+                                   .clip = {}};
 }
 
 const Document::InspectedRow* RowNamed(const std::vector<Document::InspectedRow>& rows,
@@ -58,7 +60,8 @@ TEST_CASE("A selected depth is inspected as its placement fields") {
                                                               .frame = 0,
                                                               .owned = nullptr,
                                                               .key_property = {},
-                                                              .key_frame = std::nullopt});
+                                                              .key_frame = std::nullopt,
+                                                              .clip = {}});
 
     const Document::InspectedRow* translation = RowNamed(rows, "Translation");
     REQUIRE(translation != nullptr);
@@ -74,7 +77,8 @@ TEST_CASE("A depth that holds nothing on a frame says so and edits nothing") {
                                                               .frame = 0,
                                                               .owned = nullptr,
                                                               .key_property = {},
-                                                              .key_frame = std::nullopt});
+                                                              .key_frame = std::nullopt,
+                                                              .clip = {}});
 
     const Document::InspectedRow* depth = RowNamed(rows, "Depth");
     REQUIRE(depth != nullptr);
@@ -86,7 +90,13 @@ TEST_CASE("A depth that holds nothing on a frame says so and edits nothing") {
 
 TEST_CASE("Nothing selected inspects nothing") {
     const AfpAnimation::Animation animation = Scene();
-    CHECK(Document::InspectFrame(animation, Document::Selection{}).empty());
+    CHECK(Document::InspectFrame(animation, Document::Selection{.depth = std::nullopt,
+                                                                .frame = 0,
+                                                                .owned = nullptr,
+                                                                .key_property = {},
+                                                                .key_frame = std::nullopt,
+                                                                .clip = {}})
+              .empty());
 }
 
 TEST_CASE("An owned depth keeps its own row alongside the placement fields") {
@@ -97,7 +107,8 @@ TEST_CASE("An owned depth keeps its own row alongside the placement fields") {
                                                               .frame = 0,
                                                               .owned = &owned,
                                                               .key_property = {},
-                                                              .key_frame = std::nullopt});
+                                                              .key_frame = std::nullopt,
+                                                              .clip = {}});
 
     const Document::InspectedRow* said = RowNamed(rows, "Owned by the project");
     REQUIRE(said != nullptr);
@@ -113,7 +124,8 @@ TEST_CASE("An owned depth's placement fields are not editable") {
                                                               .frame = 0,
                                                               .owned = &owned,
                                                               .key_property = {},
-                                                              .key_frame = std::nullopt});
+                                                              .key_frame = std::nullopt,
+                                                              .clip = {}});
 
     const Document::InspectedRow* translation = RowNamed(rows, "Translation");
     REQUIRE(translation != nullptr);
@@ -128,7 +140,8 @@ TEST_CASE("A selected keyframe is the one editable row of an owned depth") {
                                                               .frame = 0,
                                                               .owned = &owned,
                                                               .key_property = "Translation",
-                                                              .key_frame = 2});
+                                                              .key_frame = 2,
+                                                              .clip = {}});
 
     const Document::InspectedRow* which = RowNamed(rows, "Keyframe");
     REQUIRE(which != nullptr);
@@ -155,7 +168,8 @@ TEST_CASE("A keyframe that is no longer there is not inspected") {
                                                               .frame = 0,
                                                               .owned = &owned,
                                                               .key_property = "Translation",
-                                                              .key_frame = 1});
+                                                              .key_frame = 1,
+                                                              .clip = {}});
     CHECK(RowNamed(rows, "Keyframe value") == nullptr);
     CHECK(RowNamed(rows, "Owned by the project") != nullptr);
 }
@@ -172,7 +186,8 @@ TEST_CASE("A camera on the frame is inspected under whatever the depth holds") {
                                                               .frame = 0,
                                                               .owned = nullptr,
                                                               .key_property = {},
-                                                              .key_frame = std::nullopt});
+                                                              .key_frame = std::nullopt,
+                                                              .clip = {}});
     const Document::InspectedRow* focal = RowNamed(rows, "Focal length");
     REQUIRE(focal != nullptr);
     CHECK(focal->edits == Document::EditTarget::Camera);
@@ -190,6 +205,88 @@ TEST_CASE("A camera is inspected even when no depth is selected") {
                                                               .frame = 0,
                                                               .owned = nullptr,
                                                               .key_property = {},
-                                                              .key_frame = std::nullopt});
+                                                              .key_frame = std::nullopt,
+                                                              .clip = {}});
     CHECK(RowNamed(rows, "Focal length") != nullptr);
+}
+
+namespace {
+
+AfpAnimation::Animation WithSprite() {
+    AfpAnimation::Animation animation = Scene();
+    AfpAnimation::Container spinner;
+    spinner.frames.resize(4);
+    AfpAnimation::Placement arm;
+    arm.depth = 3;
+    arm.end_frame = 3;
+    arm.character = uint16_t{2};
+    arm.translation = std::array<int32_t, 2>{-5, 40};
+    spinner.tags.push_back(AfpAnimation::Tag{arm});
+    spinner.frames[0].tag_count = 1;
+    AfpAnimation::Camera camera;
+    camera.focal_length = 555;
+    spinner.tags.push_back(AfpAnimation::Tag{camera});
+    spinner.frames[0].tag_count = 2;
+    animation.root.tags.push_back(
+        AfpAnimation::Tag{AfpAnimation::Sprite{.id = 5, .container = spinner}});
+    return animation;
+}
+
+Document::Selection InSprite(std::optional<uint16_t> depth, uint16_t sprite) {
+    return Document::Selection{.depth = depth,
+                               .frame = 0,
+                               .owned = nullptr,
+                               .key_property = {},
+                               .key_frame = std::nullopt,
+                               .clip = Document::ClipId{.sprite = sprite}};
+}
+
+}
+
+TEST_CASE("A depth of a sprite is inspected from the sprite, not the root") {
+    const AfpAnimation::Animation animation = WithSprite();
+    const std::vector<Document::InspectedRow> rows =
+        Document::InspectFrame(animation, InSprite(uint16_t{3}, 5));
+
+    const Document::InspectedRow* translation = RowNamed(rows, "Translation");
+    REQUIRE(translation != nullptr);
+    CHECK(translation->field.value == "-5, 40");
+    CHECK(translation->edits == Document::EditTarget::Placement);
+}
+
+TEST_CASE("A root depth is not found inside a sprite") {
+    const AfpAnimation::Animation animation = WithSprite();
+    const std::vector<Document::InspectedRow> rows =
+        Document::InspectFrame(animation, InSprite(uint16_t{1}, 5));
+    const Document::InspectedRow* depth = RowNamed(rows, "Depth");
+    REQUIRE(depth != nullptr);
+    CHECK(depth->field.value.find("holds nothing") != std::string::npos);
+}
+
+TEST_CASE("A sprite's camera is inspected with the sprite") {
+    const AfpAnimation::Animation animation = WithSprite();
+    const std::vector<Document::InspectedRow> in_sprite =
+        Document::InspectFrame(animation, InSprite(std::nullopt, 5));
+    const Document::InspectedRow* focal = RowNamed(in_sprite, "Focal length");
+    REQUIRE(focal != nullptr);
+    CHECK(focal->field.value.find("555") != std::string::npos);
+
+    const std::vector<Document::InspectedRow> in_root =
+        Document::InspectFrame(animation, Document::Selection{.depth = std::nullopt,
+                                                              .frame = 0,
+                                                              .owned = nullptr,
+                                                              .key_property = {},
+                                                              .key_frame = std::nullopt,
+                                                              .clip = {}});
+    CHECK(RowNamed(in_root, "Focal length") == nullptr);
+}
+
+TEST_CASE("A sprite that is gone says so and edits nothing") {
+    const AfpAnimation::Animation animation = WithSprite();
+    const std::vector<Document::InspectedRow> rows =
+        Document::InspectFrame(animation, InSprite(uint16_t{3}, 77));
+    REQUIRE(rows.size() == 1);
+    CHECK(rows.front().field.name == "Clip");
+    CHECK(rows.front().field.value.find("77") != std::string::npos);
+    CHECK(rows.front().edits == Document::EditTarget::None);
 }

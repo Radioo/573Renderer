@@ -61,7 +61,7 @@ void Window::ShowKeysForDepth(const Document::AuthoredDepth* owned) {
 std::optional<std::size_t> Window::AuthoredIndexAt(uint16_t depth, uint32_t frame) const {
     for (std::size_t i = 0; i < authored_.size(); i++) {
         const Document::AuthoredDepth& owned = authored_[i];
-        if (owned.animation == animation_path_ && owned.depth == depth &&
+        if (owned.animation == animation_path_ && owned.clip == clip_ && owned.depth == depth &&
             frame >= owned.first_frame && frame <= owned.last_frame) {
             return i;
         }

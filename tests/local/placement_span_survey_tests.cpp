@@ -1,6 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "document/authored.h"
+#include "document/clip.h"
 #include "document/document.h"
 #include "document/outline.h"
 #include "document/timeline.h"
@@ -23,14 +24,19 @@
 
 namespace {
 
-struct Counts {
-    std::map<std::string, std::size_t> masks;
+struct OwnCounts {
     std::map<std::string, std::size_t> refusals;
     std::map<std::string, std::size_t> differences;
     std::size_t owned = 0;
     std::size_t tried = 0;
     std::size_t detach_exact = 0;
     std::size_t detach_differs = 0;
+};
+
+struct Counts {
+    std::map<std::string, std::size_t> masks;
+    OwnCounts root_own;
+    OwnCounts sprite_own;
     std::size_t spans = 0;
     std::size_t one_frame = 0;
     std::size_t steady_updates = 0;
@@ -187,10 +193,10 @@ std::string Difference(const AfpAnimation::Container& before, const AfpAnimation
     return "something outside the depth";
 }
 
-void CountOwn(const AfpAnimation::Animation& animation, uint16_t depth, uint32_t frame,
-              Counts& counts) {
+void CountOwn(const AfpAnimation::Animation& animation, Document::ClipId clip, uint16_t depth,
+              uint32_t frame, OwnCounts& counts) {
     counts.tried++;
-    const auto authored = Document::OwnDepth(animation, "afp", depth, frame);
+    const auto authored = Document::OwnDepth(animation, clip, "afp", depth, frame);
     if (!authored) {
         counts.refusals[Reason(authored.error())]++;
         return;
@@ -202,11 +208,40 @@ void CountOwn(const AfpAnimation::Animation& animation, uint16_t depth, uint32_t
         counts.refusals["detach: " + detached.error()]++;
         return;
     }
-    if (again.root == animation.root) {
+    if (again == animation) {
         counts.detach_exact++;
-    } else {
-        counts.detach_differs++;
-        counts.differences[Difference(animation.root, again.root, depth)]++;
+        return;
+    }
+    counts.detach_differs++;
+    const AfpAnimation::Container* before = Document::FindClip(animation, clip);
+    const AfpAnimation::Container* after = Document::FindClip(again, clip);
+    if (before == nullptr || after == nullptr) {
+        counts.differences["the clip itself"]++;
+        return;
+    }
+    counts.differences[Difference(*before, *after, depth)]++;
+}
+
+void CountOwnSpans(const AfpAnimation::Animation& animation, Document::ClipId clip,
+                   OwnCounts& counts) {
+    const AfpAnimation::Container* found = Document::FindClip(animation, clip);
+    if (found == nullptr) return;
+    for (const Document::DepthRow& row : Document::DepthRows(*found)) {
+        for (const Document::Span& span : row.spans)
+            CountOwn(animation, clip, row.depth, span.first_frame, counts);
+    }
+}
+
+void ReportOwn(const std::string& scope, const OwnCounts& counts) {
+    std::cerr << std::format("[own {}] {} tried, {} owned, {} detach exact, {} detach differs\n",
+                             scope, counts.tried, counts.owned, counts.detach_exact,
+                             counts.detach_differs);
+    for (const auto& [what, count] : counts.differences)
+        std::cerr << std::format("[own {}] detach differs in {}: {}\n", scope, what, count);
+    std::size_t shown = 0;
+    for (const auto& [reason, count] : counts.refusals) {
+        if (shown++ >= 20) break;
+        std::cerr << std::format("[own {}] refused, {}: {}\n", scope, reason, count);
     }
 }
 
@@ -228,9 +263,9 @@ void CountNodes(const Document::File& file, const std::vector<Document::Node>& n
             const auto animation = file.ReadAnimation(node.path);
             if (animation) {
                 CountContainer(animation->root, counts);
-                for (const Document::DepthRow& row : Document::DepthRows(animation->root)) {
-                    for (const Document::Span& span : row.spans)
-                        CountOwn(*animation, row.depth, span.first_frame, counts);
+                CountOwnSpans(*animation, Document::ClipId{}, counts.root_own);
+                for (const Document::ClipSummary& clip : Document::Clips(*animation)) {
+                    if (clip.id.sprite) CountOwnSpans(*animation, clip.id, counts.sprite_own);
                 }
             }
         }
@@ -271,17 +306,10 @@ TEST_CASE("What a per frame placement carries over a span") {
         std::cerr << std::format("[placement spans] update mask {}: {}\n", mask, count);
     }
 
-    std::cerr << std::format("[own] {} tried, {} owned, {} detach exact, {} detach differs\n",
-                             counts.tried, counts.owned, counts.detach_exact,
-                             counts.detach_differs);
-    for (const auto& [what, count] : counts.differences)
-        std::cerr << std::format("[own] detach differs in {}: {}\n", what, count);
-    shown = 0;
-    for (const auto& [reason, count] : counts.refusals) {
-        if (shown++ >= 20) break;
-        std::cerr << std::format("[own] refused, {}: {}\n", reason, count);
-    }
+    ReportOwn("root", counts.root_own);
+    ReportOwn("sprite", counts.sprite_own);
 
     CHECK(counts.spans > 0);
-    CHECK(counts.detach_differs == 0);
+    CHECK(counts.root_own.detach_differs == 0);
+    CHECK(counts.sprite_own.detach_differs == 0);
 }

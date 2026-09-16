@@ -1,6 +1,7 @@
 #include "document/project_content.h"
 
 #include "document/authored.h"
+#include "document/clip.h"
 #include "document/keyframes.h"
 #include "support/expected.h"
 
@@ -55,6 +56,7 @@ Json WriteDepth(const AuthoredDepth& depth) {
     out["last"] = depth.last_frame;
     out["tracks"] = std::move(tracks);
     if (depth.script) out["script"] = *depth.script;
+    if (depth.clip.sprite) out["sprite"] = *depth.clip.sprite;
     return out;
 }
 
@@ -150,12 +152,20 @@ Support::Expected<AuthoredDepth, std::string> ReadDepth(const Json& value) {
                       .first_frame = first.value().get<uint32_t>(),
                       .last_frame = last.value().get<uint32_t>(),
                       .tracks = {},
-                      .script = std::nullopt};
+                      .script = std::nullopt,
+                      .clip = {}};
     const auto script = value.find("script");
     if (script != value.end()) {
         if (!script.value().is_string())
             return Support::Unexpected(std::string("an owned depth's script is not text"));
         out.script = script.value().get<std::string>();
+    }
+    const auto sprite = value.find("sprite");
+    if (sprite != value.end()) {
+        if (!sprite.value().is_number_unsigned() || sprite.value().get<uint64_t>() > kMaxDepth)
+            return Support::Unexpected(
+                std::string("an owned depth's sprite is not a sprite number"));
+        out.clip = ClipId{.sprite = sprite.value().get<uint16_t>()};
     }
     if (out.first_frame > out.last_frame)
         return Support::Unexpected(std::string("an owned depth runs backwards"));

@@ -245,3 +245,7 @@ captured. This milestone is the editing itself.
 - `issues/37-authored-value-editing.md` (milestone 8)
 - `issues/38-inspector-rows-in-the-document.md` (milestone 8)
 - `issues/39-playback.md` (milestone 8)
+- `issues/40-sprite-clips.md` (milestone 8)
+- `issues/41-sprite-structure-labels-camera.md` (milestone 8)
+- `issues/42-authored-sprite-content.md` (milestone 8)
+- `issues/43-isolated-sprite-preview.md` (milestone 8)

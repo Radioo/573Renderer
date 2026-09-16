@@ -1,6 +1,7 @@
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include "document/clip.h"
 #include "document/document.h"
 #include "document/camera_edit.h"
 #include "document/history.h"
@@ -166,7 +167,7 @@ TEST_CASE("A camera the editor adds is one afp-core loads and renders") {
     REQUIRE(animation.has_value());
     CHECK_FALSE(Document::CameraTag(animation->root, kSeekFrame).has_value());
 
-    const auto added = Document::AddCamera(*animation, kSeekFrame, 0);
+    const auto added = Document::AddCamera(*animation, Document::ClipId{}, kSeekFrame, 0);
     const std::string add_error = added.has_value() ? std::string() : added.error();
     INFO(add_error);
     REQUIRE(added.has_value());

@@ -59,6 +59,7 @@ constexpr uint16_t kTagSprite = 121;
 constexpr uint16_t kTagAction = 122;
 constexpr uint16_t kTagPlacement = 127;
 constexpr uint16_t kTagRemove = 128;
+constexpr uint16_t kTagStartSound = 129;
 constexpr uint16_t kTagImage = 131;
 constexpr uint16_t kTagShape = 132;
 constexpr uint16_t kTagCamera = 136;

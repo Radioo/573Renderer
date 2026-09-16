@@ -175,7 +175,8 @@ Document::AuthoredDepth Owning(const std::string& source) {
                                    .first_frame = 0,
                                    .last_frame = 0,
                                    .tracks = {},
-                                   .script = source};
+                                   .script = source,
+                                   .clip = {}};
 }
 
 }

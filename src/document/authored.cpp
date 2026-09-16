@@ -1,5 +1,6 @@
 #include "document/authored.h"
 
+#include "document/clip.h"
 #include "document/keyframes.h"
 #include "document/placement_edit.h"
 #include "document/placement_values.h"
@@ -167,9 +168,11 @@ BakedDepth BakedOf(const AfpAnimation::Container& clip, const std::vector<Placed
 }
 
 Support::Expected<OwnedDepth, std::string> OwnDepth(const AfpAnimation::Animation& animation,
-                                                    std::string_view animation_path, uint16_t depth,
-                                                    uint32_t frame) {
-    const AfpAnimation::Container& clip = animation.root;
+                                                    ClipId clip_id, std::string_view animation_path,
+                                                    uint16_t depth, uint32_t frame) {
+    const AfpAnimation::Container* found = FindClip(animation, clip_id);
+    if (found == nullptr) return Support::Unexpected(MissingClipMessage(clip_id));
+    const AfpAnimation::Container& clip = *found;
     auto placements = SpanOf(clip, depth, frame);
     if (!placements) return Support::Unexpected(placements.error());
 
@@ -179,6 +182,7 @@ Support::Expected<OwnedDepth, std::string> OwnDepth(const AfpAnimation::Animatio
     owned.authored.depth = depth;
     owned.authored.first_frame = first;
     owned.authored.last_frame = last;
+    owned.authored.clip = clip_id;
     owned.baked = BakedOf(clip, *placements);
 
     for (const std::string_view property : AnimatableProperties()) {
@@ -199,9 +203,11 @@ Support::Expected<OwnedDepth, std::string> OwnDepth(const AfpAnimation::Animatio
 
 Support::Expected<BakedDepth, std::string> BakedFor(const AfpAnimation::Animation& animation,
                                                     const AuthoredDepth& authored) {
-    auto placements = SpanOf(animation.root, authored.depth, authored.first_frame);
+    const AfpAnimation::Container* clip = FindClip(animation, authored.clip);
+    if (clip == nullptr) return Support::Unexpected(MissingClipMessage(authored.clip));
+    auto placements = SpanOf(*clip, authored.depth, authored.first_frame);
     if (!placements) return Support::Unexpected(placements.error());
-    return BakedOf(animation.root, *placements);
+    return BakedOf(*clip, *placements);
 }
 
 Support::Expected<std::vector<std::pair<uint32_t, AfpAnimation::Placement>>, std::string>
@@ -248,7 +254,9 @@ AuthoredPlacements(const AuthoredDepth& authored, const BakedDepth& baked) {
 Support::Expected<void, std::string> WriteAuthored(AfpAnimation::Animation& animation,
                                                    const AuthoredDepth& authored,
                                                    const BakedDepth& baked) {
-    AfpAnimation::Container& clip = animation.root;
+    auto target = RequireClip(animation, authored.clip);
+    if (!target) return Support::Unexpected(target.error());
+    AfpAnimation::Container& clip = **target;
     if (authored.last_frame >= clip.frames.size())
         return Support::Unexpected("the clip has no frame " + std::to_string(authored.last_frame));
     auto placements = AuthoredPlacements(authored, baked);

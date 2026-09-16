@@ -1,6 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "document/authored.h"
+#include "document/clip.h"
 #include "document/keyframes.h"
 #include "document/tags.h"
 #include "formats/afp_animation.h"
@@ -82,7 +83,7 @@ AfpAnimation::Animation Moving() {
 
 TEST_CASE("Owning a depth keys every frame the property is set on") {
     const AfpAnimation::Animation animation = Moving();
-    const auto owned = Document::OwnDepth(animation, "afp/a", kDepth, 2);
+    const auto owned = Document::OwnDepth(animation, Document::ClipId{}, "afp/a", kDepth, 2);
     if (!owned) FAIL(owned.error());
 
     CHECK(owned->authored.animation == "afp/a");
@@ -104,7 +105,7 @@ TEST_CASE("Owning a depth keys every frame the property is set on") {
 
 TEST_CASE("The create placement keeps what a keyframe cannot hold and drops what it can") {
     const AfpAnimation::Animation animation = Moving();
-    const auto owned = Document::OwnDepth(animation, "afp/a", kDepth, 0);
+    const auto owned = Document::OwnDepth(animation, Document::ClipId{}, "afp/a", kDepth, 0);
     REQUIRE(owned.has_value());
     REQUIRE(owned->baked.create.character.has_value());
     CHECK(*owned->baked.create.character == 7);
@@ -116,7 +117,7 @@ TEST_CASE("The create placement keeps what a keyframe cannot hold and drops what
 TEST_CASE("Owning a depth and detaching it again leaves the clip as it was") {
     const AfpAnimation::Animation before = Moving();
     AfpAnimation::Animation animation = before;
-    const auto owned = Document::OwnDepth(animation, "afp/a", kDepth, 1);
+    const auto owned = Document::OwnDepth(animation, Document::ClipId{}, "afp/a", kDepth, 1);
     REQUIRE(owned.has_value());
 
     const auto detached = Document::WriteAuthored(animation, owned->authored, owned->baked);
@@ -129,7 +130,7 @@ TEST_CASE("A depth that only ever places once still owns and detaches") {
     Document::InsertTag(animation.root, 1, AfpAnimation::Tag{Create(2, 50)});
     const AfpAnimation::Animation before = animation;
 
-    const auto owned = Document::OwnDepth(animation, "afp/a", kDepth, 1);
+    const auto owned = Document::OwnDepth(animation, Document::ClipId{}, "afp/a", kDepth, 1);
     REQUIRE(owned.has_value());
     CHECK(owned->authored.first_frame == 1);
     CHECK(owned->authored.last_frame == 2);
@@ -142,7 +143,7 @@ TEST_CASE("A depth carrying something a keyframe cannot hold is not owned") {
     AfpAnimation::Placement named = Update(4);
     named.name = AfpAnimation::StringId{0};
     Document::InsertTag(animation.root, 4, AfpAnimation::Tag{named});
-    const auto owned = Document::OwnDepth(animation, "afp/a", kDepth, 0);
+    const auto owned = Document::OwnDepth(animation, Document::ClipId{}, "afp/a", kDepth, 0);
     REQUIRE_FALSE(owned.has_value());
     CHECK(owned.error().find("instance name") != std::string::npos);
 }
@@ -150,7 +151,7 @@ TEST_CASE("A depth carrying something a keyframe cannot hold is not owned") {
 TEST_CASE("A depth placed a second time inside its span is not owned") {
     AfpAnimation::Animation animation = Moving();
     Document::InsertTag(animation.root, 4, AfpAnimation::Tag{Create(5, 400)});
-    const auto owned = Document::OwnDepth(animation, "afp/a", kDepth, 0);
+    const auto owned = Document::OwnDepth(animation, Document::ClipId{}, "afp/a", kDepth, 0);
     REQUIRE_FALSE(owned.has_value());
     CHECK(owned.error().find("again") != std::string::npos);
 }
@@ -161,15 +162,15 @@ TEST_CASE("A depth whose frames end somewhere else is not owned") {
     AfpAnimation::Placement update = Update(2);
     update.translation = std::array<int32_t, 2>{10, 0};
     Document::InsertTag(animation.root, 1, AfpAnimation::Tag{update});
-    const auto owned = Document::OwnDepth(animation, "afp/a", kDepth, 0);
+    const auto owned = Document::OwnDepth(animation, Document::ClipId{}, "afp/a", kDepth, 0);
     REQUIRE_FALSE(owned.has_value());
     CHECK(owned.error().find("ends") != std::string::npos);
 }
 
 TEST_CASE("Nothing at the frame is not owned") {
     const AfpAnimation::Animation animation = Clip(3);
-    CHECK_FALSE(Document::OwnDepth(animation, "afp/a", kDepth, 0).has_value());
-    CHECK_FALSE(Document::OwnDepth(animation, "afp/a", kDepth, 9).has_value());
+    CHECK_FALSE(Document::OwnDepth(animation, Document::ClipId{}, "afp/a", kDepth, 0).has_value());
+    CHECK_FALSE(Document::OwnDepth(animation, Document::ClipId{}, "afp/a", kDepth, 9).has_value());
 }
 
 TEST_CASE("Holding a keyframe writes only the frames that are keyed") {
@@ -179,7 +180,7 @@ TEST_CASE("Holding a keyframe writes only the frames that are keyed") {
     update.translation = std::array<int32_t, 2>{500, 0};
     Document::InsertTag(animation.root, 4, AfpAnimation::Tag{update});
 
-    auto owned = Document::OwnDepth(animation, "afp/a", kDepth, 0);
+    auto owned = Document::OwnDepth(animation, Document::ClipId{}, "afp/a", kDepth, 0);
     REQUIRE(owned.has_value());
     const auto placements = Document::AuthoredPlacements(owned->authored, owned->baked);
     REQUIRE(placements.has_value());
@@ -195,7 +196,7 @@ TEST_CASE("Easing between two keyframes writes every frame between them") {
     update.translation = std::array<int32_t, 2>{400, 0};
     Document::InsertTag(animation.root, 4, AfpAnimation::Tag{update});
 
-    auto owned = Document::OwnDepth(animation, "afp/a", kDepth, 0);
+    auto owned = Document::OwnDepth(animation, Document::ClipId{}, "afp/a", kDepth, 0);
     REQUIRE(owned.has_value());
     REQUIRE(owned->authored.tracks.size() == 1);
     REQUIRE(Document::SetKeyframeEase(owned->authored.tracks.front(), 0, Document::Ease::Linear, {})
@@ -222,14 +223,14 @@ TEST_CASE("Detaching an eased depth replaces the frames the baked data had") {
     update.translation = std::array<int32_t, 2>{400, 0};
     Document::InsertTag(animation.root, 4, AfpAnimation::Tag{update});
 
-    auto owned = Document::OwnDepth(animation, "afp/a", kDepth, 0);
+    auto owned = Document::OwnDepth(animation, Document::ClipId{}, "afp/a", kDepth, 0);
     REQUIRE(owned.has_value());
     REQUIRE(Document::SetKeyframeEase(owned->authored.tracks.front(), 0, Document::Ease::Linear, {})
                 .has_value());
     REQUIRE(Document::WriteAuthored(animation, owned->authored, owned->baked).has_value());
 
     CHECK(FramesPlacing(animation.root, kDepth) == std::vector<uint32_t>{0, 1, 2, 3, 4});
-    const auto again = Document::OwnDepth(animation, "afp/a", kDepth, 0);
+    const auto again = Document::OwnDepth(animation, Document::ClipId{}, "afp/a", kDepth, 0);
     REQUIRE(again.has_value());
     REQUIRE(again->authored.tracks.size() == 1);
     CHECK(again->authored.tracks.front().keys.size() == 5);
@@ -237,7 +238,7 @@ TEST_CASE("Detaching an eased depth replaces the frames the baked data had") {
 
 TEST_CASE("Removing keyframes and detaching drops the frames they wrote") {
     AfpAnimation::Animation animation = Moving();
-    auto owned = Document::OwnDepth(animation, "afp/a", kDepth, 0);
+    auto owned = Document::OwnDepth(animation, Document::ClipId{}, "afp/a", kDepth, 0);
     REQUIRE(owned.has_value());
     REQUIRE(Document::RemoveKeyframe(owned->authored.tracks.front(), 2).has_value());
     REQUIRE(Document::RemoveKeyframe(owned->authored.tracks.front(), 3).has_value());
@@ -247,7 +248,7 @@ TEST_CASE("Removing keyframes and detaching drops the frames they wrote") {
 
 TEST_CASE("Keyframes outside the authored range are refused rather than written") {
     AfpAnimation::Animation animation = Moving();
-    auto owned = Document::OwnDepth(animation, "afp/a", kDepth, 0);
+    auto owned = Document::OwnDepth(animation, Document::ClipId{}, "afp/a", kDepth, 0);
     REQUIRE(owned.has_value());
     REQUIRE(Document::AddKeyframe(owned->authored.tracks.front(), Key(9, {900, 0})).has_value());
     CHECK_FALSE(Document::AuthoredPlacements(owned->authored, owned->baked).has_value());

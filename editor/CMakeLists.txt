@@ -58,6 +58,8 @@ add_executable(ifs_editor WIN32
     src/editor_host.cpp
     src/editor_project.cpp
     src/editor_keys.cpp
+    src/editor_clips.cpp
+    src/editor_playback.cpp
     src/editor_layout.cpp
     src/editor_timeline.cpp
     src/editor_viewport.cpp

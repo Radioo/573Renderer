@@ -762,6 +762,13 @@ target_link_libraries(afp_script_survey_tests PRIVATE Catch2::Catch2WithMain r57
                                                       r573_formats r573_support r573::warnings)
 catch_discover_tests(afp_script_survey_tests DISCOVERY_MODE POST_BUILD PROPERTIES LABELS local)
 
+add_executable(afp_clip_nesting_survey_tests
+    tests/local/afp_clip_nesting_survey_tests.cpp
+)
+target_link_libraries(afp_clip_nesting_survey_tests PRIVATE Catch2::Catch2WithMain r573_document
+                                                            r573_formats r573_support r573::warnings)
+catch_discover_tests(afp_clip_nesting_survey_tests DISCOVERY_MODE POST_BUILD PROPERTIES LABELS local)
+
 add_executable(afp_fps_survey_tests
     tests/local/afp_fps_survey_tests.cpp
 )
@@ -785,8 +792,11 @@ catch_discover_tests(document_outline_local_tests DISCOVERY_MODE POST_BUILD PROP
 
 add_executable(document_tests
     tests/document/atlas_tests.cpp
+    tests/document/authored_sprite_tests.cpp
     tests/document/authored_tests.cpp
     tests/document/camera_edit_tests.cpp
+    tests/document/clip_edit_tests.cpp
+    tests/document/clip_tests.cpp
     tests/document/document_tests.cpp
     tests/document/frame_edit_tests.cpp
     tests/document/history_tests.cpp
@@ -802,6 +812,7 @@ add_executable(document_tests
     tests/document/project_export_tests.cpp
     tests/document/project_tests.cpp
     tests/document/script_source_tests.cpp
+    tests/document/sprite_structure_tests.cpp
     tests/document/timeline_tests.cpp
 )
 target_include_directories(document_tests PRIVATE tests/document)

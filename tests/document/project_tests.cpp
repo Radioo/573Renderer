@@ -146,7 +146,8 @@ Document::AuthoredDepth Owned() {
                                                                .value = {0},
                                                                .ease = Document::Ease::Linear,
                                                                .bezier = {}}}}},
-        .script = std::nullopt};
+        .script = std::nullopt,
+        .clip = {}};
 }
 
 }
