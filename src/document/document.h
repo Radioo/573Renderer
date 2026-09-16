@@ -1,5 +1,6 @@
 #pragma once
 
+#include "document/atlas_write.h"
 #include "document/outline.h"
 #include "formats/afp_animation.h"
 #include "formats/ifs_archive.h"
@@ -45,6 +46,10 @@ public:
     AddImage(std::string_view name, uint32_t width, uint32_t height, std::span<const uint8_t> bgra);
 
     [[nodiscard]] Support::Expected<void, std::string> RemoveImage(std::string_view name);
+
+    [[nodiscard]] Support::Expected<void, std::string>
+    WriteAtlas(std::string_view atlas_name, const Atlas& atlas,
+               std::span<const LoadedImage> images);
 
 private:
     Ifs::Archive archive_;

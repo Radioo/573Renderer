@@ -550,11 +550,17 @@ void Window::ShowPackageMenu(const QPoint& where) {
 
     QMenu menu(this);
     QAction* add_image = menu.addAction(tr("Add an image from a file..."));
+    QAction* own_image =
+        project_ ? menu.addAction(tr("Add an image the project owns...")) : nullptr;
     QAction* replace = path.isEmpty() ? nullptr : menu.addAction(tr("Replace %1...").arg(name));
     QAction* remove = path.isEmpty() ? nullptr : menu.addAction(tr("Remove %1").arg(name));
     const QAction* chosen = menu.exec(where);
     if (chosen == nullptr) return;
 
+    if (chosen == own_image) {
+        AddProjectImage();
+        return;
+    }
     if (chosen == add_image) {
         const QString file = QFileDialog::getOpenFileName(
             this, tr("Add an image"), QString(), tr("Images (*.png *.bmp *.jpg);;All files (*)"));
@@ -873,7 +879,8 @@ bool Window::OfferToSave() {
 void Window::RefreshState() {
     create_project_action_->setEnabled(file_.has_value() && !project_);
     close_project_action_->setEnabled(project_.has_value());
-    export_action_->setEnabled(project_.has_value() && !authored_.empty());
+    export_action_->setEnabled(project_.has_value() &&
+                               (!authored_.empty() || (project_ && !project_->images.empty())));
     undo_action_->setEnabled(history_.CanUndo());
     redo_action_->setEnabled(history_.CanRedo());
     undo_action_->setText(history_.CanUndo()

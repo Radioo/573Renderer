@@ -218,7 +218,12 @@ same operations on clips built in code.
 
 `texture_list_shape_tests` (tests/local/texture_list_shape_tests.cpp) reads every
 `tex/texturelist.xml` in the install and pins the shape an `image` node has, so
-the editor can write a new one that matches. It is what found that an image
+the editor can write a new one that matches. It also measures how the images sit
+in their atlas, which is where the editor's packer got its rules: 11433 of 12522
+atlases are powers of two on both sides, no image falls outside its atlas or
+overlaps another, no coordinate is odd, and every atlas holding more than one
+image has a pair touching with no gap. That last one is why the editor packs
+tight and puts the guard pixel inside the image. It is what found that an image
 carries `uvrect` as well as `imgrect`, and what the inset between them is: of
 106372 images, 106370 order the children `uvrect` then `imgrect` and 2 the other
 way, and 106322 have `uvrect` inset one pixel inside `imgrect` while 50 have the

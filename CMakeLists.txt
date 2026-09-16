@@ -776,6 +776,7 @@ target_link_libraries(document_outline_local_tests PRIVATE Catch2::Catch2WithMai
 catch_discover_tests(document_outline_local_tests DISCOVERY_MODE POST_BUILD PROPERTIES LABELS local)
 
 add_executable(document_tests
+    tests/document/atlas_tests.cpp
     tests/document/authored_tests.cpp
     tests/document/camera_edit_tests.cpp
     tests/document/document_tests.cpp

@@ -1,6 +1,6 @@
 # Source images and atlas layout
 
-Status: ready-for-agent
+Status: resolved
 
 Blocked by: 32.
 

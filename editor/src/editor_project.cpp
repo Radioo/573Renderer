@@ -9,14 +9,20 @@
 #include "document/project.h"
 #include "document/project_export.h"
 
+#include <QDir>
 #include <QFileDialog>
+#include <QImage>
+#include <QInputDialog>
 #include <QFileInfo>
+#include <QFile>
+#include <QLineEdit>
 #include <QMessageBox>
 #include <QSettings>
 #include <QStatusBar>
 #include <QString>
 
 #include <algorithm>
+#include <cstddef>
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -130,11 +136,78 @@ void Window::SaveProject() {
         ReportProblem(tr("%1 could not be written").arg(manifest));
 }
 
+namespace {
+
+Support::Expected<Document::LoadedImage, std::string> LoadImage(const QString& path) {
+    QImage picture(path);
+    if (picture.isNull())
+        return Support::Unexpected(path.toStdString() + " is not an image Qt can read");
+    picture = picture.convertToFormat(QImage::Format_ARGB32);
+    Document::LoadedImage out{.width = static_cast<uint32_t>(picture.width()),
+                              .height = static_cast<uint32_t>(picture.height()),
+                              .bgra = {}};
+    out.bgra.reserve(static_cast<std::size_t>(picture.width()) * picture.height() * 4);
+    for (int y = 0; y < picture.height(); y++) {
+        const auto* row = picture.constScanLine(y);
+        out.bgra.insert(out.bgra.end(), row,
+                        row + static_cast<std::ptrdiff_t>(picture.width()) * 4);
+    }
+    return out;
+}
+
+}
+
+void Window::AddProjectImage() {
+    if (!project_ || project_folder_.isEmpty()) return;
+    const QString picked =
+        QFileDialog::getOpenFileName(this, tr("Add an image to the project"), QString(),
+                                     tr("Images (*.png *.bmp *.jpg);;All files (*)"));
+    if (picked.isEmpty()) return;
+    bool answered = false;
+    const QString name =
+        QInputDialog::getText(this, tr("Add an image to the project"), tr("Image name"),
+                              QLineEdit::Normal, QFileInfo(picked).completeBaseName(), &answered);
+    if (!answered || name.isEmpty()) return;
+    for (const Document::SourceImage& image : project_->images) {
+        if (image.name == name.toStdString()) {
+            ReportProblem(tr("The project already owns an image called %1").arg(name));
+            return;
+        }
+    }
+
+    const QString sources =
+        project_folder_ + "/" +
+        QString::fromUtf8(Document::kProjectSourceDirectory.data(),
+                          static_cast<int>(Document::kProjectSourceDirectory.size()));
+    if (!QDir().mkpath(sources)) {
+        ReportProblem(tr("%1 could not be made").arg(sources));
+        return;
+    }
+    const QString file = QString::fromStdString(std::string(Document::kProjectSourceDirectory)) +
+                         "/" + name + "." + QFileInfo(picked).suffix();
+    const QString target = project_folder_ + "/" + file;
+    QFile::remove(target);
+    if (!QFile::copy(picked, target)) {
+        ReportProblem(tr("%1 could not be copied into the project").arg(picked));
+        return;
+    }
+    project_->images.push_back(
+        Document::SourceImage{.name = name.toStdString(), .file = file.toStdString()});
+    SaveProject();
+    RefreshState();
+    statusBar()->showMessage(tr("The project owns %1 image(s)").arg(project_->images.size()));
+}
+
 void Window::ExportToPackage() {
     if (!file_ || !project_) return;
     project_->content = authored_;
     Document::File before = *file_;
-    const auto exported = Document::ExportProject(*file_, *project_);
+    const QString folder = project_folder_;
+    const auto exported =
+        Document::ExportProject(*file_, *project_, [folder](const std::string& file) {
+            return LoadImage(
+                QString::fromStdString(Document::ProjectSourcePath(folder.toStdString(), file)));
+        });
     if (!exported) {
         file_ = std::move(before);
         ReportProblem(QString::fromStdString(exported.error()));

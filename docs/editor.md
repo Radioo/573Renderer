@@ -178,7 +178,14 @@ saying so and every cell read-only, because its baked data is produced from the
 keyframes rather than edited directly. Owning and detaching both write the
 manifest straight away, so what a project owns is never held only in memory.
 
-`File > Export into the IFS` writes every owned depth's keyframes into the
+Right-clicking the package tree with a project open offers to add an image the
+project owns: the file is copied into the project's `sources/` folder under the
+name given, and export packs it into the project's own atlas. That is different
+from the plain add, which writes an image straight into the package as baked
+data.
+
+`File > Export into the IFS` writes the project's images and every owned depth's
+keyframes into the
 document as baked data. It is one undoable step like any other edit, and it runs
 the same reload loop, so the viewport shows what was exported. Export changes the
 open document and not the file on disk; `File > Save` is still what writes it

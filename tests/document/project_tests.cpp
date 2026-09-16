@@ -22,7 +22,7 @@ std::string Text(const std::vector<uint8_t>& bytes) {
 
 TEST_CASE("A project round trips through its manifest") {
     const Document::Project project{
-        .build = "iidx33", .ifs_path = "graphic/title.ifs", .content = {}};
+        .build = "iidx33", .ifs_path = "graphic/title.ifs", .content = {}, .images = {}};
     const std::vector<uint8_t> manifest = Document::WriteProject(project);
 
     const auto read = Document::ReadProject(manifest);
@@ -31,7 +31,8 @@ TEST_CASE("A project round trips through its manifest") {
 }
 
 TEST_CASE("Writing the same project twice produces the same bytes") {
-    const Document::Project project{.build = "iidx33", .ifs_path = "../title.ifs", .content = {}};
+    const Document::Project project{
+        .build = "iidx33", .ifs_path = "../title.ifs", .content = {}, .images = {}};
     CHECK(Document::WriteProject(project) == Document::WriteProject(project));
 
     const auto read = Document::ReadProject(Document::WriteProject(project));
@@ -62,7 +63,7 @@ TEST_CASE("A project written in another format says so instead of loading") {
 
 TEST_CASE("The manifest is text a person can read and edit") {
     const std::string text = Text(Document::WriteProject(
-        {.build = "iidx33", .ifs_path = "graphic/title.ifs", .content = {}}));
+        {.build = "iidx33", .ifs_path = "graphic/title.ifs", .content = {}, .images = {}}));
     CHECK(text.find("\"format\": 1") != std::string::npos);
     CHECK(text.find("\"build\": \"iidx33\"") != std::string::npos);
     CHECK(text.find("\"ifs\": \"graphic/title.ifs\"") != std::string::npos);
@@ -86,15 +87,17 @@ TEST_CASE("A stored path resolves back to the IFS it came from") {
     for (const std::string& ifs :
          {std::string("C:/work/title/title.ifs"), std::string("C:/work/title.ifs"),
           std::string("F:/game/data/title.ifs")}) {
-        const Document::Project project{
-            .build = "iidx33", .ifs_path = Document::StoredIfsPath(folder, ifs), .content = {}};
+        const Document::Project project{.build = "iidx33",
+                                        .ifs_path = Document::StoredIfsPath(folder, ifs),
+                                        .content = {},
+                                        .images = {}};
         CHECK(Document::ResolvedIfsPath(folder, project) == ifs);
     }
 }
 
 TEST_CASE("A project moved with its IFS still resolves") {
     const Document::Project project{
-        .build = "iidx33", .ifs_path = "../data/title.ifs", .content = {}};
+        .build = "iidx33", .ifs_path = "../data/title.ifs", .content = {}, .images = {}};
     CHECK(Document::ResolvedIfsPath("D:/elsewhere/title", project) ==
           "D:/elsewhere/data/title.ifs");
 }
@@ -138,7 +141,7 @@ Document::AuthoredDepth Owned() {
 
 TEST_CASE("What a project owns survives the manifest") {
     const Document::Project project{
-        .build = "iidx33", .ifs_path = "title.ifs", .content = {Owned()}};
+        .build = "iidx33", .ifs_path = "title.ifs", .content = {Owned()}, .images = {}};
     const auto read = Document::ReadProject(Document::WriteProject(project));
     if (!read) FAIL(read.error());
     CHECK(*read == project);
@@ -176,7 +179,8 @@ TEST_CASE("Owned depths the editor cannot make sense of are refused") {
 TEST_CASE("A keyframe with no bezier keeps none in the manifest") {
     Document::AuthoredDepth depth = Owned();
     depth.tracks.front().keys.front().ease = Document::Ease::Linear;
-    const Document::Project project{.build = "iidx33", .ifs_path = "title.ifs", .content = {depth}};
+    const Document::Project project{
+        .build = "iidx33", .ifs_path = "title.ifs", .content = {depth}, .images = {}};
     const std::string text = Text(Document::WriteProject(project));
     CHECK(text.find("\"curve\"") == std::string::npos);
 

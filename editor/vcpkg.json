@@ -8,6 +8,7 @@
     "flatbuffers",
     "hash-library",
     "nlohmann-json",
+    "stb",
     "qt-advanced-docking-system",
     {
       "name": "qtbase",

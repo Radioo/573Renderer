@@ -64,6 +64,7 @@ private:
     void CloseProject();
     void SaveProject();
     void ExportToPackage();
+    void AddProjectImage();
     void OwnSelectedDepth(uint32_t frame);
     void DetachSelectedDepth();
     [[nodiscard]] const Document::AuthoredDepth* AuthoredAt(uint16_t depth, uint32_t frame) const;

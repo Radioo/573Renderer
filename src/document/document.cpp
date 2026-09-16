@@ -1,6 +1,8 @@
 #include "document/document.h"
 
 #include "document/entries.h"
+#include "document/atlas.h"
+#include "document/atlas_write.h"
 #include "document/entry_edit.h"
 #include "document/outline.h"
 #include "formats/afp_animation.h"
@@ -100,6 +102,15 @@ Support::Expected<void, std::string> File::AddImage(std::string_view name, uint3
                                                     std::span<const uint8_t> bgra) {
     auto added = Document::AddImage(archive_, name, width, height, bgra);
     if (!added) return Support::Unexpected(added.error());
+    outline_ = Outline::Build(archive_);
+    return {};
+}
+
+Support::Expected<void, std::string> File::WriteAtlas(std::string_view atlas_name,
+                                                      const Atlas& atlas,
+                                                      std::span<const LoadedImage> images) {
+    auto written = Document::WriteAtlas(archive_, atlas_name, atlas, images);
+    if (!written) return Support::Unexpected(written.error());
     outline_ = Outline::Build(archive_);
     return {};
 }

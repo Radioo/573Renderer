@@ -13,11 +13,21 @@ namespace Document {
 
 inline constexpr int kProjectFormat = 1;
 inline constexpr std::string_view kProjectManifestName = "project.json";
+inline constexpr std::string_view kProjectSourceDirectory = "sources";
+inline constexpr std::string_view kProjectAtlasName = "project";
+
+struct SourceImage {
+    std::string name;
+    std::string file;
+
+    friend bool operator==(const SourceImage&, const SourceImage&) = default;
+};
 
 struct Project {
     std::string build;
     std::string ifs_path;
     std::vector<AuthoredDepth> content;
+    std::vector<SourceImage> images;
 
     friend bool operator==(const Project&, const Project&) = default;
 };
@@ -32,5 +42,7 @@ ReadProject(std::span<const uint8_t> manifest);
 [[nodiscard]] std::string ResolvedIfsPath(std::string_view folder, const Project& project);
 
 [[nodiscard]] std::string ProjectManifestPath(std::string_view folder);
+
+[[nodiscard]] std::string ProjectSourcePath(std::string_view folder, std::string_view file);
 
 }

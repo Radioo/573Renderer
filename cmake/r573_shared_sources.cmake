@@ -31,6 +31,8 @@ set(R573_EDITOR_FORMATS_SOURCES
 
 set(R573_EDITOR_DOCUMENT_SOURCES
     src/document/document.cpp
+    src/document/atlas.cpp
+    src/document/atlas_write.cpp
     src/document/authored.cpp
     src/document/animation_strings.cpp
     src/document/camera_edit.cpp

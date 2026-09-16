@@ -372,7 +372,50 @@ the 23961 refusals are 22076 with disagreeing update flags, 1809 changing
 filters and 76 changing curves. Why those updates carry different flags inside
 one span is UNRESOLVED and is why own refuses them instead of guessing.
 
+## Atlases (`document/atlas.h`, `document/atlas_write.h`)
+
+An IFS does not store a composited atlas bitmap. Each image has its own
+`tex/<md5 of its name>` entry holding exactly that image's pixels, and the
+texture list says where in the atlas it belongs. So packing decides rectangles,
+not pixels, which is why this is a layout problem and not a compositing one.
+
+`PackAtlas` is `stb_rect_pack`'s skyline packer with two things pinned around
+it. The input is sorted by name first, and `STBRP_SORT` is pointed at
+`std::stable_sort`, so images of the same size cannot swap places depending on
+how the C library's `qsort` breaks ties. The atlas size is the smallest power of
+two by area that fits, ties broken by width, searched from 64 up to 4096, so the
+same images always land in the same atlas whatever order they were given in.
+All three of those are tests.
+
+The shipped data decided the rest. Measured over IIDX 33: of 12522 atlases,
+11433 are powers of two on both sides, no image falls outside its atlas, no two
+images overlap, no coordinate sits on a half pixel, and in every atlas holding
+more than one image at least one pair touches with no gap at all. So the editor
+packs tight, and the one pixel that `uvrect` insets on every side has to come
+from inside the image rather than from padding around it.
+
+`WithGuardRing` is that pixel: it grows an image by one pixel on each side and
+repeats the edge pixels into the ring. The cell in the atlas is the artwork plus
+its ring, the `imgrect` covers the whole cell, and the `uvrect` insets back to
+exactly the artwork. That matches the shape 106322 of 106372 shipped images have,
+and it holds whichever of the two rects the engine samples, because the ring only
+ever repeats what is already at the edge.
+
+`WriteAtlas` puts all of it into the package: one `texture` node named by the
+caller, replaced rather than appended when it is already there, so exporting
+twice does not grow the list. It copies the format and the other attributes from
+a texture already in the package rather than inventing them.
+
 ## Export (`document/project_export.h`)
+
+`ExportProject` writes the images a project owns and then every depth it owns
+into its IFS. Images come first because a placement can name one.
+
+Reading a source image needs a decoder, and the document model has no Qt in it,
+so export takes an `ImageLoader` callback instead: the editor hands it one
+backed by `QImage`, and the tests hand it synthetic pixels. The project stores
+the file it copied into its own folder, never the decoded pixels, so the
+manifest cannot go stale against the image on disk.
 
 `ExportProject` writes every depth a project owns into its IFS. It works one
 animation at a time, taking the animations in name order and the depths within

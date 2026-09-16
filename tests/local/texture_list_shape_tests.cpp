@@ -15,6 +15,7 @@
 #include <iostream>
 #include <iterator>
 #include <map>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -23,10 +24,106 @@ namespace {
 struct Shapes {
     std::map<std::string, std::size_t> images;
     std::map<std::string, std::size_t> rects;
+    std::map<std::string, std::size_t> sizes;
+    std::map<std::string, std::size_t> counts;
+    std::map<std::string, std::size_t> gaps;
     std::size_t files = 0;
     std::size_t lists = 0;
     std::size_t textures = 0;
+    std::size_t power_of_two = 0;
+    std::size_t inside_the_atlas = 0;
+    std::size_t outside_the_atlas = 0;
+    std::size_t overlapping = 0;
+    std::size_t half_pixel_edges = 0;
 };
+
+struct Box {
+    int left = 0;
+    int right = 0;
+    int top = 0;
+    int bottom = 0;
+};
+
+bool PowerOfTwo(int value) {
+    return value > 0 && (value & (value - 1)) == 0;
+}
+
+std::optional<Box> RectOf(const BinaryXml::Node& image, const std::string& name) {
+    for (const BinaryXml::Node& child : image.children) {
+        if (child.name != name || child.value.size() != 8) continue;
+        return Box{.left = static_cast<int>(BigEndian::ReadU16(child.value, 0)),
+                   .right = static_cast<int>(BigEndian::ReadU16(child.value, 2)),
+                   .top = static_cast<int>(BigEndian::ReadU16(child.value, 4)),
+                   .bottom = static_cast<int>(BigEndian::ReadU16(child.value, 6))};
+    }
+    return std::nullopt;
+}
+
+bool Overlaps(const Box& a, const Box& b) {
+    return a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+}
+
+int Gap(const Box& a, const Box& b) {
+    const int across = std::max(b.left - a.right, a.left - b.right);
+    const int down = std::max(b.top - a.bottom, a.top - b.bottom);
+    return std::max(across, down);
+}
+
+std::string Bucket(std::size_t count) {
+    if (count == 1) return "1";
+    if (count <= 4) return "2 to 4";
+    if (count <= 16) return "5 to 16";
+    if (count <= 64) return "17 to 64";
+    return "more than 64";
+}
+
+void CountGaps(const std::vector<Box>& boxes, Shapes& shapes) {
+    int closest = -1;
+    for (std::size_t i = 0; i < boxes.size(); i++) {
+        for (std::size_t j = i + 1; j < boxes.size(); j++) {
+            if (Overlaps(boxes[i], boxes[j])) {
+                shapes.overlapping++;
+                continue;
+            }
+            const int gap = Gap(boxes[i], boxes[j]);
+            if (closest < 0 || gap < closest) closest = gap;
+        }
+    }
+    if (closest >= 0) shapes.gaps[std::to_string(closest)]++;
+}
+
+void CountAtlas(const BinaryXml::Node& texture, Shapes& shapes) {
+    std::optional<Box> size;
+    for (const BinaryXml::Node& child : texture.children) {
+        if (child.name == "size" && child.value.size() == 4) {
+            size = Box{.left = 0,
+                       .right = static_cast<int>(BigEndian::ReadU16(child.value, 0)),
+                       .top = 0,
+                       .bottom = static_cast<int>(BigEndian::ReadU16(child.value, 2))};
+        }
+    }
+    if (!size) return;
+    shapes.sizes[std::to_string(size->right) + "x" + std::to_string(size->bottom)]++;
+    if (PowerOfTwo(size->right) && PowerOfTwo(size->bottom)) shapes.power_of_two++;
+
+    std::vector<Box> boxes;
+    for (const BinaryXml::Node& image : texture.children) {
+        if (image.name != "image") continue;
+        const std::optional<Box> rect = RectOf(image, "imgrect");
+        if (rect) boxes.push_back(*rect);
+    }
+    shapes.counts[Bucket(boxes.size())]++;
+    for (const Box& box : boxes) {
+        if (box.left % 2 != 0 || box.right % 2 != 0 || box.top % 2 != 0 || box.bottom % 2 != 0)
+            shapes.half_pixel_edges++;
+        if (box.right <= 2 * size->right && box.bottom <= 2 * size->bottom) {
+            shapes.inside_the_atlas++;
+        } else {
+            shapes.outside_the_atlas++;
+        }
+    }
+    CountGaps(boxes, shapes);
+}
 
 std::vector<uint8_t> ReadAll(const std::filesystem::path& path) {
     std::ifstream in(path, std::ios::binary);
@@ -65,6 +162,7 @@ void CountList(const BinaryXml::Document& document, Shapes& shapes) {
     for (const BinaryXml::Node& texture : document.root.children) {
         if (texture.name != "texture") continue;
         shapes.textures++;
+        CountAtlas(texture, shapes);
         for (const BinaryXml::Node& image : texture.children) {
             if (image.name != "image") continue;
             shapes.images[Shape(image)]++;
@@ -106,6 +204,22 @@ TEST_CASE("Every image in the install carries a uvrect inset inside its imgrect"
     for (const auto& [difference, count] : shapes.rects) {
         std::cerr << std::format("[texture lists] uvrect minus imgrect {}: {}\n", difference,
                                  count);
+    }
+
+    std::cerr << std::format("[atlases] {} of {} are powers of two\n", shapes.power_of_two,
+                             shapes.textures);
+    std::cerr << std::format("[atlases] {} images inside, {} outside, {} overlapping, {} on a "
+                             "half pixel edge\n",
+                             shapes.inside_the_atlas, shapes.outside_the_atlas, shapes.overlapping,
+                             shapes.half_pixel_edges);
+    for (const auto& [bucket, count] : shapes.counts)
+        std::cerr << std::format("[atlases] images per atlas {}: {}\n", bucket, count);
+    for (const auto& [gap, count] : shapes.gaps)
+        std::cerr << std::format("[atlases] closest gap {}: {}\n", gap, count);
+    std::size_t shown = 0;
+    for (const auto& [size, count] : shapes.sizes) {
+        if (shown++ >= 24) break;
+        std::cerr << std::format("[atlases] size {}: {}\n", size, count);
     }
 
     CHECK(shapes.images.size() == 2);
