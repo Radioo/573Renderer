@@ -14,10 +14,12 @@
 #include <QMainWindow>
 #include <QString>
 
+#include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace ads {
@@ -37,6 +39,11 @@ using AnimationChange =
     std::function<Support::Expected<void, std::string>(AfpAnimation::Animation&)>;
 
 using DocumentChange = std::function<Support::Expected<void, std::string>(Document::File&)>;
+
+using AuthoredChange =
+    std::function<Support::Expected<void, std::string>(Document::AuthoredDepth&)>;
+
+inline constexpr std::string_view kKeyValueField = "Keyframe value";
 
 class Timeline;
 class Viewport;
@@ -70,6 +77,14 @@ private:
     void OwnSelectedDepth(uint32_t frame);
     void DetachSelectedDepth();
     [[nodiscard]] const Document::AuthoredDepth* AuthoredAt(uint16_t depth, uint32_t frame) const;
+    [[nodiscard]] std::optional<std::size_t> AuthoredIndexAt(uint16_t depth, uint32_t frame) const;
+    void ShowKeysForDepth(const Document::AuthoredDepth* owned);
+    bool EditAuthored(const QString& name, const AuthoredChange& change);
+    void ChooseKey(const QString& property, uint32_t frame);
+    void MoveKey(const QString& property, uint32_t from, uint32_t to);
+    void ShowKeyMenu(const QPoint& where, const QString& property, uint32_t frame, bool on_key);
+    [[nodiscard]] std::vector<Document::Field> KeyFields() const;
+    bool ApplyKeyEdit(const QString& value);
     void OpenProject(const QString& folder);
     [[nodiscard]] std::string TargetBuild() const;
     void FillTree();
@@ -77,7 +92,7 @@ private:
     void ShowAnimation(const std::string& name);
     void ShowFrame();
     void ApplyFieldEdit(QTableWidgetItem* item);
-    void EditAnimation(const QString& name, const AnimationChange& change);
+    bool EditAnimation(const QString& name, const AnimationChange& change);
     void ShowTimelineMenu(const QPoint& where, uint32_t frame, const QString& label);
     void ShowPackageMenu(const QPoint& where);
     void EditDocument(const QString& name, const DocumentChange& change);
@@ -115,6 +130,8 @@ private:
     std::optional<Document::Project> project_;
     QString project_folder_;
     std::vector<Document::AuthoredDepth> authored_;
+    QString key_property_;
+    std::optional<uint32_t> key_frame_;
     std::string package_name_;
     std::string animation_path_;
     std::string animation_name_;

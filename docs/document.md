@@ -478,6 +478,38 @@ the baked half can be re-derived; without it the project could not store only
 the authored half. A depth the project does not own is not touched at all,
 because export only ever writes the spans it was given.
 
+## Editing keyframes (`document/keyframe_edit.h`)
+
+`keyframes.h` holds the track and its sampling; `keyframe_edit.h` is what an
+editor calls, because every edit a user makes names a property and a frame
+rather than a track and an index. Each function finds the track on an
+`AuthoredDepth` by property name and refuses a property the depth does not
+animate, so a stale selection cannot reach into the wrong track.
+
+`AddKeyAt` is the one with a rule worth stating. It takes the value the track
+already samples at that frame and the ease of the segment it splits, so adding
+a keyframe to a hold or a linear segment changes nothing that any frame samples.
+That is what makes a dense track safe to refine: `OwnDepth` captures a keyframe
+on every frame, and the user thins it out and re-eases it without the render
+moving underneath them. On a bezier segment the two halves cannot carry the
+shape of the whole, so the curve does change there.
+
+`AddKeyAt` and `MoveKeyTo` refuse a frame outside the range the depth was owned
+over, because `AuthoredPlacements` only writes inside that range and a keyframe
+beyond it would be silently dropped at export.
+
+`RemoveKeyAt` refuses to take the last keyframe of a property rather than
+deleting the track. A track that is gone stops being written, so the property
+would vanish from the placements and the render would change on a step the user
+asked to be a deletion of one keyframe. Detaching the depth is how a user stops
+animating it.
+
+`SetKeyValueAt` takes the value as text and parses it with `Numbers` against the
+arity the keyframe already holds, which is the same rule the placement fields
+use, so a keyframe and the placement field it feeds are typed the same way.
+`KeyAt` and `KeyValueText` are the read side, so a widget showing a keyframe
+does not reimplement the lookup or the joining.
+
 ## Export drift (`document/project_drift.h`)
 
 A project stores only the authored half, so the baked spans in the IFS are the

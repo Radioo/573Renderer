@@ -182,6 +182,28 @@ no project at all, and nothing in milestone 6 may start depending on one.
 - Owning a depth and exporting it again with no edit produces the placements
   that were there before, which is what proves own is lossless.
 
+## Milestone 8: authoring an animation
+
+Milestone 7 made authored content exist and export correctly. Nothing in it
+lets a user change a keyframe, so an owned depth can only reproduce what it
+captured. This milestone is the editing itself.
+
+### Behaviour
+
+- The timeline shows an owned depth's animated properties as rows of keyframes,
+  and a keyframe can be selected, added, removed, retimed and given an ease.
+- The inspector edits the selected keyframe's value, so an owned depth stops
+  being read-only.
+- Every such edit is one undoable step that runs the reload loop and writes the
+  project manifest, the same as every other edit.
+
+### Seams and tests
+
+- The edits are functions over `AuthoredDepth` in `r573_document`, with no Qt
+  and no host, tested under `ci`.
+- Adding a keyframe on a covered frame is proved not to change what any frame
+  samples, which is what makes it safe to refine a dense track into a sparse one.
+
 ## Tickets
 
 - `issues/01-avs-lz77-module.md`
@@ -219,3 +241,5 @@ no project at all, and nothing in milestone 6 may start depending on one.
 - `issues/33-source-images-and-atlas-layout.md` (milestone 7)
 - `issues/34-script-source.md` (milestone 7)
 - `issues/35-export-drift.md` (milestone 7)
+- `issues/36-keyframe-editing.md` (milestone 8)
+- `issues/37-authored-value-editing.md` (milestone 8)

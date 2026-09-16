@@ -206,6 +206,27 @@ it. The choices are written to the manifest straight away, the same as owning
 and detaching, so a decision is never held only in memory. A project whose IFS
 nobody touched asks nothing.
 
+Selecting an owned depth opens its animated properties as lanes under its depth
+row on the timeline, one per track, with a mark at every keyframe: a diamond for
+a keyframe the animation eases out of and a square for one it holds. Clicking a
+mark selects that keyframe, dragging it retimes it, and right-clicking a lane
+offers to add a keyframe where there is none, and to remove one or change how it
+leaves its frame where there is. An ease of bezier asks for its four control
+points as `x1, y1, x2, y2`.
+
+With a keyframe selected the inspector carries three rows for it above the
+placement fields: which property and frame it is, its value, and the ease it
+leaves on. The value row is the one editable cell an owned depth has, because
+the placement rows below it are produced from the keyframes rather than edited.
+
+Every keyframe edit goes through `Window::EditAuthored`, which applies the change
+to a copy of the `AuthoredDepth`, rebakes and writes it into the open document
+through the same `EditAnimation` step as every other edit, and only then keeps
+the change and writes the manifest. So a keyframe edit is undoable, reloads the
+viewport, and is never recorded in the project when the write into the package
+failed. It also means the open document always shows what the project says
+rather than waiting for an export.
+
 `File > Save` writes the encoded document over the opened path and `Save as...`
 asks for a new one. Whether the document is unsaved comes from the history, not
 from the document: the title carries `(unsaved)` while the current position in

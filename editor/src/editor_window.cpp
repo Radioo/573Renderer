@@ -161,6 +161,9 @@ void Window::BuildPanels() {
     connect(timeline_, &Timeline::FrameChosen, this, &Window::SeekTo);
     connect(timeline_, &Timeline::DepthChosen, this, &Window::ChooseDepth);
     connect(timeline_, &Timeline::MenuRequested, this, &Window::ShowTimelineMenu);
+    connect(timeline_, &Timeline::KeyChosen, this, &Window::ChooseKey);
+    connect(timeline_, &Timeline::KeyMoved, this, &Window::MoveKey);
+    connect(timeline_, &Timeline::KeyMenuRequested, this, &Window::ShowKeyMenu);
     auto* timeline_area = new QScrollArea;
     timeline_area->setWidget(timeline_);
     timeline_area->setWidgetResizable(true);
@@ -312,9 +315,10 @@ void Window::FillInspector(const std::vector<Document::Field>& fields, bool edit
         auto* name = new QTableWidgetItem(QString::fromStdString(field.name));
         name->setFlags(Qt::ItemIsEnabled);
         auto* value = new QTableWidgetItem(QString::fromStdString(field.value));
-        const bool writable = editable && (Document::PlacementFieldIsEditable(field.name) ||
-                                           Document::CameraFieldIsEditable(field.name) ||
-                                           Document::CallArgumentIndex(field.name).has_value());
+        const bool writable = field.name == kKeyValueField ||
+                              (editable && (Document::PlacementFieldIsEditable(field.name) ||
+                                            Document::CameraFieldIsEditable(field.name) ||
+                                            Document::CallArgumentIndex(field.name).has_value()));
         value->setFlags(writable ? Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsEditable
                                  : Qt::ItemIsEnabled);
         inspector_->setItem(static_cast<int>(row), 0, name);
@@ -385,11 +389,14 @@ void Window::ShowFrame() {
     std::vector<Document::Field> fields;
     const Document::AuthoredDepth* owned =
         depth_ ? AuthoredAt(static_cast<uint16_t>(*depth_), frame_) : nullptr;
+    ShowKeysForDepth(owned);
     if (owned != nullptr) {
         fields.push_back(Document::Field{.name = "Owned by the project",
                                          .value = "frames " + std::to_string(owned->first_frame) +
                                                   " to " + std::to_string(owned->last_frame) +
                                                   ", edited through its keyframes"});
+        const std::vector<Document::Field> keyed = KeyFields();
+        fields.insert(fields.end(), keyed.begin(), keyed.end());
     }
     if (depth_) {
         const auto tag =
@@ -400,7 +407,9 @@ void Window::ShowFrame() {
             fields.push_back(Document::Field{
                 .name = "Depth", .value = std::to_string(*depth_) + " holds nothing here"});
         } else {
-            fields = Document::PlacementFields(*animation, *placement);
+            const std::vector<Document::Field> placed =
+                Document::PlacementFields(*animation, *placement);
+            fields.insert(fields.end(), placed.begin(), placed.end());
             if (placement->clip_actions) {
                 for (const AfpAnimation::ClipEvent& event : placement->clip_actions->events) {
                     const std::vector<Document::Field> script =
@@ -455,30 +464,31 @@ Support::Expected<void, std::string> SetCameraOn(AfpAnimation::Animation& animat
 
 }
 
-void Window::EditAnimation(const QString& name, const AnimationChange& change) {
-    if (!file_ || animation_path_.empty()) return;
+bool Window::EditAnimation(const QString& name, const AnimationChange& change) {
+    if (!file_ || animation_path_.empty()) return false;
     auto animation = file_->ReadAnimation(animation_path_);
     if (!animation) {
         ReportOnce(QString::fromStdString(animation.error()));
-        return;
+        return false;
     }
     const auto changed = change(*animation);
     if (!changed) {
         ReportProblem(QString::fromStdString(changed.error()));
         ShowFrame();
-        return;
+        return false;
     }
     Document::File before = *file_;
     const auto written = file_->WriteAnimation(animation_path_, *animation);
     if (!written) {
         ReportProblem(QString::fromStdString(written.error()));
         ShowFrame();
-        return;
+        return false;
     }
     history_.Record(name.toStdString(), std::move(before));
     RefreshState();
     Reload();
     ShowFrame();
+    return true;
 }
 
 void Window::ApplyFieldEdit(QTableWidgetItem* item) {
@@ -489,6 +499,10 @@ void Window::ApplyFieldEdit(QTableWidgetItem* item) {
     const std::string field = name->text().toStdString();
     const std::string value = item->text().toStdString();
     const uint32_t frame = frame_;
+    if (field == kKeyValueField) {
+        if (!ApplyKeyEdit(item->text())) ShowFrame();
+        return;
+    }
     if (Document::CameraFieldIsEditable(field)) {
         EditAnimation(tr("%1 on frame %2").arg(name->text()).arg(frame),
                       [field, value, frame](AfpAnimation::Animation& animation) {
