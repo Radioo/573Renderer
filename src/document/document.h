@@ -47,6 +47,8 @@ public:
 
     [[nodiscard]] Support::Expected<void, std::string> RemoveImage(std::string_view name);
 
+    [[nodiscard]] std::optional<std::string> EntryDigest(std::string_view path) const;
+
     [[nodiscard]] Support::Expected<void, std::string>
     WriteAtlas(std::string_view atlas_name, const Atlas& atlas,
                std::span<const LoadedImage> images);

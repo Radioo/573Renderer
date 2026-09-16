@@ -1,6 +1,6 @@
 # Export drift
 
-Status: ready-for-agent
+Status: resolved
 
 Blocked by: 32.
 

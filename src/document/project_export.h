@@ -13,7 +13,7 @@ namespace Document {
 using ImageLoader =
     std::function<Support::Expected<LoadedImage, std::string>(const std::string& file)>;
 
-[[nodiscard]] Support::Expected<void, std::string> ExportProject(File& file, const Project& project,
+[[nodiscard]] Support::Expected<void, std::string> ExportProject(File& file, Project& project,
                                                                  const ImageLoader& load);
 
 }

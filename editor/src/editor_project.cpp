@@ -7,6 +7,7 @@
 #include "document/document.h"
 #include "document/keyframes.h"
 #include "document/project.h"
+#include "document/project_drift.h"
 #include "document/project_export.h"
 #include "document/script_source.h"
 
@@ -18,6 +19,7 @@
 #include <QFile>
 #include <QLineEdit>
 #include <QMessageBox>
+#include <QPushButton>
 #include <QSettings>
 #include <QStatusBar>
 #include <QString>
@@ -106,6 +108,34 @@ void Window::OpenProject(const QString& folder) {
     if (host_.Running()) StartHost(QSettings().value(kGameDirKey).toString());
     RefreshState();
     statusBar()->showMessage(tr("Project open in %1").arg(folder));
+    ReportDrift();
+}
+
+void Window::ReportDrift() {
+    if (!file_ || !project_) return;
+    const std::vector<Document::DriftedEntry> drift = Document::ProjectDrift(*file_, *project_);
+    if (drift.empty()) return;
+
+    for (const Document::DriftedEntry& entry : drift) {
+        const QString path = QString::fromStdString(entry.path);
+        const QString what = entry.kind == Document::DriftKind::Missing
+                                 ? tr("%1 is no longer in the IFS.").arg(path)
+                                 : tr("%1 has changed in the IFS since the last export.").arg(path);
+        QMessageBox box(this);
+        box.setWindowTitle(tr("IFS Editor"));
+        box.setText(what);
+        box.setInformativeText(
+            tr("Keep what the IFS holds, which drops the project's source for it, or export "
+               "again and overwrite it?"));
+        QPushButton* keep = box.addButton(tr("Keep the IFS version"), QMessageBox::AcceptRole);
+        box.addButton(tr("Export again"), QMessageBox::RejectRole);
+        box.exec();
+        if (box.clickedButton() == keep) Document::KeepIfsVersion(*project_, entry.path);
+    }
+    authored_ = project_->content;
+    SaveProject();
+    RefreshState();
+    statusBar()->showMessage(tr("%1 entry(s) had changed since the last export").arg(drift.size()));
 }
 
 void Window::CloseProject() {

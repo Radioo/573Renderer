@@ -788,6 +788,7 @@ add_executable(document_tests
     tests/document/library_call_tests.cpp
     tests/document/outline_tests.cpp
     tests/document/placement_edit_tests.cpp
+    tests/document/project_drift_tests.cpp
     tests/document/project_export_tests.cpp
     tests/document/project_tests.cpp
     tests/document/script_source_tests.cpp

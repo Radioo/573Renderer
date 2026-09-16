@@ -478,6 +478,38 @@ the baked half can be re-derived; without it the project could not store only
 the authored half. A depth the project does not own is not touched at all,
 because export only ever writes the spans it was given.
 
+## Export drift (`document/project_drift.h`)
+
+A project stores only the authored half, so the baked spans in the IFS are the
+one copy of that content the user can lose. Anything can change them: another
+editor, a game update, a hand edit. `project_drift` is how the editor notices.
+
+`ExportedPaths` is the list of entries an export of this project would write:
+each owned animation and its byte-order script, and, when the project owns
+images, the texture list plus every stored image name. It drops paths the
+package does not hold, so the list is always entries that exist. `RecordExported`
+turns that list into `ExportedEntry` rows carrying `File::EntryDigest`, the MD5
+of the stored bytes, and `ExportProject` records them at the end of every
+export. The digest is of the entry as the package stores it, not of the
+placements, so a rewrite that happens to produce the same bytes is correctly not
+drift.
+
+`ProjectDrift` compares those recorded digests against the package as it stands
+now and returns one `DriftedEntry` per entry that disagrees: `Missing` when the
+entry is gone, `Changed` when its bytes differ. Entries the project never
+exported are not in the list and so never reported, which is what keeps drift
+about the project's own content rather than about the package.
+
+Note that one owned animation covers two entries, the animation and its
+byte-order script, because `WriteAnimation` writes both. Changing an animation
+therefore drifts two entries, and the tests assert that rather than one.
+
+`KeepIfsVersion(project, path)` is the resolution that gives the package the
+last word: it drops that path from `exported` and drops any authored depth whose
+animation is that path, so the project stops owning the content and a later
+export leaves the entry alone. The other resolution needs no function, because
+exporting again overwrites the entry and records a fresh digest.
+
 ## Entry edits (`document/entry_edit.h`)
 
 `AddEntry(archive, directory, logical_name, bytes)` never invents a name: the

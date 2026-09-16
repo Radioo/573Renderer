@@ -5,6 +5,7 @@
 #include "document/authored.h"
 #include "document/document.h"
 #include "document/project.h"
+#include "document/project_drift.h"
 #include "support/expected.h"
 
 #include <algorithm>
@@ -58,7 +59,7 @@ Support::Expected<void, std::string> ExportImages(File& file, const Project& pro
 
 }
 
-Support::Expected<void, std::string> ExportProject(File& file, const Project& project,
+Support::Expected<void, std::string> ExportProject(File& file, Project& project,
                                                    const ImageLoader& load) {
     auto images = ExportImages(file, project, load);
     if (!images) return Support::Unexpected(images.error());
@@ -91,6 +92,7 @@ Support::Expected<void, std::string> ExportProject(File& file, const Project& pr
         auto stored = file.WriteAnimation(path, *animation);
         if (!stored) return Support::Unexpected(stored.error());
     }
+    project.exported = RecordExported(file, project);
     return {};
 }
 

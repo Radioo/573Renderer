@@ -23,11 +23,19 @@ struct SourceImage {
     friend bool operator==(const SourceImage&, const SourceImage&) = default;
 };
 
+struct ExportedEntry {
+    std::string path;
+    std::string digest;
+
+    friend bool operator==(const ExportedEntry&, const ExportedEntry&) = default;
+};
+
 struct Project {
     std::string build;
     std::string ifs_path;
     std::vector<AuthoredDepth> content;
     std::vector<SourceImage> images;
+    std::vector<ExportedEntry> exported;
 
     friend bool operator==(const Project&, const Project&) = default;
 };

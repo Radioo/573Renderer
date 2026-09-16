@@ -22,6 +22,37 @@ namespace Support {
 namespace {
 
 constexpr unsigned kMaxNameChars = 512;
+constexpr unsigned long long kWordSize = sizeof(std::uintptr_t);
+
+#ifdef _M_X64
+constexpr DWORD kStackMachine = IMAGE_FILE_MACHINE_AMD64;
+
+unsigned long long ProgramCounter(const CONTEXT& context) {
+    return context.Rip;
+}
+unsigned long long FramePointer(const CONTEXT& context) {
+    return context.Rbp;
+}
+unsigned long long StackPointer(const CONTEXT& context) {
+    return context.Rsp;
+}
+#else
+constexpr DWORD kStackMachine = IMAGE_FILE_MACHINE_I386;
+
+unsigned long long ProgramCounter(const CONTEXT& context) {
+    return context.Eip;
+}
+unsigned long long FramePointer(const CONTEXT& context) {
+    return context.Ebp;
+}
+unsigned long long StackPointer(const CONTEXT& context) {
+    return context.Esp;
+}
+#endif
+
+const void* AddressOf(unsigned long long value) {
+    return std::bit_cast<const void*>(static_cast<std::uintptr_t>(value));
+}
 
 std::mutex& SymbolLock() {
     static std::mutex lock;
@@ -97,19 +128,18 @@ unsigned CaptureStackAddresses(_EXCEPTION_POINTERS* from, unsigned long long* ou
     }
 
     STACKFRAME64 frame{};
-    frame.AddrPC.Offset = context.Rip;
+    frame.AddrPC.Offset = ProgramCounter(context);
     frame.AddrPC.Mode = AddrModeFlat;
-    frame.AddrFrame.Offset = context.Rbp;
+    frame.AddrFrame.Offset = FramePointer(context);
     frame.AddrFrame.Mode = AddrModeFlat;
-    frame.AddrStack.Offset = context.Rsp;
+    frame.AddrStack.Offset = StackPointer(context);
     frame.AddrStack.Mode = AddrModeFlat;
 
     EnsureSymbols();
     unsigned found = 0;
     while (found < max_frames) {
-        if (StackWalk64(IMAGE_FILE_MACHINE_AMD64, GetCurrentProcess(), GetCurrentThread(), &frame,
-                        &context, nullptr, SymFunctionTableAccess64, SymGetModuleBase64,
-                        nullptr) == FALSE) {
+        if (StackWalk64(kStackMachine, GetCurrentProcess(), GetCurrentThread(), &frame, &context,
+                        nullptr, SymFunctionTableAccess64, SymGetModuleBase64, nullptr) == FALSE) {
             break;
         }
         if (frame.AddrPC.Offset == 0) break;
@@ -125,19 +155,20 @@ unsigned ScanStackForReturns(_EXCEPTION_POINTERS* from, unsigned long long* out,
     if (from == nullptr || from->ContextRecord == nullptr) return 0;
 
     MEMORY_BASIC_INFORMATION region{};
-    const auto stack_pointer = from->ContextRecord->Rsp;
-    if (VirtualQuery(std::bit_cast<LPCVOID>(stack_pointer), &region, sizeof(region)) == 0) return 0;
+    const unsigned long long stack_pointer = StackPointer(*from->ContextRecord);
+    if (VirtualQuery(AddressOf(stack_pointer), &region, sizeof(region)) == 0) return 0;
     const auto region_start =
         static_cast<unsigned long long>(reinterpret_cast<std::uintptr_t>(region.BaseAddress));
     const unsigned long long region_end = region_start + region.RegionSize;
 
-    const unsigned long long own =
-        SymGetModuleBase64(GetCurrentProcess(), std::bit_cast<unsigned long long>(&ModuleOf));
+    const auto own = static_cast<unsigned long long>(
+        reinterpret_cast<std::uintptr_t>(GetModuleHandleW(nullptr)));
     unsigned found = 0;
-    for (unsigned long long at = stack_pointer; at + 8 <= region_end && found < max_frames;
-         at += 8) {
-        unsigned long long candidate = 0;
-        std::memcpy(&candidate, std::bit_cast<const void*>(at), sizeof(candidate));
+    for (unsigned long long at = stack_pointer; at + kWordSize <= region_end && found < max_frames;
+         at += kWordSize) {
+        std::uintptr_t word = 0;
+        std::memcpy(&word, AddressOf(at), sizeof(word));
+        const auto candidate = static_cast<unsigned long long>(word);
         if (candidate < 0x10000ULL) continue;
         if (SymGetModuleBase64(GetCurrentProcess(), candidate) != own) continue;
         if (found > 0 && out[found - 1] == candidate) continue;

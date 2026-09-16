@@ -4,15 +4,21 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-BUILD_LOG="$(mktemp)"
-BUILD_BAT="$(cygpath -w "$ROOT/build.bat")"
-MSYS_NO_PATHCONV=1 cmd.exe /c "$BUILD_BAT" 2>&1 | tee "$BUILD_LOG"
-if ! grep -q "Build successful" "$BUILD_LOG"; then
-    echo "checks: build.bat never reported success - build step did not run or failed"
-    rm -f "$BUILD_LOG"
-    exit 1
-fi
-rm -f "$BUILD_LOG"
+run_build() {
+    local script="$1"
+    local log
+    log="$(mktemp)"
+    MSYS_NO_PATHCONV=1 cmd.exe /c "$(cygpath -w "$ROOT/$script")" 2>&1 | tee "$log"
+    if ! grep -q "Build successful" "$log"; then
+        echo "checks: $script never reported success - build step did not run or failed"
+        rm -f "$log"
+        exit 1
+    fi
+    rm -f "$log"
+}
+
+run_build build.bat
+run_build build32.bat
 
 CTEST_EXE="ctest"
 if [ -f build/CMakeCache.txt ]; then

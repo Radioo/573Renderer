@@ -197,6 +197,15 @@ the same reload loop, so the viewport shows what was exported. Export changes th
 open document and not the file on disk; `File > Save` is still what writes it
 out.
 
+Opening a project checks it against its IFS before the user can touch anything.
+`Window::ReportDrift` asks `Document::ProjectDrift` which exported entries no
+longer match, and asks about each one in turn: keep what the IFS holds, which
+calls `KeepIfsVersion` and so drops the project's source for that entry, or
+export again, which leaves the project owning it so the next export overwrites
+it. The choices are written to the manifest straight away, the same as owning
+and detaching, so a decision is never held only in memory. A project whose IFS
+nobody touched asks nothing.
+
 `File > Save` writes the encoded document over the opened path and `Save as...`
 asks for a new one. Whether the document is unsaved comes from the history, not
 from the document: the title carries `(unsaved)` while the current position in

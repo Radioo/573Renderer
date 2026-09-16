@@ -122,8 +122,11 @@ Document::Project Owning(const Document::File& file, Document::Ease ease) {
     if (ease != Document::Ease::Hold) {
         REQUIRE(Document::SetKeyframeEase(owned->authored.tracks.front(), 0, ease, {}).has_value());
     }
-    return Document::Project{
-        .build = "iidx33", .ifs_path = "scene.ifs", .content = {owned->authored}, .images = {}};
+    return Document::Project{.build = "iidx33",
+                             .ifs_path = "scene.ifs",
+                             .content = {owned->authored},
+                             .images = {},
+                             .exported = {}};
 }
 
 }
@@ -133,7 +136,7 @@ TEST_CASE("Exporting an untouched owned depth leaves the package as it was") {
     const auto before = file.Encode();
     REQUIRE(before.has_value());
 
-    const Document::Project project = Owning(file, Document::Ease::Hold);
+    Document::Project project = Owning(file, Document::Ease::Hold);
     const auto exported = Document::ExportProject(file, project, NoImages());
     if (!exported) FAIL(exported.error());
 
@@ -145,7 +148,7 @@ TEST_CASE("Exporting an untouched owned depth leaves the package as it was") {
 TEST_CASE("Exporting the same project twice produces the same bytes") {
     Document::File first = Package();
     Document::File second = Package();
-    const Document::Project project = Owning(first, Document::Ease::Linear);
+    Document::Project project = Owning(first, Document::Ease::Linear);
 
     REQUIRE(Document::ExportProject(first, project, NoImages()).has_value());
     REQUIRE(Document::ExportProject(second, project, NoImages()).has_value());
@@ -158,7 +161,7 @@ TEST_CASE("Exporting the same project twice produces the same bytes") {
 
 TEST_CASE("Exporting a project again changes nothing the first export did not") {
     Document::File file = Package();
-    const Document::Project project = Owning(file, Document::Ease::Linear);
+    Document::Project project = Owning(file, Document::Ease::Linear);
 
     REQUIRE(Document::ExportProject(file, project, NoImages()).has_value());
     const auto once = file.Encode();
@@ -171,7 +174,7 @@ TEST_CASE("Exporting a project again changes nothing the first export did not") 
 
 TEST_CASE("An eased keyframe becomes one placement per frame") {
     Document::File file = Package();
-    const Document::Project project = Owning(file, Document::Ease::Linear);
+    Document::Project project = Owning(file, Document::Ease::Linear);
     REQUIRE(Document::ExportProject(file, project, NoImages()).has_value());
 
     const auto animation = file.ReadAnimation(Path());
@@ -190,7 +193,7 @@ TEST_CASE("An eased keyframe becomes one placement per frame") {
 
 TEST_CASE("Export leaves a depth the project does not own alone") {
     Document::File file = Package();
-    const Document::Project project = Owning(file, Document::Ease::Linear);
+    Document::Project project = Owning(file, Document::Ease::Linear);
     REQUIRE(Document::ExportProject(file, project, NoImages()).has_value());
 
     const auto animation = file.ReadAnimation(Path());
@@ -208,8 +211,8 @@ TEST_CASE("A project owning nothing exports without touching the package") {
     Document::File file = Package();
     const auto before = file.Encode();
     REQUIRE(before.has_value());
-    const Document::Project project{
-        .build = "iidx33", .ifs_path = "scene.ifs", .content = {}, .images = {}};
+    Document::Project project{
+        .build = "iidx33", .ifs_path = "scene.ifs", .content = {}, .images = {}, .exported = {}};
     REQUIRE(Document::ExportProject(file, project, NoImages()).has_value());
     const auto after = file.Encode();
     REQUIRE(after.has_value());
@@ -248,7 +251,8 @@ Document::Project WithImages() {
         .ifs_path = "scene.ifs",
         .content = {},
         .images = {Document::SourceImage{.name = "wide", .file = "sources/wide.png"},
-                   Document::SourceImage{.name = "small", .file = "sources/small.png"}}};
+                   Document::SourceImage{.name = "small", .file = "sources/small.png"}},
+        .exported = {}};
 }
 
 std::vector<TextureImages::Image> ListedImages(const Document::File& file) {
@@ -273,7 +277,8 @@ std::vector<TextureImages::Image> ListedImages(const Document::File& file) {
 TEST_CASE("Export packs the project's images into an atlas of their own") {
     Document::File file = Package();
     const std::size_t before = ListedImages(file).size();
-    const auto exported = Document::ExportProject(file, WithImages(), Images());
+    Document::Project pictures = WithImages();
+    const auto exported = Document::ExportProject(file, pictures, Images());
     if (!exported) FAIL(exported.error());
 
     const std::vector<TextureImages::Image> listed = ListedImages(file);
@@ -290,7 +295,8 @@ TEST_CASE("Export packs the project's images into an atlas of their own") {
 
 TEST_CASE("An exported image carries its pixels as its own entry") {
     Document::File file = Package();
-    REQUIRE(Document::ExportProject(file, WithImages(), Images()).has_value());
+    Document::Project pictures = WithImages();
+    REQUIRE(Document::ExportProject(file, pictures, Images()).has_value());
     const auto entry = file.Describe("tex/" + SamplePackage::HashPath("small"));
     REQUIRE(entry.has_value());
     CHECK(entry->role == Document::Role::Texture);
@@ -300,15 +306,17 @@ TEST_CASE("An exported image carries its pixels as its own entry") {
 TEST_CASE("Exporting images twice produces the same bytes") {
     Document::File first = Package();
     Document::File second = Package();
-    REQUIRE(Document::ExportProject(first, WithImages(), Images()).has_value());
-    REQUIRE(Document::ExportProject(second, WithImages(), Images()).has_value());
+    Document::Project pictures = WithImages();
+    REQUIRE(Document::ExportProject(first, pictures, Images()).has_value());
+    Document::Project pictures_second = WithImages();
+    REQUIRE(Document::ExportProject(second, pictures_second, Images()).has_value());
     const auto one = first.Encode();
     const auto two = second.Encode();
     REQUIRE(one.has_value());
     REQUIRE(two.has_value());
     CHECK(*one == *two);
 
-    REQUIRE(Document::ExportProject(first, WithImages(), Images()).has_value());
+    REQUIRE(Document::ExportProject(first, pictures, Images()).has_value());
     const auto again = first.Encode();
     REQUIRE(again.has_value());
     CHECK(*again == *one);
@@ -317,7 +325,8 @@ TEST_CASE("Exporting images twice produces the same bytes") {
 TEST_CASE("Export leaves the atlases it did not make alone") {
     Document::File file = Package();
     const std::vector<TextureImages::Image> before = ListedImages(file);
-    REQUIRE(Document::ExportProject(file, WithImages(), Images()).has_value());
+    Document::Project pictures = WithImages();
+    REQUIRE(Document::ExportProject(file, pictures, Images()).has_value());
     const std::vector<TextureImages::Image> after = ListedImages(file);
     for (const TextureImages::Image& image : before) {
         const auto same = std::ranges::find(after, image.name, &TextureImages::Image::name);

@@ -1,6 +1,7 @@
 #include "document/document.h"
 
 #include "document/entries.h"
+#include "formats/ifs_digest.h"
 #include "document/atlas.h"
 #include "document/atlas_write.h"
 #include "document/entry_edit.h"
@@ -11,6 +12,7 @@
 
 #include <cstdint>
 #include <span>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -113,6 +115,19 @@ Support::Expected<void, std::string> File::WriteAtlas(std::string_view atlas_nam
     if (!written) return Support::Unexpected(written.error());
     outline_ = Outline::Build(archive_);
     return {};
+}
+
+std::optional<std::string> File::EntryDigest(std::string_view path) const {
+    const Ifs::Entry* entry = FindEntry(archive_, path);
+    if (entry == nullptr || entry->kind != Ifs::EntryKind::File) return std::nullopt;
+    const Ifs::Detail::Digest digest = Ifs::Detail::Md5(entry->bytes);
+    std::string out;
+    out.reserve(digest.size() * 2);
+    for (const uint8_t byte : digest) {
+        out += "0123456789abcdef"[byte >> 4U];
+        out += "0123456789abcdef"[byte & 0xFU];
+    }
+    return out;
 }
 
 Support::Expected<void, std::string> File::RemoveImage(std::string_view name) {

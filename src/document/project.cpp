@@ -26,6 +26,7 @@ constexpr std::string_view kBuildKey = "build";
 constexpr std::string_view kIfsKey = "ifs";
 constexpr std::string_view kContentKey = "owns";
 constexpr std::string_view kImagesKey = "images";
+constexpr std::string_view kExportedKey = "exported";
 constexpr int kIndent = 2;
 
 Support::Expected<std::string, std::string> Text(const Json& object, std::string_view key) {
@@ -53,6 +54,26 @@ Support::Expected<std::vector<SourceImage>, std::string> ReadImages(const Json& 
         }
         out.push_back(SourceImage{.name = name.value().get<std::string>(),
                                   .file = file.value().get<std::string>()});
+    }
+    return out;
+}
+
+Support::Expected<std::vector<ExportedEntry>, std::string> ReadExported(const Json& parsed,
+                                                                        std::string_view key) {
+    std::vector<ExportedEntry> out;
+    const auto exported = parsed.find(std::string(key));
+    if (exported == parsed.end()) return out;
+    if (!exported.value().is_array())
+        return Support::Unexpected(std::string("the project's exported list is not a list"));
+    for (const Json& entry : exported.value()) {
+        const auto path = entry.is_object() ? entry.find("path") : entry.end();
+        const auto digest = entry.is_object() ? entry.find("digest") : entry.end();
+        if (path == entry.end() || !path.value().is_string() || digest == entry.end() ||
+            !digest.value().is_string()) {
+            return Support::Unexpected(std::string("an exported entry has no path and digest"));
+        }
+        out.push_back(ExportedEntry{.path = path.value().get<std::string>(),
+                                    .digest = digest.value().get<std::string>()});
     }
     return out;
 }
@@ -89,8 +110,11 @@ Support::Expected<Project, std::string> ReadProject(std::span<const uint8_t> man
     auto ifs = Text(parsed, kIfsKey);
     if (!ifs) return Support::Unexpected(ifs.error());
     if (ifs->empty()) return Support::Unexpected(std::string("the project names no IFS"));
-    Project project{
-        .build = std::move(*build), .ifs_path = std::move(*ifs), .content = {}, .images = {}};
+    Project project{.build = std::move(*build),
+                    .ifs_path = std::move(*ifs),
+                    .content = {},
+                    .images = {},
+                    .exported = {}};
     const auto content = parsed.find(std::string(kContentKey));
     if (content != parsed.end()) {
         auto read = ReadContent(content.value());
@@ -100,6 +124,10 @@ Support::Expected<Project, std::string> ReadProject(std::span<const uint8_t> man
     auto pictures = ReadImages(parsed, kImagesKey);
     if (!pictures) return Support::Unexpected(pictures.error());
     project.images = std::move(*pictures);
+
+    auto exported = ReadExported(parsed, kExportedKey);
+    if (!exported) return Support::Unexpected(exported.error());
+    project.exported = std::move(*exported);
     return project;
 }
 
@@ -117,6 +145,14 @@ std::vector<uint8_t> WriteProject(const Project& project) {
         images.push_back(std::move(one));
     }
     out[std::string(kImagesKey)] = std::move(images);
+    Json exported = Json::array();
+    for (const ExportedEntry& entry : project.exported) {
+        Json one;
+        one["path"] = entry.path;
+        one["digest"] = entry.digest;
+        exported.push_back(std::move(one));
+    }
+    out[std::string(kExportedKey)] = std::move(exported);
     std::string text = out.dump(kIndent);
     text += '\n';
     return {text.begin(), text.end()};
