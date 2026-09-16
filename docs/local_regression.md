@@ -206,6 +206,12 @@ per-frame placement actually carries over a span, which is what the shape of
 `Document::AuthoredDepth` was decided from, and it then owns every span and
 detaches it again and requires the clip to come back identical.
 
+It owns spans in the root and in every sprite, and reports the two separately.
+On IIDX 33 it owns 187191 root spans and 563889 sprite spans and gets every one
+of them back identical; the rest are refused for a stated reason, the largest
+being an update that carries flags of its own (22076 in roots, 47098 in
+sprites), which is the obvious next thing for own to learn.
+
 That second half is the proof behind ticket 30's byte-for-byte line, and it is
 what found the three things own was dropping: the non-presence flag bits, the
 extended flag word and the frames whose update sets no property. Each showed up
@@ -223,8 +229,10 @@ tables are ordered, and how many sprites have cameras, labels and export names.
 It is what made sprites the next thing the editor had to reach: on IIDX 33, 69%
 of all placements are inside sprites. It is also what found that 145900 of
 171786 sprite definitions sit inside root frame 0, which is the reason
-`Document::RemoveFrame` keeps definitions. Run it on a new build before assuming
-either still holds.
+`Document::RemoveFrame` keeps definitions. It also checks the order of every
+export table: all of them are in case-folded name order, and 1239 are in that
+order but not in byte order, which is the order the game's symbol lookup
+searches. Run it on a new build before assuming any of this still holds.
 
 ## The frame rate an animation asks for (`local` label)
 

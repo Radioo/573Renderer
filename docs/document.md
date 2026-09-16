@@ -521,6 +521,21 @@ bounded by the frame count of its own clip, not the root's.
 and cameras show when the sprite is picked, and a sprite that has gone shows one
 row saying so and nothing to edit.
 
+### Previewing a sprite (`document/sprite_preview.h`)
+
+`PreviewSymbolFor(file, animation, clip)` answers the question the preview host
+needs answered before it can show a sprite by itself: which bytes to load and
+which name to ask for. The game only finds a symbol by its export name, so a
+sprite with one gets the document's own bytes and that name. A sprite without
+one gets a copy of the package whose animation carries an extra export entry,
+named `r573_preview_sprite_<id>` with underscores added until no export already
+uses it, and the open document is never changed. The entry goes where the
+game's lookup expects it: the export table is binary searched with ASCII
+letters folded to lower case, and every shipped table (29110 in IIDX 33) is in
+that order, 1239 of them in that order but not in byte order, so the new entry
+is inserted before the first name that folds greater. The root clip has no
+symbol to show and a sprite that is gone is refused with the usual message.
+
 ### Removing a frame keeps the definitions in it
 
 `RemoveFrame` drops only the per-frame commands in the frame (place, remove,

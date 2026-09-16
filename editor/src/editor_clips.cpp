@@ -5,6 +5,7 @@
 
 #include "document/clip.h"
 #include "document/outline.h"
+#include "document/sprite_preview.h"
 
 #include <QAction>
 #include <QComboBox>
@@ -22,6 +23,8 @@
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <utility>
+#include <vector>
 
 namespace Editor {
 
@@ -73,15 +76,57 @@ void Window::ChooseClip(int index) {
     key_property_.clear();
     key_frame_.reset();
     frame_ = clip_.sprite ? 0 : root_frame_;
-    play_action_->setEnabled(!clip_.sprite);
+    LoadViewportClip();
     ShowClipTimeline();
+    SeekViewport(frame_);
     ShowFrame();
-    if (clip_.sprite) {
-        statusBar()->showMessage(tr("Editing %1. The viewport still shows the root animation, at "
-                                    "frame %2.")
-                                     .arg(clip_box_->itemText(index))
-                                     .arg(root_frame_));
+    if (!clip_.sprite) return;
+    if (symbol_shown_) {
+        statusBar()->showMessage(tr("Showing %1 on its own").arg(clip_box_->itemText(index)));
+        return;
     }
+    statusBar()->showMessage(tr("Editing %1. The viewport still shows the root animation, at "
+                                "frame %2.")
+                                 .arg(clip_box_->itemText(index))
+                                 .arg(root_frame_));
+}
+
+bool Window::LoadViewportClip() {
+    symbol_shown_ = false;
+    if (!host_.Running() || !file_ || animation_path_.empty()) return false;
+    std::vector<uint8_t> bytes;
+    std::string symbol;
+    if (clip_.sprite) {
+        auto preview = Document::PreviewSymbolFor(*file_, animation_path_, clip_);
+        if (!preview) {
+            ReportOnce(QString::fromStdString(preview.error()));
+            return false;
+        }
+        bytes = std::move(preview->ifs);
+        symbol = std::move(preview->name);
+    } else {
+        auto encoded = file_->Encode();
+        if (!encoded) {
+            ReportOnce(QString::fromStdString(encoded.error()));
+            return false;
+        }
+        bytes = std::move(*encoded);
+    }
+    const auto loaded = host_.Reload(package_name_, animation_name_, bytes);
+    if (!loaded) {
+        ReportOnce(QString::fromStdString(loaded.error()));
+        return false;
+    }
+    frame_count_ = loaded->frame_count;
+    if (symbol.empty()) return true;
+    const auto shown = host_.ShowSymbol(symbol);
+    if (!shown) {
+        ReportOnce(QString::fromStdString(shown.error()));
+        return false;
+    }
+    frame_count_ = shown->frame_count;
+    symbol_shown_ = true;
+    return true;
 }
 
 void Window::ShowClipTimeline() {
@@ -98,7 +143,8 @@ void Window::ShowClipTimeline() {
         ShowClipTimeline();
         return;
     }
-    const uint32_t count = clip_.sprite ? details->frame_count : frame_count_;
+    const bool from_model = !host_.Running() || (clip_.sprite && !symbol_shown_);
+    const uint32_t count = from_model ? details->frame_count : frame_count_;
     timeline_->ShowAnimation(count, details->depths, details->labels);
     frame_ = count == 0 ? 0 : std::min(frame_, count - 1);
     timeline_->SetFrame(frame_);
@@ -125,15 +171,15 @@ void Window::ShowAnimation(const std::string& name) {
     frame_count_ = loaded->frame_count;
     frame_ = 0;
     root_frame_ = 0;
+    symbol_shown_ = false;
     depth_.reset();
     FillClips();
-    play_action_->setEnabled(true);
     ShowClipTimeline();
     ResizeViewport();
 }
 
 void Window::SeekViewport(uint32_t frame) {
-    root_frame_ = frame;
+    if (!clip_.sprite) root_frame_ = frame;
     if (!host_.Running()) return;
     const auto sought = host_.Seek(frame);
     if (!sought) {
@@ -147,25 +193,15 @@ void Window::SeekViewport(uint32_t frame) {
 void Window::SeekTo(uint32_t frame) {
     frame_ = frame;
     timeline_->SetFrame(frame);
-    if (!clip_.sprite) SeekViewport(frame);
+    if (!clip_.sprite || symbol_shown_) SeekViewport(frame);
     if (!Playing()) ShowFrame();
 }
 
 void Window::Reload() {
     if (!host_.Running() || animation_name_.empty() || !file_) return;
-    const auto encoded = file_->Encode();
-    if (!encoded) {
-        ReportOnce(QString::fromStdString(encoded.error()));
-        return;
-    }
-    const auto loaded = host_.Reload(package_name_, animation_name_, *encoded);
-    if (!loaded) {
-        ReportOnce(QString::fromStdString(loaded.error()));
-        return;
-    }
-    frame_count_ = loaded->frame_count;
+    LoadViewportClip();
     ShowClipTimeline();
-    SeekViewport(root_frame_);
+    SeekViewport(symbol_shown_ ? frame_ : root_frame_);
     ShowFrame();
 }
 

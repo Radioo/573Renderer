@@ -106,6 +106,15 @@ bool AfpManager::SeekFrame(const AfpFuncs& afp, int frame) {
     return rc >= 0;
 }
 
+bool AfpManager::AttachSymbol(const AfpFuncs& afp, const std::string& name) {
+    if (afp.afp_mc_attach_movie == nullptr) return false;
+    int const mc_id = ReferRootMcId(afp);
+    if (mc_id < 0) return false;
+    int const rc = afp.afp_mc_attach_movie(mc_id, name.c_str());
+    LOG("AFP", "AttachSymbol('%s') mc=0x%08x -> %d", name.c_str(), (uint32_t)mc_id, rc);
+    return rc >= 0;
+}
+
 void AfpManager::SetStreamPaused(const AfpFuncs& afp, bool paused) {
     if (g_engine.stream_id == Runtime::kModernNoStream || (int)g_engine.stream_id < 0) return;
     if (afp.afp_stream_set_speed != nullptr)

@@ -80,6 +80,13 @@ std::vector<uint8_t> SelectAnimationReply(const PreviewProtocol::SelectAnimation
     return LoadedReply();
 }
 
+std::vector<uint8_t> ShowSymbolReply(const PreviewProtocol::ShowSymbol& show) {
+    if (show.name() == nullptr) return Failure("ShowSymbol needs a name");
+    if (!AfpManager::AttachSymbol(g_afp, show.name()->str()))
+        return Failure("the animation has no symbol called " + show.name()->str());
+    return LoadedReply();
+}
+
 HWND CreateHiddenWindow(int width, int height) {
     WNDCLASSEXA wc = {};
     wc.cbSize = sizeof(wc);
@@ -109,6 +116,7 @@ std::vector<uint8_t> Session::Handle(std::span<const uint8_t> request) {
     if (const auto* select = message->request_as_SelectAnimation())
         return SelectAnimationReply(*select);
     if (const auto* seek = message->request_as_Seek()) return SeekReply(*seek);
+    if (const auto* show = message->request_as_ShowSymbol()) return ShowSymbolReply(*show);
     if (const auto* resize = message->request_as_Resize()) return Resize(*resize);
     if (message->request_as_Render() != nullptr) return Render();
     return Failure("unknown request");

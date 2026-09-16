@@ -58,6 +58,8 @@ public:
 
     [[nodiscard]] Support::Expected<Loaded, std::string> SelectAnimation(const std::string& name);
 
+    [[nodiscard]] Support::Expected<Loaded, std::string> ShowSymbol(const std::string& name);
+
     [[nodiscard]] Support::Expected<void, std::string> Seek(uint32_t frame);
 
     [[nodiscard]] Support::Expected<void, std::string> Resize(uint32_t width, uint32_t height);

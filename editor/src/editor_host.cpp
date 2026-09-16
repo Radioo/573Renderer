@@ -63,6 +63,11 @@ Support::Expected<PreviewClient::Loaded, std::string> Host::Reload(const std::st
     return loaded;
 }
 
+Support::Expected<PreviewClient::Loaded, std::string> Host::ShowSymbol(const std::string& name) {
+    if (host_ == nullptr) return Support::Unexpected(std::string("no preview host is running"));
+    return host_->ShowSymbol(name);
+}
+
 Support::Expected<void, std::string> Host::Seek(uint32_t frame) {
     if (host_ == nullptr) return Support::Unexpected(std::string("no preview host is running"));
     return host_->Seek(frame);

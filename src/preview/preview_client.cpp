@@ -160,6 +160,21 @@ Support::Expected<Loaded, std::string> Host::SelectAnimation(const std::string& 
     return ReadLoaded(*loaded);
 }
 
+Support::Expected<Loaded, std::string> Host::ShowSymbol(const std::string& name) {
+    flatbuffers::FlatBufferBuilder builder;
+    const auto show = PreviewProtocol::CreateShowSymbol(builder, builder.CreateString(name));
+    builder.Finish(PreviewProtocol::CreateRequestMessage(
+        builder, PreviewProtocol::Request::ShowSymbol, show.Union()));
+    auto reply = Call(Finished(builder), "ShowSymbol");
+    if (!reply) return Support::Unexpected(reply.error());
+    auto message = Decode(*reply, "ShowSymbol");
+    if (!message) return Support::Unexpected(message.error());
+    const auto* loaded = (*message)->reply_as_Loaded();
+    if (loaded == nullptr)
+        return Support::Unexpected(std::string("the host did not answer ShowSymbol with Loaded"));
+    return ReadLoaded(*loaded);
+}
+
 Support::Expected<void, std::string> Host::Seek(uint32_t frame) {
     flatbuffers::FlatBufferBuilder builder;
     const auto seek = PreviewProtocol::CreateSeek(builder, frame);

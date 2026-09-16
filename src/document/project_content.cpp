@@ -162,9 +162,10 @@ Support::Expected<AuthoredDepth, std::string> ReadDepth(const Json& value) {
     }
     const auto sprite = value.find("sprite");
     if (sprite != value.end()) {
-        if (!sprite.value().is_number_unsigned() || sprite.value().get<uint64_t>() > kMaxDepth)
+        if (!sprite.value().is_number_unsigned() || sprite.value().get<uint64_t>() > kMaxDepth) {
             return Support::Unexpected(
                 std::string("an owned depth's sprite is not a sprite number"));
+        }
         out.clip = ClipId{.sprite = sprite.value().get<uint16_t>()};
     }
     if (out.first_frame > out.last_frame)

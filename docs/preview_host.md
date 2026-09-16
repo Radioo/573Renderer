@@ -17,6 +17,7 @@ Windows named pipe (ADR 0007).
 | `Seek` | frame |
 | `Resize` | viewport width and height |
 | `Render` | none |
+| `ShowSymbol` | the export name of a symbol in the loaded animation |
 
 A reply is a `ReplyMessage` holding `Done`, `Loaded` (frame count and labels),
 `Frame` (the shared texture handle as a u64, its size, the frame drawn) or
@@ -65,6 +66,7 @@ unloads and exits with code 0.
 | `Seek` | `SeekFrame` on the root clip | `Done` |
 | `Resize` | drops the shared texture so the next render makes one at the new size | `Done` |
 | `Render` | draws one frame at the game's render size, copies it into the shared texture (scaled when the viewport size differs) | `Frame` |
+| `ShowSymbol` | `AttachSymbol`: attaches the named symbol onto the root movie clip, so the root clip now plays that symbol from frame 0 | `Loaded` |
 
 `Loaded` carries the root clip's frame count and labels read back from
 afp-core. `Frame` carries the root clip's current frame. A request the host
@@ -90,7 +92,7 @@ destructor closes the pipe, gives the host five seconds to exit and terminates
 it if it does not.
 
 One method per request: `Boot`, `LoadPackage`, `SelectAnimation`, `Seek`,
-`Resize`, `Render`. Each builds its FlatBuffer, calls through
+`Resize`, `Render`, `ShowSymbol`. Each builds its FlatBuffer, calls through
 `PreviewChannel::Client` and decodes the reply into a plain struct
 (`Loaded{frame_count, labels}`, `Frame{shared_handle, width, height, frame}`).
 A `Failure` reply becomes an error carrying the request name and the host's
@@ -124,3 +126,38 @@ fills the shared texture directly instead of going through `SharedFrame::Copy`.
 Tests: `tests/local/shared_texture_tests.cpp` (`local`) draws a known colour on
 one device and reads it back on another, and the `local_dll` host process test
 reads the real rendered frame and requires it to be more than zeros.
+
+## Showing one symbol on its own
+
+`ShowSymbol` is how the editor previews a sprite by itself. afp-core has a call
+that makes a movie clip show a symbol of its animation in place of what it was
+showing, Flash's `attachMovie` by linkage name: `AfpFuncs::afp_mc_attach_movie`,
+bound at `0x06d`, `int (int mc_id, const char *lib)`. `AfpManager::AttachSymbol`
+calls it on the root movie clip (`afp_mc_get_id_by_path(stream, "")`). Because
+every other request already reads and drives the root clip, nothing else
+changes: `Loaded` reports the symbol's frame count and labels, `Seek` moves
+through the symbol's frames, and `Render` reports the symbol's frame. Selecting
+or reloading the animation puts the whole animation back.
+
+The game finds the symbol by name only, never by character id, and it looks the
+name up in the animation's export table by binary search with ASCII letters
+folded to lower case, then in the import table. So only a symbol with an export
+name can be shown this way; `Document::PreviewSymbolFor` covers the rest by
+handing the host bytes that carry an extra export name. The call is read from
+the IIDX 33 and IIDX 34 afp-core, where it is the same routine at the same
+number; to find it again, xref the log string `afp_play_work_attach_movie_as2`,
+whose one reference is the attach routine, and whose two exported callers are
+`0x06d` and `0x089` (the second takes a stream id too, to take the symbol from
+another loaded animation). A build that exports by name is bound as
+`afp_mc_attach_movie`, which is the name the routine's AS3 twin logs, but no
+such build has been checked.
+
+Test: `tests/local/sprite_preview_tests.cpp` (`local_dll`) loads IIDX 33's
+`graphic/1/title.ifs`, picks an exported sprite whose frame count differs from
+the root's, shows it and checks afp-core reports the sprite's frame count and
+label count, seeks into it, renders and checks the frame, goes back to the
+whole animation, shows it again by its name in upper case (the lookup folds
+case, so this has to work), and checks a name nobody exports is refused. A
+second case shows a sprite with no export name: the name is refused against the
+shipped bytes and accepted once the host has the preview bytes, and afp-core
+reports that sprite's single frame rather than the root's 840.

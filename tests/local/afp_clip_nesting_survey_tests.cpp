@@ -36,6 +36,7 @@ struct Counts {
     std::size_t exported_sprites = 0;
     std::map<std::string, std::size_t> sprite_label_order;
     std::map<std::string, std::size_t> sprite_tag_frame;
+    std::map<std::string, std::size_t> export_order;
     std::map<std::size_t, std::size_t> deepest;
 };
 
@@ -91,6 +92,34 @@ void CountSpriteFrames(const AfpAnimation::Container& root, Counts& counts) {
     }
 }
 
+std::string Folded(std::string text) {
+    std::ranges::transform(text, text.begin(), [](char c) {
+        return (c >= 'A' && c <= 'Z') ? static_cast<char>(c - 'A' + 'a') : c;
+    });
+    return text;
+}
+
+std::string ExportOrder(const AfpAnimation::Animation& animation) {
+    if (animation.exports.size() < 2) return "fewer than two";
+    std::vector<std::string> names;
+    names.reserve(animation.exports.size());
+    for (const AfpAnimation::Export& exported : animation.exports) {
+        names.push_back(exported.name < animation.strings.size() ? animation.strings[exported.name]
+                                                                 : std::string());
+    }
+    std::vector<std::string> folded;
+    folded.reserve(names.size());
+    for (const std::string& name : names)
+        folded.push_back(Folded(name));
+    const bool by_folded = std::ranges::is_sorted(folded);
+    const bool by_bytes = std::ranges::is_sorted(names);
+    const bool by_tag = std::ranges::is_sorted(animation.exports, {}, &AfpAnimation::Export::tag);
+    std::string order = by_folded ? "folded name" : "not folded name";
+    order += by_bytes ? ", byte name" : ", not byte name";
+    order += by_tag ? ", tag" : ", not tag";
+    return order;
+}
+
 void CountLabelOrder(const AfpAnimation::Animation& animation, Counts& counts) {
     for (const AfpAnimation::Tag& tag : animation.root.tags) {
         const auto* sprite = std::get_if<AfpAnimation::Sprite>(&tag.body);
@@ -125,6 +154,7 @@ bool ExportsSprite(const AfpAnimation::Animation& animation, const AfpAnimation:
 void CountAnimation(const AfpAnimation::Animation& animation, Counts& counts) {
     counts.animations++;
     CountLabelOrder(animation, counts);
+    counts.export_order[ExportOrder(animation)]++;
     CountSpriteFrames(animation.root, counts);
     const std::size_t root = Placements(animation.root);
     std::size_t nested = 0;
@@ -181,6 +211,8 @@ TEST_CASE("How much of a shipped animation lives inside its sprites") {
         counts.root_cameras, counts.sprite_cameras, counts.sprite_labels, counts.exported_sprites);
     for (const auto& [order, count] : counts.sprite_label_order)
         std::cerr << std::format("[nesting] sprite labels {}: {}\n", order, count);
+    for (const auto& [order, count] : counts.export_order)
+        std::cerr << std::format("[nesting] export table {}: {}\n", order, count);
     for (const auto& [where, count] : counts.sprite_tag_frame)
         std::cerr << std::format("[nesting] sprite definition {}: {}\n", where, count);
     for (const auto& [level, count] : counts.deepest)

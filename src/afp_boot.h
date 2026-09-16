@@ -86,6 +86,8 @@ bool GotoLabel(const AfpFuncs& afp, const std::string& label);
 
 bool SeekFrame(const AfpFuncs& afp, int frame);
 
+bool AttachSymbol(const AfpFuncs& afp, const std::string& name);
+
 void SetStreamPaused(const AfpFuncs& afp, bool paused);
 
 struct ChildClip {

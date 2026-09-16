@@ -28,7 +28,11 @@ table Resize {
 table Render {
 }
 
-union Request { Boot, LoadPackage, SelectAnimation, Seek, Resize, Render }
+table ShowSymbol {
+  name:string;
+}
+
+union Request { Boot, LoadPackage, SelectAnimation, Seek, Resize, Render, ShowSymbol }
 
 table RequestMessage {
   request:Request;

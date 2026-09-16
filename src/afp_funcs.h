@@ -55,6 +55,7 @@ typedef int (*afp_system_dump_layer_info_t)(int min_priority);
 typedef int (*afp_mc_get_id_by_path_t)(uint32_t stream_id, const char* path);
 typedef int (*afp_mc_get_relative_id_t)(int mc_id, int direction);
 typedef int64_t (*afp_mc_attach_stream_t)(uint32_t mc_id, uint32_t data_id);
+typedef int (*afp_mc_attach_movie_t)(int mc_id, const char* lib);
 typedef int (*afp_mc_get_t)(int mc_id, uint32_t prop_id, intptr_t arg);
 typedef int (*afp_mc_set_t)(int mc_id, uint32_t code, ...);
 typedef int (*afp_play_work_load_bitmap_t)(int mc_id, const char* bitmap_name, int attach);
@@ -106,6 +107,7 @@ struct AfpFuncs {
     afp_mc_get_id_by_path_t afp_mc_get_id_by_path = nullptr;
     afp_mc_get_relative_id_t afp_mc_get_relative_id = nullptr;
     afp_mc_attach_stream_t afp_mc_attach_stream = nullptr;
+    afp_mc_attach_movie_t afp_mc_attach_movie = nullptr;
     afp_mc_get_t afp_mc_get = nullptr;
     afp_mc_set_t afp_mc_set = nullptr;
     afp_mc_control_t afp_mc_control = nullptr;
@@ -163,6 +165,7 @@ struct AfpFuncs {
         DLL_LOAD(loader, afp_mc_enumerate_children, 0x079);
         DLL_LOAD(loader, afp_mc_set, 0x072);
         DLL_LOAD(loader, afp_mc_get, 0x073);
+        DLL_LOAD(loader, afp_mc_attach_movie, 0x06d);
         DLL_LOAD(loader, afp_mc_attach_stream, 0x06e);
         DLL_LOAD(loader, afp_play_work_load_bitmap, 0x087);
         DLL_LOAD(loader, afp_play_work_load_image, 0x088);

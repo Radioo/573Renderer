@@ -97,6 +97,7 @@ TEST_CASE("Owning a sprite depth captures the sprite's placements, not the root'
     CHECK(owned->authored.clip == kInSprite);
     const auto key = Document::KeyAt(owned->authored, "Translation", 2);
     REQUIRE(key.has_value());
+    if (!key) return;
     CHECK(key->value == std::vector<int64_t>{520, 0});
 }
 
@@ -107,6 +108,7 @@ TEST_CASE("Owning a root depth records the root") {
     CHECK(owned->authored.clip == kRoot);
     const auto key = Document::KeyAt(owned->authored, "Translation", 2);
     REQUIRE(key.has_value());
+    if (!key) return;
     CHECK(key->value == std::vector<int64_t>{120, 0});
 }
 

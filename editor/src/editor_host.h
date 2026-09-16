@@ -28,6 +28,9 @@ public:
     [[nodiscard]] Support::Expected<PreviewClient::Loaded, std::string>
     Reload(const std::string& package, const std::string& animation, std::span<const uint8_t> ifs);
 
+    [[nodiscard]] Support::Expected<PreviewClient::Loaded, std::string>
+    ShowSymbol(const std::string& name);
+
     [[nodiscard]] Support::Expected<void, std::string> Seek(uint32_t frame);
 
     [[nodiscard]] Support::Expected<void, std::string> Resize(uint32_t width, uint32_t height);

@@ -18,9 +18,9 @@ void Window::TogglePlay() {
         StopPlayback();
         return;
     }
-    if (clip_.sprite) {
-        statusBar()->showMessage(tr("Only the root clip plays, since that is what the viewport "
-                                    "shows"));
+    if (clip_.sprite && !symbol_shown_) {
+        statusBar()->showMessage(
+            tr("This sprite is not showing on its own, so there is nothing of it to play"));
         return;
     }
     if (!file_ || animation_path_.empty() || frame_count_ == 0) return;

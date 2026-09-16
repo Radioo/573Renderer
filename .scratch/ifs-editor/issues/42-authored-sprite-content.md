@@ -1,6 +1,6 @@
 # Authored content inside sprites
 
-Status: ready-for-agent
+Status: resolved
 
 Blocked by: 41.
 

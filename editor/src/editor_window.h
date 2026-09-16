@@ -111,6 +111,7 @@ private:
     void FillClips();
     void ChooseClip(int index);
     void ShowClipTimeline();
+    bool LoadViewportClip();
     void TogglePlay();
     void StepPlayback();
     void StopPlayback();
@@ -157,6 +158,7 @@ private:
     uint32_t frame_ = 0;
     uint32_t root_frame_ = 0;
     Document::ClipId clip_;
+    bool symbol_shown_ = false;
     bool filling_inspector_ = false;
     std::optional<SharedTexture::Reader> reader_;
     QString last_error_;

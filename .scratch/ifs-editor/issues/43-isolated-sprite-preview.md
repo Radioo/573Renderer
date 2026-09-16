@@ -1,6 +1,6 @@
 # Previewing a sprite on its own
 
-Status: ready-for-agent
+Status: resolved
 
 Blocked by: 40.
 
@@ -17,8 +17,8 @@ name, case-insensitively, through the animation's export table by binary
 search, then its import table. Nothing exported takes a character id. To find
 it again, xref the string `afp_play_work_attach_movie_as2`: its one reference is
 the attach routine, and that routine's two exported callers are the two
-ordinals. Read on the IIDX 34 build; the IIDX 33 ordinals still need
-confirming.
+ordinals. Read on IIDX 34 and confirmed on IIDX 33, where the routine and both
+ordinals are the same.
 
 ## Acceptance
 
@@ -33,4 +33,3 @@ confirming.
   table in the case-insensitive order the lookup needs.
 - A `local_dll` test attaches a shipped sprite by name and checks afp reports
   the sprite's frame count, never by comparing pixels.
-- The IIDX 33 ordinals are confirmed before this is marked resolved.

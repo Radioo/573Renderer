@@ -254,16 +254,23 @@ sprite's depths, labels and frames on the timeline and its placements and
 cameras in the inspector. Placement fields, library call arguments, cameras,
 labels and the structure edits all apply to the clip that is picked.
 
-The viewport keeps showing the root animation while a sprite is picked, and the
-status bar says so, because the preview host can only load a package-level
-animation and cannot yet show a sprite on its own (ticket 43). So the window
-keeps two frames: `frame_`, the frame of the picked clip that the timeline and
-inspector follow, and `root_frame_`, the frame the viewport shows. Scrubbing a
-sprite moves only the first; scrubbing the root moves both. A reload seeks the
-viewport back to `root_frame_` and rebuilds the timeline for the picked clip,
-and if that sprite no longer exists after an edit or an undo the box refills and
-falls back to the root. Playback plays the root and is offered only while the
-root is picked.
+Picking a sprite shows it on its own in the viewport. `Window::LoadViewportClip`
+asks `Document::PreviewSymbolFor` for the bytes and the symbol name, reloads the
+package with those bytes and sends `ShowSymbol`, so from then on the frame
+count, the timeline, seeking and playback are all the sprite's, read back from
+afp-core like the root's are. A sprite with an export name is shown under it and
+the package bytes are the document's own; a sprite without one is shown under a
+name that exists only in the bytes handed to the host. Picking the root reloads
+the document's own bytes, which puts the whole animation back, and returns to
+the frame the root was on (`root_frame_`). Every reload after an edit goes
+through the same step, so an edited sprite stays on screen by itself.
+
+If the host refuses the symbol, the window says so and falls back: the viewport
+keeps showing the root at `root_frame_`, the timeline takes the sprite's frame
+count from the model, scrubbing moves only the sprite's frame, and playback is
+refused because there is nothing of the sprite on screen to play. If the picked
+sprite no longer exists after an edit or an undo, the box refills and falls
+back to the root.
 
 Owning, detaching, keyframes and scripts work in whichever clip is picked. The
 window matches an owned depth by animation, clip, depth and frame range, so a

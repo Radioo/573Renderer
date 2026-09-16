@@ -715,6 +715,7 @@ add_executable(local_dll_tests
     tests/local/afp_reload_tests.cpp
     tests/local/preview_host_process_tests.cpp
     tests/local/document_edit_tests.cpp
+    tests/local/sprite_preview_tests.cpp
     src/qpro/qpro_dll.cpp
     src/gc2d/gc_package.cpp
     src/preset/defaults/defaults.cpp
@@ -812,6 +813,7 @@ add_executable(document_tests
     tests/document/project_export_tests.cpp
     tests/document/project_tests.cpp
     tests/document/script_source_tests.cpp
+    tests/document/sprite_preview_tests.cpp
     tests/document/sprite_structure_tests.cpp
     tests/document/timeline_tests.cpp
 )
