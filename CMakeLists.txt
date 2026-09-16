@@ -207,7 +207,8 @@ add_library(r573_document STATIC
     ${R573_EDITOR_DOCUMENT_SOURCES}
 )
 target_include_directories(r573_document PUBLIC src)
-target_link_libraries(r573_document PUBLIC r573_formats PRIVATE r573::warnings)
+target_link_libraries(r573_document PUBLIC r573_formats
+                      PRIVATE nlohmann_json::nlohmann_json r573::warnings)
 
 add_library(r573_preview_protocol STATIC
     src/preview/preview_channel.cpp
@@ -776,6 +777,7 @@ add_executable(document_tests
     tests/document/library_call_tests.cpp
     tests/document/outline_tests.cpp
     tests/document/placement_edit_tests.cpp
+    tests/document/project_tests.cpp
     tests/document/timeline_tests.cpp
 )
 target_include_directories(document_tests PRIVATE tests/document)

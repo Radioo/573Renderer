@@ -162,6 +162,15 @@ the document and run the same reload loop so the viewport follows. The menu
 items carry the name of the step they would undo or redo and are disabled when
 there is nothing to do.
 
+`File > New project...` asks for a folder and writes a `project.json` there
+naming the open IFS; `Open project...` reads one and opens the IFS it names, and
+`Close project` drops it and leaves the IFS open on its own. The title carries
+the project folder's name next to the file's while one is open, and the two menu
+items are enabled only when they can do anything. A project is only adopted once
+its IFS has actually opened, so a manifest pointing at a file that no longer
+loads leaves the window as it was. Opening a project restarts the preview host
+when one is running, because the target build comes from the project.
+
 `File > Save` writes the encoded document over the opened path and `Save as...`
 asks for a new one. Whether the document is unsaved comes from the history, not
 from the document: the title carries `(unsaved)` while the current position in

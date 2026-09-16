@@ -13,6 +13,7 @@
 #include "document/label_edit.h"
 #include "document/library_call.h"
 #include "document/placement_edit.h"
+#include "document/project.h"
 
 #include <DockAreaWidget.h>
 #include <DockManager.h>
@@ -62,6 +63,7 @@ namespace {
 
 constexpr const char* kGameDirKey = "game/directory";
 constexpr const char* kDocumentDirKey = "document/directory";
+constexpr const char* kProjectDirKey = "project/directory";
 constexpr const char* kBuildSlug = "iidx33";
 constexpr int kPathRole = Qt::UserRole;
 constexpr int kResizeDelayMs = 120;
@@ -202,6 +204,13 @@ void Window::BuildMenus() {
     save_as->setShortcut(QKeySequence::SaveAs);
     connect(save_as, &QAction::triggered, this, [this] { SaveAs(); });
     file->addSeparator();
+    create_project_action_ = file->addAction(tr("&New project..."));
+    connect(create_project_action_, &QAction::triggered, this, &Window::CreateProject);
+    QAction* open_project = file->addAction(tr("Open &project..."));
+    connect(open_project, &QAction::triggered, this, &Window::ChooseProject);
+    close_project_action_ = file->addAction(tr("&Close project"));
+    connect(close_project_action_, &QAction::triggered, this, &Window::CloseProject);
+    file->addSeparator();
     QAction* choose = file->addAction(tr("Choose &game install..."));
     connect(choose, &QAction::triggered, this, &Window::ChooseGameDirectory);
     file->addSeparator();
@@ -238,7 +247,7 @@ void Window::StartHost(const QString& game_dir) {
     }
     statusBar()->showMessage(tr("Booting the preview host..."));
     QApplication::setOverrideCursor(Qt::WaitCursor);
-    const auto started = host_.Start(host_exe, game_dir.toStdString(), kBuildSlug);
+    const auto started = host_.Start(host_exe, game_dir.toStdString(), TargetBuild());
     QApplication::restoreOverrideCursor();
     if (!started) {
         ReportProblem(QString::fromStdString(started.error()));
@@ -257,6 +266,88 @@ void Window::ChooseDocument() {
                                                       tr("IFS files (*.ifs);;All files (*)"));
     if (path.isEmpty()) return;
     OpenDocument(path);
+}
+
+std::string Window::TargetBuild() const {
+    if (project_ && !project_->build.empty()) return project_->build;
+    return std::string(kBuildSlug);
+}
+
+void Window::CreateProject() {
+    if (!file_ || document_path_.isEmpty()) {
+        ReportProblem(tr("Open an IFS before making a project for it"));
+        return;
+    }
+    QSettings settings;
+    const QString start = settings.value(kProjectDirKey).toString();
+    const QString folder =
+        QFileDialog::getExistingDirectory(this, tr("Choose a folder for the project"), start);
+    if (folder.isEmpty()) return;
+    const QString manifest =
+        QString::fromStdString(Document::ProjectManifestPath(folder.toStdString()));
+    if (QFileInfo::exists(manifest)) {
+        ReportProblem(tr("%1 already holds a project").arg(folder));
+        return;
+    }
+    Document::Project project{
+        .build = TargetBuild(),
+        .ifs_path = Document::StoredIfsPath(
+            folder.toStdString(), QFileInfo(document_path_).absoluteFilePath().toStdString())};
+    if (!WriteFileBytes(manifest, Document::WriteProject(project))) {
+        ReportProblem(tr("%1 could not be written").arg(manifest));
+        return;
+    }
+    settings.setValue(kProjectDirKey, folder);
+    project_ = std::move(project);
+    project_folder_ = folder;
+    RefreshState();
+    statusBar()->showMessage(tr("Project made in %1").arg(folder));
+}
+
+void Window::ChooseProject() {
+    QSettings settings;
+    const QString start = settings.value(kProjectDirKey).toString();
+    const QString folder = QFileDialog::getExistingDirectory(this, tr("Open a project"), start);
+    if (folder.isEmpty()) return;
+    OpenProject(folder);
+}
+
+void Window::OpenProject(const QString& folder) {
+    const QString manifest =
+        QString::fromStdString(Document::ProjectManifestPath(folder.toStdString()));
+    const std::vector<uint8_t> bytes = ReadFileBytes(manifest);
+    if (bytes.empty()) {
+        ReportProblem(tr("%1 holds no project").arg(folder));
+        return;
+    }
+    auto project = Document::ReadProject(bytes);
+    if (!project) {
+        ReportProblem(QString::fromStdString(project.error()));
+        return;
+    }
+    const QString ifs =
+        QString::fromStdString(Document::ResolvedIfsPath(folder.toStdString(), *project));
+    if (!QFileInfo::exists(ifs)) {
+        ReportProblem(tr("The project names %1, which is not there").arg(ifs));
+        return;
+    }
+    if (!OfferToSave()) return;
+    OpenDocument(ifs);
+    if (QFileInfo(document_path_).absoluteFilePath() != QFileInfo(ifs).absoluteFilePath()) return;
+    QSettings().setValue(kProjectDirKey, folder);
+    project_ = std::move(*project);
+    project_folder_ = folder;
+    if (host_.Running()) StartHost(QSettings().value(kGameDirKey).toString());
+    RefreshState();
+    statusBar()->showMessage(tr("Project open in %1").arg(folder));
+}
+
+void Window::CloseProject() {
+    if (!project_) return;
+    project_.reset();
+    project_folder_.clear();
+    RefreshState();
+    statusBar()->showMessage(tr("Project closed. The IFS is open on its own."));
 }
 
 void Window::OpenDocument(const QString& path) {
@@ -849,6 +940,8 @@ bool Window::OfferToSave() {
 }
 
 void Window::RefreshState() {
+    create_project_action_->setEnabled(file_.has_value() && !project_);
+    close_project_action_->setEnabled(project_.has_value());
     undo_action_->setEnabled(history_.CanUndo());
     redo_action_->setEnabled(history_.CanRedo());
     undo_action_->setText(history_.CanUndo()
@@ -862,8 +955,10 @@ void Window::RefreshState() {
         return;
     }
     const QString name = QFileInfo(document_path_).fileName();
-    setWindowTitle(history_.Saved() ? tr("IFS Editor - %1").arg(name)
-                                    : tr("IFS Editor - %1 (unsaved)").arg(name));
+    const QString shown =
+        project_ ? tr("%1 in %2").arg(name, QFileInfo(project_folder_).fileName()) : name;
+    setWindowTitle(history_.Saved() ? tr("IFS Editor - %1").arg(shown)
+                                    : tr("IFS Editor - %1 (unsaved)").arg(shown));
 }
 
 void Window::ReportProblem(const QString& what) {

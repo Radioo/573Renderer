@@ -268,6 +268,33 @@ were typed. That is the measurement, not an assumption; the note repo has the
 three functions that reach the camera list and which of them sets the active
 one.
 
+## The project (`document/project.h`)
+
+ADR 0006's project is a folder beside an IFS holding the live source of what was
+authored in the editor. This is its first piece: the folder and the manifest.
+Everything the project will own, keyframes and source images and script text,
+lands in the tickets that add each of them; nothing here assumes any of it, and
+an IFS still opens, edits and saves with no project at all.
+
+`project.json` is JSON because the repo already depends on nlohmann and a
+manifest a person can open in an editor is worth more than a compact one. It
+holds three things: the format number it was written in, the target build, and
+the path of the IFS. `ReadProject` refuses anything it does not recognise rather
+than filling in a default, including a format number that is not the one it
+writes, so a project from a later editor says so instead of loading wrong.
+`WriteProject` writes the same bytes for the same project every time, which is
+the first half of ADR 0006's determinism obligation.
+
+The IFS path is stored relative to the project folder, so moving a project and
+its IFS together keeps working. `StoredIfsPath` computes that relative path and
+falls back to the whole path when there is none, which on Windows means the two
+are on different drives; `ResolvedIfsPath` reverses it. Both are pure path
+arithmetic and touch no disk, so they are tested under `ci`.
+
+The target build comes from the project when a document has one. Without a
+project the editor uses the build it was compiled against, because nothing in
+the editor decides a build yet.
+
 ## Entry edits (`document/entry_edit.h`)
 
 `AddEntry(archive, directory, logical_name, bytes)` never invents a name: the

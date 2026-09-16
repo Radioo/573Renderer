@@ -4,6 +4,7 @@
 
 #include "document/document.h"
 #include "document/history.h"
+#include "document/project.h"
 #include "formats/afp_animation.h"
 #include "support/expected.h"
 #include "document/outline.h"
@@ -57,6 +58,11 @@ private:
     void ChooseGameDirectory();
     void StartHost(const QString& game_dir);
     void ChooseDocument();
+    void CreateProject();
+    void ChooseProject();
+    void CloseProject();
+    void OpenProject(const QString& folder);
+    [[nodiscard]] std::string TargetBuild() const;
     void FillTree();
     void ShowSelectedEntry();
     void ShowAnimation(const std::string& name);
@@ -90,10 +96,14 @@ private:
     QTimer* resize_timer_ = nullptr;
     QAction* undo_action_ = nullptr;
     QAction* redo_action_ = nullptr;
+    QAction* create_project_action_ = nullptr;
+    QAction* close_project_action_ = nullptr;
     Host host_;
     std::optional<Document::File> file_;
     Document::History history_;
     QString document_path_;
+    std::optional<Document::Project> project_;
+    QString project_folder_;
     std::string package_name_;
     std::string animation_path_;
     std::string animation_name_;

@@ -143,6 +143,45 @@ milestone may assume it exists.
   placement, encode, reload, seek, render, and check afp-core reports the
   frame count and labels the edited model has.
 
+## Milestone 7: authored content
+
+Everything here is ADR 0006's project: live source that the editor owns,
+exported into the IFS as baked data. An IFS still opens, edits and saves with
+no project at all, and nothing in milestone 6 may start depending on one.
+
+### Behaviour
+
+- A project is a folder beside its IFS holding a text manifest, copies of the
+  source images it owns and the source text of the scripts it owns. Creating
+  one for an open IFS, opening one, and opening the IFS it names are all
+  possible, and closing one leaves the IFS exactly as it was.
+- The target build of a document with a project comes from the project; a
+  document without one falls back to the user's settings.
+- Owning a depth over a frame range turns its baked placements into authored
+  content with a keyframe on every frame, so nothing about the render changes.
+  Detaching does the reverse and drops the source.
+- A property of an authored depth is a list of keyframes with an ease between
+  them, edited on the timeline, and export samples it to one placement per
+  frame.
+- A script an authored depth owns keeps its source text as the truth, and
+  export compiles it; a script in baked data is still an instruction list.
+- Export is deterministic: the same project always produces the same IFS
+  bytes, and images the project owns get an atlas layout computed at export
+  while atlases of baked data keep the layout they came with.
+- Export records the digest of every entry it wrote. When an entry of the IFS
+  no longer matches, the user chooses per entry between keeping the IFS
+  version, which detaches the authored content in it, and exporting again.
+
+### Seams and tests
+
+- The project model, the manifest, keyframe sampling and export are all in
+  `r573_document` with no Qt and no host, tested under `ci`.
+- Export determinism is a test, not a claim: exporting the same project twice
+  produces the same bytes, and the round trip gate still passes on an
+  untouched install.
+- Owning a depth and exporting it again with no edit produces the placements
+  that were there before, which is what proves own is lossless.
+
 ## Tickets
 
 - `issues/01-avs-lz77-module.md`
@@ -173,3 +212,10 @@ milestone may assume it exists.
 - `issues/26-labels-and-library-calls.md` (milestone 6)
 - `issues/27-structure-edits.md` (milestone 6)
 - `issues/28-camera.md` (milestone 6)
+- `issues/29-project-file.md` (milestone 7)
+- `issues/30-own-and-detach.md` (milestone 7)
+- `issues/31-keyframes-and-easing.md` (milestone 7)
+- `issues/32-export.md` (milestone 7)
+- `issues/33-source-images-and-atlas-layout.md` (milestone 7)
+- `issues/34-script-source.md` (milestone 7)
+- `issues/35-export-drift.md` (milestone 7)

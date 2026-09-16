@@ -19,6 +19,7 @@ find_package(qtadvanceddocking-qt6 CONFIG REQUIRED)
 find_package(tl-expected CONFIG REQUIRED)
 find_package(unofficial-hash-library CONFIG REQUIRED)
 find_package(flatbuffers CONFIG REQUIRED)
+find_package(nlohmann_json CONFIG REQUIRED)
 find_program(R573_FLATC flatc REQUIRED)
 
 set(R573_PREVIEW_SCHEMA "${R573_ROOT}/src/preview/preview_host.fbs")
@@ -47,6 +48,7 @@ target_link_libraries(editor_shared
         flatbuffers::flatbuffers
     PRIVATE
         unofficial::hash-library
+        nlohmann_json::nlohmann_json
 )
 
 add_executable(ifs_editor WIN32
