@@ -41,6 +41,7 @@ set(R573_EDITOR_DOCUMENT_SOURCES
     src/document/field_values.cpp
     src/document/frame_edit.cpp
     src/document/history.cpp
+    src/document/inspector.cpp
     src/document/keyframe_edit.cpp
     src/document/keyframes.cpp
     src/document/label_edit.cpp

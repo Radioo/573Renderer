@@ -5,7 +5,6 @@
 #include "document/authored.h"
 #include "document/keyframe_edit.h"
 #include "document/keyframes.h"
-#include "document/outline.h"
 #include "formats/afp_animation.h"
 #include "support/expected.h"
 
@@ -100,25 +99,6 @@ void Window::ChooseKey(const QString& property, uint32_t frame) {
     key_frame_ = frame;
     timeline_->SelectKey(property, frame);
     ShowFrame();
-}
-
-std::vector<Document::Field> Window::KeyFields() const {
-    std::vector<Document::Field> fields;
-    if (!depth_ || key_property_.isEmpty() || !key_frame_) return fields;
-    const std::optional<std::size_t> at = AuthoredIndexAt(static_cast<uint16_t>(*depth_), frame_);
-    if (!at) return fields;
-    const std::optional<Document::Keyframe> key =
-        Document::KeyAt(authored_[*at], key_property_.toStdString(), *key_frame_);
-    if (!key) return fields;
-
-    fields.push_back(Document::Field{.name = "Keyframe",
-                                     .value = key_property_.toStdString() + " on frame " +
-                                              std::to_string(*key_frame_)});
-    fields.push_back(Document::Field{.name = std::string(kKeyValueField),
-                                     .value = Document::KeyValueText(*key)});
-    fields.push_back(Document::Field{.name = "Keyframe leaves as",
-                                     .value = std::string(Document::EaseName(key->ease))});
-    return fields;
 }
 
 bool Window::ApplyKeyEdit(const QString& value) {

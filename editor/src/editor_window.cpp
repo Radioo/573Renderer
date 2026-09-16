@@ -11,6 +11,7 @@
 #include "document/document.h"
 #include "document/outline.h"
 #include "document/history.h"
+#include "document/inspector.h"
 #include "document/frame_edit.h"
 #include "document/label_edit.h"
 #include "document/library_call.h"
@@ -64,6 +65,7 @@ namespace Editor {
 namespace {
 
 constexpr int kPathRole = Qt::UserRole;
+constexpr int kEditsRole = Qt::UserRole + 1;
 constexpr int kResizeDelayMs = 120;
 
 ads::CDockWidget* MakePanel(const QString& title, QWidget* content) {
@@ -306,21 +308,19 @@ void Window::FillTree() {
         package_tree_->resizeColumnToContents(column);
 }
 
-void Window::FillInspector(const std::vector<Document::Field>& fields, bool editable) {
+void Window::FillInspector(const std::vector<Document::InspectedRow>& rows) {
     filling_inspector_ = true;
     inspector_->clearContents();
-    inspector_->setRowCount(static_cast<int>(fields.size()));
-    for (std::size_t row = 0; row < fields.size(); row++) {
-        const Document::Field& field = fields[row];
-        auto* name = new QTableWidgetItem(QString::fromStdString(field.name));
+    inspector_->setRowCount(static_cast<int>(rows.size()));
+    for (std::size_t row = 0; row < rows.size(); row++) {
+        const Document::InspectedRow& shown = rows[row];
+        auto* name = new QTableWidgetItem(QString::fromStdString(shown.field.name));
         name->setFlags(Qt::ItemIsEnabled);
-        auto* value = new QTableWidgetItem(QString::fromStdString(field.value));
-        const bool writable = field.name == kKeyValueField ||
-                              (editable && (Document::PlacementFieldIsEditable(field.name) ||
-                                            Document::CameraFieldIsEditable(field.name) ||
-                                            Document::CallArgumentIndex(field.name).has_value()));
-        value->setFlags(writable ? Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsEditable
-                                 : Qt::ItemIsEnabled);
+        auto* value = new QTableWidgetItem(QString::fromStdString(shown.field.value));
+        value->setData(kEditsRole, static_cast<int>(shown.edits));
+        value->setFlags(shown.edits == Document::EditTarget::None
+                            ? Qt::ItemIsEnabled
+                            : Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsEditable);
         inspector_->setItem(static_cast<int>(row), 0, name);
         inspector_->setItem(static_cast<int>(row), 1, value);
     }
@@ -328,20 +328,29 @@ void Window::FillInspector(const std::vector<Document::Field>& fields, bool edit
     filling_inspector_ = false;
 }
 
+std::vector<Document::InspectedRow>
+Window::ReadOnlyRows(const std::vector<Document::Field>& fields) {
+    std::vector<Document::InspectedRow> rows;
+    rows.reserve(fields.size());
+    for (const Document::Field& field : fields)
+        rows.push_back(Document::InspectedRow{.field = field, .edits = Document::EditTarget::None});
+    return rows;
+}
+
 void Window::ShowSelectedEntry() {
     const QList<QTreeWidgetItem*> selected = package_tree_->selectedItems();
     if (selected.isEmpty() || !file_) {
-        FillInspector({}, false);
+        FillInspector({});
         return;
     }
     const QString path = selected.front()->data(0, kPathRole).toString();
     const auto details = file_->Describe(path.toStdString());
     if (!details) {
-        FillInspector({Document::Field{.name = "Problem", .value = details.error()}}, false);
+        FillInspector(ReadOnlyRows({Document::Field{.name = "Problem", .value = details.error()}}));
         return;
     }
     depth_.reset();
-    FillInspector(Document::Fields(*details), false);
+    FillInspector(ReadOnlyRows(Document::Fields(*details)));
     if (details->role != Document::Role::Animation) return;
     animation_path_ = path.toStdString();
     ShowAnimation(details->name);
@@ -386,47 +395,17 @@ void Window::ShowFrame() {
         ReportOnce(QString::fromStdString(animation.error()));
         return;
     }
-    std::vector<Document::Field> fields;
     const Document::AuthoredDepth* owned =
         depth_ ? AuthoredAt(static_cast<uint16_t>(*depth_), frame_) : nullptr;
     ShowKeysForDepth(owned);
-    if (owned != nullptr) {
-        fields.push_back(Document::Field{.name = "Owned by the project",
-                                         .value = "frames " + std::to_string(owned->first_frame) +
-                                                  " to " + std::to_string(owned->last_frame) +
-                                                  ", edited through its keyframes"});
-        const std::vector<Document::Field> keyed = KeyFields();
-        fields.insert(fields.end(), keyed.begin(), keyed.end());
-    }
-    if (depth_) {
-        const auto tag =
-            Document::LivePlacementTag(animation->root, static_cast<uint16_t>(*depth_), frame_);
-        const auto* placement =
-            tag ? std::get_if<AfpAnimation::Placement>(&animation->root.tags[*tag].body) : nullptr;
-        if (placement == nullptr) {
-            fields.push_back(Document::Field{
-                .name = "Depth", .value = std::to_string(*depth_) + " holds nothing here"});
-        } else {
-            const std::vector<Document::Field> placed =
-                Document::PlacementFields(*animation, *placement);
-            fields.insert(fields.end(), placed.begin(), placed.end());
-            if (placement->clip_actions) {
-                for (const AfpAnimation::ClipEvent& event : placement->clip_actions->events) {
-                    const std::vector<Document::Field> script =
-                        Document::ScriptFields(*animation, event.bytecode);
-                    fields.insert(fields.end(), script.begin(), script.end());
-                }
-            }
-        }
-    }
-    if (const auto tag = Document::CameraTag(animation->root, frame_)) {
-        const auto* camera = std::get_if<AfpAnimation::Camera>(&animation->root.tags[*tag].body);
-        if (camera != nullptr) {
-            const std::vector<Document::Field> shot = Document::CameraFields(*camera);
-            fields.insert(fields.end(), shot.begin(), shot.end());
-        }
-    }
-    FillInspector(fields, owned == nullptr);
+    FillInspector(Document::InspectFrame(
+        *animation, Document::Selection{
+                        .depth = depth_ ? std::optional<uint16_t>(static_cast<uint16_t>(*depth_))
+                                        : std::nullopt,
+                        .frame = frame_,
+                        .owned = owned,
+                        .key_property = key_property_.toStdString(),
+                        .key_frame = key_frame_}));
 }
 
 namespace {
@@ -496,14 +475,16 @@ void Window::ApplyFieldEdit(QTableWidgetItem* item) {
     if (!file_ || animation_path_.empty()) return;
     const QTableWidgetItem* name = inspector_->item(item->row(), 0);
     if (name == nullptr) return;
+    const auto edits = static_cast<Document::EditTarget>(item->data(kEditsRole).toInt());
     const std::string field = name->text().toStdString();
     const std::string value = item->text().toStdString();
     const uint32_t frame = frame_;
-    if (field == kKeyValueField) {
+
+    if (edits == Document::EditTarget::KeyValue) {
         if (!ApplyKeyEdit(item->text())) ShowFrame();
         return;
     }
-    if (Document::CameraFieldIsEditable(field)) {
+    if (edits == Document::EditTarget::Camera) {
         EditAnimation(tr("%1 on frame %2").arg(name->text()).arg(frame),
                       [field, value, frame](AfpAnimation::Animation& animation) {
                           return SetCameraOn(animation, frame, field, value);
@@ -512,7 +493,9 @@ void Window::ApplyFieldEdit(QTableWidgetItem* item) {
     }
     if (!depth_) return;
     const uint16_t depth = static_cast<uint16_t>(*depth_);
-    if (const std::optional<std::size_t> argument = Document::CallArgumentIndex(field)) {
+    if (edits == Document::EditTarget::CallArgument) {
+        const std::optional<std::size_t> argument = Document::CallArgumentIndex(field);
+        if (!argument) return;
         const std::size_t index = *argument;
         EditAnimation(tr("%1 on depth %2").arg(name->text()).arg(*depth_),
                       [index, value, depth, frame](AfpAnimation::Animation& animation) {
@@ -520,6 +503,7 @@ void Window::ApplyFieldEdit(QTableWidgetItem* item) {
                       });
         return;
     }
+    if (edits != Document::EditTarget::Placement) return;
     EditAnimation(tr("%1 on depth %2").arg(name->text()).arg(*depth_),
                   [field, value, depth, frame](AfpAnimation::Animation& animation) {
                       const auto tag = Document::LivePlacementTag(animation.root, depth, frame);

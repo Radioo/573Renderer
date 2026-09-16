@@ -219,6 +219,13 @@ placement fields: which property and frame it is, its value, and the ease it
 leaves on. The value row is the one editable cell an owned depth has, because
 the placement rows below it are produced from the keyframes rather than edited.
 
+What those rows are is `Document::InspectFrame`, not window code: `ShowFrame`
+reads the animation, works out which depth the project owns here, and hands the
+selection to it. `FillInspector` copies the rows into the table and stores each
+row's `EditTarget` on its item, and `ApplyFieldEdit` switches on that target
+rather than on the row's name, so a renamed row cannot quietly become
+uneditable or reach the wrong setter.
+
 Every keyframe edit goes through `Window::EditAuthored`, which applies the change
 to a copy of the `AuthoredDepth`, rebakes and writes it into the open document
 through the same `EditAnimation` step as every other edit, and only then keeps

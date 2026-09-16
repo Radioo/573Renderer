@@ -478,6 +478,33 @@ the baked half can be re-derived; without it the project could not store only
 the authored half. A depth the project does not own is not touched at all,
 because export only ever writes the spans it was given.
 
+## Inspector rows (`document/inspector.h`)
+
+`InspectFrame` is the whole of what the inspector shows for a frame: the rows
+and, per row, whether the user may type into it and what an edit to it changes.
+It takes a `Selection` (the depth, the frame, the authored depth when the
+project owns one, and the selected keyframe) and nothing about a window, so what
+the panel shows is tested rather than looked at.
+
+It lives here rather than in the widget because it is not formatting, it is
+policy. The order the rows come in, that an owned depth keeps its own rows
+alongside the placement fields, that a depth holding nothing on a frame says so
+instead of showing an empty placement, and that only the keyframe value is
+editable on an owned depth are all decisions about the document. The one time
+this lived in the widget, `fields = PlacementFields(...)` dropped the rows
+gathered before it and the "Owned by the project" row went missing for as long
+as owned depths existed, because nothing could test it.
+
+`EditTarget` is the second half of that. A row carries what it edits, so the
+widget neither works out editability from the row's name nor decides which
+setter an edit reaches. Naming was doing both jobs before, which is why a
+keyframe row had to be given a name no placement field could collide with.
+
+A camera row is editable whichever depth is selected, because a camera belongs
+to the frame. The all-or-nothing editable flag this replaced made the camera
+read-only whenever the selected depth happened to be owned, which was never
+intended.
+
 ## Editing keyframes (`document/keyframe_edit.h`)
 
 `keyframes.h` holds the track and its sampling; `keyframe_edit.h` is what an

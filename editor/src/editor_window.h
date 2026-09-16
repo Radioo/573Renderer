@@ -5,6 +5,7 @@
 #include "document/document.h"
 #include "document/authored.h"
 #include "document/history.h"
+#include "document/inspector.h"
 #include "document/project.h"
 #include "formats/afp_animation.h"
 #include "support/expected.h"
@@ -19,7 +20,6 @@
 #include <functional>
 #include <optional>
 #include <string>
-#include <string_view>
 #include <vector>
 
 namespace ads {
@@ -42,8 +42,6 @@ using DocumentChange = std::function<Support::Expected<void, std::string>(Docume
 
 using AuthoredChange =
     std::function<Support::Expected<void, std::string>(Document::AuthoredDepth&)>;
-
-inline constexpr std::string_view kKeyValueField = "Keyframe value";
 
 class Timeline;
 class Viewport;
@@ -83,7 +81,6 @@ private:
     void ChooseKey(const QString& property, uint32_t frame);
     void MoveKey(const QString& property, uint32_t from, uint32_t to);
     void ShowKeyMenu(const QPoint& where, const QString& property, uint32_t frame, bool on_key);
-    [[nodiscard]] std::vector<Document::Field> KeyFields() const;
     bool ApplyKeyEdit(const QString& value);
     void OpenProject(const QString& folder);
     [[nodiscard]] std::string TargetBuild() const;
@@ -99,7 +96,9 @@ private:
     void Undo();
     void Redo();
     void ShowRestored();
-    void FillInspector(const std::vector<Document::Field>& fields, bool editable);
+    void FillInspector(const std::vector<Document::InspectedRow>& rows);
+    [[nodiscard]] static std::vector<Document::InspectedRow>
+    ReadOnlyRows(const std::vector<Document::Field>& fields);
     void RenderFrame();
     void SeekTo(uint32_t frame);
     void ChooseDepth(uint32_t depth);
