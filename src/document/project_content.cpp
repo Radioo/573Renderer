@@ -54,6 +54,7 @@ Json WriteDepth(const AuthoredDepth& depth) {
     out["first"] = depth.first_frame;
     out["last"] = depth.last_frame;
     out["tracks"] = std::move(tracks);
+    if (depth.script) out["script"] = *depth.script;
     return out;
 }
 
@@ -148,7 +149,14 @@ Support::Expected<AuthoredDepth, std::string> ReadDepth(const Json& value) {
                       .depth = depth.value().get<uint16_t>(),
                       .first_frame = first.value().get<uint32_t>(),
                       .last_frame = last.value().get<uint32_t>(),
-                      .tracks = {}};
+                      .tracks = {},
+                      .script = std::nullopt};
+    const auto script = value.find("script");
+    if (script != value.end()) {
+        if (!script.value().is_string())
+            return Support::Unexpected(std::string("an owned depth's script is not text"));
+        out.script = script.value().get<std::string>();
+    }
     if (out.first_frame > out.last_frame)
         return Support::Unexpected(std::string("an owned depth runs backwards"));
     for (const Json& track : tracks.value()) {

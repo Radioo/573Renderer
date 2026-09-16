@@ -1,6 +1,6 @@
 # Script source
 
-Status: ready-for-agent
+Status: resolved
 
 Blocked by: 32.
 

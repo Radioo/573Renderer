@@ -406,6 +406,52 @@ caller, replaced rather than appended when it is already there, so exporting
 twice does not grow the list. It copies the format and the other attributes from
 a texture already in the package rather than inventing them.
 
+## Script source (`document/script_source.h`)
+
+The source language is not a design choice, it is what IIDX 33's own scripts
+do. Of 463562 scripts in the install, nearly all are a run of calls on the
+imported `aeplib` object, so that is the whole language: one call per line.
+
+```
+aep_set_set_frame(this, 30)
+gotoAndPlay("loop")
+stop()
+```
+
+An argument is a whole number, double-quoted text, or `this`. `this` is there
+because the data put it there: the most common call in the install passes the
+clip itself as its first argument, and leaving it out meant the compiler could
+not read back a single shipped script on the first run.
+
+The eight call names are the eight the survey counted, and nothing else
+compiles. The editor would otherwise have to invent a built-in id it has never
+measured, and afp-core resolves a call by id, not by name.
+
+Compiling emits the shape the data uses: for each call a `PUSH` of the
+arguments in reverse then the count then `aeplib`, `GET_VARIABLE`, a `PUSH` of
+the method, `CALL_METHOD`, `POP`, and one `END` at the end. `AfpScript::BuiltinItem`
+turns an id back into a push item, which is the direction the reader never
+needed.
+
+**How far this was checked.** Every script in the install was read back as
+source and compiled again: 444874 of 463562 produce source, and every one of
+those 444874 compiles to the same instructions and arguments, 381871 of them
+byte for byte. The other 63003 differ only in whether a small number was
+written in the compact one-byte form or the wide four-byte one, which is the
+original author's choice and not something source text carries. The 18688 that
+produce no source are the `getInstanceAtDepth` pattern and the variant with no
+trailing `POP`; they stay as instruction lists and are never turned into source
+on their own.
+
+The padding after `END` is not the script's. Scripts of 16, 17 and 18 bytes of
+instructions all end up occupying 18 bytes, so the slack belongs to the block
+that holds them, and a compiled script simply ends at its `END`.
+
+A depth's script is written into its create placement's clip actions at export,
+keeping the triggers and the other fields the baked data had. A depth that
+carried no clip actions refuses to be given a script, because what makes the
+game run one has not been measured yet.
+
 ## Export (`document/project_export.h`)
 
 `ExportProject` writes the images a project owns and then every depth it owns

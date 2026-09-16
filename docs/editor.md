@@ -184,6 +184,12 @@ name given, and export packs it into the project's own atlas. That is different
 from the plain add, which writes an image straight into the package as baked
 data.
 
+An owned depth's timeline menu also offers to edit its script. The box opens on
+the source the project holds, or on the depth's baked script read back as source
+when it has none yet, so owning a script is something the user asks for rather
+than something that happens on its own. Clearing the box hands the script back
+to the baked data.
+
 `File > Export into the IFS` writes the project's images and every owned depth's
 keyframes into the
 document as baked data. It is one undoable step like any other edit, and it runs

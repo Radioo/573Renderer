@@ -5,6 +5,7 @@
 #include "document/project.h"
 
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -115,26 +116,27 @@ Document::AuthoredDepth Owned() {
         .depth = 12,
         .first_frame = 4,
         .last_frame = 40,
-        .tracks = {
-            Document::Track{.property = "Translation",
-                            .keys = {Document::Keyframe{
-                                         .frame = 4,
-                                         .value = {1000, -2000},
-                                         .ease = Document::Ease::Bezier,
-                                         .bezier = {.x1 = 0.42, .y1 = 0.0, .x2 = 0.58, .y2 = 1.0}},
-                                     Document::Keyframe{.frame = 40,
-                                                        .value = {3000, -2000},
-                                                        .ease = Document::Ease::Hold,
-                                                        .bezier = {}}}},
-            Document::Track{.property = "Packed multiply colour",
-                            .keys = {Document::Keyframe{.frame = 4,
-                                                        .value = {4294967286},
-                                                        .ease = Document::Ease::Linear,
-                                                        .bezier = {}},
-                                     Document::Keyframe{.frame = 9,
-                                                        .value = {0},
-                                                        .ease = Document::Ease::Linear,
-                                                        .bezier = {}}}}}};
+        .tracks = {Document::Track{
+                       .property = "Translation",
+                       .keys = {Document::Keyframe{
+                                    .frame = 4,
+                                    .value = {1000, -2000},
+                                    .ease = Document::Ease::Bezier,
+                                    .bezier = {.x1 = 0.42, .y1 = 0.0, .x2 = 0.58, .y2 = 1.0}},
+                                Document::Keyframe{.frame = 40,
+                                                   .value = {3000, -2000},
+                                                   .ease = Document::Ease::Hold,
+                                                   .bezier = {}}}},
+                   Document::Track{.property = "Packed multiply colour",
+                                   .keys = {Document::Keyframe{.frame = 4,
+                                                               .value = {4294967286},
+                                                               .ease = Document::Ease::Linear,
+                                                               .bezier = {}},
+                                            Document::Keyframe{.frame = 9,
+                                                               .value = {0},
+                                                               .ease = Document::Ease::Linear,
+                                                               .bezier = {}}}}},
+        .script = std::nullopt};
 }
 
 }

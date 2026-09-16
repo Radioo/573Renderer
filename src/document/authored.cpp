@@ -3,6 +3,7 @@
 #include "document/keyframes.h"
 #include "document/placement_edit.h"
 #include "document/placement_values.h"
+#include "document/script_source.h"
 #include "document/tags.h"
 #include "formats/afp_animation.h"
 #include "support/expected.h"
@@ -101,6 +102,23 @@ std::pair<uint32_t, uint32_t> SpanAround(const AfpAnimation::Container& clip, ui
     while (last + 1 < clip.frames.size() && LivePlacementTag(clip, depth, last + 1))
         last++;
     return {first, last};
+}
+
+Support::Expected<void, std::string> ApplyScript(AfpAnimation::Animation& animation,
+                                                 const std::string& source, const BakedDepth& baked,
+                                                 AfpAnimation::Placement& placement) {
+    if (!baked.create.clip_actions || baked.create.clip_actions->events.empty()) {
+        return Support::Unexpected(
+            std::string("this depth carries no script to replace, and the editor does not know "
+                        "what would make the game run a new one"));
+    }
+    auto code = CompileScript(animation, source);
+    if (!code) return Support::Unexpected(code.error());
+    AfpAnimation::ClipActions actions = *baked.create.clip_actions;
+    actions.events.resize(1);
+    actions.events.front().bytecode = std::move(*code);
+    placement.clip_actions = std::move(actions);
+    return {};
 }
 
 Support::Expected<std::vector<Placed>, std::string> SpanOf(const AfpAnimation::Container& clip,
@@ -235,6 +253,10 @@ Support::Expected<void, std::string> WriteAuthored(AfpAnimation::Animation& anim
         return Support::Unexpected("the clip has no frame " + std::to_string(authored.last_frame));
     auto placements = AuthoredPlacements(authored, baked);
     if (!placements) return Support::Unexpected(placements.error());
+    if (authored.script) {
+        auto scripted = ApplyScript(animation, *authored.script, baked, placements->front().second);
+        if (!scripted) return Support::Unexpected(scripted.error());
+    }
 
     const std::vector<Placed> standing =
         SpanPlacements(clip, authored.depth, authored.first_frame, authored.last_frame);

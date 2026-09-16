@@ -1,4 +1,5 @@
 #include "qpro/qpro_internal.h"
+#include "afp_boot.h"
 #include "engine_session.h"
 
 #include "avs_funcs.h"

@@ -94,7 +94,7 @@ void SetScreenSize(int w, int h);
 
 void __cdecl BeginRender();
 void __cdecl EndRender();
-void __cdecl SetLayer(unsigned int blend_mode, int zero, const unsigned char* hsv_desc);
+void __cdecl SetLayer(unsigned int blend_mode);
 void __cdecl DrawPrimitive(unsigned int prim_info);
 void __cdecl SetBlend(unsigned int blend_mode, unsigned char flags, void* extra);
 void __cdecl SetMask(unsigned int type, unsigned char level, void* data);

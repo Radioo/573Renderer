@@ -19,6 +19,7 @@ struct AuthoredDepth {
     uint32_t first_frame = 0;
     uint32_t last_frame = 0;
     std::vector<Track> tracks;
+    std::optional<std::string> script;
 
     friend bool operator==(const AuthoredDepth&, const AuthoredDepth&) = default;
 };

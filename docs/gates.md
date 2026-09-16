@@ -465,3 +465,34 @@ without the alpha test, and it broke the IIDX 17 SIRIUS title screen.
 Build the synthetic package in the test rather than reaching for real game files:
 a package is a few `SysIdx::Cell` and `SysIdx::Record` values, and a test that
 needs a game install cannot run in CI.
+
+## Crash reports carry a symbolized stack
+
+`Support::CaptureStackAddresses` walks the faulting thread with `StackWalk64`
+and `Support::DescribeAddresses` turns those addresses into
+`module+0x... Symbol (file.cpp:line)` through DbgHelp, reading the `.pdb` that
+sits next to the binary. `[CRASH]` lines and `RenderSeh`'s caught render faults
+both print one frame per line.
+
+The split exists because MSVC refuses `__try` in a function that has to unwind
+objects, so the SEH filter stores plain addresses into a fixed array on
+`FaultReport` and the symbolizing happens outside it.
+
+This was added after three rounds of diagnosing IIDX 34 faults from a bare
+`module+offset`, which took an out-of-process DbgHelp script each time to turn
+into a file and line. A fault that prints its own stack is the difference
+between one run and three.
+
+## raw-dll-offset gate
+
+`tools/ci/check_raw_dll_offsets.py` fails the build when a literal offset is
+added to a loaded DLL base, as in `(uint8_t*)afpcore + 0x377B0`. Every such
+address belongs in `AfpProfiles::DllOffsetSet`, read through `ActiveOffsets()`,
+so each game build carries its own measured value and an unknown build gets zero
+and skips the call instead of jumping into the middle of an instruction.
+
+This gate exists because four separate hardcoded afp-core addresses shipped in
+the qpro code and each one crashed IIDX 34 in a different way, one per debugging
+round: the mc-work lookup, the definition lookup, and the matrix stack's base
+and depth. They were invisible to review because they sat inside lambdas and
+static initializers rather than next to the other offsets.

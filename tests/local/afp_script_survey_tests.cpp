@@ -1,6 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "formats/afp_animation.h"
+#include "document/script_source.h"
 #include "formats/afp_script.h"
 #include "formats/big_endian.h"
 #include "formats/binary_xml.h"
@@ -42,6 +43,12 @@ struct Counts {
     std::size_t images_at_origin = 0;
     std::size_t lists = 0;
     std::size_t rewritten = 0;
+    std::size_t sourced = 0;
+    std::size_t recompiled = 0;
+    std::size_t recompile_differs = 0;
+    std::size_t same_code = 0;
+    std::map<std::string, std::size_t> trailing;
+    std::string first_difference;
     std::size_t unreadable = 0;
     std::string first_error;
     std::string first_shape;
@@ -92,6 +99,65 @@ void CountCall(const AfpAnimation::Animation& animation, const AfpAnimation::Byt
     }
 }
 
+bool SameApartFromNumberWidth(const std::vector<uint8_t>& mine,
+                              const std::vector<uint8_t>& theirs) {
+    const auto one = AfpScript::Read(mine);
+    const auto other = AfpScript::Read(theirs);
+    if (!one || !other) return false;
+    if (one->instructions.size() != other->instructions.size()) return false;
+    for (std::size_t i = 0; i < one->instructions.size(); i++) {
+        const AfpScript::Instruction& a = one->instructions[i];
+        const AfpScript::Instruction& b = other->instructions[i];
+        if (a.opcode != b.opcode || a.items.size() != b.items.size()) return false;
+        for (std::size_t j = 0; j < a.items.size(); j++) {
+            if (a.items[j].type == b.items[j].type) {
+                if (a.items[j].operand != b.items[j].operand) return false;
+                continue;
+            }
+            const auto mine_number = AfpScript::ItemNumber(a.items[j]);
+            const auto their_number = AfpScript::ItemNumber(b.items[j]);
+            if (!mine_number || !their_number || *mine_number != *their_number) return false;
+        }
+    }
+    return true;
+}
+
+void CountSource(const AfpAnimation::Animation& animation, const AfpAnimation::Bytecode& code,
+                 Counts& counts) {
+    const std::optional<std::string> source = Document::ScriptSourceText(animation, code);
+    if (!source) return;
+    counts.sourced++;
+    AfpAnimation::Animation copy = animation;
+    const auto again = Document::CompileScript(copy, *source);
+    if (!again) {
+        counts.recompile_differs++;
+        if (counts.first_difference.empty()) counts.first_difference = again.error();
+        return;
+    }
+    const auto script = AfpScript::Read(code.code);
+    const std::size_t slack = script ? script->trailing.size() : 0;
+    const std::vector<uint8_t> instructions(code.code.begin(),
+                                            code.code.end() - static_cast<std::ptrdiff_t>(slack));
+    if (again->code == instructions) {
+        counts.recompiled++;
+        return;
+    }
+    counts.recompile_differs++;
+    if (SameApartFromNumberWidth(again->code, instructions)) {
+        counts.same_code++;
+        return;
+    }
+    if (counts.first_difference.empty()) {
+        std::string mine;
+        for (const uint8_t byte : again->code)
+            mine += std::format("{:02x} ", byte);
+        std::string theirs;
+        for (const uint8_t byte : instructions)
+            theirs += std::format("{:02x} ", byte);
+        counts.first_difference = "mine " + mine + "| theirs " + theirs;
+    }
+}
+
 void CountScript(const AfpAnimation::Animation& animation, const AfpAnimation::Bytecode& code,
                  Counts& counts) {
     counts.scripts++;
@@ -103,6 +169,8 @@ void CountScript(const AfpAnimation::Animation& animation, const AfpAnimation::B
     }
     const auto written = AfpScript::Write(*script);
     if (!written || *written != code.code) counts.rewritten++;
+    counts.trailing[std::to_string(script->trailing.size()) + " after " +
+                    std::to_string(code.code.size() - script->trailing.size())]++;
     std::string shape;
     for (const AfpScript::Instruction& instruction : script->instructions) {
         counts.opcodes[AfpScript::OpcodeName(instruction.opcode)]++;
@@ -117,6 +185,7 @@ void CountScript(const AfpAnimation::Animation& animation, const AfpAnimation::B
         counts.first_bytes = code.code;
     }
     CountCall(animation, code, script->instructions, counts);
+    CountSource(animation, code, counts);
 }
 
 void WalkContainer(const AfpAnimation::Animation& animation,
@@ -252,6 +321,17 @@ TEST_CASE("Every script in the install reads and writes back, and the counts mat
     std::cerr << std::format(
         "[afp scripts] {} with two or more script labels, {} sorted by name, {} sorted by frame\n",
         counts.script_labelled, counts.script_by_name, counts.script_by_frame);
+    std::cerr << std::format(
+        "[afp scripts] {} read back as source, {} recompile to the same bytes, {} differ, {} of "
+        "those only in the string table\n",
+        counts.sourced, counts.recompiled, counts.recompile_differs, counts.same_code);
+    std::size_t trailing_shown = 0;
+    for (const auto& [shape, count] : counts.trailing) {
+        if (trailing_shown++ >= 12) break;
+        std::cerr << std::format("[afp scripts] trailing {}: {}\n", shape, count);
+    }
+    if (!counts.first_difference.empty())
+        std::cerr << std::format("[afp scripts] first difference: {}\n", counts.first_difference);
     if (!counts.first_error.empty()) {
         std::cerr << std::format("[afp scripts] first error: {}\n", counts.first_error);
     }

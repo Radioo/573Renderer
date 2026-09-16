@@ -4,6 +4,8 @@
 #include "media/media_format.h"
 #include <d3d9.h>
 #include "qpro/qpro_internal.h"
+
+#include "backend/afp_profiles.h"
 #include "qpro/qpro_walk.h"
 #include "qpro/qpro_extract.h"
 #include "boot.h"
@@ -526,7 +528,9 @@ void* QpGetDef(void* work) {
     if (!tried) {
         tried = true;
         HMODULE m = GetModuleHandleA("afp-core.dll");
-        if (m != nullptr) fn = (void* (*)(void*))((uint8_t*)m + 0x377B0);
+        const uintptr_t def_from_work = AfpProfiles::ActiveOffsets().afp_mc_def_from_work;
+        if ((m != nullptr) && def_from_work != 0)
+            fn = (void* (*)(void*))((uint8_t*)m + def_from_work);
     }
     return ((fn != nullptr) && (work != nullptr)) ? fn(work) : nullptr;
 }
@@ -547,9 +551,10 @@ int NodeTreeVisualCmds(void* work, int depth) {
 
 int ClipVisualCmdsAfterFrame0(const AfpFuncs& afp, uint32_t mc_id) {
     HMODULE afpcore = GetModuleHandleA("afp-core.dll");
-    if ((afpcore == nullptr) || (afp.afp_stream_control == nullptr)) return -1;
+    const uintptr_t work_from_id = AfpProfiles::ActiveOffsets().afp_mc_work_from_id;
+    if ((afpcore == nullptr) || (afp.afp_stream_control == nullptr) || work_from_id == 0) return -1;
     using resolve_t = void* (*)(uint32_t);
-    auto resolve = (resolve_t)((uint8_t*)afpcore + 0x48AC0);
+    auto resolve = (resolve_t)((uint8_t*)afpcore + work_from_id);
     int visual = -1;
     __try {
         afp.afp_stream_control(6, mc_id);

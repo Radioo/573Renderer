@@ -1,6 +1,7 @@
 #include "support/crash_report.h"
 
 #include "support/log.h"
+#include "support/stack_trace.h"
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
@@ -47,6 +48,7 @@ LONG CALLBACK CrashHandler(PEXCEPTION_POINTERS ep) {
                           : 0ULL;
     LOG("CRASH", "code=0x%08lx at 0x%llx module=%s base=0x%llx off=0x%llx data=0x%llx", code,
         (unsigned long long)fault_addr, base, (unsigned long long)module_addr, off, data);
+    LogStackTrace("CRASH", CaptureStackTrace(ep));
     return EXCEPTION_CONTINUE_SEARCH;
 }
 

@@ -69,4 +69,6 @@ struct Script {
 
 [[nodiscard]] Item NumberItem(int32_t value);
 
+[[nodiscard]] std::optional<Item> BuiltinItem(uint16_t id);
+
 }

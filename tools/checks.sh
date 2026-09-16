@@ -31,6 +31,7 @@ uv run --project tools/ci python tools/ci/check_file_length.py
 uv run --project tools/ci python tools/ci/check_no_comments.py
 uv run --project tools/ci python tools/ci/check_banned_chars.py
 uv run --project tools/ci python tools/ci/check_machine_paths.py
+uv run --project tools/ci python tools/ci/check_raw_dll_offsets.py
 uv run --project tools/ci python tools/ci/check_gui_isolation.py
 uv run --project tools/ci python tools/ci/check_qt_isolation.py
 uv run --project tools/ci python tools/ci/check_host_isolation.py

@@ -51,6 +51,7 @@ add_library(r573_support STATIC
     src/support/log.cpp
     src/support/dll_loader.cpp
     src/support/env.cpp
+    src/support/stack_trace.cpp
     src/support/math/float_trig.cpp
 )
 if(MSVC)
@@ -58,7 +59,7 @@ if(MSVC)
         PROPERTIES COMPILE_OPTIONS "/fp:precise")
 endif()
 target_include_directories(r573_support PUBLIC src)
-target_link_libraries(r573_support PUBLIC tl::expected PRIVATE r573::warnings)
+target_link_libraries(r573_support PUBLIC tl::expected dbghelp.lib PRIVATE r573::warnings)
 
 add_library(r573_formats STATIC
     src/formats/ddr_arc.cpp
@@ -757,8 +758,8 @@ catch_discover_tests(texture_list_shape_tests DISCOVERY_MODE POST_BUILD PROPERTI
 add_executable(afp_script_survey_tests
     tests/local/afp_script_survey_tests.cpp
 )
-target_link_libraries(afp_script_survey_tests PRIVATE Catch2::Catch2WithMain r573_formats
-                                                      r573_support r573::warnings)
+target_link_libraries(afp_script_survey_tests PRIVATE Catch2::Catch2WithMain r573_document
+                                                      r573_formats r573_support r573::warnings)
 catch_discover_tests(afp_script_survey_tests DISCOVERY_MODE POST_BUILD PROPERTIES LABELS local)
 
 add_executable(placement_span_survey_tests
@@ -789,6 +790,7 @@ add_executable(document_tests
     tests/document/placement_edit_tests.cpp
     tests/document/project_export_tests.cpp
     tests/document/project_tests.cpp
+    tests/document/script_source_tests.cpp
     tests/document/timeline_tests.cpp
 )
 target_include_directories(document_tests PRIVATE tests/document)

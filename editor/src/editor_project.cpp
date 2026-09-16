@@ -8,6 +8,7 @@
 #include "document/keyframes.h"
 #include "document/project.h"
 #include "document/project_export.h"
+#include "document/script_source.h"
 
 #include <QDir>
 #include <QFileDialog>
@@ -196,6 +197,45 @@ void Window::AddProjectImage() {
     SaveProject();
     RefreshState();
     statusBar()->showMessage(tr("The project owns %1 image(s)").arg(project_->images.size()));
+}
+
+void Window::EditOwnedScript() {
+    if (!file_ || !depth_ || animation_path_.empty()) return;
+    const Document::AuthoredDepth* owned = AuthoredAt(static_cast<uint16_t>(*depth_), frame_);
+    if (owned == nullptr) return;
+    QString source = QString::fromStdString(owned->script.value_or(std::string()));
+    if (source.isEmpty()) {
+        const auto animation = file_->ReadAnimation(animation_path_);
+        if (animation) {
+            const auto baked = Document::BakedFor(*animation, *owned);
+            if (baked && baked->create.clip_actions &&
+                !baked->create.clip_actions->events.empty()) {
+                const std::optional<std::string> text = Document::ScriptSourceText(
+                    *animation, baked->create.clip_actions->events.front().bytecode);
+                if (text) source = QString::fromStdString(*text);
+            }
+        }
+    }
+
+    bool answered = false;
+    const QString edited = QInputDialog::getMultiLineText(
+        this, tr("The script of depth %1").arg(*depth_),
+        tr("One aeplib call per line, such as gotoAndPlay(\"loop\")"), source, &answered);
+    if (!answered) return;
+
+    const std::string taken = edited.trimmed().toStdString();
+    for (Document::AuthoredDepth& one : authored_) {
+        if (one.animation != owned->animation || one.depth != owned->depth ||
+            one.first_frame != owned->first_frame) {
+            continue;
+        }
+        one.script = taken.empty() ? std::nullopt : std::optional<std::string>(taken);
+    }
+    SaveProject();
+    RefreshState();
+    statusBar()->showMessage(taken.empty()
+                                 ? tr("Depth %1 keeps the script it was given").arg(*depth_)
+                                 : tr("The project writes the script of depth %1").arg(*depth_));
 }
 
 void Window::ExportToPackage() {

@@ -634,6 +634,8 @@ void Window::ShowTimelineMenu(const QPoint& where, uint32_t frame, const QString
                        : nullptr;
     QAction* detach =
         authored ? menu.addAction(tr("Detach depth %1 back to baked data").arg(*depth_)) : nullptr;
+    QAction* script =
+        authored ? menu.addAction(tr("Edit the script of depth %1...").arg(*depth_)) : nullptr;
     menu.addSeparator();
     const auto animation = file_->ReadAnimation(animation_path_);
     const bool has_camera = animation && Document::CameraTag(animation->root, frame).has_value();
@@ -650,6 +652,10 @@ void Window::ShowTimelineMenu(const QPoint& where, uint32_t frame, const QString
     }
     if (chosen == detach) {
         DetachSelectedDepth();
+        return;
+    }
+    if (chosen == script) {
+        EditOwnedScript();
         return;
     }
     if (chosen == add_camera) {

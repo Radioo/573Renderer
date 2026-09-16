@@ -43,6 +43,7 @@ set(R573_EDITOR_DOCUMENT_SOURCES
     src/document/history.cpp
     src/document/keyframes.cpp
     src/document/label_edit.cpp
+    src/document/script_source.cpp
     src/document/tags.cpp
     src/document/library_call.cpp
     src/document/placement_edit.cpp

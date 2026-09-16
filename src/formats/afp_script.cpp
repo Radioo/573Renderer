@@ -4,6 +4,8 @@
 #include "support/expected.h"
 
 #include <cstddef>
+#include <algorithm>
+#include <array>
 #include <cstdint>
 #include <optional>
 #include <format>
@@ -247,6 +249,31 @@ std::optional<uint16_t> BuiltinId(const Item& item) {
     }();
     if (!base) return std::nullopt;
     return static_cast<uint16_t>(*base + item.operand.front());
+}
+
+std::optional<Item> BuiltinItem(uint16_t id) {
+    struct Family {
+        uint16_t base;
+        uint8_t type;
+    };
+    static constexpr std::array<Family, 12> kFamilies{{
+        {.base = 0x200, .type = 25},
+        {.base = 0x300, .type = 19},
+        {.base = 0x400, .type = 22},
+        {.base = 0x500, .type = 28},
+        {.base = 0x600, .type = 31},
+        {.base = 0x700, .type = 36},
+        {.base = 0x800, .type = 39},
+        {.base = 0x900, .type = 42},
+        {.base = 0xA00, .type = 45},
+        {.base = 0xB00, .type = 48},
+        {.base = 0xC00, .type = 52},
+        {.base = 0xD00, .type = 56},
+    }};
+    const auto base = static_cast<uint16_t>(id & 0xFF00U);
+    const auto found = std::ranges::find(kFamilies, base, &Family::base);
+    if (found == kFamilies.end()) return std::nullopt;
+    return Item{.type = found->type, .operand = {static_cast<uint8_t>(id & 0xFFU)}};
 }
 
 uint16_t StringIndex(const Item& item) {
