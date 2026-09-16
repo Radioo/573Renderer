@@ -5,6 +5,7 @@
 #include "editor_timeline.h"
 #include "editor_viewport.h"
 
+#include "document/camera_edit.h"
 #include "document/document.h"
 #include "document/outline.h"
 #include "document/history.h"
@@ -48,6 +49,7 @@
 #include <fstream>
 #include <ios>
 #include <iterator>
+#include <limits>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -313,6 +315,7 @@ void Window::FillInspector(const std::vector<Document::Field>& fields, bool edit
         name->setFlags(Qt::ItemIsEnabled);
         auto* value = new QTableWidgetItem(QString::fromStdString(field.value));
         const bool writable = editable && (Document::PlacementFieldIsEditable(field.name) ||
+                                           Document::CameraFieldIsEditable(field.name) ||
                                            Document::CallArgumentIndex(field.name).has_value());
         value->setFlags(writable ? Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsEditable
                                  : Qt::ItemIsEnabled);
@@ -371,32 +374,41 @@ void Window::ShowAnimation(const std::string& name) {
 
 void Window::ChooseDepth(uint32_t depth) {
     depth_ = depth;
-    ShowPlacement();
+    ShowFrame();
 }
 
-void Window::ShowPlacement() {
-    if (!file_ || !depth_ || animation_path_.empty()) return;
+void Window::ShowFrame() {
+    if (!file_ || animation_path_.empty()) return;
     const auto animation = file_->ReadAnimation(animation_path_);
     if (!animation) {
         ReportOnce(QString::fromStdString(animation.error()));
         return;
     }
-    const auto tag =
-        Document::LivePlacementTag(animation->root, static_cast<uint16_t>(*depth_), frame_);
-    if (!tag) {
-        FillInspector({Document::Field{.name = "Depth",
-                                       .value = std::to_string(*depth_) + " holds nothing here"}},
-                      false);
-        return;
+    std::vector<Document::Field> fields;
+    if (depth_) {
+        const auto tag =
+            Document::LivePlacementTag(animation->root, static_cast<uint16_t>(*depth_), frame_);
+        const auto* placement =
+            tag ? std::get_if<AfpAnimation::Placement>(&animation->root.tags[*tag].body) : nullptr;
+        if (placement == nullptr) {
+            fields.push_back(Document::Field{
+                .name = "Depth", .value = std::to_string(*depth_) + " holds nothing here"});
+        } else {
+            fields = Document::PlacementFields(*animation, *placement);
+            if (placement->clip_actions) {
+                for (const AfpAnimation::ClipEvent& event : placement->clip_actions->events) {
+                    const std::vector<Document::Field> script =
+                        Document::ScriptFields(*animation, event.bytecode);
+                    fields.insert(fields.end(), script.begin(), script.end());
+                }
+            }
+        }
     }
-    const auto* placement = std::get_if<AfpAnimation::Placement>(&animation->root.tags[*tag].body);
-    if (placement == nullptr) return;
-    std::vector<Document::Field> fields = Document::PlacementFields(*animation, *placement);
-    if (placement->clip_actions) {
-        for (const AfpAnimation::ClipEvent& event : placement->clip_actions->events) {
-            const std::vector<Document::Field> script =
-                Document::ScriptFields(*animation, event.bytecode);
-            fields.insert(fields.end(), script.begin(), script.end());
+    if (const auto tag = Document::CameraTag(animation->root, frame_)) {
+        const auto* camera = std::get_if<AfpAnimation::Camera>(&animation->root.tags[*tag].body);
+        if (camera != nullptr) {
+            const std::vector<Document::Field> shot = Document::CameraFields(*camera);
+            fields.insert(fields.end(), shot.begin(), shot.end());
         }
     }
     FillInspector(fields, true);
@@ -425,6 +437,16 @@ Support::Expected<void, std::string> SetCallArgument(AfpAnimation::Animation& an
     return Support::Unexpected(std::string("that script is not a library call"));
 }
 
+Support::Expected<void, std::string> SetCameraOn(AfpAnimation::Animation& animation, uint32_t frame,
+                                                 const std::string& field,
+                                                 const std::string& value) {
+    const auto tag = Document::CameraTag(animation.root, frame);
+    if (!tag) return Support::Unexpected(std::string("this frame places no camera"));
+    auto* camera = std::get_if<AfpAnimation::Camera>(&animation.root.tags[*tag].body);
+    if (camera == nullptr) return Support::Unexpected(std::string("that tag is not a camera"));
+    return Document::SetCameraField(*camera, field, value);
+}
+
 }
 
 void Window::EditAnimation(const QString& name, const AnimationChange& change) {
@@ -437,31 +459,39 @@ void Window::EditAnimation(const QString& name, const AnimationChange& change) {
     const auto changed = change(*animation);
     if (!changed) {
         ReportProblem(QString::fromStdString(changed.error()));
-        ShowPlacement();
+        ShowFrame();
         return;
     }
     Document::File before = *file_;
     const auto written = file_->WriteAnimation(animation_path_, *animation);
     if (!written) {
         ReportProblem(QString::fromStdString(written.error()));
-        ShowPlacement();
+        ShowFrame();
         return;
     }
     history_.Record(name.toStdString(), std::move(before));
     RefreshState();
     Reload();
-    ShowPlacement();
+    ShowFrame();
 }
 
 void Window::ApplyFieldEdit(QTableWidgetItem* item) {
     if (filling_inspector_ || item == nullptr || item->column() != 1) return;
-    if (!file_ || !depth_ || animation_path_.empty()) return;
+    if (!file_ || animation_path_.empty()) return;
     const QTableWidgetItem* name = inspector_->item(item->row(), 0);
     if (name == nullptr) return;
     const std::string field = name->text().toStdString();
     const std::string value = item->text().toStdString();
-    const uint16_t depth = static_cast<uint16_t>(*depth_);
     const uint32_t frame = frame_;
+    if (Document::CameraFieldIsEditable(field)) {
+        EditAnimation(tr("%1 on frame %2").arg(name->text()).arg(frame),
+                      [field, value, frame](AfpAnimation::Animation& animation) {
+                          return SetCameraOn(animation, frame, field, value);
+                      });
+        return;
+    }
+    if (!depth_) return;
+    const uint16_t depth = static_cast<uint16_t>(*depth_);
     if (const std::optional<std::size_t> argument = Document::CallArgumentIndex(field)) {
         const std::size_t index = *argument;
         EditAnimation(tr("%1 on depth %2").arg(name->text()).arg(*depth_),
@@ -584,8 +614,33 @@ void Window::ShowTimelineMenu(const QPoint& where, uint32_t frame, const QString
                : nullptr;
     QAction* remove_depth =
         depth_ ? menu.addAction(tr("Remove depth %1 here").arg(*depth_)) : nullptr;
+    menu.addSeparator();
+    const auto animation = file_->ReadAnimation(animation_path_);
+    const bool has_camera = animation && Document::CameraTag(animation->root, frame).has_value();
+    QAction* add_camera =
+        has_camera ? nullptr : menu.addAction(tr("Add a camera on frame %1...").arg(frame));
+    QAction* remove_camera =
+        has_camera ? menu.addAction(tr("Remove the camera on frame %1").arg(frame)) : nullptr;
     const QAction* chosen = menu.exec(where);
     if (chosen == nullptr) return;
+
+    if (chosen == add_camera) {
+        bool answered = false;
+        const int id = QInputDialog::getInt(this, tr("Add a camera"), tr("Camera"), 0, 0,
+                                            std::numeric_limits<uint16_t>::max(), 1, &answered);
+        if (!answered) return;
+        const auto number = static_cast<uint16_t>(id);
+        EditAnimation(tr("Add camera %1").arg(id), [frame, number](AfpAnimation::Animation& clip) {
+            return Document::AddCamera(clip, frame, number);
+        });
+        return;
+    }
+    if (chosen == remove_camera) {
+        EditAnimation(
+            tr("Remove the camera on frame %1").arg(frame),
+            [frame](AfpAnimation::Animation& clip) { return Document::RemoveCamera(clip, frame); });
+        return;
+    }
 
     if (chosen == insert_frame) {
         EditAnimation(tr("Insert frame %1").arg(frame),
@@ -680,7 +735,7 @@ void Window::Redo() {
 
 void Window::ShowRestored() {
     RefreshState();
-    ShowPlacement();
+    ShowFrame();
     Reload();
 }
 
@@ -725,7 +780,7 @@ void Window::SeekTo(uint32_t frame) {
         return;
     }
     RenderFrame();
-    if (depth_) ShowPlacement();
+    if (depth_) ShowFrame();
 }
 
 void Window::RenderFrame() {

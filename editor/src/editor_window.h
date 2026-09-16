@@ -60,7 +60,7 @@ private:
     void FillTree();
     void ShowSelectedEntry();
     void ShowAnimation(const std::string& name);
-    void ShowPlacement();
+    void ShowFrame();
     void ApplyFieldEdit(QTableWidgetItem* item);
     void EditAnimation(const QString& name, const AnimationChange& change);
     void ShowTimelineMenu(const QPoint& where, uint32_t frame, const QString& label);

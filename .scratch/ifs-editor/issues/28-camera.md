@@ -1,6 +1,6 @@
 # The 3D camera
 
-Status: ready-for-agent
+Status: resolved
 
 Blocked by: 24.
 

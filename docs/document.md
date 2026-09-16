@@ -80,6 +80,17 @@ never leave a file overlapping its neighbour.
 use: `JoinPath`, `ScriptPath` (an `afp/<name>` path to its `afp/bsi/<name>`),
 and `FindEntry`, which walks a slash path of unescaped names.
 
+## Field values (`document/field_values.h`)
+
+Every editable field is text, and one set of helpers turns text into the numbers
+the format stores and back. `Numbers(text, count)` splits on commas, trims
+spaces and refuses anything that is not exactly `count` integers; `SetScalar`
+and `SetVector` range-check each one against the field's own type and refuse a
+value that does not fit rather than truncating it. An empty string clears the
+optional, which is how a field is dropped from a tag. `Scalar`, `Vector` and
+`Join` print the same shape back. Placement fields and camera fields both go
+through these, so the two cannot drift in what they accept.
+
 ## Editing a placement (`document/placement_edit.h`)
 
 `LivePlacementTag(clip, depth, frame)` returns the tag index of the placement
@@ -149,6 +160,14 @@ linear scan and the order does not matter, so the editor keeps those tables in
 frame order, which is what a reader expects to see. `SortLabels` picks between
 the two from that flag rather than guessing.
 
+The install agrees. Over IIDX 33, none of the 29110 animations sets `0x8`, and
+7015 of the 7021 containers with two or more labels and 2106 of the 2108 with
+two or more script labels are already in name order, so writing them sorted by
+name is what the shipped data does rather than a choice the editor is making.
+The two tables are searched separately and have to be measured separately: a
+first pass concatenated them and reported frame order as the more common shape,
+which was an artefact of the measurement.
+
 Removing or renaming a label runs `CompactStrings`, so a string no part of the
 animation refers to any more leaves the table.
 
@@ -194,11 +213,12 @@ as the `this` the calls pass, keeps its original item.
 
 A clip stores its tags in one flat list and each frame names a range into it, so
 every structure edit is really an edit to that list plus a fix-up of the ranges
-that follow. Two helpers do that once: inserting a tag puts it at the end of its
-frame's range and bumps `first_tag` for every later frame; erasing one lowers the
-count of the frame that owned it and `first_tag` for every frame after it. The
-tags before the first frame's `first_tag` are the clip's definition tags, which
-belong to no frame and are never touched.
+that follow. `document/tags.h` does that once for everything that adds or drops
+a tag: `InsertTag` puts it at the end of its frame's range and bumps `first_tag`
+for every later frame, and `EraseTag` lowers the count of the frame that owned it
+and `first_tag` for every frame after it. The tags before the first frame's
+`first_tag` are the clip's definition tags, which belong to no frame and are
+never touched.
 
 `AddDepth(animation, depth, character, first, last)` refuses a depth that is
 already taken anywhere in the range, then writes a create placement on `first`
@@ -216,6 +236,37 @@ and every placement's `end_frame`. Removing a frame drops the tags that were on
 it. A label on a removed frame stays in the clip on the frame that took its
 index, clamped to the last one, because a label is a jump target and silently
 dropping it would break a script that names it.
+
+## The camera (`document/camera_edit.h`)
+
+`CameraTag(clip, frame)` finds the camera tag placed on a frame, and
+`CameraFields` / `SetCameraField` read and write it the way placement fields
+work. Three fields: `Camera` is the camera number and is always there, while
+`Projection centre and depth` and `Focal length` are optional and map to the
+tag's two presence bits.
+
+The names are afp-core's own. The tag's x and y are the projection centre,
+because the built-in `projectionCenter` property setter writes the same two
+slots of the camera object that a place writes them into; the z is added to the
+focal length rather than being a third position axis; and the reader derives the
+field of view from the focal length and the view extent it seeds from the
+centre. `Core/afp_format.md` in the notes repo has the reader, the slots and how
+to find them again. Every number is stored in twentieths of a unit, which the
+editor does not convert, so what the inspector shows is what the tag holds.
+
+`AddCamera(animation, frame, id)` places a camera on a frame that has none, with
+both optional fields present and zeroed so every field is editable straight
+away. `RemoveCamera` takes it off again. Both go through `document/tags.h`, so
+the frame ranges stay consistent.
+
+A camera tag updates a stored camera but does not make it the one the movie
+draws with, which is a pointer afp-core only changes from the script side, so
+adding a camera to a clip that never activates one leaves the viewport looking
+exactly the same. A local test pins that: the edited package loads, seeks and
+renders through the preview host, and the tag reads back with the values that
+were typed. That is the measurement, not an assumption; the note repo has the
+three functions that reach the camera list and which of them sets the active
+one.
 
 ## Entry edits (`document/entry_edit.h`)
 

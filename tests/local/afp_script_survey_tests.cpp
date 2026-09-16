@@ -33,6 +33,9 @@ struct Counts {
     std::size_t labelled = 0;
     std::size_t by_name = 0;
     std::size_t by_frame = 0;
+    std::size_t script_labelled = 0;
+    std::size_t script_by_name = 0;
+    std::size_t script_by_frame = 0;
     std::size_t linear_lookup = 0;
     std::size_t animations = 0;
     std::size_t images = 0;
@@ -153,15 +156,16 @@ bool SortedByFrame(const std::vector<AfpAnimation::Label>& labels) {
 void CountLabels(const AfpAnimation::Animation& animation, const AfpAnimation::Container& container,
                  Counts& counts) {
     counts.containers++;
-    std::vector<AfpAnimation::Label> labels = container.labels;
-    if (container.script_labels) {
-        labels.insert(labels.end(), container.script_labels->begin(),
-                      container.script_labels->end());
+    if (container.labels.size() >= 2) {
+        counts.labelled++;
+        if (SortedByName(animation, container.labels)) counts.by_name++;
+        if (SortedByFrame(container.labels)) counts.by_frame++;
     }
-    if (labels.size() < 2) return;
-    counts.labelled++;
-    if (SortedByName(animation, labels)) counts.by_name++;
-    if (SortedByFrame(labels)) counts.by_frame++;
+    if (container.script_labels && container.script_labels->size() >= 2) {
+        counts.script_labelled++;
+        if (SortedByName(animation, *container.script_labels)) counts.script_by_name++;
+        if (SortedByFrame(*container.script_labels)) counts.script_by_frame++;
+    }
 }
 
 void WalkContainer(const AfpAnimation::Animation& animation,
@@ -245,6 +249,9 @@ TEST_CASE("Every script in the install reads and writes back, and the counts mat
         "[afp scripts] {} containers, {} with two or more labels, {} sorted by name, {} sorted by "
         "frame\n",
         counts.containers, counts.labelled, counts.by_name, counts.by_frame);
+    std::cerr << std::format(
+        "[afp scripts] {} with two or more script labels, {} sorted by name, {} sorted by frame\n",
+        counts.script_labelled, counts.script_by_name, counts.script_by_frame);
     if (!counts.first_error.empty()) {
         std::cerr << std::format("[afp scripts] first error: {}\n", counts.first_error);
     }

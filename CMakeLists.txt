@@ -201,18 +201,10 @@ add_library(r573_shared_texture STATIC
 target_include_directories(r573_shared_texture PUBLIC src)
 target_link_libraries(r573_shared_texture PUBLIC r573_support d3d9.lib PRIVATE r573::warnings)
 
+include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/r573_shared_sources.cmake")
+
 add_library(r573_document STATIC
-    src/document/document.cpp
-    src/document/animation_strings.cpp
-    src/document/entries.cpp
-    src/document/entry_edit.cpp
-    src/document/frame_edit.cpp
-    src/document/history.cpp
-    src/document/label_edit.cpp
-    src/document/library_call.cpp
-    src/document/placement_edit.cpp
-    src/document/outline.cpp
-    src/document/timeline.cpp
+    ${R573_EDITOR_DOCUMENT_SOURCES}
 )
 target_include_directories(r573_document PUBLIC src)
 target_link_libraries(r573_document PUBLIC r573_formats PRIVATE r573::warnings)
@@ -776,6 +768,7 @@ target_link_libraries(document_outline_local_tests PRIVATE Catch2::Catch2WithMai
 catch_discover_tests(document_outline_local_tests DISCOVERY_MODE POST_BUILD PROPERTIES LABELS local)
 
 add_executable(document_tests
+    tests/document/camera_edit_tests.cpp
     tests/document/document_tests.cpp
     tests/document/frame_edit_tests.cpp
     tests/document/history_tests.cpp

@@ -32,11 +32,14 @@ set(R573_EDITOR_FORMATS_SOURCES
 set(R573_EDITOR_DOCUMENT_SOURCES
     src/document/document.cpp
     src/document/animation_strings.cpp
+    src/document/camera_edit.cpp
     src/document/entries.cpp
     src/document/entry_edit.cpp
+    src/document/field_values.cpp
     src/document/frame_edit.cpp
     src/document/history.cpp
     src/document/label_edit.cpp
+    src/document/tags.cpp
     src/document/library_call.cpp
     src/document/placement_edit.cpp
     src/document/outline.cpp

@@ -188,6 +188,16 @@ just the model: afp-core goes back to the one `loop` label at 240, and the
 history reports the document as saved again because the undo landed back on the
 depth it was opened at.
 
+A second case in the same file adds a camera on frame 300 with `AddCamera`, sets
+its projection centre and focal length, reloads and renders. afp-core takes the
+package, keeps the frame count and renders the frame, and the tag reads back
+with the focal length that was set. What it deliberately does not check is the
+picture: a camera tag updates a stored camera without making it the one the
+movie draws with, so the frame is unchanged, and asserting on pixels here would
+be asserting on something the tag does not control. `Core/afp_format.md` in the
+notes repo has the reader, the camera list and which function picks the active
+camera.
+
 ## The texture list shape (`local` label)
 
 `texture_list_shape_tests` (tests/local/texture_list_shape_tests.cpp) reads every

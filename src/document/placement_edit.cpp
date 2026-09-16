@@ -1,16 +1,15 @@
 #include "document/placement_edit.h"
 
 #include "document/animation_strings.h"
+#include "document/field_values.h"
 #include "document/outline.h"
 #include "formats/afp_animation.h"
 #include "support/expected.h"
 
 #include <algorithm>
 #include <array>
-#include <charconv>
 #include <cstddef>
 #include <cstdint>
-#include <system_error>
 #include <limits>
 #include <optional>
 #include <string>
@@ -81,29 +80,6 @@ std::optional<FieldId> FieldFor(std::string_view name) {
     return found->id;
 }
 
-std::string Join(const std::vector<std::string>& parts) {
-    std::string out;
-    for (const std::string& part : parts) {
-        if (!out.empty()) out += ", ";
-        out += part;
-    }
-    return out;
-}
-
-template <typename T> std::string Scalar(const std::optional<T>& field) {
-    return field ? std::to_string(*field) : std::string();
-}
-
-template <typename T, std::size_t N>
-std::string Vector(const std::optional<std::array<T, N>>& field) {
-    if (!field) return {};
-    std::vector<std::string> parts;
-    parts.reserve(N);
-    for (const T value : *field)
-        parts.push_back(std::to_string(value));
-    return Join(parts);
-}
-
 std::string HsvText(const std::optional<AfpAnimation::Hsv>& field) {
     if (!field) return {};
     return Join({std::to_string(field->hue), std::to_string(field->saturation),
@@ -114,73 +90,6 @@ std::string NameText(const AfpAnimation::Animation& animation,
                      const std::optional<AfpAnimation::StringId>& field) {
     if (!field) return {};
     return StringText(animation, *field);
-}
-
-Support::Expected<std::vector<int64_t>, std::string> Numbers(std::string_view value,
-                                                             std::size_t count) {
-    std::vector<int64_t> out;
-    std::size_t start = 0;
-    while (start <= value.size()) {
-        const std::size_t comma = value.find(',', start);
-        std::string_view part = value.substr(
-            start, comma == std::string_view::npos ? value.size() - start : comma - start);
-        while (!part.empty() && part.front() == ' ')
-            part.remove_prefix(1);
-        while (!part.empty() && part.back() == ' ')
-            part.remove_suffix(1);
-        int64_t number = 0;
-        const auto* end = part.data() + part.size();
-        const auto parsed = std::from_chars(part.data(), end, number);
-        if (parsed.ec != std::errc{} || parsed.ptr != end)
-            return Support::Unexpected("not a number: " + std::string(part));
-        out.push_back(number);
-        if (comma == std::string_view::npos) break;
-        start = comma + 1;
-    }
-    if (out.size() != count) {
-        return Support::Unexpected("expected " + std::to_string(count) + " numbers, got " +
-                                   std::to_string(out.size()));
-    }
-    return out;
-}
-
-template <typename T>
-Support::Expected<void, std::string> SetScalar(std::optional<T>& field, std::string_view value) {
-    if (value.empty()) {
-        field.reset();
-        return {};
-    }
-    auto numbers = Numbers(value, 1);
-    if (!numbers) return Support::Unexpected(numbers.error());
-    const int64_t number = numbers->front();
-    if (number < static_cast<int64_t>(std::numeric_limits<T>::min()) ||
-        number > static_cast<int64_t>(std::numeric_limits<T>::max())) {
-        return Support::Unexpected(std::to_string(number) + " does not fit the field");
-    }
-    field = static_cast<T>(number);
-    return {};
-}
-
-template <typename T, std::size_t N>
-Support::Expected<void, std::string> SetVector(std::optional<std::array<T, N>>& field,
-                                               std::string_view value) {
-    if (value.empty()) {
-        field.reset();
-        return {};
-    }
-    auto numbers = Numbers(value, N);
-    if (!numbers) return Support::Unexpected(numbers.error());
-    std::array<T, N> out{};
-    for (std::size_t i = 0; i < N; i++) {
-        const int64_t number = (*numbers)[i];
-        if (number < static_cast<int64_t>(std::numeric_limits<T>::min()) ||
-            number > static_cast<int64_t>(std::numeric_limits<T>::max())) {
-            return Support::Unexpected(std::to_string(number) + " does not fit the field");
-        }
-        out[i] = static_cast<T>(number);
-    }
-    field = out;
-    return {};
 }
 
 Support::Expected<void, std::string> SetHsv(std::optional<AfpAnimation::Hsv>& field,

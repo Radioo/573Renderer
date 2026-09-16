@@ -139,9 +139,15 @@ its node too; removing anything else is a plain entry removal.
 Right-clicking the timeline offers the label edits: add one at the frame under
 the cursor, and rename, move or remove the label the cursor is near. Below the
 labels it offers the structure edits: insert or remove a frame at that point,
-and add or remove the selected depth over a range. The widget
+and add or remove the selected depth over a range. Last it offers the camera:
+add one on that frame when it has none, remove the one it has. The widget
 does not own the dialogs; it emits the position, the frame and the label it
 found and the window builds the menu.
+
+A camera belongs to a frame rather than to a depth, so the inspector shows it
+under whatever the selected depth holds, and shows it even when no depth is
+selected. Committing one of its cells goes through the same `EditAnimation`
+step as everything else, named after the frame instead of the depth.
 
 When the selected placement carries a script, the inspector shows it under the
 placement fields. A script that is one `aeplib` call reads as the call and one

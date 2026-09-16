@@ -2,6 +2,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "document/document.h"
+#include "document/camera_edit.h"
 #include "document/history.h"
 #include "document/outline.h"
 #include "document/placement_edit.h"
@@ -142,4 +143,64 @@ TEST_CASE("An edited package reloads and afp-core reports the edited animation")
     REQUIRE(back->labels.size() == 1);
     CHECK(back->labels[0].name == "loop");
     CHECK(back->labels[0].frame == kLoopFrame);
+}
+
+TEST_CASE("A camera the editor adds is one afp-core loads and renders") {
+    const std::string dir = Support::EnvVar("R573_IIDX_DIR").value_or("");
+    if (dir.empty()) SKIP("R573_IIDX_DIR not set");
+
+    const std::vector<uint8_t> bytes = ReadAll(dir + "/data/graphic/1/title.ifs");
+    REQUIRE(!bytes.empty());
+    auto file = Document::File::Open(bytes);
+    REQUIRE(file.has_value());
+    const std::string path = AnimationPath(*file);
+    REQUIRE(!path.empty());
+
+    auto host =
+        PreviewClient::Host::Start(PreviewClient::Options{.host_exe = R573_PREVIEW_HOST_EXE});
+    REQUIRE(host.has_value());
+    REQUIRE((*host)->Boot(dir, "iidx33").has_value());
+    REQUIRE((*host)->LoadPackage("title", "title", bytes, false).has_value());
+
+    auto animation = file->ReadAnimation(path);
+    REQUIRE(animation.has_value());
+    CHECK_FALSE(Document::CameraTag(animation->root, kSeekFrame).has_value());
+
+    const auto added = Document::AddCamera(*animation, kSeekFrame, 0);
+    const std::string add_error = added.has_value() ? std::string() : added.error();
+    INFO(add_error);
+    REQUIRE(added.has_value());
+    const auto tag = Document::CameraTag(animation->root, kSeekFrame);
+    REQUIRE(tag.has_value());
+    auto* camera = std::get_if<AfpAnimation::Camera>(&animation->root.tags[*tag].body);
+    REQUIRE(camera != nullptr);
+    REQUIRE(Document::SetCameraField(*camera, "Projection centre and depth", "4800, 2700, 0")
+                .has_value());
+    REQUIRE(Document::SetCameraField(*camera, "Focal length", "2000").has_value());
+
+    REQUIRE(file->WriteAnimation(path, *animation).has_value());
+    const auto encoded = file->Encode();
+    REQUIRE(encoded.has_value());
+
+    const auto reloaded = (*host)->LoadPackage("title", "title", *encoded, true);
+    const std::string reload_error = reloaded.has_value() ? std::string() : reloaded.error();
+    INFO(reload_error);
+    REQUIRE(reloaded.has_value());
+    CHECK(reloaded->frame_count == kTitleFrames);
+
+    REQUIRE((*host)->Seek(kSeekFrame).has_value());
+    const auto frame = (*host)->Render();
+    const std::string render_error = frame.has_value() ? std::string() : frame.error();
+    INFO(render_error);
+    REQUIRE(frame.has_value());
+    CHECK(frame->frame == kSeekFrame);
+
+    const auto after = file->ReadAnimation(path);
+    REQUIRE(after.has_value());
+    const auto kept = Document::CameraTag(after->root, kSeekFrame);
+    REQUIRE(kept.has_value());
+    const auto* stored = std::get_if<AfpAnimation::Camera>(&after->root.tags[*kept].body);
+    REQUIRE(stored != nullptr);
+    REQUIRE(stored->focal_length.has_value());
+    CHECK(*stored->focal_length == 2000);
 }
