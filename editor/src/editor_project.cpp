@@ -3,9 +3,11 @@
 #include "editor_files.h"
 
 #include "document/authored.h"
+#include "support/expected.h"
 #include "document/document.h"
 #include "document/keyframes.h"
 #include "document/project.h"
+#include "document/project_export.h"
 
 #include <QFileDialog>
 #include <QFileInfo>
@@ -55,6 +57,7 @@ void Window::CreateProject() {
     settings.setValue(kProjectDirKey, folder);
     project_ = std::move(project);
     project_folder_ = folder;
+    authored_.clear();
     RefreshState();
     statusBar()->showMessage(tr("Project made in %1").arg(folder));
 }
@@ -90,6 +93,7 @@ void Window::OpenProject(const QString& folder) {
     OpenDocument(ifs);
     if (QFileInfo(document_path_).absoluteFilePath() != QFileInfo(ifs).absoluteFilePath()) return;
     QSettings().setValue(kProjectDirKey, folder);
+    authored_ = project->content;
     project_ = std::move(*project);
     project_folder_ = folder;
     if (host_.Running()) StartHost(QSettings().value(kGameDirKey).toString());
@@ -99,15 +103,6 @@ void Window::OpenProject(const QString& folder) {
 
 void Window::CloseProject() {
     if (!project_) return;
-    if (!authored_.empty()) {
-        const auto answer = QMessageBox::question(
-            this, tr("IFS Editor"),
-            tr("This project owns %1 depth(s). Closing it drops that source, and the baked data "
-               "stays as it is. Close the project?")
-                .arg(authored_.size()),
-            QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
-        if (answer != QMessageBox::Yes) return;
-    }
     authored_.clear();
     project_.reset();
     project_folder_.clear();
@@ -126,6 +121,33 @@ const Document::AuthoredDepth* Window::AuthoredAt(uint16_t depth, uint32_t frame
     return nullptr;
 }
 
+void Window::SaveProject() {
+    if (!project_ || project_folder_.isEmpty()) return;
+    project_->content = authored_;
+    const QString manifest =
+        QString::fromStdString(Document::ProjectManifestPath(project_folder_.toStdString()));
+    if (!WriteFileBytes(manifest, Document::WriteProject(*project_)))
+        ReportProblem(tr("%1 could not be written").arg(manifest));
+}
+
+void Window::ExportToPackage() {
+    if (!file_ || !project_) return;
+    project_->content = authored_;
+    Document::File before = *file_;
+    const auto exported = Document::ExportProject(*file_, *project_);
+    if (!exported) {
+        file_ = std::move(before);
+        ReportProblem(QString::fromStdString(exported.error()));
+        return;
+    }
+    history_.Record(tr("Export").toStdString(), std::move(before));
+    SaveProject();
+    RefreshState();
+    Reload();
+    ShowFrame();
+    statusBar()->showMessage(tr("Exported %1 owned depth(s) into the IFS").arg(authored_.size()));
+}
+
 void Window::OwnSelectedDepth(uint32_t frame) {
     if (!file_ || !depth_ || animation_path_.empty()) return;
     const auto animation = file_->ReadAnimation(animation_path_);
@@ -139,7 +161,8 @@ void Window::OwnSelectedDepth(uint32_t frame) {
         ReportProblem(QString::fromStdString(owned.error()));
         return;
     }
-    authored_.push_back(std::move(*owned));
+    authored_.push_back(std::move(owned->authored));
+    SaveProject();
     RefreshState();
     ShowFrame();
     statusBar()->showMessage(tr("Depth %1 is now the project's, from frame %2 to %3")
@@ -154,12 +177,16 @@ void Window::DetachSelectedDepth() {
     if (owned == nullptr) return;
     const Document::AuthoredDepth taken = *owned;
     EditAnimation(tr("Detach depth %1").arg(*depth_), [taken](AfpAnimation::Animation& clip) {
-        return Document::DetachDepth(clip, taken);
+        using Written = Support::Expected<void, std::string>;
+        auto baked = Document::BakedFor(clip, taken);
+        if (!baked) return Written(Support::Unexpected(baked.error()));
+        return Document::WriteAuthored(clip, taken, *baked);
     });
     std::erase_if(authored_, [&taken](const Document::AuthoredDepth& one) {
         return one.animation == taken.animation && one.depth == taken.depth &&
                one.first_frame == taken.first_frame;
     });
+    SaveProject();
     RefreshState();
     ShowFrame();
 }

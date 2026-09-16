@@ -278,8 +278,12 @@ an IFS still opens, edits and saves with no project at all.
 
 `project.json` is JSON because the repo already depends on nlohmann and a
 manifest a person can open in an editor is worth more than a compact one. It
-holds three things: the format number it was written in, the target build, and
-the path of the IFS. `ReadProject` refuses anything it does not recognise rather
+holds the format number it was written in, the target build, the path of the
+IFS, and under `owns` the depths the project has authored: for each one the
+animation, the depth, the frame range and its tracks. A keyframe writes its
+curve only when its ease is `bezier`, so a manifest of ordinary keyframes stays
+readable. `document/project_content.h` does that half on its own so neither file
+grows without bound. `ReadProject` refuses anything it does not recognise rather
 than filling in a default, including a format number that is not the one it
 writes, so a project from a later editor says so instead of loading wrong.
 `WriteProject` writes the same bytes for the same project every time, which is
@@ -328,11 +332,21 @@ because the timing function stops being a function of time otherwise; `y1` and
 
 ## Own and detach (`document/authored.h`)
 
-`OwnDepth` takes the span of a depth around a frame and turns it into an
-`AuthoredDepth`: the create placement with its animatable properties cleared,
-and one `Track` per property, keyed on exactly the frames that set it, every
-ease `hold`. `DetachDepth` is the inverse, and `AuthoredPlacements` is the one
-function both it and export use to turn keyframes back into placements.
+`OwnDepth` takes the span of a depth around a frame and splits it in two. The
+`AuthoredDepth` is what the project keeps: the animation, the depth, the frame
+range, and one `Track` per property, keyed on exactly the frames that set it,
+every ease `hold`. The `BakedDepth` is what the IFS keeps and the project does
+not: the create placement with its animatable properties cleared, the flags
+every update carries, and the frames whose update sets no property.
+
+That split is what makes the project file honest. Only the authored half is
+written into the manifest; `BakedFor` derives the baked half again from the IFS
+whenever it is needed, which works because the derivation is stable under
+export. Re-deriving from what export wrote gives back the same baked half, and
+the export tests pin that by exporting twice and comparing bytes.
+
+`AuthoredPlacements` is the one function that turns keyframes back into
+placements, used by export and by detach alike, so the two cannot disagree.
 
 **Keying only the frames a property is set on is the measured shape of the
 data, not a simplification.** Over IIDX 33, 234363 spans set the same properties
@@ -357,6 +371,23 @@ Of 211152 spans offered, 187191 are owned and all 187191 detach byte for byte;
 the 23961 refusals are 22076 with disagreeing update flags, 1809 changing
 filters and 76 changing curves. Why those updates carry different flags inside
 one span is UNRESOLVED and is why own refuses them instead of guessing.
+
+## Export (`document/project_export.h`)
+
+`ExportProject` writes every depth a project owns into its IFS. It works one
+animation at a time, taking the animations in name order and the depths within
+one animation in depth then frame order, so the result does not depend on the
+order the user owned things in. For each depth it derives the baked half from
+the animation as it currently stands, asks `AuthoredPlacements` for the
+placements, and writes them; a depth it cannot write names itself in the error
+rather than leaving the package half done.
+
+ADR 0006 asks for two things and both are tests rather than claims. The same
+project exported into two copies of the same package produces the same bytes.
+Exporting the same project a second time changes nothing, which is what proves
+the baked half can be re-derived; without it the project could not store only
+the authored half. A depth the project does not own is not touched at all,
+because export only ever writes the spans it was given.
 
 ## Entry edits (`document/entry_edit.h`)
 

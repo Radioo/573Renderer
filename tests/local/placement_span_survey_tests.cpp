@@ -197,7 +197,7 @@ void CountOwn(const AfpAnimation::Animation& animation, uint16_t depth, uint32_t
     }
     counts.owned++;
     AfpAnimation::Animation again = animation;
-    const auto detached = Document::DetachDepth(again, *authored);
+    const auto detached = Document::WriteAuthored(again, authored->authored, authored->baked);
     if (!detached) {
         counts.refusals["detach: " + detached.error()]++;
         return;

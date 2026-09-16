@@ -175,9 +175,14 @@ With a project open, right-clicking the timeline also offers to let the project
 own the selected depth from the frame under the cursor, and to detach one it
 already owns. An owned depth's placement is shown in the inspector with a row
 saying so and every cell read-only, because its baked data is produced from the
-keyframes rather than edited directly. Closing a project that owns depths asks
-first: the source is held in memory for now and the baked data in the IFS is
-what survives.
+keyframes rather than edited directly. Owning and detaching both write the
+manifest straight away, so what a project owns is never held only in memory.
+
+`File > Export into the IFS` writes every owned depth's keyframes into the
+document as baked data. It is one undoable step like any other edit, and it runs
+the same reload loop, so the viewport shows what was exported. Export changes the
+open document and not the file on disk; `File > Save` is still what writes it
+out.
 
 `File > Save` writes the encoded document over the opened path and `Save as...`
 asks for a new one. Whether the document is unsaved comes from the history, not

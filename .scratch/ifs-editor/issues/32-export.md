@@ -1,6 +1,6 @@
 # Export
 
-Status: ready-for-agent
+Status: resolved
 
 Blocked by: 30, 31.
 
@@ -13,7 +13,5 @@ Blocked by: 30, 31.
 - Export never disturbs baked data the project does not own, and the round trip
   gate still passes on an untouched install.
 - The project's authored content is written into and read back from the
-  manifest, so what is owned survives closing the editor. Ticket 30 holds it
-  only in memory on purpose, because the persisted form has to agree with what
-  export writes.
+  manifest, so what is owned survives closing the editor.
 - Tested under `ci` over the model.

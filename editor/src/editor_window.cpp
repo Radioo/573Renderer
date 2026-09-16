@@ -196,6 +196,9 @@ void Window::BuildMenus() {
     connect(open_project, &QAction::triggered, this, &Window::ChooseProject);
     close_project_action_ = file->addAction(tr("&Close project"));
     connect(close_project_action_, &QAction::triggered, this, &Window::CloseProject);
+    export_action_ = file->addAction(tr("&Export into the IFS"));
+    export_action_->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_E));
+    connect(export_action_, &QAction::triggered, this, &Window::ExportToPackage);
     file->addSeparator();
     QAction* choose = file->addAction(tr("Choose &game install..."));
     connect(choose, &QAction::triggered, this, &Window::ChooseGameDirectory);
@@ -870,6 +873,7 @@ bool Window::OfferToSave() {
 void Window::RefreshState() {
     create_project_action_->setEnabled(file_.has_value() && !project_);
     close_project_action_->setEnabled(project_.has_value());
+    export_action_->setEnabled(project_.has_value() && !authored_.empty());
     undo_action_->setEnabled(history_.CanUndo());
     redo_action_->setEnabled(history_.CanRedo());
     undo_action_->setText(history_.CanUndo()

@@ -1,5 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 
+#include "document/authored.h"
+#include "document/keyframes.h"
 #include "document/project.h"
 
 #include <cstdint>
@@ -19,7 +21,8 @@ std::string Text(const std::vector<uint8_t>& bytes) {
 }
 
 TEST_CASE("A project round trips through its manifest") {
-    const Document::Project project{.build = "iidx33", .ifs_path = "graphic/title.ifs"};
+    const Document::Project project{
+        .build = "iidx33", .ifs_path = "graphic/title.ifs", .content = {}};
     const std::vector<uint8_t> manifest = Document::WriteProject(project);
 
     const auto read = Document::ReadProject(manifest);
@@ -28,7 +31,7 @@ TEST_CASE("A project round trips through its manifest") {
 }
 
 TEST_CASE("Writing the same project twice produces the same bytes") {
-    const Document::Project project{.build = "iidx33", .ifs_path = "../title.ifs"};
+    const Document::Project project{.build = "iidx33", .ifs_path = "../title.ifs", .content = {}};
     CHECK(Document::WriteProject(project) == Document::WriteProject(project));
 
     const auto read = Document::ReadProject(Document::WriteProject(project));
@@ -58,8 +61,8 @@ TEST_CASE("A project written in another format says so instead of loading") {
 }
 
 TEST_CASE("The manifest is text a person can read and edit") {
-    const std::string text =
-        Text(Document::WriteProject({.build = "iidx33", .ifs_path = "graphic/title.ifs"}));
+    const std::string text = Text(Document::WriteProject(
+        {.build = "iidx33", .ifs_path = "graphic/title.ifs", .content = {}}));
     CHECK(text.find("\"format\": 1") != std::string::npos);
     CHECK(text.find("\"build\": \"iidx33\"") != std::string::npos);
     CHECK(text.find("\"ifs\": \"graphic/title.ifs\"") != std::string::npos);
@@ -83,14 +86,15 @@ TEST_CASE("A stored path resolves back to the IFS it came from") {
     for (const std::string& ifs :
          {std::string("C:/work/title/title.ifs"), std::string("C:/work/title.ifs"),
           std::string("F:/game/data/title.ifs")}) {
-        const Document::Project project{.build = "iidx33",
-                                        .ifs_path = Document::StoredIfsPath(folder, ifs)};
+        const Document::Project project{
+            .build = "iidx33", .ifs_path = Document::StoredIfsPath(folder, ifs), .content = {}};
         CHECK(Document::ResolvedIfsPath(folder, project) == ifs);
     }
 }
 
 TEST_CASE("A project moved with its IFS still resolves") {
-    const Document::Project project{.build = "iidx33", .ifs_path = "../data/title.ifs"};
+    const Document::Project project{
+        .build = "iidx33", .ifs_path = "../data/title.ifs", .content = {}};
     CHECK(Document::ResolvedIfsPath("D:/elsewhere/title", project) ==
           "D:/elsewhere/data/title.ifs");
 }
@@ -98,4 +102,85 @@ TEST_CASE("A project moved with its IFS still resolves") {
 TEST_CASE("The manifest sits in the project folder under a fixed name") {
     CHECK(Document::ProjectManifestPath("C:/work/title") == "C:/work/title/project.json");
     CHECK(Document::ProjectManifestPath("C:/work/title/") == "C:/work/title/project.json");
+}
+
+namespace {
+
+Document::AuthoredDepth Owned() {
+    return Document::AuthoredDepth{
+        .animation = "afp/1a2b",
+        .depth = 12,
+        .first_frame = 4,
+        .last_frame = 40,
+        .tracks = {
+            Document::Track{.property = "Translation",
+                            .keys = {Document::Keyframe{
+                                         .frame = 4,
+                                         .value = {1000, -2000},
+                                         .ease = Document::Ease::Bezier,
+                                         .bezier = {.x1 = 0.42, .y1 = 0.0, .x2 = 0.58, .y2 = 1.0}},
+                                     Document::Keyframe{.frame = 40,
+                                                        .value = {3000, -2000},
+                                                        .ease = Document::Ease::Hold,
+                                                        .bezier = {}}}},
+            Document::Track{.property = "Packed multiply colour",
+                            .keys = {Document::Keyframe{.frame = 4,
+                                                        .value = {4294967286},
+                                                        .ease = Document::Ease::Linear,
+                                                        .bezier = {}},
+                                     Document::Keyframe{.frame = 9,
+                                                        .value = {0},
+                                                        .ease = Document::Ease::Linear,
+                                                        .bezier = {}}}}}};
+}
+
+}
+
+TEST_CASE("What a project owns survives the manifest") {
+    const Document::Project project{
+        .build = "iidx33", .ifs_path = "title.ifs", .content = {Owned()}};
+    const auto read = Document::ReadProject(Document::WriteProject(project));
+    if (!read) FAIL(read.error());
+    CHECK(*read == project);
+    CHECK(Document::WriteProject(*read) == Document::WriteProject(project));
+}
+
+TEST_CASE("A manifest with no owned depths reads as owning nothing") {
+    const auto read =
+        Document::ReadProject(Bytes(R"({"format":1,"build":"iidx33","ifs":"a.ifs"})"));
+    REQUIRE(read.has_value());
+    CHECK(read->content.empty());
+}
+
+TEST_CASE("Owned depths the editor cannot make sense of are refused") {
+    const std::string head = R"({"format":1,"build":"b","ifs":"a.ifs","owns":)";
+    CHECK_FALSE(Document::ReadProject(Bytes(head + "7}")).has_value());
+    CHECK_FALSE(Document::ReadProject(Bytes(head + "[7]}")).has_value());
+    CHECK_FALSE(Document::ReadProject(Bytes(head + R"([{"depth":1}]})")).has_value());
+    CHECK_FALSE(
+        Document::ReadProject(Bytes(head + R"([{"animation":"a","depth":1,"first":5,"last":2,)"
+                                           R"("tracks":[]}]})"))
+            .has_value());
+    CHECK_FALSE(Document::ReadProject(
+                    Bytes(head + R"([{"animation":"a","depth":1,"first":0,"last":2,"tracks":)"
+                                 R"([{"property":"Translation","keys":[{"frame":0,"value":[1],)"
+                                 R"("ease":"spring"}]}]}]})"))
+                    .has_value());
+    CHECK_FALSE(Document::ReadProject(
+                    Bytes(head + R"([{"animation":"a","depth":1,"first":0,"last":2,"tracks":)"
+                                 R"([{"property":"Translation","keys":[{"frame":0,"value":[1,2],)"
+                                 R"("ease":"hold"},{"frame":1,"value":[1],"ease":"hold"}]}]}]})"))
+                    .has_value());
+}
+
+TEST_CASE("A keyframe with no bezier keeps none in the manifest") {
+    Document::AuthoredDepth depth = Owned();
+    depth.tracks.front().keys.front().ease = Document::Ease::Linear;
+    const Document::Project project{.build = "iidx33", .ifs_path = "title.ifs", .content = {depth}};
+    const std::string text = Text(Document::WriteProject(project));
+    CHECK(text.find("\"curve\"") == std::string::npos);
+
+    const auto read = Document::ReadProject(Document::WriteProject(project));
+    REQUIRE(read.has_value());
+    CHECK(read->content.front().tracks.front().keys.front().bezier == Document::Bezier{});
 }

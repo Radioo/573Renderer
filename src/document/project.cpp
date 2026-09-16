@@ -1,4 +1,5 @@
 #include "document/project.h"
+#include "document/project_content.h"
 
 #include "support/expected.h"
 
@@ -23,6 +24,7 @@ using Json = nlohmann::ordered_json;
 constexpr std::string_view kFormatKey = "format";
 constexpr std::string_view kBuildKey = "build";
 constexpr std::string_view kIfsKey = "ifs";
+constexpr std::string_view kContentKey = "owns";
 constexpr int kIndent = 2;
 
 Support::Expected<std::string, std::string> Text(const Json& object, std::string_view key) {
@@ -66,7 +68,14 @@ Support::Expected<Project, std::string> ReadProject(std::span<const uint8_t> man
     auto ifs = Text(parsed, kIfsKey);
     if (!ifs) return Support::Unexpected(ifs.error());
     if (ifs->empty()) return Support::Unexpected(std::string("the project names no IFS"));
-    return Project{.build = std::move(*build), .ifs_path = std::move(*ifs)};
+    Project project{.build = std::move(*build), .ifs_path = std::move(*ifs), .content = {}};
+    const auto content = parsed.find(std::string(kContentKey));
+    if (content != parsed.end()) {
+        auto read = ReadContent(content.value());
+        if (!read) return Support::Unexpected(read.error());
+        project.content = std::move(*read);
+    }
+    return project;
 }
 
 std::vector<uint8_t> WriteProject(const Project& project) {
@@ -74,6 +83,7 @@ std::vector<uint8_t> WriteProject(const Project& project) {
     out[std::string(kFormatKey)] = kProjectFormat;
     out[std::string(kBuildKey)] = project.build;
     out[std::string(kIfsKey)] = project.ifs_path;
+    out[std::string(kContentKey)] = WriteContent(project.content);
     std::string text = out.dump(kIndent);
     text += '\n';
     return {text.begin(), text.end()};

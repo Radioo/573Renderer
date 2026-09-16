@@ -45,6 +45,8 @@ set(R573_EDITOR_DOCUMENT_SOURCES
     src/document/library_call.cpp
     src/document/placement_edit.cpp
     src/document/placement_values.cpp
+    src/document/project_content.cpp
+    src/document/project_export.cpp
     src/document/project.cpp
     src/document/outline.cpp
     src/document/timeline.cpp

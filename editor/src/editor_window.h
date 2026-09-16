@@ -62,6 +62,8 @@ private:
     void CreateProject();
     void ChooseProject();
     void CloseProject();
+    void SaveProject();
+    void ExportToPackage();
     void OwnSelectedDepth(uint32_t frame);
     void DetachSelectedDepth();
     [[nodiscard]] const Document::AuthoredDepth* AuthoredAt(uint16_t depth, uint32_t frame) const;
@@ -102,6 +104,7 @@ private:
     QAction* redo_action_ = nullptr;
     QAction* create_project_action_ = nullptr;
     QAction* close_project_action_ = nullptr;
+    QAction* export_action_ = nullptr;
     Host host_;
     std::optional<Document::File> file_;
     Document::History history_;

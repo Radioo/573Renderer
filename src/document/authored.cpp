@@ -103,21 +103,16 @@ std::pair<uint32_t, uint32_t> SpanAround(const AfpAnimation::Container& clip, ui
     return {first, last};
 }
 
-}
-
-Support::Expected<AuthoredDepth, std::string> OwnDepth(const AfpAnimation::Animation& animation,
-                                                       std::string_view animation_path,
-                                                       uint16_t depth, uint32_t frame) {
-    const AfpAnimation::Container& clip = animation.root;
+Support::Expected<std::vector<Placed>, std::string> SpanOf(const AfpAnimation::Container& clip,
+                                                           uint16_t depth, uint32_t frame) {
     if (frame >= clip.frames.size())
         return Support::Unexpected("the clip has no frame " + std::to_string(frame));
     if (!LivePlacementTag(clip, depth, frame)) {
         return Support::Unexpected("depth " + std::to_string(depth) + " holds nothing on frame " +
                                    std::to_string(frame));
     }
-
     const auto [first, last] = SpanAround(clip, depth, frame);
-    const std::vector<Placed> placements = SpanPlacements(clip, depth, first, last);
+    std::vector<Placed> placements = SpanPlacements(clip, depth, first, last);
     if (placements.empty() || placements.front().frame != first ||
         (PlacementAt(clip, placements.front()).flags & kUpdateExisting) != 0) {
         return Support::Unexpected("depth " + std::to_string(depth) +
@@ -126,34 +121,51 @@ Support::Expected<AuthoredDepth, std::string> OwnDepth(const AfpAnimation::Anima
     }
     auto shaped = CheckSpan(clip, depth, placements);
     if (!shaped) return Support::Unexpected(shaped.error());
+    return placements;
+}
 
-    AuthoredDepth authored;
-    authored.animation = std::string(animation_path);
-    authored.depth = depth;
-    authored.first_frame = first;
-    authored.last_frame = last;
-    authored.create = PlacementAt(clip, placements.front());
-    ClearAnimatableProperties(authored.create);
+BakedDepth BakedOf(const AfpAnimation::Container& clip, const std::vector<Placed>& placements) {
+    BakedDepth baked;
+    baked.create = PlacementAt(clip, placements.front());
+    ClearAnimatableProperties(baked.create);
     if (placements.size() > 1) {
         const AfpAnimation::Placement& update = PlacementAt(clip, placements[1]);
-        authored.update_flags = update.flags;
-        authored.update_extended_flags = update.extended_flags;
+        baked.update_flags = update.flags;
+        baked.update_extended_flags = update.extended_flags;
     } else {
-        authored.update_flags = kUpdateExisting;
+        baked.update_flags = kUpdateExisting;
     }
-
     for (std::size_t i = 1; i < placements.size(); i++) {
         bool carries = false;
         for (const std::string_view property : AnimatableProperties()) {
             carries =
                 carries || ReadProperty(PlacementAt(clip, placements[i]), property).has_value();
         }
-        if (!carries) authored.blank_frames.push_back(placements[i].frame);
+        if (!carries) baked.blank_frames.push_back(placements[i].frame);
     }
+    return baked;
+}
+
+}
+
+Support::Expected<OwnedDepth, std::string> OwnDepth(const AfpAnimation::Animation& animation,
+                                                    std::string_view animation_path, uint16_t depth,
+                                                    uint32_t frame) {
+    const AfpAnimation::Container& clip = animation.root;
+    auto placements = SpanOf(clip, depth, frame);
+    if (!placements) return Support::Unexpected(placements.error());
+
+    const auto [first, last] = SpanAround(clip, depth, frame);
+    OwnedDepth owned;
+    owned.authored.animation = std::string(animation_path);
+    owned.authored.depth = depth;
+    owned.authored.first_frame = first;
+    owned.authored.last_frame = last;
+    owned.baked = BakedOf(clip, *placements);
 
     for (const std::string_view property : AnimatableProperties()) {
         Track track{.property = std::string(property), .keys = {}};
-        for (const Placed& placed : placements) {
+        for (const Placed& placed : *placements) {
             std::optional<std::vector<int64_t>> value =
                 ReadProperty(PlacementAt(clip, placed), property);
             if (!value) continue;
@@ -162,13 +174,20 @@ Support::Expected<AuthoredDepth, std::string> OwnDepth(const AfpAnimation::Anima
                                           .ease = Ease::Hold,
                                           .bezier = {}});
         }
-        if (!track.keys.empty()) authored.tracks.push_back(std::move(track));
+        if (!track.keys.empty()) owned.authored.tracks.push_back(std::move(track));
     }
-    return authored;
+    return owned;
+}
+
+Support::Expected<BakedDepth, std::string> BakedFor(const AfpAnimation::Animation& animation,
+                                                    const AuthoredDepth& authored) {
+    auto placements = SpanOf(animation.root, authored.depth, authored.first_frame);
+    if (!placements) return Support::Unexpected(placements.error());
+    return BakedOf(animation.root, *placements);
 }
 
 Support::Expected<std::vector<std::pair<uint32_t, AfpAnimation::Placement>>, std::string>
-AuthoredPlacements(const AuthoredDepth& authored) {
+AuthoredPlacements(const AuthoredDepth& authored, const BakedDepth& baked) {
     if (authored.first_frame > authored.last_frame)
         return Support::Unexpected(std::string("the authored range runs backwards"));
     for (const Track& track : authored.tracks) {
@@ -185,12 +204,12 @@ AuthoredPlacements(const AuthoredDepth& authored) {
     for (uint32_t frame = authored.first_frame; frame <= authored.last_frame; frame++) {
         AfpAnimation::Placement placement;
         if (frame == authored.first_frame) {
-            placement = authored.create;
+            placement = baked.create;
         } else {
-            placement.flags = authored.update_flags | kUpdateExisting;
-            placement.extended_flags = authored.update_extended_flags;
+            placement.flags = baked.update_flags | kUpdateExisting;
+            placement.extended_flags = baked.update_extended_flags;
             placement.depth = authored.depth;
-            placement.end_frame = authored.create.end_frame;
+            placement.end_frame = baked.create.end_frame;
         }
         bool wrote = false;
         for (const Track& track : authored.tracks) {
@@ -200,8 +219,7 @@ AuthoredPlacements(const AuthoredDepth& authored) {
             if (!written) return Support::Unexpected(written.error());
             wrote = true;
         }
-        const bool blank =
-            std::ranges::find(authored.blank_frames, frame) != authored.blank_frames.end();
+        const bool blank = std::ranges::find(baked.blank_frames, frame) != baked.blank_frames.end();
         if (frame == authored.first_frame || wrote || blank)
             out.emplace_back(frame, std::move(placement));
     }
@@ -209,12 +227,13 @@ AuthoredPlacements(const AuthoredDepth& authored) {
     return out;
 }
 
-Support::Expected<void, std::string> DetachDepth(AfpAnimation::Animation& animation,
-                                                 const AuthoredDepth& authored) {
+Support::Expected<void, std::string> WriteAuthored(AfpAnimation::Animation& animation,
+                                                   const AuthoredDepth& authored,
+                                                   const BakedDepth& baked) {
     AfpAnimation::Container& clip = animation.root;
     if (authored.last_frame >= clip.frames.size())
         return Support::Unexpected("the clip has no frame " + std::to_string(authored.last_frame));
-    auto placements = AuthoredPlacements(authored);
+    auto placements = AuthoredPlacements(authored, baked);
     if (!placements) return Support::Unexpected(placements.error());
 
     const std::vector<Placed> standing =

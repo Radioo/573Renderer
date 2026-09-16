@@ -1,5 +1,6 @@
 #pragma once
 
+#include "document/authored.h"
 #include "support/expected.h"
 
 #include <cstdint>
@@ -16,6 +17,7 @@ inline constexpr std::string_view kProjectManifestName = "project.json";
 struct Project {
     std::string build;
     std::string ifs_path;
+    std::vector<AuthoredDepth> content;
 
     friend bool operator==(const Project&, const Project&) = default;
 };
