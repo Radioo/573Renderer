@@ -6,6 +6,7 @@
 #include "document/authored.h"
 #include "document/history.h"
 #include "document/inspector.h"
+#include "document/playback.h"
 #include "document/project.h"
 #include "formats/afp_animation.h"
 #include "support/expected.h"
@@ -101,6 +102,10 @@ private:
     ReadOnlyRows(const std::vector<Document::Field>& fields);
     void RenderFrame();
     void SeekTo(uint32_t frame);
+    void TogglePlay();
+    void StepPlayback();
+    void StopPlayback();
+    [[nodiscard]] bool Playing() const;
     void ChooseDepth(uint32_t depth);
     void ResizeViewport();
     void Reload();
@@ -117,6 +122,9 @@ private:
     Viewport* viewport_ = nullptr;
     Timeline* timeline_ = nullptr;
     QTimer* resize_timer_ = nullptr;
+    QTimer* play_timer_ = nullptr;
+    QAction* play_action_ = nullptr;
+    QAction* loop_action_ = nullptr;
     QAction* undo_action_ = nullptr;
     QAction* redo_action_ = nullptr;
     QAction* create_project_action_ = nullptr;

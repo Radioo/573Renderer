@@ -762,6 +762,13 @@ target_link_libraries(afp_script_survey_tests PRIVATE Catch2::Catch2WithMain r57
                                                       r573_formats r573_support r573::warnings)
 catch_discover_tests(afp_script_survey_tests DISCOVERY_MODE POST_BUILD PROPERTIES LABELS local)
 
+add_executable(afp_fps_survey_tests
+    tests/local/afp_fps_survey_tests.cpp
+)
+target_link_libraries(afp_fps_survey_tests PRIVATE Catch2::Catch2WithMain r573_document
+                                                   r573_formats r573_support r573::warnings)
+catch_discover_tests(afp_fps_survey_tests DISCOVERY_MODE POST_BUILD PROPERTIES LABELS local)
+
 add_executable(placement_span_survey_tests
     tests/local/placement_span_survey_tests.cpp
 )
@@ -790,6 +797,7 @@ add_executable(document_tests
     tests/document/library_call_tests.cpp
     tests/document/outline_tests.cpp
     tests/document/placement_edit_tests.cpp
+    tests/document/playback_tests.cpp
     tests/document/project_drift_tests.cpp
     tests/document/project_export_tests.cpp
     tests/document/project_tests.cpp

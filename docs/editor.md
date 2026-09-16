@@ -234,6 +234,20 @@ viewport, and is never recorded in the project when the write into the package
 failed. It also means the open document always shows what the project says
 rather than waiting for an export.
 
+`Playback > Play` (the space bar) plays the animation and pauses it, and
+`Playback > Loop` decides whether it wraps at the end; the choice is remembered
+between runs. The timer's interval is `Document::FrameIntervalMs` of the
+animation's own rate, read when playback starts, so an animation authored at 30
+plays at 30 rather than at whatever the editor felt like.
+
+Each tick asks `Document::Advance` for the next frame and seeks there, which
+moves the timeline playhead with it. While playing, `SeekTo` does not rebuild the
+inspector: that path reads the animation back out of the package, which a scrub
+can afford once and playback cannot afford sixty times a second. The inspector
+is refreshed once when playback stops. Playback also stops when the animation
+changes, when a document is opened, when an edit is made and when a seek fails,
+so it can never keep running against something that is no longer there.
+
 `File > Save` writes the encoded document over the opened path and `Save as...`
 asks for a new one. Whether the document is unsaved comes from the history, not
 from the document: the title carries `(unsaved)` while the current position in

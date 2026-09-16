@@ -214,6 +214,20 @@ placement differed so the next fix does not have to be guessed. It is a `local`
 test because it needs the install and takes minutes; `document_tests` covers the
 same operations on clips built in code.
 
+## The frame rate an animation asks for (`local` label)
+
+`afp_fps_survey_tests` (tests/local/afp_fps_survey_tests.cpp) reads every
+animation in the install and reports how its header stores a frame rate and what
+rate that comes to, which is where `Document::FrameRate` got its rule. On IIDX 33
+it reports 29110 animations, every one of them storing the rate as fixed point,
+landing on 60, 30, 29.97 and 15, and none outside a rate anything could play at.
+
+The whole numbers are the point. The scale is a `/ 1024` divisor taken from the
+notes, and a wrong divisor would give 29110 ragged fractions rather than four
+exact rates, so the survey is what turns a documented constant into a checked
+one. Run it against another build before trusting playback there, because the
+count of animations storing a float is the thing that could change.
+
 ## The texture list shape (`local` label)
 
 `texture_list_shape_tests` (tests/local/texture_list_shape_tests.cpp) reads every

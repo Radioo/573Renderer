@@ -170,6 +170,9 @@ void Window::BuildPanels() {
     timeline_area->setWidget(timeline_);
     timeline_area->setWidgetResizable(true);
 
+    play_timer_ = new QTimer(this);
+    connect(play_timer_, &QTimer::timeout, this, &Window::StepPlayback);
+
     resize_timer_ = new QTimer(this);
     resize_timer_->setSingleShot(true);
     resize_timer_->setInterval(kResizeDelayMs);
@@ -210,6 +213,17 @@ void Window::BuildMenus() {
     file->addSeparator();
     QAction* quit = file->addAction(tr("&Quit"));
     connect(quit, &QAction::triggered, this, &QWidget::close);
+
+    QMenu* play = menuBar()->addMenu(tr("&Playback"));
+    play_action_ = play->addAction(tr("&Play"));
+    play_action_->setShortcut(QKeySequence(Qt::Key_Space));
+    play_action_->setShortcutContext(Qt::ApplicationShortcut);
+    connect(play_action_, &QAction::triggered, this, &Window::TogglePlay);
+    loop_action_ = play->addAction(tr("&Loop"));
+    loop_action_->setCheckable(true);
+    loop_action_->setChecked(QSettings().value(kLoopKey, true).toBool());
+    connect(loop_action_, &QAction::toggled, this,
+            [this](bool on) { QSettings().setValue(kLoopKey, on); });
 
     QMenu* edit = menuBar()->addMenu(tr("&Edit"));
     undo_action_ = edit->addAction(tr("&Undo"));
@@ -263,6 +277,7 @@ void Window::ChooseDocument() {
 }
 
 void Window::OpenDocument(const QString& path) {
+    StopPlayback();
     const std::vector<uint8_t> bytes = ReadFileBytes(path);
     if (bytes.empty()) {
         ReportProblem(tr("%1 is empty or cannot be read").arg(path));
@@ -357,6 +372,7 @@ void Window::ShowSelectedEntry() {
 }
 
 void Window::ShowAnimation(const std::string& name) {
+    StopPlayback();
     animation_name_ = name;
     if (!host_.Running()) {
         viewport_->ShowMessage(
@@ -445,6 +461,7 @@ Support::Expected<void, std::string> SetCameraOn(AfpAnimation::Animation& animat
 
 bool Window::EditAnimation(const QString& name, const AnimationChange& change) {
     if (!file_ || animation_path_.empty()) return false;
+    StopPlayback();
     auto animation = file_->ReadAnimation(animation_path_);
     if (!animation) {
         ReportOnce(QString::fromStdString(animation.error()));
@@ -521,6 +538,7 @@ void Window::ApplyFieldEdit(QTableWidgetItem* item) {
 
 void Window::EditDocument(const QString& name, const DocumentChange& change) {
     if (!file_) return;
+    StopPlayback();
     Document::File before = *file_;
     const auto changed = change(*file_);
     if (!changed) {
@@ -805,14 +823,56 @@ void Window::ResizeViewport() {
 
 void Window::SeekTo(uint32_t frame) {
     frame_ = frame;
+    timeline_->SetFrame(frame);
     if (!host_.Running()) return;
     const auto sought = host_.Seek(frame);
     if (!sought) {
         ReportOnce(QString::fromStdString(sought.error()));
+        StopPlayback();
         return;
     }
     RenderFrame();
-    if (depth_) ShowFrame();
+    if (depth_ && !Playing()) ShowFrame();
+}
+
+bool Window::Playing() const {
+    return play_timer_ != nullptr && play_timer_->isActive();
+}
+
+void Window::TogglePlay() {
+    if (Playing()) {
+        StopPlayback();
+        return;
+    }
+    if (!file_ || animation_path_.empty() || frame_count_ == 0) return;
+    const auto animation = file_->ReadAnimation(animation_path_);
+    if (!animation) {
+        ReportOnce(QString::fromStdString(animation.error()));
+        return;
+    }
+    const double rate = Document::FrameRate(*animation);
+    play_timer_->setInterval(Document::FrameIntervalMs(rate));
+    play_timer_->start();
+    play_action_->setText(tr("&Pause"));
+    statusBar()->showMessage(tr("Playing %1 at %2 fps")
+                                 .arg(QString::fromStdString(animation_name_))
+                                 .arg(rate, 0, 'g', 4));
+}
+
+void Window::StepPlayback() {
+    const Document::Step step = Document::Advance(
+        Document::Playback{.frame_count = frame_count_, .looping = loop_action_->isChecked()},
+        frame_);
+    SeekTo(step.frame);
+    if (!step.playing) StopPlayback();
+}
+
+void Window::StopPlayback() {
+    if (play_timer_ == nullptr) return;
+    const bool was_playing = play_timer_->isActive();
+    play_timer_->stop();
+    play_action_->setText(tr("&Play"));
+    if (was_playing) ShowFrame();
 }
 
 void Window::RenderFrame() {

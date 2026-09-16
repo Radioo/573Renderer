@@ -244,3 +244,4 @@ captured. This milestone is the editing itself.
 - `issues/36-keyframe-editing.md` (milestone 8)
 - `issues/37-authored-value-editing.md` (milestone 8)
 - `issues/38-inspector-rows-in-the-document.md` (milestone 8)
+- `issues/39-playback.md` (milestone 8)

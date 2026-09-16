@@ -478,6 +478,32 @@ the baked half can be re-derived; without it the project could not store only
 the authored half. A depth the project does not own is not touched at all,
 because export only ever writes the spans it was given.
 
+## Playback (`document/playback.h`)
+
+The rate an animation plays at is in the animation, not in a setting.
+`FrameRate` reads the header's `fps` as `s32 / 1024` when the header flags carry
+`0x2` and as a float otherwise, and falls back to 60 when the result is not
+finite or is not a rate anything could play at.
+
+That fallback is safe rather than a guess, because the two encodings do not
+overlap in the playable range: a float between 1 and 240 read as fixed point is
+about a million, and a fixed point rate in that range read as a float is a
+denormal near zero. Reading with the wrong rule therefore always lands far
+outside the range instead of producing a plausible wrong rate. Surveyed over
+IIDX 33, all 29110 shipped animations set the flag and land on 60, 30, 29.97 and
+15, which is also what confirms the scale: a wrong divisor would not give whole
+numbers across that many files. The survey is a `local` test so it can be run
+again on another build.
+
+`Advance` is where playback goes next, and it takes the frame count rather than
+looking at what was drawn: the end of an animation is afp's frame count, never a
+comparison of rendered frames. It returns both the next frame and whether
+playback continues, so a caller stops for the same reason the model does, and a
+looping animation of one frame keeps playing rather than stopping on itself.
+
+`FrameIntervalMs` is whole milliseconds and never zero, since a timer given zero
+would spin.
+
 ## Inspector rows (`document/inspector.h`)
 
 `InspectFrame` is the whole of what the inspector shows for a frame: the rows
