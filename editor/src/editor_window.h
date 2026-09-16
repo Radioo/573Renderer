@@ -3,6 +3,7 @@
 #include "editor_host.h"
 
 #include "document/document.h"
+#include "document/authored.h"
 #include "document/history.h"
 #include "document/project.h"
 #include "formats/afp_animation.h"
@@ -61,6 +62,9 @@ private:
     void CreateProject();
     void ChooseProject();
     void CloseProject();
+    void OwnSelectedDepth(uint32_t frame);
+    void DetachSelectedDepth();
+    [[nodiscard]] const Document::AuthoredDepth* AuthoredAt(uint16_t depth, uint32_t frame) const;
     void OpenProject(const QString& folder);
     [[nodiscard]] std::string TargetBuild() const;
     void FillTree();
@@ -104,6 +108,7 @@ private:
     QString document_path_;
     std::optional<Document::Project> project_;
     QString project_folder_;
+    std::vector<Document::AuthoredDepth> authored_;
     std::string package_name_;
     std::string animation_path_;
     std::string animation_name_;

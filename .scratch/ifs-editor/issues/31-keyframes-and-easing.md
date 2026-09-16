@@ -1,6 +1,6 @@
 # Keyframes and easing
 
-Status: ready-for-agent
+Status: resolved
 
 Blocked by: 29.
 

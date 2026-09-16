@@ -198,6 +198,22 @@ be asserting on something the tag does not control. `Core/afp_format.md` in the
 notes repo has the reader, the camera list and which function picks the active
 camera.
 
+## Own and detach against the install (`local` label)
+
+`placement_span_survey_tests` (tests/local/placement_span_survey_tests.cpp)
+walks every animation in the install, and does two jobs. It measures what a
+per-frame placement actually carries over a span, which is what the shape of
+`Document::AuthoredDepth` was decided from, and it then owns every span and
+detaches it again and requires the clip to come back identical.
+
+That second half is the proof behind ticket 30's byte-for-byte line, and it is
+what found the three things own was dropping: the non-presence flag bits, the
+extended flag word and the frames whose update sets no property. Each showed up
+as a count of differing spans, and the test reports which member of the
+placement differed so the next fix does not have to be guessed. It is a `local`
+test because it needs the install and takes minutes; `document_tests` covers the
+same operations on clips built in code.
+
 ## The texture list shape (`local` label)
 
 `texture_list_shape_tests` (tests/local/texture_list_shape_tests.cpp) reads every

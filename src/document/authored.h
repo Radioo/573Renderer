@@ -1,0 +1,40 @@
+#pragma once
+
+#include "document/keyframes.h"
+#include "formats/afp_animation.h"
+#include "support/expected.h"
+
+#include <cstdint>
+#include <optional>
+#include <string>
+#include <utility>
+#include <vector>
+
+namespace Document {
+
+struct AuthoredDepth {
+    std::string animation;
+    uint16_t depth = 0;
+    uint32_t first_frame = 0;
+    uint32_t last_frame = 0;
+    AfpAnimation::Placement create;
+    uint32_t update_flags = 0;
+    std::optional<uint32_t> update_extended_flags;
+    std::vector<uint32_t> blank_frames;
+    std::vector<Track> tracks;
+
+    friend bool operator==(const AuthoredDepth&, const AuthoredDepth&) = default;
+};
+
+[[nodiscard]] Support::Expected<AuthoredDepth, std::string>
+OwnDepth(const AfpAnimation::Animation& animation, std::string_view animation_path, uint16_t depth,
+         uint32_t frame);
+
+[[nodiscard]] Support::Expected<std::vector<std::pair<uint32_t, AfpAnimation::Placement>>,
+                                std::string>
+AuthoredPlacements(const AuthoredDepth& authored);
+
+[[nodiscard]] Support::Expected<void, std::string> DetachDepth(AfpAnimation::Animation& animation,
+                                                               const AuthoredDepth& authored);
+
+}

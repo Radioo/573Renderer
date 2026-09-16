@@ -23,7 +23,7 @@ A value set on a whole frame for one property of an authored depth, from which e
 _Avoid_: key, placement
 
 **Own**:
-To turn one baked depth over a frame range into authored content, with a keyframe on every frame so nothing changes.
+To turn one baked depth over a frame range into authored content, keying every frame a property is set on so nothing changes. Not every frame sets every property: measured over IIDX 33, 70653 spans vary which properties each frame carries, so keying every frame with everything would not be lossless.
 _Avoid_: import, convert, unbake
 
 **Detach**:

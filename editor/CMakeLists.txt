@@ -54,7 +54,9 @@ target_link_libraries(editor_shared
 add_executable(ifs_editor WIN32
     src/editor_main.cpp
     src/editor_window.cpp
+    src/editor_files.cpp
     src/editor_host.cpp
+    src/editor_project.cpp
     src/editor_layout.cpp
     src/editor_timeline.cpp
     src/editor_viewport.cpp

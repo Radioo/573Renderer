@@ -171,6 +171,14 @@ its IFS has actually opened, so a manifest pointing at a file that no longer
 loads leaves the window as it was. Opening a project restarts the preview host
 when one is running, because the target build comes from the project.
 
+With a project open, right-clicking the timeline also offers to let the project
+own the selected depth from the frame under the cursor, and to detach one it
+already owns. An owned depth's placement is shown in the inspector with a row
+saying so and every cell read-only, because its baked data is produced from the
+keyframes rather than edited directly. Closing a project that owns depths asks
+first: the source is held in memory for now and the baked data in the IFS is
+what survives.
+
 `File > Save` writes the encoded document over the opened path and `Save as...`
 asks for a new one. Whether the document is unsaved comes from the history, not
 from the document: the title carries `(unsaved)` while the current position in

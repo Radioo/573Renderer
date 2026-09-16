@@ -12,4 +12,8 @@ Blocked by: 30, 31.
   IFS bytes, proved by a test rather than asserted.
 - Export never disturbs baked data the project does not own, and the round trip
   gate still passes on an untouched install.
+- The project's authored content is written into and read back from the
+  manifest, so what is owned survives closing the editor. Ticket 30 holds it
+  only in memory on purpose, because the persisted form has to agree with what
+  export writes.
 - Tested under `ci` over the model.

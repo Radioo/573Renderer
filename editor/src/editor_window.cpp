@@ -1,10 +1,12 @@
 #include "editor_window.h"
 
+#include "editor_files.h"
 #include "editor_host.h"
 #include "editor_layout.h"
 #include "editor_timeline.h"
 #include "editor_viewport.h"
 
+#include "document/authored.h"
 #include "document/camera_edit.h"
 #include "document/document.h"
 #include "document/outline.h"
@@ -61,10 +63,6 @@ namespace Editor {
 
 namespace {
 
-constexpr const char* kGameDirKey = "game/directory";
-constexpr const char* kDocumentDirKey = "document/directory";
-constexpr const char* kProjectDirKey = "project/directory";
-constexpr const char* kBuildSlug = "iidx33";
 constexpr int kPathRole = Qt::UserRole;
 constexpr int kResizeDelayMs = 120;
 
@@ -121,18 +119,6 @@ QTreeWidgetItem* ItemForPath(QTreeWidget* tree, const QString& path) {
         if ((*it)->data(0, kPathRole).toString() == path) return *it;
     }
     return nullptr;
-}
-
-std::vector<uint8_t> ReadFileBytes(const QString& path) {
-    std::ifstream in(path.toStdWString(), std::ios::binary);
-    return {std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>()};
-}
-
-bool WriteFileBytes(const QString& path, const std::vector<uint8_t>& bytes) {
-    std::ofstream out(path.toStdWString(), std::ios::binary);
-    for (const uint8_t byte : bytes)
-        out.put(static_cast<char>(byte));
-    return out.good();
 }
 
 }
@@ -268,88 +254,6 @@ void Window::ChooseDocument() {
     OpenDocument(path);
 }
 
-std::string Window::TargetBuild() const {
-    if (project_ && !project_->build.empty()) return project_->build;
-    return std::string(kBuildSlug);
-}
-
-void Window::CreateProject() {
-    if (!file_ || document_path_.isEmpty()) {
-        ReportProblem(tr("Open an IFS before making a project for it"));
-        return;
-    }
-    QSettings settings;
-    const QString start = settings.value(kProjectDirKey).toString();
-    const QString folder =
-        QFileDialog::getExistingDirectory(this, tr("Choose a folder for the project"), start);
-    if (folder.isEmpty()) return;
-    const QString manifest =
-        QString::fromStdString(Document::ProjectManifestPath(folder.toStdString()));
-    if (QFileInfo::exists(manifest)) {
-        ReportProblem(tr("%1 already holds a project").arg(folder));
-        return;
-    }
-    Document::Project project{
-        .build = TargetBuild(),
-        .ifs_path = Document::StoredIfsPath(
-            folder.toStdString(), QFileInfo(document_path_).absoluteFilePath().toStdString())};
-    if (!WriteFileBytes(manifest, Document::WriteProject(project))) {
-        ReportProblem(tr("%1 could not be written").arg(manifest));
-        return;
-    }
-    settings.setValue(kProjectDirKey, folder);
-    project_ = std::move(project);
-    project_folder_ = folder;
-    RefreshState();
-    statusBar()->showMessage(tr("Project made in %1").arg(folder));
-}
-
-void Window::ChooseProject() {
-    QSettings settings;
-    const QString start = settings.value(kProjectDirKey).toString();
-    const QString folder = QFileDialog::getExistingDirectory(this, tr("Open a project"), start);
-    if (folder.isEmpty()) return;
-    OpenProject(folder);
-}
-
-void Window::OpenProject(const QString& folder) {
-    const QString manifest =
-        QString::fromStdString(Document::ProjectManifestPath(folder.toStdString()));
-    const std::vector<uint8_t> bytes = ReadFileBytes(manifest);
-    if (bytes.empty()) {
-        ReportProblem(tr("%1 holds no project").arg(folder));
-        return;
-    }
-    auto project = Document::ReadProject(bytes);
-    if (!project) {
-        ReportProblem(QString::fromStdString(project.error()));
-        return;
-    }
-    const QString ifs =
-        QString::fromStdString(Document::ResolvedIfsPath(folder.toStdString(), *project));
-    if (!QFileInfo::exists(ifs)) {
-        ReportProblem(tr("The project names %1, which is not there").arg(ifs));
-        return;
-    }
-    if (!OfferToSave()) return;
-    OpenDocument(ifs);
-    if (QFileInfo(document_path_).absoluteFilePath() != QFileInfo(ifs).absoluteFilePath()) return;
-    QSettings().setValue(kProjectDirKey, folder);
-    project_ = std::move(*project);
-    project_folder_ = folder;
-    if (host_.Running()) StartHost(QSettings().value(kGameDirKey).toString());
-    RefreshState();
-    statusBar()->showMessage(tr("Project open in %1").arg(folder));
-}
-
-void Window::CloseProject() {
-    if (!project_) return;
-    project_.reset();
-    project_folder_.clear();
-    RefreshState();
-    statusBar()->showMessage(tr("Project closed. The IFS is open on its own."));
-}
-
 void Window::OpenDocument(const QString& path) {
     const std::vector<uint8_t> bytes = ReadFileBytes(path);
     if (bytes.empty()) {
@@ -476,6 +380,14 @@ void Window::ShowFrame() {
         return;
     }
     std::vector<Document::Field> fields;
+    const Document::AuthoredDepth* owned =
+        depth_ ? AuthoredAt(static_cast<uint16_t>(*depth_), frame_) : nullptr;
+    if (owned != nullptr) {
+        fields.push_back(Document::Field{.name = "Owned by the project",
+                                         .value = "frames " + std::to_string(owned->first_frame) +
+                                                  " to " + std::to_string(owned->last_frame) +
+                                                  ", edited through its keyframes"});
+    }
     if (depth_) {
         const auto tag =
             Document::LivePlacementTag(animation->root, static_cast<uint16_t>(*depth_), frame_);
@@ -502,7 +414,7 @@ void Window::ShowFrame() {
             fields.insert(fields.end(), shot.begin(), shot.end());
         }
     }
-    FillInspector(fields, true);
+    FillInspector(fields, owned == nullptr);
 }
 
 namespace {
@@ -706,6 +618,14 @@ void Window::ShowTimelineMenu(const QPoint& where, uint32_t frame, const QString
     QAction* remove_depth =
         depth_ ? menu.addAction(tr("Remove depth %1 here").arg(*depth_)) : nullptr;
     menu.addSeparator();
+    const bool authored =
+        depth_ != std::nullopt && AuthoredAt(static_cast<uint16_t>(*depth_), frame) != nullptr;
+    QAction* own = (project_ && depth_ && !authored)
+                       ? menu.addAction(tr("Let the project own depth %1 from here").arg(*depth_))
+                       : nullptr;
+    QAction* detach =
+        authored ? menu.addAction(tr("Detach depth %1 back to baked data").arg(*depth_)) : nullptr;
+    menu.addSeparator();
     const auto animation = file_->ReadAnimation(animation_path_);
     const bool has_camera = animation && Document::CameraTag(animation->root, frame).has_value();
     QAction* add_camera =
@@ -715,6 +635,14 @@ void Window::ShowTimelineMenu(const QPoint& where, uint32_t frame, const QString
     const QAction* chosen = menu.exec(where);
     if (chosen == nullptr) return;
 
+    if (chosen == own) {
+        OwnSelectedDepth(frame);
+        return;
+    }
+    if (chosen == detach) {
+        DetachSelectedDepth();
+        return;
+    }
     if (chosen == add_camera) {
         bool answered = false;
         const int id = QInputDialog::getInt(this, tr("Add a camera"), tr("Camera"), 0, 0,

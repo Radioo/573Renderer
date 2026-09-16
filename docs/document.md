@@ -295,6 +295,69 @@ The target build comes from the project when a document has one. Without a
 project the editor uses the build it was compiled against, because nothing in
 the editor decides a build yet.
 
+## Keyframes (`document/keyframes.h`)
+
+A `Track` is one property of an authored depth: a list of keyframes, each on a
+whole frame, each holding the property's numbers and the ease that reaches the
+next one. Values are `int64_t` rather than the field's own type, because a
+packed colour is a `uint32_t` and would come back negative through an `int32_t`;
+the range check happens when the value is written back into a placement, not
+when it is keyed.
+
+`SampleTrack` is the only thing that turns keyframes into numbers, so export and
+anything drawing a curve cannot disagree. Before the first key and after the
+last it holds that key's value. Between two keys the ease decides:
+
+- `hold` keeps the earlier value until the next key, which is what afp does
+  anyway when a frame does not set a property;
+- `linear` walks each component evenly;
+- `bezier` is a cubic timing function with control points `(x1,y1)` and
+  `(x2,y2)` and endpoints fixed at `(0,0)` and `(1,1)`, the same shape CSS
+  `cubic-bezier` uses. The parameter is found by exactly 40 bisection steps, a
+  fixed count with no early exit, so the result is the same number everywhere,
+  which is what ADR 0006's deterministic export needs.
+
+Eases are the editor's own idea, not the format's: the game never sees one,
+because export samples them into per-frame placements. `Placement::curves` is a
+different thing that afp-core reads itself and is not touched here.
+
+A sampled component is rounded away from zero, so a value halfway between two
+integers moves rather than sticking. `x1` and `x2` are refused outside 0 to 1
+because the timing function stops being a function of time otherwise; `y1` and
+`y2` are free, which is what lets an ease overshoot.
+
+## Own and detach (`document/authored.h`)
+
+`OwnDepth` takes the span of a depth around a frame and turns it into an
+`AuthoredDepth`: the create placement with its animatable properties cleared,
+and one `Track` per property, keyed on exactly the frames that set it, every
+ease `hold`. `DetachDepth` is the inverse, and `AuthoredPlacements` is the one
+function both it and export use to turn keyframes back into placements.
+
+**Keying only the frames a property is set on is the measured shape of the
+data, not a simplification.** Over IIDX 33, 234363 spans set the same properties
+on every frame but 70653 do not, so a keyframe on every frame carrying
+everything would rewrite a quarter of the install. A property is written on a
+frame when that frame has a key, or when the ease reaching it is not `hold`,
+which is what makes an ease produce the per-frame placements the game needs
+while an untouched depth writes back exactly the frames it came from.
+
+Three things own keeps that look like baked detail and are: the non-presence
+flag bits every update carries, the extended flag word, and the frames whose
+update sets no property at all. All three were found by running own and detach
+over the whole install and comparing: without the flags 41222 spans came back
+different, and without the blank frames 16802 did. IIDX 33 has 529434 updates
+that set nothing, so dropping them is not a corner case.
+
+Own refuses rather than losing anything. A span whose later frames change a
+character, a name, filters, curves or anything else a keyframe cannot hold is
+refused and says which; so is a span placed twice, one whose updates disagree on
+their flags, and one whose frames end somewhere other than its first frame does.
+Of 211152 spans offered, 187191 are owned and all 187191 detach byte for byte;
+the 23961 refusals are 22076 with disagreeing update flags, 1809 changing
+filters and 76 changing curves. Why those updates carry different flags inside
+one span is UNRESOLVED and is why own refuses them instead of guessing.
+
 ## Entry edits (`document/entry_edit.h`)
 
 `AddEntry(archive, directory, logical_name, bytes)` never invents a name: the
