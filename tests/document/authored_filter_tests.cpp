@@ -101,11 +101,21 @@ TEST_CASE("A depth whose updates leave its filters alone keeps them on the creat
     CHECK(written == animation);
 }
 
-TEST_CASE("A depth whose filters change shape is refused") {
+TEST_CASE("A depth whose filters change shape is owned and written back exactly") {
     std::vector<AfpAnimation::Filter> two = Tint(1);
     two.push_back(two.front());
     const AfpAnimation::Animation animation = Filtered(two);
     const auto owned = Document::OwnDepth(animation, kRoot, "afp/a", kDepth, 0);
-    REQUIRE_FALSE(owned.has_value());
-    CHECK(owned.error().find("shape of its Filters") != std::string::npos);
+    const std::string error = owned.has_value() ? std::string() : owned.error();
+    INFO(error);
+    REQUIRE(owned.has_value());
+    if (!owned) return;
+    const Document::Track* filters = TrackFor(owned->authored, "Filters");
+    REQUIRE(filters != nullptr);
+    REQUIRE(filters->keys.size() == 2);
+    CHECK(filters->keys[0].value.size() != filters->keys[1].value.size());
+
+    AfpAnimation::Animation written = animation;
+    REQUIRE(Document::WriteAuthored(written, owned->authored, owned->baked).has_value());
+    CHECK(written == animation);
 }

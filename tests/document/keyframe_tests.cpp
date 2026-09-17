@@ -211,3 +211,22 @@ TEST_CASE("Every ease preset is a curve a keyframe accepts") {
               1e-9);
     }
 }
+
+TEST_CASE("A stepped track's keyframes may hold different numbers of values") {
+    Document::Track filters{.property = "Filters", .keys = {Key(0, {0})}};
+    filters.keys[0].ease = Document::Ease::Hold;
+    Document::Keyframe two = Key(4, {1, 0, 6, 0, 0, 0});
+    two.ease = Document::Ease::Hold;
+    REQUIRE(Document::AddKeyframe(filters, two).has_value());
+    CHECK(Document::CheckTrack(filters).has_value());
+    CHECK(Sampled(filters, 3) == std::vector<int64_t>{0});
+    CHECK(Sampled(filters, 4) == std::vector<int64_t>{1, 0, 6, 0, 0, 0});
+    REQUIRE(Document::SetKeyframeValue(filters, 0, {1, 2, 9}).has_value());
+    CHECK(Sampled(filters, 0) == std::vector<int64_t>{1, 2, 9});
+
+    Document::Track scale{.property = "Scale", .keys = {Key(0, {1024, 1024})}};
+    CHECK_FALSE(Document::AddKeyframe(scale, Key(4, {1024})).has_value());
+    CHECK_FALSE(Document::SetKeyframeValue(scale, 0, {1024}).has_value());
+    scale.keys.push_back(Key(4, {1024}));
+    CHECK_FALSE(Document::CheckTrack(scale).has_value());
+}

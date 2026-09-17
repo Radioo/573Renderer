@@ -27,6 +27,9 @@ constexpr std::string_view kPrefix = "Filter ";
 constexpr std::string_view kHsv = "HSV";
 constexpr std::size_t kRowWidth = 5;
 constexpr std::array<std::string_view, 4> kRows{"red", "green", "blue", "alpha"};
+constexpr std::array<uint8_t, 4> kMatrixHead{6, 0, 0, 0};
+constexpr std::array<uint8_t, 4> kHsvHead{6, 1, 0x64, 0};
+constexpr int32_t kOne = 65536;
 
 struct FieldName {
     std::size_t filter = 0;
@@ -155,6 +158,31 @@ Support::Expected<void, std::string> SetFilterField(std::vector<AfpAnimation::Fi
     auto set = row ? SetRow(*target, *row, value) : SetHsv(*target, value);
     if (!set) return Support::Unexpected(set.error());
     filters = std::move(edited);
+    return {};
+}
+
+std::optional<std::size_t> FilterNumberOf(std::string_view name) {
+    const std::optional<FieldName> parsed = Parse(name);
+    if (!parsed) return std::nullopt;
+    return parsed->filter + 1;
+}
+
+void AddFilter(std::vector<AfpAnimation::Filter>& filters, NewFilter kind) {
+    AfpAnimation::ColourMatrixFilter matrix;
+    matrix.head = kind == NewFilter::Hsv ? kHsvHead : kMatrixHead;
+    for (std::size_t i = 0; i < kRows.size(); i++)
+        matrix.matrix.at((i * kRowWidth) + i) = kOne;
+    if (kind == NewFilter::Hsv) matrix.hsv = AfpAnimation::Hsv{};
+    filters.emplace_back(matrix);
+}
+
+Support::Expected<void, std::string> RemoveFilter(std::vector<AfpAnimation::Filter>& filters,
+                                                  std::string_view name) {
+    const std::optional<std::size_t> number = FilterNumberOf(name);
+    if (!number) return Support::Unexpected(std::string(name) + " names no filter");
+    if (*number > filters.size())
+        return Support::Unexpected("there is no filter " + std::to_string(*number));
+    filters.erase(filters.begin() + static_cast<std::ptrdiff_t>(*number - 1));
     return {};
 }
 

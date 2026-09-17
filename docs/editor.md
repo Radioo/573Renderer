@@ -292,7 +292,10 @@ step with the handles.
 With a keyframe selected the inspector carries three rows for it above the
 placement fields: which property and frame it is, its value, and the ease it
 leaves on. A Filters keyframe shows its filters as rows instead of the value,
-and an edit to one of them goes through `Window::ApplyKeyFilterEdit`. The value row is the one editable cell an owned depth has, because
+and an edit to one of them goes through `Window::ApplyKeyFilterEdit`. Right-clicking
+the inspector with a Filters keyframe selected offers to add a colour matrix or
+an HSV filter, and, on a filter's rows, to remove that filter
+(`Window::ShowInspectorMenu`). The value row is the one editable cell an owned depth has, because
 the placement rows below it are produced from the keyframes rather than edited.
 
 What those rows are is `Document::InspectFrame`, not window code: `ShowFrame`

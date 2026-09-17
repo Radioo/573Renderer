@@ -185,3 +185,18 @@ TEST_CASE("Selected keyframes take one ease together, or none does") {
                     .has_value());
     CHECK(depth == before);
 }
+
+TEST_CASE("A pasted filter keyframe replaces one that holds a different number of filters") {
+    Document::AuthoredDepth depth = Depth();
+    depth.tracks.push_back(
+        Document::Track{.property = "Filters",
+                        .keys = {Key(0, {0}, Document::Ease::Hold),
+                                 Key(4, {1, 0, 6, 0, 0, 0}, Document::Ease::Hold)}});
+    const auto clip = Document::CopyKeys(depth, {Ref("Filters", 0)});
+    REQUIRE(clip.has_value());
+    if (!clip) return;
+    const auto pasted = Document::PasteKeys(depth, {}, *clip, 4);
+    INFO(Error(pasted));
+    REQUIRE(pasted.has_value());
+    CHECK(depth.tracks.back().keys[1].value == std::vector<int64_t>{0});
+}

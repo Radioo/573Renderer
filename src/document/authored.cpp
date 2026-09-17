@@ -142,24 +142,6 @@ bool HeldUntilUpdated(std::string_view property) {
     return std::ranges::find(kHeldUntilUpdated, property) != kHeldUntilUpdated.end();
 }
 
-Support::Expected<void, std::string> CheckSteadyShape(const AfpAnimation::Container& clip,
-                                                      const std::vector<Placed>& placements) {
-    for (const std::string_view property : kHeldUntilUpdated) {
-        std::optional<std::size_t> size;
-        for (const Placed& placed : placements) {
-            const auto value = ReadProperty(PlacementAt(clip, placed), property);
-            if (!value) continue;
-            if (size && *size != value->size()) {
-                return Support::Unexpected("frame " + std::to_string(placed.frame) +
-                                           " changes the shape of its " + std::string(property) +
-                                           ", which a keyframe track cannot hold");
-            }
-            size = value->size();
-        }
-    }
-    return {};
-}
-
 bool Tracked(const AfpAnimation::Container& clip, const std::vector<Placed>& placements,
              std::string_view property) {
     if (HeldUntilUpdated(property) && !UpdatesCarry(clip, placements, property)) return false;
@@ -251,8 +233,6 @@ Support::Expected<std::vector<Placed>, std::string> SpanOf(const AfpAnimation::C
     }
     auto shaped = CheckSpan(clip, depth, placements);
     if (!shaped) return Support::Unexpected(shaped.error());
-    auto steady = CheckSteadyShape(clip, placements);
-    if (!steady) return Support::Unexpected(steady.error());
     return placements;
 }
 

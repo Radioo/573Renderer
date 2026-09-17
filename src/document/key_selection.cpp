@@ -66,7 +66,8 @@ Support::Expected<void, std::string> PasteTrack(AuthoredDepth& authored, const B
         placed.frame = *at;
         const auto existing = std::ranges::find(track->keys, *at, &Keyframe::frame);
         if (existing != track->keys.end()) {
-            if (existing->value.size() != placed.value.size()) {
+            if (!PropertyIsStepped(track->property) &&
+                existing->value.size() != placed.value.size()) {
                 return Support::Unexpected("the track for " + track->property + " keys " +
                                            std::to_string(existing->value.size()) +
                                            " values, not " + std::to_string(placed.value.size()));

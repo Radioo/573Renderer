@@ -550,10 +550,12 @@ followed by its fields: the 4 head bytes, 20 matrix values and an HSV presence
 flag with its three values for a colour matrix; the 6 head bytes, the 4 unread
 bytes and the length-prefixed table for a lookup; the length-prefixed bytes
 otherwise. `FiltersFrom` reads that back to the same filters and refuses numbers
-that do not follow the layout. Two lists with the same kinds of filter and the
-same table lengths take the same count of numbers, which is what a track needs;
-a span whose updates change that count is refused (`changes the shape of its
-Filters`).
+that do not follow the layout. A list with other kinds of filter, or another
+table length, takes a different count of numbers. Every other track keys the
+same count on every keyframe, and `CheckTrack`, `AddKeyframe`,
+`SetKeyframeValue` and `PasteKeys` hold it to that, but a stepped track is
+exempt: it never blends two keyframes, so each keyframe can hold its own list.
+That is what lets own take a span whose updates change the list itself.
 
 ## Atlases (`document/atlas.h`, `document/atlas_write.h`)
 
@@ -900,8 +902,20 @@ A baked placement lists these rows among its fields and `SetPlacementField`
 takes them. For an owned depth, a selected Filters keyframe shows them in place
 of the raw keyframe value, marked `EditTarget::KeyFilter`, and
 `SetKeyFilterFieldAt` decodes the keyframe, applies the edit and stores it back.
-An edit never changes a filter's kind or how many numbers the list takes, so
-the track stays one shape.
+
+A keyframe's list can also grow and shrink. `AddFilter` appends a filter that
+changes nothing, in one of the two layouts IIDX 33 ships (`NewFilter`): a
+colour matrix with head bytes `06 00 00 00`, or an HSV filter with `06 01 64 00`
+and hue, saturation and value 0. Both carry the identity matrix (65536 on the
+diagonal); afp-core reads only the HSV values from the second layout.
+`RemoveFilter` drops the filter a row names, whichever of its rows that is
+(`FilterNumberOf` reads the number from the name). No lookup filter is offered,
+because what its table means is not known. `AddKeyFilterAt` and
+`RemoveKeyFilterAt` do this to a Filters keyframe, down to an empty list. An
+empty list is safe to write: afp-core's filter list parser returns at once for a
+count of 0, the placement parser still swaps the object's list for the empty
+one, and the draw path applies filters only when the list's count is above 0,
+so an empty list draws like no filters at all.
 
 ## Editing keyframes (`document/keyframe_edit.h`)
 

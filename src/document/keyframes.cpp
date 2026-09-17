@@ -1,5 +1,6 @@
 #include "document/keyframes.h"
 
+#include "document/placement_values.h"
 #include "support/expected.h"
 
 #include <algorithm>
@@ -16,6 +17,10 @@
 namespace Document {
 
 namespace {
+
+bool FixedArity(const Track& track) {
+    return !PropertyIsStepped(track.property);
+}
 
 constexpr int kSolveSteps = 40;
 
@@ -110,7 +115,7 @@ Support::Expected<void, std::string> CheckTrack(const Track& track) {
     if (arity == 0) return Support::Unexpected("the track for " + track.property + " keys nothing");
     for (std::size_t i = 0; i < track.keys.size(); i++) {
         const Keyframe& key = track.keys[i];
-        if (key.value.size() != arity) {
+        if (FixedArity(track) && key.value.size() != arity) {
             return Support::Unexpected("the keyframes of " + track.property +
                                        " do not all hold the same number of values");
         }
@@ -150,7 +155,8 @@ std::vector<int64_t> SampleTrack(const Track& track, uint32_t frame) {
 Support::Expected<void, std::string> AddKeyframe(Track& track, const Keyframe& key) {
     if (key.value.empty())
         return Support::Unexpected(std::string("a keyframe holds at least one value"));
-    if (!track.keys.empty() && key.value.size() != track.keys.front().value.size()) {
+    if (FixedArity(track) && !track.keys.empty() &&
+        key.value.size() != track.keys.front().value.size()) {
         return Support::Unexpected("the track for " + track.property + " keys " +
                                    std::to_string(track.keys.front().value.size()) +
                                    " values, not " + std::to_string(key.value.size()));
@@ -171,7 +177,9 @@ Support::Expected<void, std::string> SetKeyframeValue(Track& track, uint32_t fra
     const auto found = Find(track, frame);
     if (found == track.keys.end())
         return Support::Unexpected("frame " + std::to_string(frame) + " holds no keyframe");
-    if (value.size() != found->value.size()) {
+    if (value.empty())
+        return Support::Unexpected(std::string("a keyframe holds at least one value"));
+    if (FixedArity(track) && value.size() != found->value.size()) {
         return Support::Unexpected("the track for " + track.property + " keys " +
                                    std::to_string(found->value.size()) + " values, not " +
                                    std::to_string(value.size()));

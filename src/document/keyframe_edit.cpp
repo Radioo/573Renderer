@@ -5,6 +5,7 @@
 #include "document/filter_fields.h"
 #include "document/filter_values.h"
 #include "document/keyframes.h"
+#include "formats/afp_animation.h"
 #include "support/expected.h"
 
 #include <algorithm>
@@ -35,6 +36,21 @@ Support::Expected<void, std::string> InRange(const AuthoredDepth& authored, uint
                                    " is outside the frames this depth was owned over");
     }
     return {};
+}
+
+template <typename Edit>
+Support::Expected<void, std::string> EditKeyFilters(AuthoredDepth& authored, uint32_t frame,
+                                                    const Edit& edit) {
+    auto track = TrackOf(authored, kFilters);
+    if (!track) return Support::Unexpected(track.error());
+    const auto key = std::ranges::find((*track)->keys, frame, &Keyframe::frame);
+    if (key == (*track)->keys.end())
+        return Support::Unexpected("frame " + std::to_string(frame) + " holds no keyframe");
+    auto filters = FiltersFrom(key->value);
+    if (!filters) return Support::Unexpected(filters.error());
+    auto edited = edit(*filters);
+    if (!edited) return Support::Unexpected(edited.error());
+    return SetKeyframeValue(**track, frame, FilterNumbers(*filters));
 }
 
 Ease EaseReaching(const Track& track, uint32_t frame) {
@@ -90,15 +106,24 @@ Support::Expected<void, std::string> SetKeyValueAt(AuthoredDepth& authored,
 Support::Expected<void, std::string> SetKeyFilterFieldAt(AuthoredDepth& authored, uint32_t frame,
                                                          std::string_view field,
                                                          std::string_view value) {
-    auto track = TrackOf(authored, kFilters);
-    if (!track) return Support::Unexpected(track.error());
-    const std::optional<Keyframe> key = KeyAt(authored, kFilters, frame);
-    if (!key) return Support::Unexpected("frame " + std::to_string(frame) + " holds no keyframe");
-    auto filters = FiltersFrom(key->value);
-    if (!filters) return Support::Unexpected(filters.error());
-    auto set = SetFilterField(*filters, field, value);
-    if (!set) return Support::Unexpected(set.error());
-    return SetKeyframeValue(**track, frame, FilterNumbers(*filters));
+    return EditKeyFilters(authored, frame, [&](std::vector<AfpAnimation::Filter>& filters) {
+        return SetFilterField(filters, field, value);
+    });
+}
+
+Support::Expected<void, std::string> AddKeyFilterAt(AuthoredDepth& authored, uint32_t frame,
+                                                    NewFilter kind) {
+    return EditKeyFilters(authored, frame, [&](std::vector<AfpAnimation::Filter>& filters) {
+        AddFilter(filters, kind);
+        return Support::Expected<void, std::string>();
+    });
+}
+
+Support::Expected<void, std::string> RemoveKeyFilterAt(AuthoredDepth& authored, uint32_t frame,
+                                                       std::string_view field) {
+    return EditKeyFilters(authored, frame, [&](std::vector<AfpAnimation::Filter>& filters) {
+        return RemoveFilter(filters, field);
+    });
 }
 
 std::optional<Keyframe> KeyAt(const AuthoredDepth& authored, std::string_view property,

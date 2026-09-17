@@ -16,6 +16,7 @@
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <variant>
 #include <vector>
 
 namespace {
@@ -144,4 +145,68 @@ TEST_CASE("A filter keyframe shows its filters and takes an edit to one row") {
     CHECK(MatrixOf(*decoded).matrix[0] == 7);
     CHECK_FALSE(
         Document::SetKeyFilterFieldAt(depth, 3, "Filter 1 red", "7, 7, 7, 7, 7").has_value());
+}
+
+TEST_CASE("A new filter is a colour matrix or an HSV filter that changes nothing") {
+    std::vector<AfpAnimation::Filter> filters;
+    Document::AddFilter(filters, Document::NewFilter::ColourMatrix);
+    Document::AddFilter(filters, Document::NewFilter::Hsv);
+    REQUIRE(filters.size() == 2);
+    const auto& plain = std::get<AfpAnimation::ColourMatrixFilter>(filters[0]);
+    const auto& hsv = std::get<AfpAnimation::ColourMatrixFilter>(filters[1]);
+    CHECK(plain.head == std::array<uint8_t, 4>{6, 0, 0, 0});
+    CHECK_FALSE(plain.hsv.has_value());
+    CHECK(hsv.head == std::array<uint8_t, 4>{6, 1, 0x64, 0});
+    CHECK(hsv.hsv == AfpAnimation::Hsv{.hue = 0, .saturation = 0, .value = 0});
+    for (const auto* matrix : {&plain, &hsv}) {
+        for (std::size_t i = 0; i < matrix->matrix.size(); i++)
+            CHECK(matrix->matrix.at(i) == (i % 6 == 0 && i < 20 ? 65536 : 0));
+    }
+    const auto decoded = Document::FiltersFrom(Document::FilterNumbers(filters));
+    REQUIRE(decoded.has_value());
+    if (!decoded) return;
+    CHECK(*decoded == filters);
+}
+
+TEST_CASE("A filter is removed by the name of any of its rows") {
+    std::vector<AfpAnimation::Filter> filters = Filters();
+    CHECK(Document::FilterNumberOf("Filter 12 HSV") == std::size_t{12});
+    CHECK_FALSE(Document::FilterNumberOf("Filter 0").has_value());
+    CHECK_FALSE(Document::FilterNumberOf("Filters").has_value());
+    REQUIRE(Document::RemoveFilter(filters, "Filter 1 red").has_value());
+    REQUIRE(filters.size() == 1);
+    CHECK(std::holds_alternative<AfpAnimation::LookupFilter>(filters[0]));
+    CHECK_FALSE(Document::RemoveFilter(filters, "Filter 2").has_value());
+    CHECK_FALSE(Document::RemoveFilter(filters, "Blend").has_value());
+    CHECK(filters.size() == 1);
+}
+
+TEST_CASE("A filter keyframe gains and loses filters down to none") {
+    Document::AuthoredDepth depth{
+        .animation = "afp/a",
+        .depth = 1,
+        .first_frame = 0,
+        .last_frame = 4,
+        .tracks = {Document::Track{
+            .property = "Filters",
+            .keys = {Document::Keyframe{.frame = 0,
+                                        .value = Document::FilterNumbers(Filters()),
+                                        .ease = Document::Ease::Hold,
+                                        .bezier = {}}}}},
+        .script = std::nullopt,
+        .clip = {}};
+    const auto Count = [&depth] {
+        const auto decoded = Document::FiltersFrom(depth.tracks[0].keys[0].value);
+        return decoded ? decoded->size() : std::size_t{0};
+    };
+    REQUIRE(Document::AddKeyFilterAt(depth, 0, Document::NewFilter::ColourMatrix).has_value());
+    CHECK(Count() == 3);
+    CHECK_FALSE(Document::AddKeyFilterAt(depth, 2, Document::NewFilter::Hsv).has_value());
+    REQUIRE(Document::RemoveKeyFilterAt(depth, 0, "Filter 1").has_value());
+    REQUIRE(Document::RemoveKeyFilterAt(depth, 0, "Filter 1").has_value());
+    CHECK(Count() == 1);
+    REQUIRE(Document::RemoveKeyFilterAt(depth, 0, "Filter 1").has_value());
+    CHECK(Count() == 0);
+    CHECK(depth.tracks[0].keys[0].value == std::vector<int64_t>{0});
+    CHECK_FALSE(Document::RemoveKeyFilterAt(depth, 0, "Filter 1").has_value());
 }

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "document/authored.h"
+#include "document/filter_fields.h"
 #include "document/keyframes.h"
 #include "support/expected.h"
 
@@ -26,6 +27,12 @@ RemoveKeyAt(AuthoredDepth& authored, std::string_view property, uint32_t frame);
                                                                        uint32_t frame,
                                                                        std::string_view field,
                                                                        std::string_view value);
+
+[[nodiscard]] Support::Expected<void, std::string> AddKeyFilterAt(AuthoredDepth& authored,
+                                                                  uint32_t frame, NewFilter kind);
+
+[[nodiscard]] Support::Expected<void, std::string>
+RemoveKeyFilterAt(AuthoredDepth& authored, uint32_t frame, std::string_view field);
 
 [[nodiscard]] std::optional<Keyframe> KeyAt(const AuthoredDepth& authored,
                                             std::string_view property, uint32_t frame);

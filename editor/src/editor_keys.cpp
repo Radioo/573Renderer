@@ -4,6 +4,7 @@
 #include "editor_timeline.h"
 
 #include "document/authored.h"
+#include "document/filter_fields.h"
 #include "document/key_selection.h"
 #include "document/keyframe_edit.h"
 #include "document/keyframes.h"
@@ -16,6 +17,8 @@
 #include <QMenu>
 #include <QPoint>
 #include <QString>
+#include <QTableWidget>
+#include <QTableWidgetItem>
 
 #include <algorithm>
 #include <cstddef>
@@ -95,6 +98,34 @@ bool Window::ApplyKeyFilterEdit(const QString& field, const QString& value) {
                         [&name, frame, &text](Document::AuthoredDepth& owned) {
                             return Document::SetKeyFilterFieldAt(owned, frame, name, text);
                         });
+}
+
+void Window::ShowInspectorMenu(const QPoint& where) {
+    if (!key_frame_ || key_property_ != QStringLiteral("Filters")) return;
+    const uint32_t frame = *key_frame_;
+    QMenu menu(this);
+    const auto add = [this, frame](Document::NewFilter kind) {
+        EditAuthored(tr("Add a filter on frame %1").arg(frame),
+                     [frame, kind](Document::AuthoredDepth& owned) {
+                         return Document::AddKeyFilterAt(owned, frame, kind);
+                     });
+    };
+    menu.addAction(tr("Add colour matrix filter"), this,
+                   [add] { add(Document::NewFilter::ColourMatrix); });
+    menu.addAction(tr("Add HSV filter"), this, [add] { add(Document::NewFilter::Hsv); });
+    const QTableWidgetItem* row = inspector_->itemAt(where);
+    const QTableWidgetItem* name = row == nullptr ? nullptr : inspector_->item(row->row(), 0);
+    const std::string field = name == nullptr ? std::string() : name->text().toStdString();
+    const std::optional<std::size_t> number = Document::FilterNumberOf(field);
+    if (number) {
+        menu.addAction(tr("Remove filter %1").arg(*number), this, [this, frame, field, number] {
+            EditAuthored(tr("Remove filter %1 on frame %2").arg(*number).arg(frame),
+                         [frame, &field](Document::AuthoredDepth& owned) {
+                             return Document::RemoveKeyFilterAt(owned, frame, field);
+                         });
+        });
+    }
+    menu.exec(inspector_->viewport()->mapToGlobal(where));
 }
 
 void Window::StartAnimating() {

@@ -160,6 +160,9 @@ void Window::BuildPanels() {
     inspector_->horizontalHeader()->setStretchLastSection(true);
     inspector_->setSelectionBehavior(QAbstractItemView::SelectRows);
     connect(inspector_, &QTableWidget::itemChanged, this, &Window::ApplyFieldEdit);
+    inspector_->setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(inspector_, &QTableWidget::customContextMenuRequested, this,
+            [this](const QPoint& at) { ShowInspectorMenu(at); });
 
     timeline_ = new Timeline;
     connect(timeline_, &Timeline::FrameChosen, this, &Window::SeekTo);
