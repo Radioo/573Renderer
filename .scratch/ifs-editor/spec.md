@@ -249,3 +249,5 @@ captured. This milestone is the editing itself.
 - `issues/41-sprite-structure-labels-camera.md` (milestone 8)
 - `issues/42-authored-sprite-content.md` (milestone 8)
 - `issues/43-isolated-sprite-preview.md` (milestone 8)
+- `issues/44-control-bits.md` (milestone 8)
+- `issues/45-group-resets.md` (milestone 8)

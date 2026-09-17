@@ -2,6 +2,7 @@
 
 #include "document/authored.h"
 #include "document/clip.h"
+#include "document/placement_effect.h"
 #include "document/document.h"
 #include "document/outline.h"
 #include "document/timeline.h"
@@ -31,6 +32,9 @@ struct OwnCounts {
     std::size_t tried = 0;
     std::size_t detach_exact = 0;
     std::size_t detach_differs = 0;
+    std::size_t frames_compared = 0;
+    std::size_t frames_disagree = 0;
+    std::map<std::string, std::size_t> disagreements;
 };
 
 struct Counts {
@@ -202,6 +206,23 @@ void CountOwn(const AfpAnimation::Animation& animation, Document::ClipId clip, u
         return;
     }
     counts.owned++;
+    const AfpAnimation::Container* original = Document::FindClip(animation, clip);
+    if (original != nullptr) {
+        for (const auto& [on, shown] :
+             Document::ReplayDepth(*original, depth, authored->authored.first_frame,
+                                   authored->authored.last_frame)) {
+            counts.frames_compared++;
+            const Document::AppliedState keyed =
+                Document::KeyedState(authored->authored, authored->baked, on);
+            if (shown == keyed) continue;
+            counts.frames_disagree++;
+            std::string what;
+            if (shown.matrix != keyed.matrix) what += " matrix";
+            if (shown.multiply != keyed.multiply) what += " multiply";
+            if (shown.add != keyed.add) what += " add";
+            counts.disagreements[what]++;
+        }
+    }
     AfpAnimation::Animation again = animation;
     const auto detached = Document::WriteAuthored(again, authored->authored, authored->baked);
     if (!detached) {
@@ -233,6 +254,11 @@ void CountOwnSpans(const AfpAnimation::Animation& animation, Document::ClipId cl
 }
 
 void ReportOwn(const std::string& scope, const OwnCounts& counts) {
+    std::cerr << std::format("[own {}] {} frames compared with the game, {} disagree\n", scope,
+                             counts.frames_compared, counts.frames_disagree);
+    for (const auto& [what, count] : counts.disagreements)
+        std::cerr << std::format("[own {}] game and keyframes disagree on{}: {}\n", scope, what,
+                                 count);
     std::cerr << std::format("[own {}] {} tried, {} owned, {} detach exact, {} detach differs\n",
                              scope, counts.tried, counts.owned, counts.detach_exact,
                              counts.detach_differs);
@@ -312,4 +338,6 @@ TEST_CASE("What a per frame placement carries over a span") {
     CHECK(counts.spans > 0);
     CHECK(counts.root_own.detach_differs == 0);
     CHECK(counts.sprite_own.detach_differs == 0);
+    CHECK(counts.root_own.frames_disagree == 0);
+    CHECK(counts.sprite_own.frames_disagree == 0);
 }

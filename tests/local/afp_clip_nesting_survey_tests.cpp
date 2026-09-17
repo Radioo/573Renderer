@@ -6,6 +6,7 @@
 #include "support/env.h"
 
 #include <algorithm>
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
@@ -16,6 +17,7 @@
 #include <iterator>
 #include <map>
 #include <string>
+#include <utility>
 #include <variant>
 #include <vector>
 
@@ -37,6 +39,8 @@ struct Counts {
     std::map<std::string, std::size_t> sprite_label_order;
     std::map<std::string, std::size_t> sprite_tag_frame;
     std::map<std::string, std::size_t> export_order;
+    std::map<std::string, std::size_t> control_bits;
+    std::map<std::string, std::size_t> resets;
     std::map<std::size_t, std::size_t> deepest;
 };
 
@@ -120,6 +124,170 @@ std::string ExportOrder(const AfpAnimation::Animation& animation) {
     return order;
 }
 
+bool CarriesMatrix(const AfpAnimation::Placement& placement) {
+    return placement.scale || placement.rotate_skew || placement.translation ||
+           placement.short_scale || placement.short_rotate_skew;
+}
+
+bool CarriesColour(const AfpAnimation::Placement& placement) {
+    return placement.multiply_colour || placement.add_colour || placement.packed_multiply_colour ||
+           placement.packed_add_colour;
+}
+
+void CountControlBits(const AfpAnimation::Container& clip, Counts& counts) {
+    for (const AfpAnimation::Tag& tag : clip.tags) {
+        const auto* placement = std::get_if<AfpAnimation::Placement>(&tag.body);
+        if (placement == nullptr) continue;
+        const std::string kind = (placement->flags & 0x1U) != 0 ? "update" : "create";
+        const bool matrix = CarriesMatrix(*placement);
+        const bool use_matrix = (placement->flags & 0x4U) != 0;
+        const bool colour = CarriesColour(*placement);
+        const bool use_colour = (placement->flags & 0x8U) != 0;
+        counts.control_bits[std::format("{} matrix {} / 0x4 {}", kind, matrix ? "yes" : "no",
+                                        use_matrix ? "set" : "clear")]++;
+        counts.control_bits[std::format("{} colour {} / 0x8 {}", kind, colour ? "yes" : "no",
+                                        use_colour ? "set" : "clear")]++;
+    }
+}
+
+struct Effective {
+    std::array<double, 6> matrix{1.0, 0.0, 0.0, 1.0, 0.0, 0.0};
+    std::array<double, 4> multiply{1.0, 1.0, 1.0, 1.0};
+    std::array<double, 4> add{0.0, 0.0, 0.0, 0.0};
+    bool long_scale = false;
+    bool short_scale = false;
+};
+
+std::array<double, 4> Unpacked(uint32_t packed) {
+    return {static_cast<double>((packed >> 24) & 0xFF) / 255.0,
+            static_cast<double>((packed >> 16) & 0xFF) / 255.0,
+            static_cast<double>((packed >> 8) & 0xFF) / 255.0,
+            static_cast<double>(packed & 0xFF) / 255.0};
+}
+
+std::array<double, 4> Scaled(const std::array<int16_t, 4>& colour) {
+    return {colour[0] / 255.0, colour[1] / 255.0, colour[2] / 255.0, colour[3] / 255.0};
+}
+
+void ApplyMatrix(const AfpAnimation::Placement& placement, Effective& state, bool fresh,
+                 Counts& counts) {
+    std::array<double, 6> next{1.0, 0.0, 0.0, 1.0, 0.0, 0.0};
+    std::array<bool, 6> carried{};
+    if (placement.scale) {
+        next[0] = (*placement.scale)[0] / 1024.0;
+        next[3] = (*placement.scale)[1] / 1024.0;
+        carried[0] = carried[3] = true;
+    }
+    if (placement.rotate_skew) {
+        next[1] = (*placement.rotate_skew)[0] / 1024.0;
+        next[2] = (*placement.rotate_skew)[1] / 1024.0;
+        carried[1] = carried[2] = true;
+    }
+    if (placement.translation) {
+        next[4] = (*placement.translation)[0];
+        next[5] = (*placement.translation)[1];
+        carried[4] = carried[5] = true;
+    }
+    if (placement.short_scale) {
+        next[0] = (*placement.short_scale)[0] / 32768.0;
+        next[3] = (*placement.short_scale)[1] / 32768.0;
+        carried[0] = carried[3] = true;
+    }
+    if (placement.short_rotate_skew) {
+        next[1] = (*placement.short_rotate_skew)[0] / 32768.0;
+        next[2] = (*placement.short_rotate_skew)[1] / 32768.0;
+        carried[1] = carried[2] = true;
+    }
+    if (!fresh) {
+        const std::array<const char*, 6> names{"scale", "rotate", "rotate", "scale", "translation",
+                                               "translation"};
+        std::map<std::string, bool> mattered;
+        for (std::size_t i = 0; i < 6; i++) {
+            if (carried[i]) continue;
+            const double identity = (i == 0 || i == 3) ? 1.0 : 0.0;
+            if (state.matrix[i] != identity) mattered[names[i]] = true;
+        }
+        for (const auto& [name, yes] : mattered)
+            counts.resets[std::string("2D update resets a held ") + name]++;
+        if (mattered.empty()) counts.resets["2D update resets nothing held"]++;
+    }
+    state.matrix = next;
+}
+
+void ApplyColour(const AfpAnimation::Placement& placement, Effective& state, bool fresh,
+                 Counts& counts) {
+    std::array<double, 4> multiply{1.0, 1.0, 1.0, 1.0};
+    std::array<double, 4> add{0.0, 0.0, 0.0, 0.0};
+    bool has_multiply = false;
+    bool has_add = false;
+    if (placement.multiply_colour) {
+        multiply = Scaled(*placement.multiply_colour);
+        has_multiply = true;
+    }
+    if (placement.add_colour) {
+        add = Scaled(*placement.add_colour);
+        has_add = true;
+    }
+    if (placement.packed_multiply_colour) {
+        multiply = Unpacked(*placement.packed_multiply_colour);
+        has_multiply = true;
+    }
+    if (placement.packed_add_colour) {
+        add = Unpacked(*placement.packed_add_colour);
+        has_add = true;
+    }
+    if (!fresh) {
+        const bool lost_multiply = !has_multiply && state.multiply != std::array<double, 4>{1.0, 1.0, 1.0, 1.0};
+        const bool lost_add = !has_add && state.add != std::array<double, 4>{0.0, 0.0, 0.0, 0.0};
+        if (lost_multiply) counts.resets["colour update resets a held multiply"]++;
+        if (lost_add) counts.resets["colour update resets a held add"]++;
+        if (!lost_multiply && !lost_add) counts.resets["colour update resets nothing held"]++;
+    }
+    state.multiply = multiply;
+    state.add = add;
+}
+
+void ReplayClip(const AfpAnimation::Container& clip, Counts& counts) {
+    std::map<uint16_t, Effective> live;
+    std::map<uint16_t, std::pair<bool, bool>> encodings;
+    for (const AfpAnimation::Frame& frame : clip.frames) {
+        for (uint32_t i = 0; i < frame.tag_count; i++) {
+            const std::size_t index = frame.first_tag + i;
+            if (index >= clip.tags.size()) break;
+            const AfpAnimation::Tag& tag = clip.tags[index];
+            if (const auto* remove = std::get_if<AfpAnimation::Remove>(&tag.body)) {
+                live.erase(remove->depth);
+                continue;
+            }
+            const auto* placement = std::get_if<AfpAnimation::Placement>(&tag.body);
+            if (placement == nullptr) continue;
+            const bool update = (placement->flags & 0x1U) != 0;
+            const auto found = live.find(placement->depth);
+            if (update && found == live.end()) continue;
+            const bool fresh = !update;
+            if (fresh) live[placement->depth] = Effective{};
+            Effective& state = live[placement->depth];
+            auto& seen = encodings[placement->depth];
+            if (placement->scale) seen.first = true;
+            if (placement->short_scale) seen.second = true;
+            if (placement->scale && placement->short_scale)
+                counts.resets["placement carries both scale encodings"]++;
+            if (placement->multiply_colour && placement->packed_multiply_colour)
+                counts.resets["placement carries both multiply encodings"]++;
+            const bool three_d = (placement->flags & 0x04000000U) != 0;
+            if ((placement->flags & 0x4U) != 0 && !three_d) ApplyMatrix(*placement, state, fresh, counts);
+            if ((placement->flags & 0x4U) != 0 && three_d && !fresh && !placement->translation &&
+                (state.matrix[4] != 0.0 || state.matrix[5] != 0.0)) {
+                counts.resets["3D update resets a held translation"]++;
+            }
+            if ((placement->flags & 0x8U) != 0) ApplyColour(*placement, state, fresh, counts);
+        }
+    }
+    for (const auto& [depth, seen] : encodings) {
+        if (seen.first && seen.second) counts.resets["depth uses both scale encodings"]++;
+    }
+}
+
 void CountLabelOrder(const AfpAnimation::Animation& animation, Counts& counts) {
     for (const AfpAnimation::Tag& tag : animation.root.tags) {
         const auto* sprite = std::get_if<AfpAnimation::Sprite>(&tag.body);
@@ -156,6 +324,14 @@ void CountAnimation(const AfpAnimation::Animation& animation, Counts& counts) {
     CountLabelOrder(animation, counts);
     counts.export_order[ExportOrder(animation)]++;
     CountSpriteFrames(animation.root, counts);
+    CountControlBits(animation.root, counts);
+    ReplayClip(animation.root, counts);
+    for (const AfpAnimation::Tag& tag : animation.root.tags) {
+        if (const auto* sprite = std::get_if<AfpAnimation::Sprite>(&tag.body))
+            CountControlBits(sprite->container, counts);
+        if (const auto* sprite = std::get_if<AfpAnimation::Sprite>(&tag.body))
+            ReplayClip(sprite->container, counts);
+    }
     const std::size_t root = Placements(animation.root);
     std::size_t nested = 0;
     const std::size_t deepest = CountSprites(animation.root, 0, counts, nested);
@@ -211,6 +387,10 @@ TEST_CASE("How much of a shipped animation lives inside its sprites") {
         counts.root_cameras, counts.sprite_cameras, counts.sprite_labels, counts.exported_sprites);
     for (const auto& [order, count] : counts.sprite_label_order)
         std::cerr << std::format("[nesting] sprite labels {}: {}\n", order, count);
+    for (const auto& [what, count] : counts.resets)
+        std::cerr << std::format("[nesting] reset, {}: {}\n", what, count);
+    for (const auto& [bits, count] : counts.control_bits)
+        std::cerr << std::format("[nesting] control bits, {}: {}\n", bits, count);
     for (const auto& [order, count] : counts.export_order)
         std::cerr << std::format("[nesting] export table {}: {}\n", order, count);
     for (const auto& [where, count] : counts.sprite_tag_frame)

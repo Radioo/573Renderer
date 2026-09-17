@@ -352,6 +352,69 @@ the export tests pin that by exporting twice and comparing bytes.
 `AuthoredPlacements` is the one function that turns keyframes back into
 placements, used by export and by detach alike, so the two cannot disagree.
 
+### Control bits
+
+A placement's `0x4` (use matrix) and `0x8` (use colour) decide whether the game
+applies its matrix and colour fields at all, so they cannot be treated like the
+rest of an update's flags. Surveyed over IIDX 33, a field is never written
+without its bit, but a bit is often set without its field: every create sets
+`0x4`, and 377321 updates set one of the two with nothing behind it. Updates in
+one span differ in these bits all the time, since one frame moves and the next
+only tints.
+
+So `BakedDepth::update_flags` leaves the two bits out, and own records, per
+update frame, the bits it carried beyond what its fields need
+(`extra_controls`). `AuthoredPlacements` then writes each frame with the bits
+its written fields need plus that frame's recorded extras, and gives the create
+the bits its fields need on top of the flags it was owned with. An unedited
+frame writes exactly the fields it had, so it gets back exactly the bits it had.
+An edited frame always gets the bit that makes the game apply what was keyed
+there, which is what fixes a colour keyed on a frame that only moved being
+written and then ignored. A span whose updates differ in anything else is still
+refused, and a placement carrying a field without its bit is refused too,
+because own could not give that back.
+
+### Groups reset what they leave out (`document/placement_effect.h`, `document/property_groups.h`)
+
+The game does not hold a matrix or colour part an update leaves out. With `0x4`
+it starts from the identity matrix and copies the parts the update carries, and
+with `0x8` it starts from multiply (1, 1, 1, 1), add 0 and copies the colours
+the update carries (in 3D the matrix bit only resets the translation). The
+keyframe model holds every property between keyframes, so the two only agree if
+own and export account for the reset.
+
+`placement_effect.h` is the game's rule as pure data: `ApplyPlacement` applies
+one placement to an `AppliedState` (the 2D matrix, the multiply and the add
+colour) and `ReplayDepth` replays a depth frame by frame the way the game does,
+fresh on a create, ignored while nothing is placed, cleared by a remove.
+`KeyedState` is the same state as the keyframes describe it. Every test that
+changes own or export compares the two on every exported frame, and the `local`
+survey compares them over every owned span of the install, which is what makes
+"what the keyframes say is what the game draws" a checked statement.
+
+`property_groups.h` says which properties belong to which group and what each
+one's identity is: the five matrix properties (scale, rotate, translation and
+the two short forms) and the four colour properties (multiply, add and the two
+packed forms). In a 3D span only translation is in the matrix group, since the
+game does not apply the 2D parts there, and a span that switches between 2D and
+3D is refused.
+
+Own keys every property the span animates on every frame where the game applies
+that property's group: with the value the frame carries, or with the identity
+when it carries none, because that is what the game shows there. It also
+records which frames carried an identity value explicitly
+(`explicit_identities`), since a key cannot tell an identity the game wrote from
+one it reset to.
+
+Export then treats a group as applied on a frame when any of its properties is
+keyed there, is eased through it, or the frame had a recorded extra bit. On
+such a frame it writes every property of the group whose value is not the
+identity, and an identity only where it was explicit, and sets the group's bit.
+On other frames it writes nothing of the group, so the game holds it, which is
+what the held keyframes say. An unedited span writes exactly the fields it had.
+An eased translation next to a held scale now writes the scale on every eased
+frame as well, where it used to be dropped and drawn at 1.
+
 `OwnDepth` takes the clip to own a depth in, and `BakedFor` and `WriteAuthored`
 read the clip off the `AuthoredDepth`, so a sprite depth is captured from and
 written back into its own sprite. A sprite that is gone is refused with the

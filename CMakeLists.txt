@@ -793,6 +793,8 @@ catch_discover_tests(document_outline_local_tests DISCOVERY_MODE POST_BUILD PROP
 
 add_executable(document_tests
     tests/document/atlas_tests.cpp
+    tests/document/authored_control_bits_tests.cpp
+    tests/document/authored_group_tests.cpp
     tests/document/authored_sprite_tests.cpp
     tests/document/authored_tests.cpp
     tests/document/camera_edit_tests.cpp
@@ -808,6 +810,7 @@ add_executable(document_tests
     tests/document/library_call_tests.cpp
     tests/document/outline_tests.cpp
     tests/document/placement_edit_tests.cpp
+    tests/document/placement_effect_tests.cpp
     tests/document/playback_tests.cpp
     tests/document/project_drift_tests.cpp
     tests/document/project_export_tests.cpp

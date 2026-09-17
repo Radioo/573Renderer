@@ -166,7 +166,9 @@ Document::BakedDepth Baked(bool with_actions) {
     return Document::BakedDepth{.create = Scripted(with_actions),
                                 .update_flags = 1,
                                 .update_extended_flags = std::nullopt,
-                                .blank_frames = {}};
+                                .blank_frames = {},
+                                .extra_controls = {},
+                                .explicit_identities = {}};
 }
 
 Document::AuthoredDepth Owning(const std::string& source) {

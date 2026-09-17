@@ -3,7 +3,9 @@
 #include "document/clip.h"
 #include "document/keyframes.h"
 #include "document/placement_edit.h"
+#include "document/placement_effect.h"
 #include "document/placement_values.h"
+#include "document/property_groups.h"
 #include "document/script_source.h"
 #include "document/tags.h"
 #include "formats/afp_animation.h"
@@ -24,6 +26,10 @@ namespace Document {
 namespace {
 
 constexpr uint32_t kUpdateExisting = 0x1;
+constexpr uint32_t kUseMatrix = 0x4;
+constexpr uint32_t kUseColour = 0x8;
+constexpr uint32_t kControlBits = kUseMatrix | kUseColour;
+constexpr uint32_t kThreeD = 0x04000000;
 
 struct Placed {
     uint32_t frame = 0;
@@ -65,12 +71,59 @@ bool WritesFrame(const Track& track, uint32_t frame) {
     return track.keys[after - 1].ease != Ease::Hold;
 }
 
+uint32_t NeededControls(const AfpAnimation::Placement& placement) {
+    uint32_t bits = 0;
+    if (placement.scale || placement.rotate_skew || placement.translation ||
+        placement.short_scale || placement.short_rotate_skew) {
+        bits |= kUseMatrix;
+    }
+    if (placement.multiply_colour || placement.add_colour || placement.packed_multiply_colour ||
+        placement.packed_add_colour) {
+        bits |= kUseColour;
+    }
+    return bits;
+}
+
+Support::Expected<void, std::string> CheckControls(const AfpAnimation::Placement& placement,
+                                                   uint32_t frame) {
+    const uint32_t missing = NeededControls(placement) & ~placement.flags;
+    if (missing == 0) return {};
+    const std::string field = (missing & kUseMatrix) != 0 ? "matrix" : "colour";
+    return Support::Unexpected("frame " + std::to_string(frame) + " carries a " + field +
+                               " the game would not apply, which own could not give back");
+}
+
+bool Applies(uint32_t flags, PropertyGroup group) {
+    return group != PropertyGroup::None && (flags & GroupBit(group)) != 0;
+}
+
+bool ThreeD(const AfpAnimation::Placement& placement) {
+    return (placement.flags & kThreeD) != 0;
+}
+
+bool IsExplicit(const BakedDepth& baked, uint32_t frame, std::string_view property) {
+    return std::ranges::any_of(baked.explicit_identities, [&](const ExplicitIdentity& one) {
+        return one.frame == frame && one.property == property;
+    });
+}
+
+bool Tracked(const AfpAnimation::Container& clip, const std::vector<Placed>& placements,
+             std::string_view property) {
+    return std::ranges::any_of(placements, [&](const Placed& placed) {
+        return ReadProperty(PlacementAt(clip, placed), property).has_value();
+    });
+}
+
 Support::Expected<void, std::string> CheckSpan(const AfpAnimation::Container& clip, uint16_t depth,
                                                const std::vector<Placed>& placements) {
     const AfpAnimation::Placement& create = PlacementAt(clip, placements.front());
+    auto applied = CheckControls(create, placements.front().frame);
+    if (!applied) return Support::Unexpected(applied.error());
     for (std::size_t i = 1; i < placements.size(); i++) {
         const std::string where = "frame " + std::to_string(placements[i].frame);
         const AfpAnimation::Placement& later = PlacementAt(clip, placements[i]);
+        auto later_applied = CheckControls(later, placements[i].frame);
+        if (!later_applied) return Support::Unexpected(later_applied.error());
         if ((later.flags & kUpdateExisting) == 0) {
             return Support::Unexpected(where + " places depth " + std::to_string(depth) +
                                        " again instead of updating it");
@@ -80,12 +133,16 @@ Support::Expected<void, std::string> CheckSpan(const AfpAnimation::Container& cl
             return Support::Unexpected(where + " changes " + parts.front() +
                                        ", which is not something a keyframe can hold");
         }
+        if (ThreeD(later) != ThreeD(create)) {
+            return Support::Unexpected(where + " switches depth " + std::to_string(depth) +
+                                       " between 2D and 3D");
+        }
         if (later.end_frame != create.end_frame) {
             return Support::Unexpected(where + " ends depth " + std::to_string(depth) +
                                        " somewhere else than its first frame does");
         }
         const AfpAnimation::Placement& first_update = PlacementAt(clip, placements[1]);
-        if (later.flags != first_update.flags ||
+        if ((later.flags & ~kControlBits) != (first_update.flags & ~kControlBits) ||
             later.extended_flags != first_update.extended_flags) {
             return Support::Unexpected(where + " updates depth " + std::to_string(depth) +
                                        " with flags of its own");
@@ -149,12 +206,30 @@ BakedDepth BakedOf(const AfpAnimation::Container& clip, const std::vector<Placed
     ClearAnimatableProperties(baked.create);
     if (placements.size() > 1) {
         const AfpAnimation::Placement& update = PlacementAt(clip, placements[1]);
-        baked.update_flags = update.flags;
+        baked.update_flags = update.flags & ~kControlBits;
         baked.update_extended_flags = update.extended_flags;
     } else {
         baked.update_flags = kUpdateExisting;
     }
+    const bool three_d = ThreeD(baked.create);
+    for (const Placed& placed : placements) {
+        const AfpAnimation::Placement& placement = PlacementAt(clip, placed);
+        for (const std::string_view property : AnimatableProperties()) {
+            if (!Applies(placement.flags, GroupOf(property, three_d))) continue;
+            const std::optional<std::vector<int64_t>> value = ReadProperty(placement, property);
+            if (value && value == IdentityOf(property)) {
+                baked.explicit_identities.push_back(
+                    ExplicitIdentity{.frame = placed.frame, .property = std::string(property)});
+            }
+        }
+    }
     for (std::size_t i = 1; i < placements.size(); i++) {
+        const AfpAnimation::Placement& update = PlacementAt(clip, placements[i]);
+        const uint32_t extra = update.flags & kControlBits & ~NeededControls(update);
+        if (extra != 0) {
+            baked.extra_controls.push_back(
+                FrameControls{.frame = placements[i].frame, .bits = extra});
+        }
         bool carries = false;
         for (const std::string_view property : AnimatableProperties()) {
             carries =
@@ -163,6 +238,34 @@ BakedDepth BakedOf(const AfpAnimation::Container& clip, const std::vector<Placed
         if (!carries) baked.blank_frames.push_back(placements[i].frame);
     }
     return baked;
+}
+
+uint32_t AppliedGroups(const AuthoredDepth& authored, const BakedDepth& baked, uint32_t frame) {
+    uint32_t bits = 0;
+    if (frame == authored.first_frame) bits |= baked.create.flags & kControlBits;
+    const auto extra = std::ranges::find(baked.extra_controls, frame, &FrameControls::frame);
+    if (extra != baked.extra_controls.end()) bits |= extra->bits;
+    const bool three_d = ThreeD(baked.create);
+    for (const Track& track : authored.tracks) {
+        const PropertyGroup group = GroupOf(track.property, three_d);
+        if (group != PropertyGroup::None && WritesFrame(track, frame)) bits |= GroupBit(group);
+    }
+    return bits;
+}
+
+std::optional<std::vector<int64_t>> WrittenValue(const BakedDepth& baked, const Track& track,
+                                                 uint32_t frame, uint32_t applied) {
+    const PropertyGroup group = GroupOf(track.property, ThreeD(baked.create));
+    if (group == PropertyGroup::None) {
+        if (!WritesFrame(track, frame)) return std::nullopt;
+        return SampleTrack(track, frame);
+    }
+    if (!Applies(applied, group) || track.keys.empty() || frame < track.keys.front().frame)
+        return std::nullopt;
+    std::vector<int64_t> value = SampleTrack(track, frame);
+    if (value == IdentityOf(track.property) && !IsExplicit(baked, frame, track.property))
+        return std::nullopt;
+    return value;
 }
 
 }
@@ -185,11 +288,15 @@ Support::Expected<OwnedDepth, std::string> OwnDepth(const AfpAnimation::Animatio
     owned.authored.clip = clip_id;
     owned.baked = BakedOf(clip, *placements);
 
+    const bool three_d = ThreeD(owned.baked.create);
     for (const std::string_view property : AnimatableProperties()) {
+        if (!Tracked(clip, *placements, property)) continue;
+        const PropertyGroup group = GroupOf(property, three_d);
         Track track{.property = std::string(property), .keys = {}};
         for (const Placed& placed : *placements) {
-            std::optional<std::vector<int64_t>> value =
-                ReadProperty(PlacementAt(clip, placed), property);
+            const AfpAnimation::Placement& placement = PlacementAt(clip, placed);
+            std::optional<std::vector<int64_t>> value = ReadProperty(placement, property);
+            if (!value && Applies(placement.flags, group)) value = IdentityOf(property);
             if (!value) continue;
             track.keys.push_back(Keyframe{.frame = placed.frame,
                                           .value = std::move(*value),
@@ -235,20 +342,40 @@ AuthoredPlacements(const AuthoredDepth& authored, const BakedDepth& baked) {
             placement.depth = authored.depth;
             placement.end_frame = baked.create.end_frame;
         }
+        const uint32_t applied = AppliedGroups(authored, baked, frame);
         bool wrote = false;
         for (const Track& track : authored.tracks) {
-            if (!WritesFrame(track, frame)) continue;
-            const std::vector<int64_t> value = SampleTrack(track, frame);
-            auto written = WriteProperty(placement, track.property, value);
+            const std::optional<std::vector<int64_t>> value =
+                WrittenValue(baked, track, frame, applied);
+            if (!value) continue;
+            auto written = WriteProperty(placement, track.property, *value);
             if (!written) return Support::Unexpected(written.error());
             wrote = true;
         }
+        placement.flags |= NeededControls(placement) | applied;
         const bool blank = std::ranges::find(baked.blank_frames, frame) != baked.blank_frames.end();
-        if (frame == authored.first_frame || wrote || blank)
+        if (frame == authored.first_frame || wrote || applied != 0 || blank)
             out.emplace_back(frame, std::move(placement));
     }
     if (out.empty()) return Support::Unexpected(std::string("the authored depth places nothing"));
     return out;
+}
+
+AppliedState KeyedState(const AuthoredDepth& authored, const BakedDepth& baked,
+                        uint32_t frame) {
+    AfpAnimation::Placement placement;
+    placement.flags = kUseMatrix | kUseColour | (baked.create.flags & kThreeD);
+    for (const Track& track : authored.tracks) {
+        if (track.keys.empty() || frame < track.keys.front().frame) continue;
+        const std::vector<int64_t> value = SampleTrack(track, frame);
+        if (value == IdentityOf(track.property) && !IsExplicit(baked, frame, track.property))
+            continue;
+        auto written = WriteProperty(placement, track.property, value);
+        if (!written) continue;
+    }
+    AppliedState state;
+    ApplyPlacement(state, placement);
+    return state;
 }
 
 Support::Expected<void, std::string> WriteAuthored(AfpAnimation::Animation& animation,

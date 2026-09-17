@@ -23,6 +23,7 @@ Document::Keyframe Key(uint32_t frame, std::vector<int64_t> value) {
 }
 
 constexpr uint32_t kUpdateExisting = 0x1;
+constexpr uint32_t kUseMatrix = 0x4;
 constexpr uint16_t kDepth = 3;
 
 AfpAnimation::Animation Clip(std::size_t frames) {
@@ -35,6 +36,7 @@ AfpAnimation::Animation Clip(std::size_t frames) {
 
 AfpAnimation::Placement Create(uint16_t end_frame, int32_t x) {
     AfpAnimation::Placement placement;
+    placement.flags = kUseMatrix;
     placement.depth = kDepth;
     placement.end_frame = end_frame;
     placement.character = uint16_t{7};
@@ -44,7 +46,7 @@ AfpAnimation::Placement Create(uint16_t end_frame, int32_t x) {
 
 AfpAnimation::Placement Update(uint16_t end_frame) {
     AfpAnimation::Placement placement;
-    placement.flags = kUpdateExisting;
+    placement.flags = kUpdateExisting | kUseMatrix;
     placement.depth = kDepth;
     placement.end_frame = end_frame;
     return placement;

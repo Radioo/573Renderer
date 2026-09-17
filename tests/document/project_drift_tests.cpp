@@ -25,6 +25,8 @@
 
 namespace {
 
+constexpr uint32_t kUseMatrix = 0x4;
+
 std::string Path() {
     return "afp/" + SamplePackage::HashPath("intro");
 }
@@ -40,6 +42,7 @@ AfpAnimation::Animation Scene() {
     AfpAnimation::Animation animation = SamplePackage::SampleAnimation();
     animation.root.labels = {};
     AfpAnimation::Placement create;
+    create.flags = kUseMatrix;
     create.depth = 1;
     create.end_frame = 3;
     create.character = uint16_t{7};
