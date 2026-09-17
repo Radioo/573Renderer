@@ -275,6 +275,37 @@ Writing an image without that `uvrect` would have looked correct in every test
 that only reads back what the editor wrote, which is exactly why the shape is
 measured against the shipped data instead.
 
+## Shipped shapes and what a new one must look like (`local` label)
+
+`shape_geometry_survey_tests` (tests/local/shape_geometry_survey_tests.cpp)
+reads every package under `data/graphic` with an `afp/afplist.xml`, every
+`geo/` file its `geo` arrays list, and the animation that owns them. Over the
+IIDX 33 install (2120 packages, 27878 listed animations):
+
+- All 219739 single-texture `0x3` quads whose image is in the package's own
+  list are exactly the image's `uvrect` size in pixels, with their minimum
+  corner at (0, 0), and their UVs sit on the same corners as the vertices.
+- The leading word of an `AP2_SHAPE` tag is 2 on every textured shape (`0x3`
+  and `0x43`) and 0 on every solid one (`0x9`).
+- Shape tags are in id order in every animation, 21858 of them before frame 0
+  and 248469 inside root frame 0.
+- Every animation's header name equals its `afplist.xml` name. The `geo`
+  array is always a u16 array (type 69). For the 27550 names listed once it
+  holds exactly the ids of the shape tags, sorted and without repeats. The 164
+  names listed twice have one listing whose array repeats ids (163 of them out
+  of order) but names the same set, and one listing with no array.
+
+Those are the rules `ImageQuad` and `AddImageShape` follow.
+
+The proof that such a shape draws is in `local_dll_tests`:
+`image_shape_live_tests.cpp` places the largest image of `graphic/1/title.ifs`
+on a new depth over frames 0 to 20 with `PlaceImage`, loads the package before
+and after in a real preview host at 1920x1080, and reads frame 10 back. Some
+pixels inside the image's rectangle at the stage origin must change and none
+outside it. Ending the depth at frame 5 instead makes it fail with no pixel
+changed, which is how the check was shown to see the drawing. This is a
+content-drawn check between two different packages, not a playback state check.
+
 ## The script walker over every script in the install (`local` label)
 
 `afp_script_survey_tests` (tests/local/afp_script_survey_tests.cpp) reads every

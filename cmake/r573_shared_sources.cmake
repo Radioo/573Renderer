@@ -44,6 +44,7 @@ set(R573_EDITOR_DOCUMENT_SOURCES
     src/document/field_values.cpp
     src/document/frame_edit.cpp
     src/document/history.cpp
+    src/document/image_shape.cpp
     src/document/inspector.cpp
     src/document/keyframe_edit.cpp
     src/document/keyframes.cpp
@@ -62,6 +63,7 @@ set(R573_EDITOR_DOCUMENT_SOURCES
     src/document/project.cpp
     src/document/property_groups.cpp
     src/document/outline.cpp
+    src/document/place_image.cpp
     src/document/timeline.cpp
 )
 

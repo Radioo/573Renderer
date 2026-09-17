@@ -6,6 +6,8 @@
 #include "document/characters.h"
 #include "document/clip.h"
 #include "document/outline.h"
+#include "document/place_image.h"
+#include "support/expected.h"
 #include "document/sprite_preview.h"
 
 #include <QAction>
@@ -51,22 +53,46 @@ QWidget* Window::BuildTimelinePanel(QScrollArea* timeline_area) {
     return panel;
 }
 
-std::optional<uint16_t> Window::ChooseCharacter(const AfpAnimation::Animation& animation) {
-    const std::vector<Document::CharacterSummary> characters = Document::Characters(animation);
-    if (characters.empty()) {
-        ReportProblem(tr("This animation defines nothing that can be placed"));
+std::optional<Placeable> Window::ChoosePlaceable(const AfpAnimation::Animation& animation) {
+    std::vector<Placeable> choices;
+    QStringList labels;
+    for (const Document::CharacterSummary& one :
+         Document::Characters(animation, file_->ShapeImages(animation_path_))) {
+        choices.push_back(Placeable{.character = one.id, .image = {}});
+        labels.append(QString::fromStdString(one.label));
+    }
+    for (const Document::Node& node : file_->Nodes()) {
+        for (const Document::Node& child : node.children) {
+            if (child.role != Document::Role::Texture) continue;
+            choices.push_back(Placeable{.character = std::nullopt, .image = child.name});
+            labels.append(
+                tr("Package image %1, as a new shape").arg(QString::fromStdString(child.name)));
+        }
+    }
+    if (choices.empty()) {
+        ReportProblem(tr("Nothing in this package can be placed"));
         return std::nullopt;
     }
-    QStringList labels;
-    for (const Document::CharacterSummary& one : characters)
-        labels.append(QString::fromStdString(one.label));
     bool answered = false;
     const QString picked =
         QInputDialog::getItem(this, tr("Add a depth"), tr("Place"), labels, 0, false, &answered);
     if (!answered) return std::nullopt;
     const auto index = labels.indexOf(picked);
     if (index < 0) return std::nullopt;
-    return characters[static_cast<std::size_t>(index)].id;
+    return choices[static_cast<std::size_t>(index)];
+}
+
+void Window::PlaceImage(const std::string& image, const Document::DepthSpan& span) {
+    const std::string path = animation_path_;
+    EditDocument(tr("Place %1 on depth %2").arg(QString::fromStdString(image)).arg(span.depth),
+                 [path, image, span](Document::File& document) {
+                     using Placed = Support::Expected<void, std::string>;
+                     const auto shape = Document::PlaceImage(document, path, image, span);
+                     if (!shape) return Placed(Support::Unexpected(shape.error()));
+                     return Placed();
+                 });
+    ShowClipTimeline();
+    ShowFrame();
 }
 
 void Window::FillClips() {

@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <map>
 #include <vector>
 
 namespace {
@@ -40,7 +41,7 @@ const Document::CharacterSummary* WithId(const std::vector<Document::CharacterSu
 }
 
 TEST_CASE("Every placeable character of an animation is listed by id") {
-    const std::vector<Document::CharacterSummary> list = Document::Characters(Scene());
+    const std::vector<Document::CharacterSummary> list = Document::Characters(Scene(), {});
     std::vector<uint16_t> ids;
     ids.reserve(list.size());
     for (const Document::CharacterSummary& one : list)
@@ -49,7 +50,7 @@ TEST_CASE("Every placeable character of an animation is listed by id") {
 }
 
 TEST_CASE("A character reads as what it is") {
-    const std::vector<Document::CharacterSummary> list = Document::Characters(Scene());
+    const std::vector<Document::CharacterSummary> list = Document::Characters(Scene(), {});
     REQUIRE(WithId(list, 3) != nullptr);
     CHECK(WithId(list, 3)->kind == Document::CharacterKind::Image);
     CHECK(WithId(list, 3)->label == "Image 3: bg_star");
@@ -67,5 +68,12 @@ TEST_CASE("A character reads as what it is") {
 }
 
 TEST_CASE("An animation with nothing defined has nothing to place") {
-    CHECK(Document::Characters(AfpAnimation::Animation{}).empty());
+    CHECK(Document::Characters(AfpAnimation::Animation{}, {}).empty());
+}
+
+TEST_CASE("A shape reads as the image it draws") {
+    const std::vector<Document::CharacterSummary> list =
+        Document::Characters(Scene(), {{uint16_t{8}, "bg_star"}});
+    REQUIRE(WithId(list, 8) != nullptr);
+    CHECK(WithId(list, 8)->label == "Shape 8: bg_star");
 }

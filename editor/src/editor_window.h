@@ -12,6 +12,7 @@
 #include "formats/afp_animation.h"
 #include "support/expected.h"
 #include "document/outline.h"
+#include "document/place_image.h"
 #include "preview/shared_texture.h"
 
 #include <QMainWindow>
@@ -42,6 +43,11 @@ namespace Editor {
 
 using AnimationChange =
     std::function<Support::Expected<void, std::string>(AfpAnimation::Animation&)>;
+
+struct Placeable {
+    std::optional<uint16_t> character;
+    std::string image;
+};
 
 using DocumentChange = std::function<Support::Expected<void, std::string>(Document::File&)>;
 
@@ -112,7 +118,9 @@ private:
     void FillClips();
     void ChooseClip(int index);
     void ShowClipTimeline();
-    [[nodiscard]] std::optional<uint16_t> ChooseCharacter(const AfpAnimation::Animation& animation);
+    [[nodiscard]] std::optional<Placeable>
+    ChoosePlaceable(const AfpAnimation::Animation& animation);
+    void PlaceImage(const std::string& image, const Document::DepthSpan& span);
     bool LoadViewportClip();
     void TogglePlay();
     void StepPlayback();

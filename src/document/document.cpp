@@ -5,12 +5,14 @@
 #include "document/atlas.h"
 #include "document/atlas_write.h"
 #include "document/entry_edit.h"
+#include "document/image_shape.h"
 #include "document/outline.h"
 #include "formats/afp_animation.h"
 #include "formats/ifs_archive.h"
 #include "support/expected.h"
 
 #include <cstdint>
+#include <map>
 #include <span>
 #include <optional>
 #include <string>
@@ -135,6 +137,18 @@ Support::Expected<void, std::string> File::RemoveImage(std::string_view name) {
     if (!removed) return Support::Unexpected(removed.error());
     outline_ = Outline::Build(archive_);
     return {};
+}
+
+std::map<uint16_t, std::string> File::ShapeImages(std::string_view animation_path) const {
+    return Document::ShapeImages(archive_, animation_path);
+}
+
+Support::Expected<uint16_t, std::string> File::AddImageShape(std::string_view animation_path,
+                                                             std::string_view image) {
+    auto added = Document::AddImageShape(archive_, animation_path, image);
+    if (!added) return Support::Unexpected(added.error());
+    outline_ = Outline::Build(archive_);
+    return *added;
 }
 
 }

@@ -661,11 +661,18 @@ void Window::ShowTimelineMenu(const QPoint& where, uint32_t frame, const QString
                                  static_cast<int>(frame),
                                  std::max(clip_frames - 1, static_cast<int>(frame)), 1, &answered);
         if (!answered || !animation) return;
-        const std::optional<uint16_t> character = ChooseCharacter(*animation);
-        if (!character) return;
+        const std::optional<Placeable> choice = ChoosePlaceable(*animation);
+        if (!choice) return;
         const auto depth = static_cast<uint16_t>(*depth_);
         const auto until = static_cast<uint32_t>(last);
-        const uint16_t placed = *character;
+        if (!choice->character) {
+            PlaceImage(choice->image, Document::DepthSpan{.clip = clip,
+                                                          .depth = depth,
+                                                          .first_frame = frame,
+                                                          .last_frame = until});
+            return;
+        }
+        const uint16_t placed = *choice->character;
         EditAnimation(tr("Add depth %1").arg(*depth_),
                       [clip, depth, placed, frame, until](AfpAnimation::Animation& edited) {
                           return Document::AddDepth(edited, clip, depth, placed, frame, until);

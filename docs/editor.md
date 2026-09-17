@@ -148,7 +148,8 @@ Right-clicking the timeline offers the label edits: add one at the frame under
 the cursor, and rename, move or remove the label the cursor is near. Below the
 labels it offers the structure edits: insert or remove a frame at that point,
 and add or remove the selected depth over a range; adding one asks which of the
-animation's characters it places. Last it offers the camera:
+animation's characters it places, or which of the package's images to place as
+a new shape (`Document::PlaceImage`), which is recorded as one undo step. Last it offers the camera:
 add one on that frame when it has none, remove the one it has. The widget
 does not own the dialogs; it emits the position, the frame and the label it
 found and the window builds the menu.

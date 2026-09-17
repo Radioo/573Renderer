@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <map>
 #include <string>
 #include <variant>
 #include <vector>
@@ -25,9 +26,18 @@ std::string ExportName(const AfpAnimation::Animation& animation, uint16_t id) {
     return StringText(animation, exported->name);
 }
 
+std::string ShapeName(const AfpAnimation::Animation& animation, uint16_t id,
+                      const std::map<uint16_t, std::string>& shape_images) {
+    std::string name = ExportName(animation, id);
+    if (!name.empty()) return name;
+    const auto image = shape_images.find(id);
+    return image == shape_images.end() ? std::string() : image->second;
 }
 
-std::vector<CharacterSummary> Characters(const AfpAnimation::Animation& animation) {
+}
+
+std::vector<CharacterSummary> Characters(const AfpAnimation::Animation& animation,
+                                         const std::map<uint16_t, std::string>& shape_images) {
     std::vector<CharacterSummary> out;
     for (const AfpAnimation::Tag& tag : animation.root.tags) {
         if (const auto* sprite = std::get_if<AfpAnimation::Sprite>(&tag.body)) {
@@ -44,7 +54,7 @@ std::vector<CharacterSummary> Characters(const AfpAnimation::Animation& animatio
             out.push_back(CharacterSummary{
                 .id = shape->id,
                 .kind = CharacterKind::Shape,
-                .label = Named("Shape", shape->id, ExportName(animation, shape->id))});
+                .label = Named("Shape", shape->id, ShapeName(animation, shape->id, shape_images))});
         }
     }
     for (const AfpAnimation::Import& imported : animation.imports) {

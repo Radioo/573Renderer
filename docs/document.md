@@ -585,8 +585,44 @@ by name) and shapes (`AP2_SHAPE`, host geometry) defined in its root, plus the
 assets it imports from other animations, all in one id space. `Characters` lists
 them in id order, labelled the way a person would pick one: a sprite by its
 export name, an image by its texture name, an import by its asset name and the
-animation it comes from. The editor's add depth offers exactly this list, so a
-new depth is always pointed at something the animation can actually place.
+animation it comes from. A shape is labelled with the one image its GE2D file
+draws, which `File::ShapeImages` reads from `geo/`, unless an export names it.
+The editor's add depth offers exactly this list, so a new depth is always
+pointed at something the animation can actually place.
+
+### Placing a package image (`document/image_shape.h`, `document/place_image.h`)
+
+A placement cannot show a texture directly. An `AP2_IMAGE` tag placed on a
+depth draws nothing, and no shipped placement points at one; every picture on
+stage is a shape whose GE2D file names the image. So to put a package image on
+stage, `AddImageShape` makes the animation a new shape, the way the converter
+does:
+
+- The id is one above every character the animation defines or imports
+  (`NextCharacterId`), which keeps the shape tags in id order, as every shipped
+  animation has them. An animation already using id `0xFFFE` has none left.
+- `geo/<animation name>_shape<id>` is a textured quad (`ImageQuad`): four
+  vertices from (0, 0) to the image's `uvrect` size in pixels, UVs of
+  `uvrect / (2 * atlas size)` on the same corners, one triangle-list primitive
+  with draw flags `0x3` naming the image. The name is the animation's header
+  name, which is the prefix afp-core formats shape names with.
+- In a package whose `version.xml` has `shapetype` `mesh` the header flags are
+  `0x20` and the file carries its bounds; elsewhere the flags are 0 and it does
+  not.
+- The id is appended to the animation's `geo` array in `afplist.xml`, created
+  as a u16 array when the animation has none, because afp-utils reads only the
+  shape files that array lists.
+- An `AP2_SHAPE` tag with the id and a leading word of 2 goes at the end of root
+  frame 0.
+
+The shape is written in the byte order the package `magic` asks for. Nothing
+changes unless every step succeeds. `PlaceImage` does this and then adds the
+depth over the frames given, as one step, which is what the editor records as
+one undo entry. The image has to be in the package's own texture list; placing
+another package's image (a `0x43` shape with image-relative UVs) is not offered.
+
+The numbers behind each rule are in `docs/local_regression.md` under the shape
+survey.
 
 ## Clips (`document/clip.h`, `document/clip_edit.h`)
 

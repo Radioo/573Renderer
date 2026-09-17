@@ -7,6 +7,7 @@
 #include "support/expected.h"
 
 #include <cstdint>
+#include <map>
 #include <span>
 #include <string>
 #include <string_view>
@@ -46,6 +47,12 @@ public:
     AddImage(std::string_view name, uint32_t width, uint32_t height, std::span<const uint8_t> bgra);
 
     [[nodiscard]] Support::Expected<void, std::string> RemoveImage(std::string_view name);
+
+    [[nodiscard]] std::map<uint16_t, std::string>
+    ShapeImages(std::string_view animation_path) const;
+
+    [[nodiscard]] Support::Expected<uint16_t, std::string>
+    AddImageShape(std::string_view animation_path, std::string_view image);
 
     [[nodiscard]] std::optional<std::string> EntryDigest(std::string_view path) const;
 
