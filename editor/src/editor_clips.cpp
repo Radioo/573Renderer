@@ -9,6 +9,7 @@
 #include "document/hidden_depths.h"
 #include "document/keyframes.h"
 #include "document/outline.h"
+#include "document/playback.h"
 #include "document/place_image.h"
 #include "support/expected.h"
 #include "document/sprite_exports.h"
@@ -165,6 +166,7 @@ void Window::ChooseClip(int index) {
     key_property_.clear();
     key_frame_.reset();
     frame_ = clip_.sprite ? 0 : root_frame_;
+    SetWorkArea(std::nullopt);
     if (file_) LoadViewportClip(*file_);
     ShowClipTimeline();
     SeekViewport(frame_);
@@ -253,6 +255,7 @@ void Window::ShowAnimation(const std::string& name) {
     StopPlayback();
     animation_name_ = name;
     frame_ = 0;
+    SetWorkArea(std::nullopt);
     root_frame_ = 0;
     symbol_shown_ = false;
     depth_.reset();
@@ -350,6 +353,13 @@ void Window::AddStepActions(QMenu* menu) {
          [this] { StepToMark(Document::Direction::Back); }},
         {tr("Next c&hange on the depth"), QKeySequence(Qt::Key_K),
          [this] { StepToMark(Document::Direction::Forward); }},
+        {tr("Start the &work area here"), QKeySequence(Qt::Key_B),
+         [this] {
+             SetWorkArea(Document::WithWorkAreaStart(work_area_, frame_, ClipFrameCount()));
+         }},
+        {tr("En&d the work area here"), QKeySequence(Qt::Key_N),
+         [this] { SetWorkArea(Document::WithWorkAreaEnd(work_area_, frame_, ClipFrameCount())); }},
+        {tr("Clear the work area"), QKeySequence(), [this] { SetWorkArea(std::nullopt); }},
     };
     menu->addSeparator();
     for (const StepAction& step : actions) {
@@ -357,6 +367,11 @@ void Window::AddStepActions(QMenu* menu) {
         action->setShortcut(step.keys);
         connect(action, &QAction::triggered, this, step.run);
     }
+}
+
+void Window::SetWorkArea(std::optional<Document::WorkArea> area) {
+    work_area_ = area;
+    timeline_->SetWorkArea(area);
 }
 
 void Window::SeekTo(uint32_t frame) {

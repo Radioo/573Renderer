@@ -3,6 +3,7 @@
 #include "document/key_selection.h"
 #include "document/keyframes.h"
 #include "document/outline.h"
+#include "document/playback.h"
 #include "document/timeline.h"
 
 #include <QPoint>
@@ -41,6 +42,7 @@ public:
     void SelectDepth(std::optional<uint16_t> depth);
     void SetHiddenDepths(std::vector<uint16_t> depths);
     void SetLockedDepths(std::vector<uint16_t> depths);
+    void SetWorkArea(std::optional<Document::WorkArea> area);
     void Clear();
     void SetFrame(uint32_t frame);
 
@@ -103,6 +105,7 @@ private:
     std::optional<uint16_t> selected_depth_;
     std::vector<uint16_t> hidden_depths_;
     std::vector<uint16_t> locked_depths_;
+    std::optional<Document::WorkArea> work_area_;
     std::vector<Document::Track> tracks_;
     std::vector<Document::KeyRef> selected_keys_;
     std::optional<uint32_t> drag_from_;

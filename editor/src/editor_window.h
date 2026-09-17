@@ -147,6 +147,7 @@ private:
     void JumpToFrame(int64_t frame);
     void StepToMark(Document::Direction direction);
     void AddStepActions(QMenu* menu);
+    void SetWorkArea(std::optional<Document::WorkArea> area);
     void SeekViewport(uint32_t frame);
     QWidget* BuildTimelinePanel(QScrollArea* timeline_area);
     void FillClips();
@@ -234,6 +235,7 @@ private:
     uint32_t frame_ = 0;
     uint32_t root_frame_ = 0;
     Document::ClipId clip_;
+    std::optional<Document::WorkArea> work_area_;
     bool symbol_shown_ = false;
     bool filling_inspector_ = false;
     std::optional<SharedTexture::Reader> reader_;

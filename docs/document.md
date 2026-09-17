@@ -1120,6 +1120,14 @@ looping animation of one frame keeps playing rather than stopping on itself.
 `FrameIntervalMs` is whole milliseconds and never zero, since a timer given zero
 would spin.
 
+A `Playback` can carry a `WorkArea`, the frame range After Effects plays
+between. `Advance` then plays inside it: a playhead outside the range goes to
+its first frame, the last frame wraps to the first when looping and stops
+there otherwise, and a range past the end of the clip is cut to the clip.
+`WithWorkAreaStart` and `WithWorkAreaEnd` set one end at a frame and move the
+other end when it would be on the wrong side, starting from the whole clip when
+there is no work area yet.
+
 ## Inspector rows (`document/inspector.h`)
 
 `InspectFrame` is the whole of what the inspector shows for a frame: the rows

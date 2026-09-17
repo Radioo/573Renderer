@@ -431,6 +431,14 @@ stops playback, stays inside the clip, and seeks the same way a click on the
 ruler does (`Window::JumpToFrame`); the clip's frame count comes from the host
 when it shows the clip and from the model otherwise (`Window::ClipFrameCount`).
 
+B and N start and end the work area at the playhead and `Clear the work area`
+drops it (`Window::SetWorkArea`). Playback then stays inside it, and the ruler
+shades it (`Timeline::SetWorkArea`). It belongs to the clip on screen and is
+cleared when another clip or animation is shown. A live window test sets a
+three frame work area on `graphic/1/title.ifs`, plays for 0.7 seconds and
+requires the playhead to have stopped inside it; with the work area left out
+of playback it was seen to fail.
+
 `Playback > Play` (the space bar) plays the animation and pauses it, and
 `Playback > Loop` decides whether it wraps at the end; the choice is remembered
 between runs. The timer's interval is `Document::FrameIntervalMs` of the

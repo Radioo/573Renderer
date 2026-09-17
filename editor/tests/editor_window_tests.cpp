@@ -66,6 +66,7 @@ namespace {
 constexpr int kStepMs = 5;
 constexpr qint64 kLongestWaitMs = 10000;
 constexpr uint32_t kPreviewFrame = 400;
+constexpr qint64 kPlayForMs = 700;
 constexpr uint32_t kNoDepth = 65535;
 constexpr uint32_t kFixedRate = 0x2;
 constexpr uint32_t kUpdateMatrix = 0x5;
@@ -631,6 +632,34 @@ TEST_CASE("Frame keys step through the clip and jump between a depth's changes")
     CHECK(script.Problems().isEmpty());
 }
 
+TEST_CASE("B and N set the work area on the ruler and it can be cleared") {
+    Opened opened;
+    Open(opened);
+    auto* timeline = opened.window.findChild<Editor::Timeline*>();
+    REQUIRE(timeline != nullptr);
+    const auto picture = [&] {
+        QApplication::processEvents();
+        return timeline->grab().toImage();
+    };
+    emit timeline->FrameChosen(1);
+    const QImage plain = picture();
+    QAction* start = ShortcutAction(opened.window, QKeySequence(Qt::Key_B));
+    QAction* end = ShortcutAction(opened.window, QKeySequence(Qt::Key_N));
+    REQUIRE(start != nullptr);
+    REQUIRE(end != nullptr);
+    end->trigger();
+    const QImage ended = picture();
+    CHECK(ended != plain);
+    start->trigger();
+    CHECK(picture() != ended);
+    const QList<QAction*> actions = opened.window.findChildren<QAction*>();
+    const auto clear = std::ranges::find_if(
+        actions, [](const QAction* action) { return action->text() == "Clear the work area"; });
+    REQUIRE(clear != actions.end());
+    (*clear)->trigger();
+    CHECK(picture() == plain);
+}
+
 TEST_CASE("A stage drag previews through the host before it is committed") {
     const QString game = qEnvironmentVariable("R573_IIDX_DIR");
     if (game.isEmpty()) SKIP("R573_IIDX_DIR not set");
@@ -716,6 +745,47 @@ TEST_CASE("Hiding a depth in the view takes it out of the rendered frame until i
         CHECK(shown.Problems().isEmpty());
     }
     CHECK(grab() == before);
+    CHECK(opening.Problems().isEmpty());
+}
+
+TEST_CASE("Playback stays inside the work area") {
+    const QString game = qEnvironmentVariable("R573_IIDX_DIR");
+    if (game.isEmpty()) SKIP("R573_IIDX_DIR not set");
+    QSettings().setValue("game/directory", game);
+    Editor::Window window;
+    QSettings().remove("game/directory");
+    window.resize(1600, 900);
+    window.show();
+    Script opening({});
+    window.OpenDocument(game + "/data/graphic/1/title.ifs");
+    REQUIRE(opening.Problems().isEmpty());
+    auto* timeline = window.findChild<Editor::Timeline*>();
+    REQUIRE(timeline != nullptr);
+    const auto at = [&](uint32_t frame) {
+        emit timeline->FrameChosen(frame);
+        QApplication::processEvents();
+        return timeline->grab().toImage();
+    };
+    QAction* start = ShortcutAction(window, QKeySequence(Qt::Key_B));
+    QAction* end = ShortcutAction(window, QKeySequence(Qt::Key_N));
+    QAction* play = ShortcutAction(window, QKeySequence(Qt::Key_Space));
+    REQUIRE(start != nullptr);
+    REQUIRE(end != nullptr);
+    REQUIRE(play != nullptr);
+    at(kPreviewFrame + 2);
+    end->trigger();
+    at(kPreviewFrame);
+    start->trigger();
+    const std::vector<QImage> inside{at(kPreviewFrame), at(kPreviewFrame + 1),
+                                     at(kPreviewFrame + 2)};
+    play->trigger();
+    QElapsedTimer played;
+    played.start();
+    while (played.elapsed() < kPlayForMs)
+        QApplication::processEvents();
+    play->trigger();
+    const QImage stopped = timeline->grab().toImage();
+    CHECK(std::ranges::find(inside, stopped) != inside.end());
     CHECK(opening.Problems().isEmpty());
 }
 

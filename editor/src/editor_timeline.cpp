@@ -57,6 +57,7 @@ const QColor kKeySelected(240, 190, 80);
 const QColor kKeyLine(96, 96, 104);
 const QColor kLabelMark(220, 180, 90);
 const QColor kPlayhead(230, 90, 90);
+const QColor kWorkArea(72, 96, 132);
 
 }
 
@@ -514,6 +515,11 @@ void Timeline::SetHiddenDepths(std::vector<uint16_t> depths) {
     update();
 }
 
+void Timeline::SetWorkArea(std::optional<Document::WorkArea> area) {
+    work_area_ = area;
+    update();
+}
+
 void Timeline::SetLockedDepths(std::vector<uint16_t> depths) {
     locked_depths_ = std::move(depths);
     update();
@@ -529,6 +535,11 @@ void Timeline::paintEvent(QPaintEvent* event) {
     }
 
     painter.fillRect(QRect(0, 0, width(), kRulerHeight), kRuler);
+    if (work_area_) {
+        const int from = FrameToX(work_area_->first_frame);
+        const int to = FrameToX(work_area_->last_frame + 1);
+        painter.fillRect(QRect(from, 0, std::max(2, to - from), kRulerHeight), kWorkArea);
+    }
     DrawTicks(painter);
     painter.setPen(palette().color(QPalette::BrightText));
     painter.drawText(QRect(0, 0, kGutterWidth, kRulerHeight), Qt::AlignCenter,

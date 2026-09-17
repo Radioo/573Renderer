@@ -248,6 +248,19 @@ TEST_CASE("A locked depth is marked in the gutter") {
     CHECK(timeline.grab(gutter).toImage() == plain);
 }
 
+TEST_CASE("The work area is shaded on the ruler") {
+    Editor::Timeline timeline;
+    ShowScene(timeline);
+    const QPoint inside(static_cast<int>(FrameX(3)) + 5, 3);
+    const QColor plain = timeline.grab().toImage().pixelColor(inside);
+    timeline.SetWorkArea(Document::WorkArea{.first_frame = 2, .last_frame = 4});
+    CHECK(timeline.grab().toImage().pixelColor(inside) == QColor(72, 96, 132));
+    CHECK(timeline.grab().toImage().pixelColor(QPoint(static_cast<int>(FrameX(6)) + 5, 3)) ==
+          plain);
+    timeline.SetWorkArea(std::nullopt);
+    CHECK(timeline.grab().toImage().pixelColor(inside) == plain);
+}
+
 TEST_CASE("Dragging a bar's edge asks to trim that span") {
     Editor::Timeline timeline;
     timeline.resize(kTimelineWidth, 200);

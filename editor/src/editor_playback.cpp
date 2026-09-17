@@ -39,9 +39,11 @@ void Window::TogglePlay() {
 }
 
 void Window::StepPlayback() {
-    const Document::Step step = Document::Advance(
-        Document::Playback{.frame_count = frame_count_, .looping = loop_action_->isChecked()},
-        frame_);
+    const Document::Step step =
+        Document::Advance(Document::Playback{.frame_count = frame_count_,
+                                             .looping = loop_action_->isChecked(),
+                                             .work_area = work_area_},
+                          frame_);
     SeekTo(step.frame);
     if (!step.playing) StopPlayback();
 }
