@@ -113,6 +113,17 @@ void Window::FillClips() {
     clip_box_->setCurrentIndex(0);
 }
 
+void Window::RefillClipsKeepingChoice() {
+    const Document::ClipId kept = clip_;
+    FillClips();
+    const QVariant wanted = kept.sprite ? QVariant(static_cast<int>(*kept.sprite)) : QVariant();
+    const int index = clip_box_->findData(wanted);
+    if (index < 0) return;
+    const QSignalBlocker blocked(clip_box_);
+    clip_box_->setCurrentIndex(index);
+    clip_ = kept;
+}
+
 void Window::ChooseClip(int index) {
     if (index < 0) return;
     const QVariant sprite = clip_box_->itemData(index);

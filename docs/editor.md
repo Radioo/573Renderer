@@ -190,7 +190,12 @@ offers to move the span under the playhead to another depth number
 (`Document::ChangeSpanDepth`), which moves an owned depth's record with it, and
 to duplicate it onto another depth (`Window::DuplicateSpanToDepth`, suggesting
 the first depth above every depth the clip uses), after which the copy is the
-selected depth.
+selected depth. It also offers to group the selected depth and the ones above it
+into a sprite (`Window::GroupDepthsIntoSprite`): it asks for the last depth, then
+the first and last frame, which start as the widest span those depths have under
+the playhead, and applies `Document::GroupIntoSprite` as one undo step. It is
+refused while the project owns any depth in that range. The clip box is refilled
+so the new sprite can be picked, keeping the clip that was being edited.
 
 **Timeline.** `Editor::Timeline` draws a ruler carrying the animation's labels
 at their frames, then one row per depth from `Document::DepthRows`, with a bar

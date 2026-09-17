@@ -634,6 +634,9 @@ void Window::ShowTimelineMenu(const QPoint& where, uint32_t frame, const QString
     QAction* duplicate =
         depth_ ? menu.addAction(tr("Duplicate depth %1 here onto another depth...").arg(*depth_))
                : nullptr;
+    QAction* group =
+        depth_ ? menu.addAction(tr("Group depth %1 and up here into a sprite...").arg(*depth_))
+               : nullptr;
     menu.addSeparator();
     const bool authored =
         depth_ != std::nullopt && AuthoredAt(static_cast<uint16_t>(*depth_), frame) != nullptr;
@@ -734,10 +737,11 @@ void Window::ShowTimelineMenu(const QPoint& where, uint32_t frame, const QString
                       });
         return;
     }
-    if (chosen == restack || chosen == duplicate) {
+    if (chosen == restack || chosen == duplicate || chosen == group) {
         const auto depth = static_cast<uint16_t>(*depth_);
         if (chosen == restack) MoveSpanToDepth(depth, frame);
         if (chosen == duplicate) DuplicateSpanToDepth(depth, frame);
+        if (chosen == group) GroupDepthsIntoSprite(depth, frame);
         return;
     }
     if (chosen == remove_depth) {

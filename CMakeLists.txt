@@ -720,6 +720,8 @@ add_executable(local_dll_tests
     tests/local/image_shape_live_tests.cpp
     tests/local/animation_settings_live_tests.cpp
     tests/local/span_trim_live_tests.cpp
+    tests/local/group_sprite_live_tests.cpp
+    tests/local/live_stage.cpp
     src/qpro/qpro_dll.cpp
     src/gc2d/gc_package.cpp
     src/preset/defaults/defaults.cpp
@@ -843,6 +845,7 @@ add_executable(document_tests
     tests/document/frame_edit_tests.cpp
     tests/document/history_tests.cpp
     tests/document/key_selection_tests.cpp
+    tests/document/group_sprite_tests.cpp
     tests/document/image_shape_tests.cpp
     tests/document/inspector_tests.cpp
     tests/document/keyframe_edit_tests.cpp

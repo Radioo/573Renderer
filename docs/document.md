@@ -974,6 +974,48 @@ that order, 1239 of them in that order but not in byte order, so the new entry
 is inserted before the first name that folds greater. The root clip has no
 symbol to show and a sprite that is gone is refused with the usual message.
 
+### Grouping depths into a sprite (`document/group_sprite.h`)
+
+`GroupIntoSprite(animation, range)` is After Effects' pre-compose: it moves the
+depths `first_depth` to `last_depth` over the frames `first_frame` to
+`last_frame` of a clip into a new sprite, and places that sprite at
+`first_depth` for exactly those frames. The sprite gets the next free character
+id, its definition goes into root frame 0 with the others, and it holds one
+frame per grouped frame. Every placement at those depths in the range moves in
+its original order, with its end frame rebased onto the sprite's timeline, and
+so does every remove after the first frame. The removes on the frame after the
+range go, and the sprite's own remove takes their place first in that frame, so
+a span that starts there on the same depth still follows it.
+
+That the result draws the same comes from how afp-core runs nested timelines
+(notes repo `Core/afp_format.md` section 9.6). A sprite placed on parent frame
+F shows its own frame k on parent frame F + k during playback, and a deep or
+synced goto to X puts it on (X - F) mod its length, so a sprite exactly as long
+as the range shows the same frame the flat depths did. The editor seeks with a
+deep goto, so scrubbing agrees too. A plain goto into the range restarts the
+sprite at its first frame, which the flat depths did not do, so grouping is an
+edit for content the timeline plays through.
+
+It refuses rather than guess:
+
+- a span at those depths that starts before the range or ends after it;
+- a range with nothing on those depths, a range past the clip, or depths or
+  frames that run backwards;
+- a grouped placement with an instance name, a class name or a script, because
+  scripts and names find objects by their path, which the sprite changes, and
+  a 3D placement, because how a nested 3D object meets the camera has not been
+  read;
+- any placement in the clip that sets a clip depth on those frames, grouped or
+  not, because the clip depth field is still unverified.
+
+`group_sprite_tests` covers the layout and each refusal. `group_sprite_live_tests`
+(`local_dll`) groups two unscripted depths of IIDX 33's `led_effects.ifs`
+(`Background_life`) over their whole span, and again after trimming them to
+start ten frames later, and requires the frames before, inside and after the
+range to draw byte for byte as before, and that removing the sprite changes a
+frame inside it. Building the sprite's frames one frame late, or without the
+offset of the first frame, was seen to fail it.
+
 ### Removing a frame keeps the definitions in it
 
 `RemoveFrame` drops only the per-frame commands in the frame (place, remove,

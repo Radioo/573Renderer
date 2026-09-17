@@ -2,6 +2,7 @@
 
 #include "document/authored.h"
 #include "document/clip.h"
+#include "document/group_sprite.h"
 #include "document/outline.h"
 #include "document/span_edit.h"
 #include "document/span_trim.h"
@@ -94,6 +95,68 @@ void Window::MoveSpanToDepth(uint16_t depth, uint32_t frame) {
         authored_[*owned].depth = to;
         SaveProject();
     }
+    ShowFrame();
+}
+
+bool Window::OwnsDepthIn(const Document::GroupRange& range) const {
+    return std::ranges::any_of(authored_, [&](const Document::AuthoredDepth& owned) {
+        return owned.animation == animation_path_ && owned.clip == range.clip &&
+               owned.depth >= range.first_depth && owned.depth <= range.last_depth &&
+               owned.first_frame <= range.last_frame && owned.last_frame >= range.first_frame;
+    });
+}
+
+void Window::GroupDepthsIntoSprite(uint16_t depth, uint32_t frame) {
+    if (!file_ || animation_path_.empty()) return;
+    const auto animation = file_->ReadAnimation(animation_path_);
+    if (!animation) {
+        ReportProblem(QString::fromStdString(animation.error()));
+        return;
+    }
+    const AfpAnimation::Container* shown = Document::FindClip(*animation, clip_);
+    if (shown == nullptr || shown->frames.empty()) return;
+    const QString title = tr("Group into a sprite");
+    const int widest = std::numeric_limits<uint16_t>::max();
+    bool answered = false;
+    const int last_depth =
+        QInputDialog::getInt(this, title, tr("Last depth"), depth, depth, widest, 1, &answered);
+    if (!answered) return;
+    Document::Span around{.first_frame = frame, .last_frame = frame};
+    for (int at = depth; at <= last_depth; at++) {
+        const auto span = Document::SpanOfDepth(*shown, static_cast<uint16_t>(at), frame);
+        if (!span) continue;
+        around.first_frame = std::min(around.first_frame, span->first_frame);
+        around.last_frame = std::max(around.last_frame, span->last_frame);
+    }
+    const int final_frame = static_cast<int>(shown->frames.size()) - 1;
+    const int first =
+        QInputDialog::getInt(this, title, tr("First frame"), static_cast<int>(around.first_frame),
+                             0, final_frame, 1, &answered);
+    if (!answered) return;
+    const int last = QInputDialog::getInt(this, title, tr("Last frame"),
+                                          std::max(static_cast<int>(around.last_frame), first),
+                                          first, final_frame, 1, &answered);
+    if (!answered) return;
+    const Document::GroupRange range{.clip = clip_,
+                                     .first_depth = depth,
+                                     .last_depth = static_cast<uint16_t>(last_depth),
+                                     .first_frame = static_cast<uint32_t>(first),
+                                     .last_frame = static_cast<uint32_t>(last)};
+    if (OwnsDepthIn(range)) {
+        ReportProblem(tr("The project owns a depth in that range. Detach it before grouping."));
+        return;
+    }
+    if (!EditAnimation(tr("Group depths %1 to %2 into a sprite").arg(depth).arg(last_depth),
+                       [range](AfpAnimation::Animation& edited) {
+                           using Grouped = Support::Expected<void, std::string>;
+                           auto sprite = Document::GroupIntoSprite(edited, range);
+                           if (!sprite) return Grouped(Support::Unexpected(sprite.error()));
+                           return Grouped();
+                       })) {
+        return;
+    }
+    depth_ = depth;
+    RefillClipsKeepingChoice();
     ShowFrame();
 }
 

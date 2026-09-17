@@ -5,6 +5,7 @@
 #include "document/document.h"
 #include "document/authored.h"
 #include "document/clip.h"
+#include "document/group_sprite.h"
 #include "document/history.h"
 #include "document/inspector.h"
 #include "document/key_selection.h"
@@ -142,6 +143,7 @@ private:
     void SeekViewport(uint32_t frame);
     QWidget* BuildTimelinePanel(QScrollArea* timeline_area);
     void FillClips();
+    void RefillClipsKeepingChoice();
     void ChooseClip(int index);
     void ShowClipTimeline();
     [[nodiscard]] std::optional<Placeable>
@@ -165,6 +167,8 @@ private:
     void MoveSpanInTime(uint16_t depth, uint32_t frame, int64_t by);
     void MoveSpanToDepth(uint16_t depth, uint32_t frame);
     void DuplicateSpanToDepth(uint16_t depth, uint32_t frame);
+    void GroupDepthsIntoSprite(uint16_t depth, uint32_t frame);
+    [[nodiscard]] bool OwnsDepthIn(const Document::GroupRange& range) const;
     void TrimSpanOnTimeline(uint16_t depth, uint32_t frame, uint32_t first, uint32_t last);
     void ResizeViewport();
     void Reload();

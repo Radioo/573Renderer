@@ -19,6 +19,7 @@
 #include <QtGlobal>
 #include <QApplication>
 #include <QByteArray>
+#include <QComboBox>
 #include <QDialog>
 #include <QElapsedTimer>
 #include <QDir>
@@ -347,6 +348,25 @@ TEST_CASE("A span duplicated from the timeline menu lands on the next free depth
     emit timeline->MenuRequested(QPoint(4, 4), 1, QString());
     REQUIRE(Settle([&refused] { return !refused.Problems().isEmpty(); }));
     CHECK(refused.Problems().front().contains("depth 2"));
+}
+
+TEST_CASE("Depths grouped from the timeline menu become a sprite that can be picked") {
+    Opened opened;
+    Open(opened);
+    auto* timeline = opened.window.findChild<Editor::Timeline*>();
+    auto* clips = opened.window.findChild<QComboBox*>();
+    REQUIRE(timeline != nullptr);
+    REQUIRE(clips != nullptr);
+    const int before = clips->count();
+    emit timeline->DepthChosen(1);
+    Script grouped({Choose("Group depth 1 and up here into a sprite..."), AcceptNumber(),
+                    AcceptNumber(), AcceptNumber()});
+    emit timeline->MenuRequested(QPoint(4, 4), 1, QString());
+    REQUIRE(Settle([&grouped] { return grouped.Finished(); }));
+    CHECK(grouped.Problems().isEmpty());
+    CHECK(clips->count() == before + 1);
+    CHECK(clips->currentIndex() == 0);
+    CHECK(RowValue(*opened.inspector, "Depth") == "1");
 }
 
 TEST_CASE("A stage drag only changes the document when it ends") {
