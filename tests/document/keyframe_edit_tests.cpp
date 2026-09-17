@@ -2,6 +2,7 @@
 
 #include "document/authored.h"
 #include "document/keyframe_edit.h"
+#include "document/key_selection.h"
 #include "document/keyframes.h"
 
 #include <algorithm>
@@ -55,7 +56,9 @@ TEST_CASE("A keyframe added on a linear segment changes nothing that is sampled"
 
 TEST_CASE("A keyframe added on a held segment changes nothing that is sampled") {
     Document::AuthoredDepth depth = Depth();
-    REQUIRE(Document::SetKeyEaseAt(depth, "Translation", 0, Document::Ease::Hold, {}).has_value());
+    REQUIRE(Document::SetKeysEase(depth, {Document::KeyRef{.property = "Translation", .frame = 0}},
+                                  Document::Ease::Hold, {})
+                .has_value());
     const std::vector<std::vector<int64_t>> before = Sampled(depth);
 
     REQUIRE(Document::AddKeyAt(depth, "Translation", 5).has_value());
@@ -113,8 +116,9 @@ TEST_CASE("A keyframe is looked up by its property and frame") {
 TEST_CASE("A keyframe takes a bezier ease and its control points") {
     Document::AuthoredDepth depth = Depth();
     const Document::Bezier curve{.x1 = 0.25, .y1 = 0.1, .x2 = 0.25, .y2 = 1.0};
-    REQUIRE(
-        Document::SetKeyEaseAt(depth, "Translation", 0, Document::Ease::Bezier, curve).has_value());
+    REQUIRE(Document::SetKeysEase(depth, {Document::KeyRef{.property = "Translation", .frame = 0}},
+                                  Document::Ease::Bezier, curve)
+                .has_value());
 
     const Document::Track& track = TrackOf(depth, "Translation");
     CHECK(track.keys.front().ease == Document::Ease::Bezier);
@@ -124,8 +128,10 @@ TEST_CASE("A keyframe takes a bezier ease and its control points") {
 TEST_CASE("An ease control point outside its range is refused") {
     Document::AuthoredDepth depth = Depth();
     const Document::Bezier curve{.x1 = 2.0, .y1 = 0.0, .x2 = 0.5, .y2 = 1.0};
-    CHECK_FALSE(
-        Document::SetKeyEaseAt(depth, "Translation", 0, Document::Ease::Bezier, curve).has_value());
+    CHECK_FALSE(Document::SetKeysEase(depth,
+                                      {Document::KeyRef{.property = "Translation", .frame = 0}},
+                                      Document::Ease::Bezier, curve)
+                    .has_value());
 }
 
 TEST_CASE("A keyframe is removed by the frame it is on") {
@@ -152,6 +158,8 @@ TEST_CASE("A keyframe of a property the depth does not animate cannot be reached
     Document::AuthoredDepth depth = Depth();
     CHECK_FALSE(Document::RemoveKeyAt(depth, "Multiply colour", 0).has_value());
     CHECK_FALSE(Document::SetKeyValueAt(depth, "Multiply colour", 0, "1").has_value());
-    CHECK_FALSE(Document::SetKeyEaseAt(depth, "Multiply colour", 0, Document::Ease::Linear, {})
+    CHECK_FALSE(Document::SetKeysEase(depth,
+                                      {Document::KeyRef{.property = "Multiply colour", .frame = 0}},
+                                      Document::Ease::Linear, {})
                     .has_value());
 }

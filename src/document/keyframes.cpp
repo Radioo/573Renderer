@@ -40,18 +40,6 @@ double BezierFraction(const Bezier& bezier, double t) {
     return CurveAt(bezier.y1, bezier.y2, 0.5 * (low + high));
 }
 
-double Fraction(const Keyframe& from, double t) {
-    switch (from.ease) {
-    case Ease::Hold:
-        return 0.0;
-    case Ease::Linear:
-        return t;
-    case Ease::Bezier:
-        return BezierFraction(from.bezier, t);
-    }
-    return t;
-}
-
 int64_t Blend(int64_t from, int64_t to, double fraction) {
     const double value = static_cast<double>(from) +
                          ((static_cast<double>(to) - static_cast<double>(from)) * fraction);
@@ -72,6 +60,35 @@ Support::Expected<void, std::string> CheckBezier(const Bezier& bezier) {
     return {};
 }
 
+}
+
+double EaseProgress(Ease ease, const Bezier& bezier, double t) {
+    switch (ease) {
+    case Ease::Hold:
+        return 0.0;
+    case Ease::Linear:
+        return t;
+    case Ease::Bezier:
+        return BezierFraction(bezier, t);
+    }
+    return t;
+}
+
+Bezier WithinTime(Bezier bezier) {
+    bezier.x1 = std::clamp(bezier.x1, 0.0, 1.0);
+    bezier.x2 = std::clamp(bezier.x2, 0.0, 1.0);
+    return bezier;
+}
+
+const std::vector<EasePreset>& EasePresets() {
+    static const std::vector<EasePreset> presets{
+        {.name = "Ease", .bezier = {.x1 = 1.0 / 3.0, .y1 = 0.0, .x2 = 2.0 / 3.0, .y2 = 1.0}},
+        {.name = "Ease in", .bezier = {.x1 = 1.0 / 3.0, .y1 = 0.0, .x2 = 1.0, .y2 = 1.0}},
+        {.name = "Ease out", .bezier = {.x1 = 0.0, .y1 = 0.0, .x2 = 2.0 / 3.0, .y2 = 1.0}},
+        {.name = "Straight", .bezier = {.x1 = 0.0, .y1 = 0.0, .x2 = 1.0, .y2 = 1.0}},
+        {.name = "Overshoot", .bezier = {.x1 = 0.3, .y1 = 0.0, .x2 = 0.6, .y2 = 1.3}},
+    };
+    return presets;
 }
 
 std::string_view EaseName(Ease ease) {
@@ -119,7 +136,7 @@ std::vector<int64_t> SampleTrack(const Track& track, uint32_t frame) {
     const Keyframe& to = track.keys[after];
     const double span = static_cast<double>(to.frame) - static_cast<double>(from.frame);
     const double t = (static_cast<double>(frame) - static_cast<double>(from.frame)) / span;
-    const double fraction = Fraction(from, t);
+    const double fraction = EaseProgress(from.ease, from.bezier, t);
 
     std::vector<int64_t> out;
     out.reserve(from.value.size());

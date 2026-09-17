@@ -160,6 +160,20 @@ Support::Expected<void, std::string> RemoveKeys(AuthoredDepth& authored,
     return {};
 }
 
+Support::Expected<void, std::string>
+SetKeysEase(AuthoredDepth& authored, const std::vector<KeyRef>& keys, Ease ease, Bezier bezier) {
+    if (keys.empty()) return Support::Unexpected(std::string("no keyframes are selected"));
+    AuthoredDepth edited = authored;
+    for (const KeyRef& key : keys) {
+        Track* track = TrackNamed(edited, key.property);
+        if (track == nullptr) return Support::Unexpected(Missing(key));
+        auto eased = SetKeyframeEase(*track, key.frame, ease, bezier);
+        if (!eased) return Support::Unexpected(eased.error());
+    }
+    authored = std::move(edited);
+    return {};
+}
+
 Support::Expected<std::vector<KeyRef>, std::string>
 ShiftKeys(AuthoredDepth& authored, const std::vector<KeyRef>& keys, int64_t by) {
     if (keys.empty()) return Support::Unexpected(std::string("no keyframes are selected"));

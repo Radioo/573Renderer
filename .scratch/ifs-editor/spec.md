@@ -259,3 +259,4 @@ captured. This milestone is the editing itself.
 - `issues/51-select-and-move-on-stage.md` (milestone 8)
 - `issues/52-scale-and-turn-on-stage.md` (milestone 8)
 - `issues/53-keyframe-selection.md` (milestone 8)
+- `issues/54-ease-curve-editor.md` (milestone 8)

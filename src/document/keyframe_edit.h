@@ -27,9 +27,4 @@ RemoveKeyAt(AuthoredDepth& authored, std::string_view property, uint32_t frame);
 
 [[nodiscard]] std::string KeyValueText(const Keyframe& key);
 
-[[nodiscard]] Support::Expected<void, std::string> SetKeyEaseAt(AuthoredDepth& authored,
-                                                                std::string_view property,
-                                                                uint32_t frame, Ease ease,
-                                                                Bezier bezier);
-
 }

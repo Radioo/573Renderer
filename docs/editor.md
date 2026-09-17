@@ -258,8 +258,13 @@ selected there (starting any track it does not have yet), Delete removes it and
 Ctrl+A selects every keyframe of the depth. Right-clicking a lane offers the same
 copy, paste and delete, to add a keyframe where there is none, and to remove one
 or change how it leaves its frame where there is. The copied keyframes are kept
-by the window, so they can be pasted into another owned depth. An ease of bezier asks for its four control
-points as `x1, y1, x2, y2`.
+by the window, so they can be pasted into another owned depth. How a keyframe leaves its frame applies to the whole
+selection when the right-clicked keyframe is part of it, and to that keyframe
+alone otherwise. Bezier opens `Editor::EaseDialog`: the curve drawn with
+`Document::EaseProgress` over a unit square that has room above and below for
+an overshoot, two handles to drag (kept inside the segment's time), a button
+for each `Document::EasePresets` curve, and the four numbers as text, kept in
+step with the handles.
 
 With a keyframe selected the inspector carries three rows for it above the
 placement fields: which property and frame it is, its value, and the ease it

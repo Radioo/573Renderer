@@ -4,6 +4,7 @@
 #include "document/authored.h"
 #include "document/clip.h"
 #include "document/keyframe_edit.h"
+#include "document/key_selection.h"
 #include "document/keyframes.h"
 #include "document/placement_effect.h"
 #include "document/tags.h"
@@ -72,7 +73,9 @@ TEST_CASE("Easing a translation keeps a held scale on every frame the game draws
     AfpAnimation::Animation animation = Scaled();
     auto owned = Document::OwnDepth(animation, kRoot, "afp/a", kDepth, 0);
     REQUIRE(owned.has_value());
-    REQUIRE(Document::SetKeyEaseAt(owned->authored, "Translation", 0, Document::Ease::Linear, {})
+    REQUIRE(Document::SetKeysEase(owned->authored,
+                                  {Document::KeyRef{.property = "Translation", .frame = 0}},
+                                  Document::Ease::Linear, {})
                 .has_value());
 
     const auto shown = Exported(animation, owned->authored);
@@ -99,9 +102,10 @@ TEST_CASE("Easing a colour keeps a held add colour on every frame the game draws
 
     auto owned = Document::OwnDepth(animation, kRoot, "afp/a", kDepth, 0);
     REQUIRE(owned.has_value());
-    REQUIRE(
-        Document::SetKeyEaseAt(owned->authored, "Multiply colour", 0, Document::Ease::Linear, {})
-            .has_value());
+    REQUIRE(Document::SetKeysEase(owned->authored,
+                                  {Document::KeyRef{.property = "Multiply colour", .frame = 0}},
+                                  Document::Ease::Linear, {})
+                .has_value());
 
     for (const auto& [frame, state] : Exported(animation, owned->authored)) {
         INFO("frame " << frame);
@@ -140,11 +144,15 @@ TEST_CASE("What the keyframes say is what the game draws on every exported frame
     AfpAnimation::Animation animation = Scaled();
     auto owned = Document::OwnDepth(animation, kRoot, "afp/a", kDepth, 0);
     REQUIRE(owned.has_value());
-    REQUIRE(Document::SetKeyEaseAt(owned->authored, "Translation", 0, Document::Ease::Linear, {})
+    REQUIRE(Document::SetKeysEase(owned->authored,
+                                  {Document::KeyRef{.property = "Translation", .frame = 0}},
+                                  Document::Ease::Linear, {})
                 .has_value());
     REQUIRE(Document::SetKeyValueAt(owned->authored, "Scale", kLast, "1024, 4096").has_value());
-    REQUIRE(Document::SetKeyEaseAt(owned->authored, "Scale", 0, Document::Ease::Bezier,
-                                   Document::Bezier{.x1 = 0.3, .y1 = 0.0, .x2 = 0.7, .y2 = 1.0})
+    REQUIRE(Document::SetKeysEase(owned->authored,
+                                  {Document::KeyRef{.property = "Scale", .frame = 0}},
+                                  Document::Ease::Bezier,
+                                  Document::Bezier{.x1 = 0.3, .y1 = 0.0, .x2 = 0.7, .y2 = 1.0})
                 .has_value());
 
     const auto shown = Exported(animation, owned->authored);

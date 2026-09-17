@@ -1,7 +1,9 @@
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include "document/keyframes.h"
 
+#include <cmath>
 #include <cstdint>
 #include <string>
 #include <utility>
@@ -175,4 +177,37 @@ TEST_CASE("Ease names round trip") {
     }
     CHECK_FALSE(Document::EaseFor("spring").has_value());
     CHECK_FALSE(Document::EaseFor("").has_value());
+}
+
+TEST_CASE("The ease a curve editor draws is the one the track samples") {
+    const Document::Bezier bezier{.x1 = 0.2, .y1 = 0.9, .x2 = 0.4, .y2 = 1.2};
+    Document::Track track{.property = "Translation", .keys = {Key(0, {0}), Key(10, {10000})}};
+    track.keys[0].ease = Document::Ease::Bezier;
+    track.keys[0].bezier = bezier;
+    for (uint32_t frame = 0; frame <= 10; frame++) {
+        const double progress =
+            Document::EaseProgress(Document::Ease::Bezier, bezier, frame / 10.0);
+        CHECK(Sampled(track, frame) == std::vector<int64_t>{std::llround(progress * 10000.0)});
+    }
+    CHECK(Document::EaseProgress(Document::Ease::Hold, {}, 0.7) == 0.0);
+    CHECK(Document::EaseProgress(Document::Ease::Linear, {}, 0.7) == 0.7);
+}
+
+TEST_CASE("A dragged ease handle stays inside the segment's time") {
+    const Document::Bezier kept =
+        Document::WithinTime({.x1 = -0.5, .y1 = -2.0, .x2 = 1.5, .y2 = 3.0});
+    CHECK(kept == Document::Bezier{.x1 = 0.0, .y1 = -2.0, .x2 = 1.0, .y2 = 3.0});
+}
+
+TEST_CASE("Every ease preset is a curve a keyframe accepts") {
+    REQUIRE(!Document::EasePresets().empty());
+    for (const Document::EasePreset& preset : Document::EasePresets()) {
+        Document::Track track = Two(0, 1000, Document::Ease::Linear);
+        INFO(preset.name);
+        CHECK(Document::SetKeyframeEase(track, 10, Document::Ease::Bezier, preset.bezier)
+                  .has_value());
+        CHECK(std::abs(Document::EaseProgress(Document::Ease::Bezier, preset.bezier, 0.0)) < 1e-9);
+        CHECK(std::abs(Document::EaseProgress(Document::Ease::Bezier, preset.bezier, 1.0) - 1.0) <
+              1e-9);
+    }
 }

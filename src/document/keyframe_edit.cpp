@@ -100,12 +100,4 @@ std::string KeyValueText(const Keyframe& key) {
     return Join(parts);
 }
 
-Support::Expected<void, std::string> SetKeyEaseAt(AuthoredDepth& authored,
-                                                  std::string_view property, uint32_t frame,
-                                                  Ease ease, Bezier bezier) {
-    auto track = TrackOf(authored, property);
-    if (!track) return Support::Unexpected(track.error());
-    return SetKeyframeEase(**track, frame, ease, bezier);
-}
-
 }

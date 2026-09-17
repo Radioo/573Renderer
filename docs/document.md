@@ -342,6 +342,12 @@ integers moves rather than sticking. `x1` and `x2` are refused outside 0 to 1
 because the timing function stops being a function of time otherwise; `y1` and
 `y2` are free, which is what lets an ease overshoot.
 
+`EaseProgress` is the function sampling uses, exposed so a curve editor draws
+exactly what export will write. `WithinTime` pulls a dragged control point back
+inside 0 to 1 in time and leaves its value alone. `EasePresets` holds the named
+curves the editor offers: Ease (1/3, 0, 2/3, 1), the After Effects easy ease,
+Ease in, Ease out, Straight and an Overshoot.
+
 ## Own and detach (`document/authored.h`)
 
 `OwnDepth` takes the span of a depth around a frame and splits it in two. The
@@ -848,6 +854,7 @@ paste or a move that fails halfway leaves nothing behind.
   that cannot be started (a short twin of a tracked property, for one). It
   returns the pasted keyframes so the editor can select them.
 - `RemoveKeys` removes them all; a track still keeps its last keyframe.
+- `SetKeysEase` gives them all one ease, with its bezier when it is one.
 - `ShiftKeys` moves them all by the same number of frames. A move that would
   land on a keyframe that is not moving, or leave the owned range, is refused.
   It returns where the keyframes went.

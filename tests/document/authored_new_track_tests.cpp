@@ -4,6 +4,7 @@
 #include "document/authored.h"
 #include "document/clip.h"
 #include "document/keyframe_edit.h"
+#include "document/key_selection.h"
 #include "document/keyframes.h"
 #include "document/placement_effect.h"
 #include "document/tags.h"
@@ -88,8 +89,10 @@ TEST_CASE("A property started on a depth animates once its keyframes change") {
     REQUIRE(Document::AddTrack(owned.authored, owned.baked, "Scale").has_value());
     REQUIRE(Document::AddKeyAt(owned.authored, "Scale", kLast).has_value());
     REQUIRE(Document::SetKeyValueAt(owned.authored, "Scale", kLast, "2048, 2048").has_value());
-    REQUIRE(
-        Document::SetKeyEaseAt(owned.authored, "Scale", 0, Document::Ease::Linear, {}).has_value());
+    REQUIRE(Document::SetKeysEase(owned.authored,
+                                  {Document::KeyRef{.property = "Scale", .frame = 0}},
+                                  Document::Ease::Linear, {})
+                .has_value());
 
     const auto baked = Document::BakedFor(animation, owned.authored);
     REQUIRE(baked.has_value());

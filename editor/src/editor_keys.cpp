@@ -1,21 +1,21 @@
 #include "editor_window.h"
 
+#include "editor_ease_dialog.h"
 #include "editor_timeline.h"
 
 #include "document/authored.h"
+#include "document/key_selection.h"
 #include "document/keyframe_edit.h"
 #include "document/keyframes.h"
 #include "formats/afp_animation.h"
 #include "support/expected.h"
 
 #include <QAction>
+#include <QDialog>
 #include <QInputDialog>
-#include <QLineEdit>
 #include <QMenu>
 #include <QPoint>
-#include <QRegularExpression>
 #include <QString>
-#include <QStringList>
 
 #include <algorithm>
 #include <cstddef>
@@ -25,30 +25,6 @@
 #include <vector>
 
 namespace Editor {
-
-namespace {
-
-QString CurveText(const Document::Bezier& bezier) {
-    return QString("%1, %2, %3, %4").arg(bezier.x1).arg(bezier.y1).arg(bezier.x2).arg(bezier.y2);
-}
-
-std::optional<Document::Bezier> CurveFrom(const QString& text) {
-    const QStringList parts = text.split(QRegularExpression("[,\\s]+"), Qt::SkipEmptyParts);
-    if (parts.size() != 4) return std::nullopt;
-    Document::Bezier bezier;
-    bool ok = true;
-    bezier.x1 = parts[0].toDouble(&ok);
-    if (!ok) return std::nullopt;
-    bezier.y1 = parts[1].toDouble(&ok);
-    if (!ok) return std::nullopt;
-    bezier.x2 = parts[2].toDouble(&ok);
-    if (!ok) return std::nullopt;
-    bezier.y2 = parts[3].toDouble(&ok);
-    if (!ok) return std::nullopt;
-    return bezier;
-}
-
-}
 
 void Window::ShowKeysForDepth(const Document::AuthoredDepth* owned) {
     if (owned == nullptr) {
@@ -225,25 +201,23 @@ void Window::ShowKeyMenu(const QPoint& where, const QString& property, uint32_t 
     if (chosen == hold) {
         wanted = Document::Ease::Hold;
     } else if (chosen == bezier) {
-        bool accepted = false;
-        const QString text = QInputDialog::getText(
-            this, tr("IFS Editor"), tr("Control points as x1, y1, x2, y2:"), QLineEdit::Normal,
-            key ? CurveText(key->bezier) : CurveText({}), &accepted);
-        if (!accepted) return;
-        const std::optional<Document::Bezier> parsed = CurveFrom(text);
-        if (!parsed) {
-            ReportProblem(tr("An ease needs four numbers: x1, y1, x2, y2."));
-            return;
-        }
+        const Document::Bezier start = key && key->ease == Document::Ease::Bezier
+                                           ? key->bezier
+                                           : Document::EasePresets().front().bezier;
+        EaseDialog dialog(start, this);
+        if (dialog.exec() != QDialog::Accepted) return;
         wanted = Document::Ease::Bezier;
-        curve = *parsed;
+        curve = dialog.Result();
     } else if (chosen != linear) {
         return;
     }
 
-    EditAuthored(tr("Ease the %1 keyframe at frame %2").arg(property).arg(frame),
-                 [&name, frame, wanted, curve](Document::AuthoredDepth& owned) {
-                     return Document::SetKeyEaseAt(owned, name, frame, wanted, curve);
+    const Document::KeyRef clicked{.property = name, .frame = frame};
+    std::vector<Document::KeyRef> eased = timeline_->SelectedKeys();
+    if (std::ranges::find(eased, clicked) == eased.end()) eased = {clicked};
+    EditAuthored(tr("Ease %n keyframe(s)", nullptr, static_cast<int>(eased.size())),
+                 [&eased, wanted, curve](Document::AuthoredDepth& owned) {
+                     return Document::SetKeysEase(owned, eased, wanted, curve);
                  });
 }
 

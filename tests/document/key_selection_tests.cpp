@@ -164,3 +164,24 @@ TEST_CASE("Keyframes cannot move onto another keyframe or outside the range") {
         Document::ShiftKeys(depth, {Ref("Translation", 4), Ref("Translation", 8)}, 4).has_value());
     CHECK(Frames(depth, "Translation") == std::vector<uint32_t>{0, 8, 12});
 }
+
+TEST_CASE("Selected keyframes take one ease together, or none does") {
+    Document::AuthoredDepth depth = Depth();
+    const Document::Bezier curve{.x1 = 0.25, .y1 = 0.0, .x2 = 0.75, .y2 = 1.0};
+    REQUIRE(Document::SetKeysEase(depth, {Ref("Translation", 0), Ref("Multiply colour", 0)},
+                                  Document::Ease::Bezier, curve)
+                .has_value());
+    CHECK(depth.tracks[0].keys[0].ease == Document::Ease::Bezier);
+    CHECK(depth.tracks[0].keys[0].bezier == curve);
+    CHECK(depth.tracks[1].keys[0].ease == Document::Ease::Bezier);
+    CHECK(depth.tracks[0].keys[1].ease == Document::Ease::Linear);
+
+    const Document::AuthoredDepth before = depth;
+    CHECK_FALSE(Document::SetKeysEase(depth, {Ref("Translation", 4), Ref("Translation", 5)},
+                                      Document::Ease::Hold, {})
+                    .has_value());
+    CHECK_FALSE(Document::SetKeysEase(depth, {Ref("Translation", 4)}, Document::Ease::Bezier,
+                                      {.x1 = 2.0, .y1 = 0.0, .x2 = 1.0, .y2 = 1.0})
+                    .has_value());
+    CHECK(depth == before);
+}

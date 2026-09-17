@@ -35,6 +35,9 @@ PasteKeys(AuthoredDepth& authored, const BakedDepth& baked, const KeyClip& clip,
 [[nodiscard]] Support::Expected<void, std::string> RemoveKeys(AuthoredDepth& authored,
                                                               const std::vector<KeyRef>& keys);
 
+[[nodiscard]] Support::Expected<void, std::string>
+SetKeysEase(AuthoredDepth& authored, const std::vector<KeyRef>& keys, Ease ease, Bezier bezier);
+
 [[nodiscard]] Support::Expected<std::vector<KeyRef>, std::string>
 ShiftKeys(AuthoredDepth& authored, const std::vector<KeyRef>& keys, int64_t by);
 

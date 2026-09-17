@@ -37,6 +37,17 @@ struct Track {
     friend bool operator==(const Track&, const Track&) = default;
 };
 
+struct EasePreset {
+    std::string name;
+    Bezier bezier;
+};
+
+[[nodiscard]] double EaseProgress(Ease ease, const Bezier& bezier, double t);
+
+[[nodiscard]] Bezier WithinTime(Bezier bezier);
+
+[[nodiscard]] const std::vector<EasePreset>& EasePresets();
+
 [[nodiscard]] std::string_view EaseName(Ease ease);
 
 [[nodiscard]] std::optional<Ease> EaseFor(std::string_view name);
