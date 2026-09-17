@@ -801,6 +801,7 @@ catch_discover_tests(document_outline_local_tests DISCOVERY_MODE POST_BUILD PROP
 
 add_executable(document_tests
     tests/document/atlas_tests.cpp
+    tests/document/authored_character_tests.cpp
     tests/document/authored_control_bits_tests.cpp
     tests/document/authored_group_tests.cpp
     tests/document/authored_new_track_tests.cpp

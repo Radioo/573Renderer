@@ -16,6 +16,8 @@ namespace Document {
 
 [[nodiscard]] bool PropertyIsAnimatable(std::string_view name);
 
+[[nodiscard]] bool PropertyIsStepped(std::string_view name);
+
 [[nodiscard]] std::optional<std::vector<int64_t>>
 ReadProperty(const AfpAnimation::Placement& placement, std::string_view name);
 

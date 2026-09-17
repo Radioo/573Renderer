@@ -469,13 +469,20 @@ different, and without the blank frames 16802 did. IIDX 33 has 529434 updates
 that set nothing, so dropping them is not a corner case.
 
 Own refuses rather than losing anything. A span whose later frames change a
-character, a name, filters, curves or anything else a keyframe cannot hold is
-refused and says which; so is a span placed twice, one whose updates disagree on
-their flags, and one whose frames end somewhere other than its first frame does.
-Of 211152 spans offered, 187191 are owned and all 187191 detach byte for byte;
-the 23961 refusals are 22076 with disagreeing update flags, 1809 changing
-filters and 76 changing curves. Why those updates carry different flags inside
-one span is UNRESOLVED and is why own refuses them instead of guessing.
+name, filters, curves or anything else a keyframe cannot hold is refused and
+says which; so is a span placed twice, one whose updates disagree on their
+flags, and one whose frames end somewhere other than its first frame does. The
+current numbers over the install are in `docs/local_regression.md`.
+
+### Stepped properties
+
+Character, Clip depth and Blend are properties whose values do not blend: an
+object is one character or another. They are keyed like any other property but
+only hold, so `SetKeysEase` and `AuthoredPlacements` refuse any other ease on
+them (`PropertyIsStepped`). A character becomes a track only when an update in
+the span swaps it; otherwise it stays on the baked create placement, so an
+ordinary depth does not grow a Character lane. A swap is then a key on the frame
+the update carried it, and moving that key moves the swap.
 
 ## Atlases (`document/atlas.h`, `document/atlas_write.h`)
 

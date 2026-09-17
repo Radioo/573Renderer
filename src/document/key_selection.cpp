@@ -2,6 +2,7 @@
 
 #include "document/authored.h"
 #include "document/keyframes.h"
+#include "document/placement_values.h"
 #include "support/expected.h"
 
 #include <algorithm>
@@ -167,6 +168,10 @@ SetKeysEase(AuthoredDepth& authored, const std::vector<KeyRef>& keys, Ease ease,
     for (const KeyRef& key : keys) {
         Track* track = TrackNamed(edited, key.property);
         if (track == nullptr) return Support::Unexpected(Missing(key));
+        if (ease != Ease::Hold && PropertyIsStepped(track->property)) {
+            return Support::Unexpected(track->property +
+                                       " jumps from one keyframe to the next and only holds");
+        }
         auto eased = SetKeyframeEase(*track, key.frame, ease, bezier);
         if (!eased) return Support::Unexpected(eased.error());
     }

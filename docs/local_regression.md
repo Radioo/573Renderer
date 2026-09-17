@@ -207,16 +207,18 @@ per-frame placement actually carries over a span, which is what the shape of
 detaches it again and requires the clip to come back identical.
 
 It owns spans in the root and in every sprite, and reports the two separately.
-On IIDX 33 it owns 209251 root spans and 610965 sprite spans, 99.2% of the
+On IIDX 33 it owns 209251 root spans and 612605 sprite spans, 99.4% of the
 826810 in the install, and gets every one of them back identical. The rest are
-refused for a stated reason: filters (4737), a character swapped mid-span (1640)
-and deformation curves (217). Before tickets 44 and 45 it refused another 69174
-spans whose updates used different control bits.
+refused for a stated reason: filters (4737) and deformation curves (217). Before
+tickets 44 and 45 it refused another 69174 spans whose updates used different
+control bits, and before ticket 55 another 1640 that swap their character
+mid-span.
 
 For every span it owns it also replays the shipped placements with the game's
 rule (`Document::ReplayDepth`) and compares each frame with what the keyframes
-say (`Document::KeyedState`): 35291707 root frames and 93222908 sprite frames,
-with no disagreement. That comparison is what shows own records what the game
+say (`Document::KeyedState`): 35291707 root frames and 93304176 sprite frames,
+with no disagreement. A full run reads every IFS under `data` (about 36 GB)
+and takes around half an hour, printing only at the end. That comparison is what shows own records what the game
 draws, including the 135000 or so updates that reset a matrix part and the
 375758 that reset a colour.
 

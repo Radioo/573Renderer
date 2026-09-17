@@ -31,6 +31,7 @@ constexpr uint32_t kUseMatrix = 0x4;
 constexpr uint32_t kUseColour = 0x8;
 constexpr uint32_t kControlBits = kUseMatrix | kUseColour;
 constexpr uint32_t kThreeD = 0x04000000;
+constexpr std::string_view kCharacter = "Character";
 
 struct StartableProperty {
     std::string_view property;
@@ -69,6 +70,15 @@ std::vector<Placed> SpanPlacements(const AfpAnimation::Container& clip, uint16_t
 const AfpAnimation::Placement& PlacementAt(const AfpAnimation::Container& clip,
                                            const Placed& placed) {
     return std::get<AfpAnimation::Placement>(clip.tags[placed.tag].body);
+}
+
+Support::Expected<void, std::string> CheckStepped(const Track& track) {
+    if (!PropertyIsStepped(track.property)) return {};
+    const bool eased =
+        std::ranges::any_of(track.keys, [](const Keyframe& key) { return key.ease != Ease::Hold; });
+    if (!eased) return {};
+    return Support::Unexpected(track.property +
+                               " jumps from one keyframe to the next and only holds");
 }
 
 bool CoversFrame(const Track& track, uint32_t frame) {
@@ -121,8 +131,15 @@ bool IsExplicit(const BakedDepth& baked, uint32_t frame, std::string_view proper
     });
 }
 
+bool SwapsCharacter(const AfpAnimation::Container& clip, const std::vector<Placed>& placements) {
+    return std::any_of(placements.begin() + 1, placements.end(), [&](const Placed& placed) {
+        return PlacementAt(clip, placed).character.has_value();
+    });
+}
+
 bool Tracked(const AfpAnimation::Container& clip, const std::vector<Placed>& placements,
              std::string_view property) {
+    if (property == kCharacter && !SwapsCharacter(clip, placements)) return false;
     return std::ranges::any_of(placements, [&](const Placed& placed) {
         return ReadProperty(PlacementAt(clip, placed), property).has_value();
     });
@@ -218,6 +235,8 @@ BakedDepth BakedOf(const AfpAnimation::Container& clip, const std::vector<Placed
     BakedDepth baked;
     baked.create = PlacementAt(clip, placements.front());
     ClearAnimatableProperties(baked.create);
+    if (!SwapsCharacter(clip, placements))
+        baked.create.character = PlacementAt(clip, placements.front()).character;
     if (placements.size() > 1) {
         const AfpAnimation::Placement& update = PlacementAt(clip, placements[1]);
         baked.update_flags = update.flags & ~kControlBits;
@@ -343,6 +362,8 @@ AuthoredPlacements(const AuthoredDepth& authored, const BakedDepth& baked) {
             return Support::Unexpected("the keyframes of " + track.property +
                                        " fall outside the authored range");
         }
+        auto stepped = CheckStepped(track);
+        if (!stepped) return Support::Unexpected(stepped.error());
     }
 
     std::vector<std::pair<uint32_t, AfpAnimation::Placement>> out;

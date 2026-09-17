@@ -19,6 +19,7 @@ namespace Document {
 namespace {
 
 enum class PropertyId : uint8_t {
+    Character,
     Ratio,
     ClipDepth,
     Blend,
@@ -43,7 +44,8 @@ struct NamedProperty {
     PropertyId id;
 };
 
-constexpr std::array<NamedProperty, 17> kProperties{{
+constexpr std::array<NamedProperty, 18> kProperties{{
+    {.name = "Character", .id = PropertyId::Character},
     {.name = "Ratio", .id = PropertyId::Ratio},
     {.name = "Clip depth", .id = PropertyId::ClipDepth},
     {.name = "Blend", .id = PropertyId::Blend},
@@ -62,6 +64,9 @@ constexpr std::array<NamedProperty, 17> kProperties{{
     {.name = "3D matrix", .id = PropertyId::Matrix3d},
     {.name = "HSV", .id = PropertyId::Hsv},
 }};
+
+constexpr std::array<PropertyId, 3> kStepped{PropertyId::Character, PropertyId::ClipDepth,
+                                             PropertyId::Blend};
 
 constexpr auto kPropertyNames = [] {
     std::array<std::string_view, kProperties.size()> out{};
@@ -146,6 +151,11 @@ std::span<const std::string_view> AnimatableProperties() {
     return kPropertyNames;
 }
 
+bool PropertyIsStepped(std::string_view name) {
+    const std::optional<PropertyId> id = PropertyFor(name);
+    return id && std::ranges::find(kStepped, *id) != kStepped.end();
+}
+
 bool PropertyIsAnimatable(std::string_view name) {
     return PropertyFor(name).has_value();
 }
@@ -155,6 +165,8 @@ std::optional<std::vector<int64_t>> ReadProperty(const AfpAnimation::Placement& 
     const std::optional<PropertyId> id = PropertyFor(name);
     if (!id) return std::nullopt;
     switch (*id) {
+    case PropertyId::Character:
+        return Read(placement.character);
     case PropertyId::Ratio:
         return Read(placement.ratio);
     case PropertyId::ClipDepth:
@@ -199,6 +211,8 @@ Support::Expected<void, std::string> WriteProperty(AfpAnimation::Placement& plac
     const std::optional<PropertyId> id = PropertyFor(name);
     if (!id) return Support::Unexpected(std::string(name) + " is not an animatable property");
     switch (*id) {
+    case PropertyId::Character:
+        return Write(placement.character, value);
     case PropertyId::Ratio:
         return Write(placement.ratio, value);
     case PropertyId::ClipDepth:
@@ -238,6 +252,7 @@ Support::Expected<void, std::string> WriteProperty(AfpAnimation::Placement& plac
 }
 
 void ClearAnimatableProperties(AfpAnimation::Placement& placement) {
+    placement.character.reset();
     placement.ratio.reset();
     placement.clip_depth.reset();
     placement.blend.reset();
@@ -259,7 +274,6 @@ void ClearAnimatableProperties(AfpAnimation::Placement& placement) {
 
 std::vector<std::string> UnanimatableParts(const AfpAnimation::Placement& placement) {
     std::vector<std::string> parts;
-    if (placement.character) parts.emplace_back("a character");
     if (placement.name) parts.emplace_back("an instance name");
     if (placement.class_name) parts.emplace_back("a class name");
     if (placement.geometry) parts.emplace_back("a geometry");
