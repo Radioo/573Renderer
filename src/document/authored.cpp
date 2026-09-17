@@ -1,6 +1,7 @@
 #include "document/authored.h"
 
 #include "document/clip.h"
+#include "document/curve_values.h"
 #include "document/keyframes.h"
 #include "document/placement_edit.h"
 #include "document/placement_effect.h"
@@ -31,7 +32,7 @@ constexpr uint32_t kUseMatrix = 0x4;
 constexpr uint32_t kUseColour = 0x8;
 constexpr uint32_t kControlBits = kUseMatrix | kUseColour;
 constexpr uint32_t kThreeD = 0x04000000;
-constexpr std::array<std::string_view, 2> kHeldUntilUpdated{"Character", "Filters"};
+constexpr std::array<std::string_view, 3> kHeldUntilUpdated{"Character", "Filters", "Curves"};
 
 struct StartableProperty {
     std::string_view property;
@@ -81,6 +82,21 @@ Support::Expected<void, std::string> CheckStepped(const Track& track) {
                                " jumps from one keyframe to the next and only holds");
 }
 
+Support::Expected<void, std::string> CheckCurveKeys(const Track& track) {
+    if (track.property != "Curves") return {};
+    auto first = CurvesFrom(track.keys.front().value);
+    if (!first) return Support::Unexpected(first.error());
+    for (const Keyframe& key : track.keys) {
+        auto later = CurvesFrom(key.value);
+        if (!later) return Support::Unexpected(later.error());
+        auto fits = CheckCurvesFit(*first, *later);
+        if (!fits) {
+            return Support::Unexpected("frame " + std::to_string(key.frame) + ": " + fits.error());
+        }
+    }
+    return {};
+}
+
 bool CoversFrame(const Track& track, uint32_t frame) {
     return !track.keys.empty() && frame >= track.keys.front().frame &&
            frame <= track.keys.back().frame;
@@ -115,6 +131,15 @@ Support::Expected<void, std::string> CheckControls(const AfpAnimation::Placement
     const std::string field = (missing & kUseMatrix) != 0 ? "matrix" : "colour";
     return Support::Unexpected("frame " + std::to_string(frame) + " carries a " + field +
                                " the game would not apply, which own could not give back");
+}
+
+bool NeedsExtended(const AfpAnimation::Placement& placement) {
+    return placement.curves.has_value() || placement.origin_z.has_value();
+}
+
+bool ExpectsExtended(const std::optional<uint32_t>& usual,
+                     const AfpAnimation::Placement& placement) {
+    return usual.has_value() || NeedsExtended(placement);
 }
 
 bool Applies(uint32_t flags, PropertyGroup group) {
@@ -179,7 +204,7 @@ Support::Expected<void, std::string> CheckSpan(const AfpAnimation::Container& cl
         }
         const AfpAnimation::Placement& first_update = PlacementAt(clip, placements[1]);
         if ((later.flags & ~kControlBits) != (first_update.flags & ~kControlBits) ||
-            later.extended_flags != first_update.extended_flags) {
+            later.extended_flags.value_or(0) != first_update.extended_flags.value_or(0)) {
             return Support::Unexpected(where + " updates depth " + std::to_string(depth) +
                                        " with flags of its own");
         }
@@ -243,6 +268,7 @@ BakedDepth BakedOf(const AfpAnimation::Container& clip, const std::vector<Placed
     const AfpAnimation::Placement& created = PlacementAt(clip, placements.front());
     if (!UpdatesCarry(clip, placements, "Character")) baked.create.character = created.character;
     if (!UpdatesCarry(clip, placements, "Filters")) baked.create.filters = created.filters;
+    if (!UpdatesCarry(clip, placements, "Curves")) baked.create.curves = created.curves;
     if (placements.size() > 1) {
         const AfpAnimation::Placement& update = PlacementAt(clip, placements[1]);
         baked.update_flags = update.flags & ~kControlBits;
@@ -264,6 +290,9 @@ BakedDepth BakedOf(const AfpAnimation::Container& clip, const std::vector<Placed
     }
     for (std::size_t i = 1; i < placements.size(); i++) {
         const AfpAnimation::Placement& update = PlacementAt(clip, placements[i]);
+        if (update.extended_flags.has_value() !=
+            ExpectsExtended(baked.update_extended_flags, update))
+            baked.other_extended_frames.push_back(placements[i].frame);
         const uint32_t extra = update.flags & kControlBits & ~NeededControls(update);
         if (extra != 0) {
             baked.extra_controls.push_back(
@@ -290,6 +319,32 @@ uint32_t AppliedGroups(const AuthoredDepth& authored, const BakedDepth& baked, u
         if (group != PropertyGroup::None && WritesFrame(track, frame)) bits |= GroupBit(group);
     }
     return bits;
+}
+
+Support::Expected<void, std::string> CheckTracks(const AuthoredDepth& authored) {
+    for (const Track& track : authored.tracks) {
+        auto shaped = CheckTrack(track);
+        if (!shaped) return Support::Unexpected(shaped.error());
+        if (track.keys.front().frame < authored.first_frame ||
+            track.keys.back().frame > authored.last_frame) {
+            return Support::Unexpected("the keyframes of " + track.property +
+                                       " fall outside the authored range");
+        }
+        auto stepped = CheckStepped(track);
+        if (!stepped) return Support::Unexpected(stepped.error());
+        auto curves = CheckCurveKeys(track);
+        if (!curves) return Support::Unexpected(curves.error());
+    }
+    return {};
+}
+
+std::optional<uint32_t> ExtendedWord(const BakedDepth& baked,
+                                     const AfpAnimation::Placement& placement, uint32_t frame) {
+    const bool other =
+        std::ranges::find(baked.other_extended_frames, frame) != baked.other_extended_frames.end();
+    if (!NeedsExtended(placement) && baked.update_extended_flags.has_value() == other)
+        return std::nullopt;
+    return baked.update_extended_flags.value_or(0);
 }
 
 std::optional<std::vector<int64_t>> WrittenValue(const BakedDepth& baked, const Track& track,
@@ -360,17 +415,8 @@ Support::Expected<std::vector<std::pair<uint32_t, AfpAnimation::Placement>>, std
 AuthoredPlacements(const AuthoredDepth& authored, const BakedDepth& baked) {
     if (authored.first_frame > authored.last_frame)
         return Support::Unexpected(std::string("the authored range runs backwards"));
-    for (const Track& track : authored.tracks) {
-        auto shaped = CheckTrack(track);
-        if (!shaped) return Support::Unexpected(shaped.error());
-        if (track.keys.front().frame < authored.first_frame ||
-            track.keys.back().frame > authored.last_frame) {
-            return Support::Unexpected("the keyframes of " + track.property +
-                                       " fall outside the authored range");
-        }
-        auto stepped = CheckStepped(track);
-        if (!stepped) return Support::Unexpected(stepped.error());
-    }
+    auto checked = CheckTracks(authored);
+    if (!checked) return Support::Unexpected(checked.error());
 
     std::vector<std::pair<uint32_t, AfpAnimation::Placement>> out;
     for (uint32_t frame = authored.first_frame; frame <= authored.last_frame; frame++) {
@@ -379,7 +425,6 @@ AuthoredPlacements(const AuthoredDepth& authored, const BakedDepth& baked) {
             placement = baked.create;
         } else {
             placement.flags = baked.update_flags | kUpdateExisting;
-            placement.extended_flags = baked.update_extended_flags;
             placement.depth = authored.depth;
             placement.end_frame = baked.create.end_frame;
         }
@@ -394,6 +439,8 @@ AuthoredPlacements(const AuthoredDepth& authored, const BakedDepth& baked) {
             wrote = true;
         }
         placement.flags |= NeededControls(placement) | applied;
+        if (frame != authored.first_frame)
+            placement.extended_flags = ExtendedWord(baked, placement, frame);
         const bool blank = std::ranges::find(baked.blank_frames, frame) != baked.blank_frames.end();
         if (frame == authored.first_frame || wrote || applied != 0 || blank)
             out.emplace_back(frame, std::move(placement));

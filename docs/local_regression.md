@@ -207,9 +207,10 @@ per-frame placement actually carries over a span, which is what the shape of
 detaches it again and requires the clip to come back identical.
 
 It owns spans in the root and in every sprite, and reports the two separately.
-On IIDX 33 it owns 211054 root spans and 615487 sprite spans, 99.97% of the
-826810 in the install, and gets every one of them back identical. The other 269
-are refused because they change deformation curves. Before tickets 44 and 45 it
+On IIDX 33 it owns all 826810 spans in the install, 211152 in roots and 615658
+in sprites, and gets every one of them back identical. Before ticket 70 it
+refused the 269 whose updates change deformation curves, and 94 of those also
+mixed updates with and without an extended word. Before tickets 44 and 45 it
 refused another 69174 spans whose updates used different control bits, before
 ticket 55 another 1640 that swap their character mid-span, before ticket 56
 every span whose updates change its filters (4737, which hid 52 of the curve
@@ -218,7 +219,7 @@ table lengths.
 
 For every span it owns it also replays the shipped placements with the game's
 rule (`Document::ReplayDepth`) and compares each frame with what the keyframes
-say (`Document::KeyedState`): 35596353 root frames and 93844745 sprite frames,
+say (`Document::KeyedState`): 35623952 root frames and 93902985 sprite frames,
 with no disagreement. A full run reads every IFS under `data` (about 36 GB)
 and takes around half an hour, printing only at the end. That comparison is what shows own records what the game
 draws, including the 135000 or so updates that reset a matrix part and the
@@ -271,6 +272,18 @@ entries that move are 0, 1, 2, 5, 6, 7, 10, 11 and 12, the RGB rows, in about
 values in 100552. Update lists are one colour matrix (246960), one with HSV
 (109421), or one to three lookups (109466). That is why filters became a stepped
 track rather than something own refuses.
+
+## How spans use deformation curves (`local` label)
+
+`curve_span_survey_tests` (tests/local/curve_span_survey_tests.cpp) looks at
+every span whose placements carry a curve set. Over IIDX 33's 6146 files there
+are 1050 such spans, and every one has its first set on the create; 269 have
+later sets. All 10460 sets have their slots packed from 0, with one curve
+(10212), two (246) or three (2), and 4 to 61 points. Of the 9410 later sets,
+122 repeat the first set, 7058 keep its slots and point counts and change the
+values, and 2230 also change a slot's flags. None names a slot past the first
+set's count or gives a slot more points than the first set did, which is the
+rule `Document::CheckCurvesFit` enforces.
 
 ## Where an animation's content lives (`local` label)
 

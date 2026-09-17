@@ -17,6 +17,7 @@
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <utility>
 #include <variant>
 #include <vector>
 
@@ -45,6 +46,17 @@ AfpAnimation::Placement Update(uint32_t flags) {
     AfpAnimation::Placement update;
     update.flags = kUpdateExisting | flags;
     update.depth = kDepth;
+    return update;
+}
+
+AfpAnimation::Curve Curve(uint8_t slot, std::size_t points, int32_t value) {
+    return AfpAnimation::Curve{
+        .slot = slot, .flags = 0, .values = std::vector<int32_t>(points * 2, value)};
+}
+
+AfpAnimation::Placement Curved(std::vector<AfpAnimation::Curve> curves) {
+    AfpAnimation::Placement update = Update(0);
+    update.curves = std::move(curves);
     return update;
 }
 
@@ -202,6 +214,37 @@ TEST_CASE("Moving a 3D span's start later keeps the translation, depth and 3D ma
     CHECK(folded.translation_z == int32_t{50});
     CHECK(folded.matrix_3d == std::array<int32_t, 9>{0, 1024, 0, -1024, 0, 0, 0, 0, 1024});
     CHECK(Document::ReplayDepth(animation.root, kDepth, 6, 7) == shown);
+}
+
+TEST_CASE("Moving a span's start later keeps the newest curve in every slot") {
+    AfpAnimation::Animation animation = Clip(10);
+    Add(animation, kDepth, 1, 7);
+    std::get<AfpAnimation::Placement>(animation.root.tags.at(0).body).curves =
+        std::vector<AfpAnimation::Curve>{Curve(0, 2, 1), Curve(1, 3, 1)};
+    Document::InsertTag(animation.root, 2, AfpAnimation::Tag{Curved({Curve(1, 3, 2)})});
+    Document::InsertTag(animation.root, 3, AfpAnimation::Tag{Curved({Curve(0, 1, 3)})});
+    Document::InsertTag(animation.root, 5, AfpAnimation::Tag{Curved({Curve(0, 1, 4)})});
+
+    const auto trimmed =
+        Document::TrimSpan(animation, kRoot, kDepth, 1, {.first_frame = 4, .last_frame = 7});
+    INFO(Error(trimmed));
+    REQUIRE(trimmed.has_value());
+    CHECK(CreateOf(animation).curves ==
+          std::vector<AfpAnimation::Curve>{Curve(0, 1, 3), Curve(1, 3, 2)});
+    CHECK(PlacementFrames(animation) == std::vector<uint32_t>{4, 5});
+}
+
+TEST_CASE("A trim whose folded curves leave a kept update no room is refused") {
+    AfpAnimation::Animation animation = Clip(10);
+    Add(animation, kDepth, 1, 7);
+    std::get<AfpAnimation::Placement>(animation.root.tags.at(0).body).curves =
+        std::vector<AfpAnimation::Curve>{Curve(0, 3, 1)};
+    Document::InsertTag(animation.root, 2, AfpAnimation::Tag{Curved({Curve(0, 1, 2)})});
+    Document::InsertTag(animation.root, 5, AfpAnimation::Tag{Curved({Curve(0, 3, 3)})});
+    const AfpAnimation::Animation before = animation;
+    CHECK_FALSE(Document::TrimSpan(animation, kRoot, kDepth, 1, {.first_frame = 4, .last_frame = 7})
+                    .has_value());
+    CHECK(animation == before);
 }
 
 TEST_CASE("A span that switches between 2D and 3D is not folded") {

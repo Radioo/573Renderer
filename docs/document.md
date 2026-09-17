@@ -305,8 +305,16 @@ placement carries `0x4000000`) folds by the parser's 3D rule instead: the
 matrix bit replaces only the translation, a `tz` or a 3x3 matrix replaces its
 own part, and the 2D scale and rotation fields are left as they are, since the
 parser does not copy them in 3D. A span whose updates switch between 2D and 3D
-is refused, because whether a 2D update takes an object out of 3D mode has not
-been read. Updates that carry a class name, geometry, curves, controllers or
+is refused: afp-core keeps an object in 3D mode once any placement put it
+there, and a later 2D update overwrites its whole matrix, including `tz`, so the
+fold would have to rewrite that matrix into the 3D fields. No span in IIDX 33's
+`graphic/1` mixes the two (notes repo `Core/afp_format.md` section 4), so that
+conversion is not written. A curve set folds per slot, the way afp-core's rebuild applies
+it: each slot takes the newest set that names it, and the others keep the
+create's. Because the folded create is now the set that sizes the curve
+controller, the trim is refused when a kept update would not fit it
+(`CheckCurvesFit`), which can happen when a skipped update gave a slot fewer
+points. Updates that carry a class name, geometry, controllers or
 discarded words are refused rather than guessed. The result is checked against
 `ReplayDepth`: the depth must show the same state on every frame the trim
 keeps, or the trim is refused. That replay follows only the 2D matrix and the
@@ -314,7 +322,10 @@ colours, so for 3D spans the proof is a render: `span_trim_live_tests`
 (`local_dll`) trims a 3D span of IIDX 33's `arena.ifs` (`x_panel_broken`) ten
 frames later and requires three kept frames to draw byte for byte as before,
 and checks that removing the depth changes those frames, so the comparison can
-see the depth. Skipping the 3D fold was seen to fail it.
+see the depth. Skipping the 3D fold was seen to fail it. A second case does
+the same for a span whose updates change curves (`led_effects.ifs`,
+`Background_life`), and skipping the curve fold was seen to fail that one on
+the first kept frame.
 
 `TrimAuthored` cuts a project-owned depth's keyframes to the new range: a track
 that had keys before the new first frame gets a key there holding the value it
@@ -540,24 +551,31 @@ while an untouched depth writes back exactly the frames it came from.
 
 Three things own keeps that look like baked detail and are: the non-presence
 flag bits every update carries, the extended flag word, and the frames whose
-update sets no property at all. All three were found by running own and detach
+update sets no property at all. The extended word needs one more rule. A placement
+has one only when flag `0x80000000` is set, and the curves and `Origin z` live
+behind it, so shipped updates that carry curves have the word while the other
+updates of the same span often do not. An empty word changes nothing in the
+game, so own compares only the word's value across updates. An update gets the
+word when the first update had one or when it carries curves or `Origin z`, and
+`BakedDepth::other_extended_frames` lists the shipped updates that break that
+rule, so detach writes the word back exactly where it was. All three were found by running own and detach
 over the whole install and comparing: without the flags 41222 spans came back
 different, and without the blank frames 16802 did. IIDX 33 has 529434 updates
 that set nothing, so dropping them is not a corner case.
 
 Own refuses rather than losing anything. A span whose later frames change a
-name, filters, curves or anything else a keyframe cannot hold is refused and
+name, a controller or anything else a keyframe cannot hold is refused and
 says which; so is a span placed twice, one whose updates disagree on their
 flags, and one whose frames end somewhere other than its first frame does. The
 current numbers over the install are in `docs/local_regression.md`.
 
 ### Stepped properties
 
-Character, Clip depth, Blend and Filters are properties whose values do not
-blend: an object is one character or another. They are keyed like any other
+Character, Clip depth, Blend, Filters and Curves are properties whose values do
+not blend: an object is one character or another. They are keyed like any other
 property but only hold, so `SetKeysEase` and `AuthoredPlacements` refuse any
-other ease on them (`PropertyIsStepped`). Character and Filters become tracks
-only when an update in the span carries them; otherwise they stay on the baked
+other ease on them (`PropertyIsStepped`). Character, Filters and Curves become
+tracks only when an update in the span carries them; otherwise they stay on the baked
 create placement, so an ordinary depth does not grow a lane for them. A swap is
 then a key on the frame the update carried it, and moving that key moves the
 swap.
@@ -574,6 +592,25 @@ same count on every keyframe, and `CheckTrack`, `AddKeyframe`,
 `SetKeyframeValue` and `PasteKeys` hold it to that, but a stepped track is
 exempt: it never blends two keyframes, so each keyframe can hold its own list.
 That is what lets own take a span whose updates change the list itself.
+
+A curve set (the deformation curves, ext `0x8`) is kept the same way
+(`document/curve_values.h`): its count, then per curve its slot, its flags, its
+value count and the values. `CurvesFrom` refuses slots that are not ascending or
+not below 32, a value count that is not a whole number of points, and a 16-bit
+curve value that does not fit. A key holds exactly the set that update carried,
+not the deformation that results, because afp-core rebuilds only the curves a
+set's mask names and keeps the others, so holding each update's own set is what
+writes the same bytes back.
+
+afp-core sizes the curve controller from the first set a placed object sees and
+writes later sets into those buffers without a bounds check, so
+`AuthoredPlacements` refuses a curve key that names a slot past the first key's
+curve count or gives a slot more points than the first key gave it
+(`CheckCurvesFit`). Applied to the first key itself, the same check refuses a
+set whose slots have a gap, which the game's allocator would read wrongly. The
+notes repo's `Core/afp_format.md` (curve set) has the
+allocator and rebuild this rule comes from. The value is edited as a plain
+number list in the inspector.
 
 ## Atlases (`document/atlas.h`, `document/atlas_write.h`)
 

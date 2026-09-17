@@ -168,6 +168,7 @@ Document::BakedDepth Baked(bool with_actions) {
                                 .update_extended_flags = std::nullopt,
                                 .blank_frames = {},
                                 .extra_controls = {},
+                                .other_extended_frames = {},
                                 .explicit_identities = {}};
 }
 

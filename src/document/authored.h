@@ -47,6 +47,7 @@ struct BakedDepth {
     std::optional<uint32_t> update_extended_flags;
     std::vector<uint32_t> blank_frames;
     std::vector<FrameControls> extra_controls;
+    std::vector<uint32_t> other_extended_frames;
     std::vector<ExplicitIdentity> explicit_identities;
 
     friend bool operator==(const BakedDepth&, const BakedDepth&) = default;

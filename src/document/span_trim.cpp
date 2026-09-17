@@ -2,6 +2,7 @@
 
 #include "document/authored.h"
 #include "document/clip.h"
+#include "document/curve_values.h"
 #include "document/keyframes.h"
 #include "document/placement_effect.h"
 #include "document/span_edit.h"
@@ -44,7 +45,7 @@ Support::Expected<void, std::string> CheckFoldable(const AfpAnimation::Placement
         return Support::Unexpected(
             FrameText(frame) + " switches the depth between 2D and 3D, which a trim cannot fold");
     }
-    if (update.class_name || update.geometry || update.curves || update.colour_controller ||
+    if (update.class_name || update.geometry || update.colour_controller ||
         update.grid_controller || update.discarded_words) {
         return Support::Unexpected(FrameText(frame) +
                                    " carries data a trim cannot fold into the first placement");
@@ -73,6 +74,24 @@ void FoldColour(AfpAnimation::Placement& create, const AfpAnimation::Placement& 
     create.packed_add_colour = update.packed_add_colour;
 }
 
+void FoldCurves(AfpAnimation::Placement& create, const AfpAnimation::Placement& update) {
+    if (!update.curves) return;
+    if (!create.curves) {
+        create.curves = update.curves;
+        return;
+    }
+    std::vector<AfpAnimation::Curve>& merged = *create.curves;
+    for (const AfpAnimation::Curve& curve : *update.curves) {
+        const auto at =
+            std::ranges::lower_bound(merged, curve.slot, {}, &AfpAnimation::Curve::slot);
+        if (at != merged.end() && at->slot == curve.slot) {
+            *at = curve;
+        } else {
+            merged.insert(at, curve);
+        }
+    }
+}
+
 void FoldHeld(AfpAnimation::Placement& create, const AfpAnimation::Placement& update) {
     if (update.character) create.character = update.character;
     if (update.ratio) create.ratio = update.ratio;
@@ -97,6 +116,7 @@ Support::Expected<void, std::string> Fold(AfpAnimation::Placement& create,
     }
     if ((update.flags & kUseColour) != 0) FoldColour(create, update);
     FoldHeld(create, update);
+    FoldCurves(create, update);
     create.flags |= update.flags & (kUseMatrix | kUseColour);
     return {};
 }
@@ -167,6 +187,22 @@ Support::Expected<void, std::string> StartEarlier(AfpAnimation::Container& clip,
     return {};
 }
 
+Support::Expected<void, std::string> CheckKeptCurves(const AfpAnimation::Container& clip,
+                                                     uint16_t depth,
+                                                     const AfpAnimation::Placement& create,
+                                                     const Span& kept) {
+    if (!create.curves) return {};
+    for (const std::size_t index :
+         PlacementsBetween(clip, depth, kept.first_frame, kept.last_frame)) {
+        const auto& update = std::get<AfpAnimation::Placement>(clip.tags[index].body);
+        if (!update.curves) continue;
+        auto fits = CheckCurvesFit(*create.curves, *update.curves);
+        if (!fits)
+            return Support::Unexpected(FrameText(FrameHolding(clip, index)) + ": " + fits.error());
+    }
+    return {};
+}
+
 Support::Expected<void, std::string> StartLater(AfpAnimation::Container& clip, uint16_t depth,
                                                 const Span& span, uint32_t first) {
     const std::vector<std::size_t> folded =
@@ -178,6 +214,9 @@ Support::Expected<void, std::string> StartLater(AfpAnimation::Container& clip, u
         auto done = Fold(create, PlacementAt(clip, index), FrameHolding(clip, index));
         if (!done) return Support::Unexpected(done.error());
     }
+    auto room = CheckKeptCurves(clip, depth, create,
+                                Span{.first_frame = first, .last_frame = span.last_frame});
+    if (!room) return Support::Unexpected(room.error());
     EraseAll(clip, folded);
     InsertTagFirst(clip, first, AfpAnimation::Tag{std::move(create)});
     return {};

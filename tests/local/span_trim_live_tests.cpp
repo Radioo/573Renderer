@@ -29,32 +29,43 @@ namespace {
 
 constexpr uint32_t kViewWidth = 1920;
 constexpr uint32_t kViewHeight = 1080;
+constexpr uint32_t kUpdateExisting = 0x1;
 constexpr uint32_t kThreeD = 0x04000000;
 constexpr uint32_t kLaterBy = 10;
 constexpr uint32_t kShortestSpan = 30;
-const std::string kPackage = "arena";
-const std::string kAnimation = "x_panel_broken";
+
+struct Target {
+    std::string package;
+    std::string animation;
+};
 
 std::vector<uint8_t> ReadAll(const std::filesystem::path& path) {
     std::ifstream in(path, std::ios::binary);
     return {std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>()};
 }
 
-std::string AnimationPath(const Document::File& file) {
+std::string AnimationPath(const Document::File& file, const std::string& name) {
     for (const Document::Node& node : file.Nodes()) {
         for (const Document::Node& child : node.children) {
-            if (child.role == Document::Role::Animation && child.name == kAnimation)
-                return child.path;
+            if (child.role == Document::Role::Animation && child.name == name) return child.path;
         }
     }
     return {};
 }
 
-bool IsThreeD(const AfpAnimation::Animation& animation, uint16_t depth) {
+bool IsThreeD(const AfpAnimation::Placement& placement) {
+    return (placement.flags & kThreeD) != 0;
+}
+
+bool UpdatesCurves(const AfpAnimation::Placement& placement) {
+    return (placement.flags & kUpdateExisting) != 0 && placement.curves.has_value();
+}
+
+bool AnyAtDepth(const AfpAnimation::Animation& animation, uint16_t depth,
+                bool (*wanted)(const AfpAnimation::Placement&)) {
     for (const AfpAnimation::Tag& tag : animation.root.tags) {
         const auto* placement = std::get_if<AfpAnimation::Placement>(&tag.body);
-        if (placement != nullptr && placement->depth == depth && (placement->flags & kThreeD) != 0)
-            return true;
+        if (placement != nullptr && placement->depth == depth && wanted(*placement)) return true;
     }
     return false;
 }
@@ -65,15 +76,16 @@ struct Picked {
     AfpAnimation::Animation trimmed;
 };
 
-std::optional<Picked> TrimmableSpan(const AfpAnimation::Animation& animation) {
+std::optional<Picked> TrimmableSpan(const AfpAnimation::Animation& animation,
+                                    bool (*wanted)(const AfpAnimation::Placement&)) {
     for (const Document::DepthRow& row : Document::DepthRows(animation.root)) {
-        if (!IsThreeD(animation, row.depth)) continue;
+        if (!AnyAtDepth(animation, row.depth, wanted)) continue;
         for (const Document::Span& span : row.spans) {
             if (span.last_frame - span.first_frame < kShortestSpan) continue;
             AfpAnimation::Animation trimmed = animation;
-            const Document::Span wanted{.first_frame = span.first_frame + kLaterBy,
-                                        .last_frame = span.last_frame};
-            if (!Document::TrimSpan(trimmed, {}, row.depth, span.first_frame, wanted)) continue;
+            const Document::Span kept{.first_frame = span.first_frame + kLaterBy,
+                                      .last_frame = span.last_frame};
+            if (!Document::TrimSpan(trimmed, {}, row.depth, span.first_frame, kept)) continue;
             return Picked{.depth = row.depth, .span = span, .trimmed = std::move(trimmed)};
         }
     }
@@ -82,7 +94,7 @@ std::optional<Picked> TrimmableSpan(const AfpAnimation::Animation& animation) {
 
 class Stage {
 public:
-    explicit Stage(const std::string& dir) {
+    Stage(const std::string& dir, Target target) : target_(std::move(target)) {
         auto started =
             PreviewClient::Host::Start(PreviewClient::Options{.host_exe = R573_PREVIEW_HOST_EXE});
         REQUIRE(started.has_value());
@@ -95,7 +107,8 @@ public:
     std::vector<uint8_t> Render(const Document::File& file, uint32_t frame) {
         const auto bytes = file.Encode();
         REQUIRE(bytes.has_value());
-        const auto loaded = host_->LoadPackage(kPackage, kAnimation, *bytes, loaded_once_);
+        const auto loaded =
+            host_->LoadPackage(target_.package, target_.animation, *bytes, loaded_once_);
         const std::string error = loaded.has_value() ? std::string() : loaded.error();
         INFO(error);
         REQUIRE(loaded.has_value());
@@ -111,24 +124,24 @@ public:
     }
 
 private:
+    Target target_;
     std::unique_ptr<PreviewClient::Host> host_;
     bool loaded_once_ = false;
 };
 
-}
-
-TEST_CASE("A trimmed 3D span draws its kept frames exactly as before") {
+void CheckTrimDrawsAlike(const Target& target, bool (*wanted)(const AfpAnimation::Placement&)) {
     const std::string dir = Support::EnvVar("R573_IIDX_DIR").value_or("");
     if (dir.empty()) SKIP("R573_IIDX_DIR not set");
-    auto original = Document::File::Open(ReadAll(dir + "/data/graphic/1/" + kPackage + ".ifs"));
+    auto original =
+        Document::File::Open(ReadAll(dir + "/data/graphic/1/" + target.package + ".ifs"));
     REQUIRE(original.has_value());
     if (!original) return;
-    const std::string path = AnimationPath(*original);
+    const std::string path = AnimationPath(*original, target.animation);
     REQUIRE(!path.empty());
     const auto animation = original->ReadAnimation(path);
     REQUIRE(animation.has_value());
     if (!animation) return;
-    const std::optional<Picked> picked = TrimmableSpan(*animation);
+    const std::optional<Picked> picked = TrimmableSpan(*animation, wanted);
     REQUIRE(picked.has_value());
     if (!picked) return;
     INFO("depth " << picked->depth << " frames " << picked->span.first_frame << " to "
@@ -142,7 +155,7 @@ TEST_CASE("A trimmed 3D span draws its kept frames exactly as before") {
         Document::RemoveDepth(removed, {}, picked->depth, picked->span.first_frame).has_value());
     REQUIRE(without.WriteAnimation(path, removed).has_value());
 
-    Stage stage(dir);
+    Stage stage(dir, target);
     const std::array<uint32_t, 3> kept{picked->span.first_frame + kLaterBy,
                                        picked->span.first_frame + kLaterBy + 5,
                                        picked->span.last_frame};
@@ -155,4 +168,15 @@ TEST_CASE("A trimmed 3D span draws its kept frames exactly as before") {
         depth_drawn = depth_drawn || stage.Render(without, frame) != before;
     }
     CHECK(depth_drawn);
+}
+
+}
+
+TEST_CASE("A trimmed 3D span draws its kept frames exactly as before") {
+    CheckTrimDrawsAlike(Target{.package = "arena", .animation = "x_panel_broken"}, IsThreeD);
+}
+
+TEST_CASE("A trimmed span whose updates change curves draws its kept frames exactly as before") {
+    CheckTrimDrawsAlike(Target{.package = "led_effects", .animation = "Background_life"},
+                        UpdatesCurves);
 }

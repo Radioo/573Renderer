@@ -1,12 +1,11 @@
 #include "document/filter_values.h"
 
+#include "document/number_reader.h"
 #include "formats/afp_animation.h"
 #include "support/expected.h"
 
 #include <array>
-#include <cstddef>
 #include <cstdint>
-#include <limits>
 #include <optional>
 #include <span>
 #include <string>
@@ -28,49 +27,7 @@ void Append(std::vector<int64_t>& out, std::span<const uint8_t> bytes) {
         out.push_back(byte);
 }
 
-class Numbers {
-public:
-    explicit Numbers(std::span<const int64_t> numbers) : numbers_(numbers) {}
-
-    [[nodiscard]] bool Done() const { return at_ >= numbers_.size(); }
-
-    template <typename T> std::optional<T> Next() {
-        if (at_ >= numbers_.size()) return std::nullopt;
-        const int64_t value = numbers_[at_++];
-        if (value < static_cast<int64_t>(std::numeric_limits<T>::min()) ||
-            value > static_cast<int64_t>(std::numeric_limits<T>::max()))
-            return std::nullopt;
-        return static_cast<T>(value);
-    }
-
-    std::optional<std::vector<uint8_t>> Bytes() {
-        const std::optional<uint32_t> size = Next<uint32_t>();
-        if (!size || *size > numbers_.size() - at_) return std::nullopt;
-        std::vector<uint8_t> out;
-        out.reserve(*size);
-        for (uint32_t i = 0; i < *size; i++) {
-            const std::optional<uint8_t> byte = Next<uint8_t>();
-            if (!byte) return std::nullopt;
-            out.push_back(*byte);
-        }
-        return out;
-    }
-
-    template <typename T, std::size_t N> bool Fill(std::array<T, N>& out) {
-        for (T& value : out) {
-            const std::optional<T> next = Next<T>();
-            if (!next) return false;
-            value = *next;
-        }
-        return true;
-    }
-
-private:
-    std::span<const int64_t> numbers_;
-    std::size_t at_ = 0;
-};
-
-std::optional<AfpAnimation::Filter> ColourMatrixFrom(Numbers& in) {
+std::optional<AfpAnimation::Filter> ColourMatrixFrom(NumberReader& in) {
     AfpAnimation::ColourMatrixFilter filter;
     if (!in.Fill(filter.head) || !in.Fill(filter.matrix)) return std::nullopt;
     const std::optional<uint8_t> has_hsv = in.Next<uint8_t>();
@@ -83,7 +40,7 @@ std::optional<AfpAnimation::Filter> ColourMatrixFrom(Numbers& in) {
     return filter;
 }
 
-std::optional<AfpAnimation::Filter> LookupFrom(Numbers& in) {
+std::optional<AfpAnimation::Filter> LookupFrom(NumberReader& in) {
     AfpAnimation::LookupFilter filter;
     if (!in.Fill(filter.head) || !in.Fill(filter.unread_bytes)) return std::nullopt;
     std::optional<std::vector<uint8_t>> table = in.Bytes();
@@ -92,7 +49,7 @@ std::optional<AfpAnimation::Filter> LookupFrom(Numbers& in) {
     return filter;
 }
 
-std::optional<AfpAnimation::Filter> UnknownFrom(Numbers& in) {
+std::optional<AfpAnimation::Filter> UnknownFrom(NumberReader& in) {
     std::optional<std::vector<uint8_t>> bytes = in.Bytes();
     if (!bytes) return std::nullopt;
     return AfpAnimation::UnknownFilter{.bytes = std::move(*bytes)};
@@ -124,7 +81,7 @@ std::vector<int64_t> FilterNumbers(const std::vector<AfpAnimation::Filter>& filt
 
 Support::Expected<std::vector<AfpAnimation::Filter>, std::string>
 FiltersFrom(std::span<const int64_t> numbers) {
-    Numbers in(numbers);
+    NumberReader in(numbers);
     const std::optional<uint16_t> count = in.Next<uint16_t>();
     if (!count) return Support::Unexpected(std::string("a filter list starts with its count"));
     std::vector<AfpAnimation::Filter> filters;
