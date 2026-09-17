@@ -305,19 +305,10 @@ void Window::OpenDocument(const QString& path) {
     history_.Clear();
     document_path_ = path;
     package_name_ = QFileInfo(path).completeBaseName().toStdString();
-    animation_name_.clear();
-    animation_path_.clear();
-    depth_.reset();
-    frame_count_ = 0;
-    frame_ = 0;
-    RefreshState();
-    viewport_->ShowMessage(tr("No animation selected"));
-    timeline_->Clear();
+    CloseAnimation();
     FillTree();
-    if (const Document::Node* first = FirstAnimation(file_->Nodes()); first != nullptr) {
-        QTreeWidgetItem* item = ItemForPath(package_tree_, QString::fromStdString(first->path));
-        if (item != nullptr) package_tree_->setCurrentItem(item);
-    }
+    if (const Document::Node* first = FirstAnimation(file_->Nodes()); first != nullptr)
+        SelectEntry(QString::fromStdString(first->path));
     const std::vector<std::string>& problems = file_->Problems();
     if (problems.empty()) {
         statusBar()->showMessage(tr("%1 entries").arg(CountNodes(file_->Nodes())));
@@ -488,21 +479,38 @@ void Window::ApplyFieldEdit(QTableWidgetItem* item) {
                   });
 }
 
-void Window::EditDocument(const QString& name, const DocumentChange& change) {
-    if (!file_) return;
+bool Window::EditDocument(const QString& name, const DocumentChange& change) {
+    if (!file_) return false;
     StopPlayback();
     Document::File before = *file_;
     const auto changed = change(*file_);
     if (!changed) {
         file_ = std::move(before);
         ReportProblem(QString::fromStdString(changed.error()));
-        return;
+        return false;
     }
     history_.Record(name.toStdString(),
                     Document::Snapshot{.file = std::move(before), .authored = authored_});
     RefreshState();
     FillTree();
     Reload();
+    return true;
+}
+
+void Window::CloseAnimation() {
+    animation_name_.clear();
+    animation_path_.clear();
+    depth_.reset();
+    frame_count_ = 0;
+    frame_ = 0;
+    RefreshState();
+    viewport_->ShowMessage(tr("No animation selected"));
+    timeline_->Clear();
+}
+
+void Window::SelectEntry(const QString& path) {
+    QTreeWidgetItem* item = ItemForPath(package_tree_, path);
+    if (item != nullptr) package_tree_->setCurrentItem(item);
 }
 
 void Window::ShowPackageMenu(const QPoint& where) {
@@ -515,9 +523,11 @@ void Window::ShowPackageMenu(const QPoint& where) {
             ? Support::Expected<Document::Details, std::string>(Support::Unexpected(std::string()))
             : file_->Describe(path.toStdString());
     const bool is_image = details && details->role == Document::Role::Texture;
+    const bool is_animation = details && details->role == Document::Role::Animation;
     const QString name = details ? QString::fromStdString(details->name) : QString();
 
     QMenu menu(this);
+    QAction* new_animation = menu.addAction(tr("New animation..."));
     QAction* add_image = menu.addAction(tr("Add an image from a file..."));
     QAction* own_image =
         project_ ? menu.addAction(tr("Add an image the project owns...")) : nullptr;
@@ -526,6 +536,10 @@ void Window::ShowPackageMenu(const QPoint& where) {
     const QAction* chosen = menu.exec(where);
     if (chosen == nullptr) return;
 
+    if (chosen == new_animation) {
+        AddNewAnimation();
+        return;
+    }
     if (chosen == own_image) {
         AddProjectImage();
         return;
@@ -567,6 +581,10 @@ void Window::ShowPackageMenu(const QPoint& where) {
         EditDocument(tr("Replace %1").arg(name), [target, bytes](Document::File& document) {
             return document.ReplaceEntry(target, bytes);
         });
+        return;
+    }
+    if (chosen == remove && is_animation) {
+        RemoveAnimation(path.toStdString(), name);
         return;
     }
     if (chosen == remove) {

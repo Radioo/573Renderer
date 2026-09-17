@@ -676,6 +676,35 @@ draws, which `File::ShapeImages` reads from `geo/`, unless an export names it.
 The editor's add depth offers exactly this list, so a new depth is always
 pointed at something the animation can actually place.
 
+### Adding and removing animations (`document/animation_entries.h`)
+
+afp-utils loads a package's animations from `afp/afplist.xml`: for each `afp`
+entry it reads `afp/<name>` and `afp/bsi/<name>`, then the shape files its `geo`
+array lists. So an animation exists when all three agree.
+
+`AddAnimation` makes a new, empty one from an animation already in the package.
+It copies that animation's header (container and data versions, magic, flags,
+stage rect, frame rate, background colour, byte order form) and its imports,
+because every IIDX 33 animation imports the same library and the header is what
+decides the stage size and the rate. It drops the exports and the content, gives
+the root the requested number of empty frames, names the header after the new
+animation (shape names are formed from it) and keeps only the strings still in
+use. The new `afp` entry copies the first entry's node and attribute types, with
+the name alone and no `geo` child: afp-utils skips a missing `geo` array, and
+`AddImageShape` creates it with the first shape.
+
+The name has to be new, 1 to 52 bytes of printable ASCII, without slashes.
+afp-utils reads the name into a 64-byte buffer and forms `<name>_shape<id>` in
+another one, so 52 leaves room for the longest shape id; files are stored under
+the MD5 of the name, so the name's characters never reach a path.
+
+`RemoveAnimation` removes the animation file, its byte order script, every
+`afplist.xml` entry naming it and the shape files those entries list, in one
+step. It refuses an animation that another animation in the package imports by
+name, since removing it would leave that import unresolved. Removing only the
+animation file, which the entry removal used to do, left a list entry pointing at
+a file afp-utils could no longer read.
+
 ### Placing a package image (`document/image_shape.h`, `document/place_image.h`)
 
 A placement cannot show a texture directly. An `AP2_IMAGE` tag placed on a

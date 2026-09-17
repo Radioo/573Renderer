@@ -119,7 +119,11 @@ private:
     bool EditAnimation(const QString& name, const AnimationChange& change);
     void ShowTimelineMenu(const QPoint& where, uint32_t frame, const QString& label);
     void ShowPackageMenu(const QPoint& where);
-    void EditDocument(const QString& name, const DocumentChange& change);
+    bool EditDocument(const QString& name, const DocumentChange& change);
+    void AddNewAnimation();
+    void RemoveAnimation(const std::string& path, const QString& name);
+    void CloseAnimation();
+    void SelectEntry(const QString& path);
     void Undo();
     void Redo();
     void ShowRestored();

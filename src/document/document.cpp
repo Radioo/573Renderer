@@ -6,6 +6,7 @@
 #include "document/atlas_write.h"
 #include "document/entry_edit.h"
 #include "document/image_shape.h"
+#include "document/animation_entries.h"
 #include "document/outline.h"
 #include "document/stage_bounds.h"
 #include "formats/afp_animation.h"
@@ -151,6 +152,21 @@ std::map<uint16_t, Box> File::ShapeBounds(std::string_view animation_path) const
 Support::Expected<uint16_t, std::string> File::AddImageShape(std::string_view animation_path,
                                                              std::string_view image) {
     auto added = Document::AddImageShape(archive_, animation_path, image);
+    if (!added) return Support::Unexpected(added.error());
+    outline_ = Outline::Build(archive_);
+    return *added;
+}
+
+Support::Expected<void, std::string> File::RemoveAnimation(std::string_view path) {
+    auto removed = Document::RemoveAnimation(archive_, path);
+    if (!removed) return Support::Unexpected(removed.error());
+    outline_ = Outline::Build(archive_);
+    return {};
+}
+
+Support::Expected<std::string, std::string>
+File::AddAnimation(std::string_view name, std::string_view like_path, uint32_t frames) {
+    auto added = Document::AddAnimation(archive_, name, like_path, frames);
     if (!added) return Support::Unexpected(added.error());
     outline_ = Outline::Build(archive_);
     return *added;

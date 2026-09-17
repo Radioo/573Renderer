@@ -171,8 +171,13 @@ A field that refuses a value puts the message in a dialog and repaints the
 inspector from the model, so the cell can never show a value the document does
 not hold.
 
-Right-clicking the package tree offers the entry edits: add an image from a
-file, replace the selected entry from a file, and remove it. The image path goes
+Right-clicking the package tree offers the entry edits: a new animation, add
+an image from a file, replace the selected entry from a file, and remove it.
+A new animation asks for a name and a frame count and copies its header from the
+open animation, or the package's first one (`Window::AddNewAnimation`), then
+opens it. Removing an animation goes through `Document::RemoveAnimation`, is
+refused while the project owns depths in it, and closes it first when it is the
+one on screen. The image path goes
 through `QImage`, so the editor reads whatever image formats Qt was built with
 rather than carrying a decoder of its own, and converts to the BGRA the package
 stores. Removing a texture goes through `RemoveImage` so the texture list loses

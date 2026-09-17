@@ -37,6 +37,8 @@ constexpr uint32_t kLastFrame = 20;
 constexpr std::size_t kBgraBytes = 4;
 constexpr uint32_t kLargestSide = 400;
 constexpr uint32_t kUseMatrix = 0x4;
+constexpr uint32_t kNewFrames = 45;
+const std::string kNewAnimation = "editor_new_scene";
 
 struct Picked {
     std::string name;
@@ -87,9 +89,12 @@ uint16_t FreeDepth(const Document::File& file, const std::string& path) {
     return static_cast<uint16_t>(highest + 1);
 }
 
-std::vector<uint8_t> RenderPixels(PreviewClient::Host& host, std::span<const uint8_t> ifs,
-                                  bool reload) {
-    REQUIRE(host.LoadPackage("title", "title", ifs, reload).has_value());
+std::vector<uint8_t> RenderPixels(PreviewClient::Host& host, const std::string& animation,
+                                  std::span<const uint8_t> ifs, bool reload) {
+    const auto loaded = host.LoadPackage("title", animation, ifs, reload);
+    const std::string load_error = loaded.has_value() ? std::string() : loaded.error();
+    INFO(load_error);
+    REQUIRE(loaded.has_value());
     REQUIRE(host.Seek(kShownFrame).has_value());
     const auto frame = host.Render();
     REQUIRE(frame.has_value());
@@ -98,6 +103,19 @@ std::vector<uint8_t> RenderPixels(PreviewClient::Host& host, std::span<const uin
     auto pixels = reader->Read(frame->shared_handle, frame->width, frame->height);
     REQUIRE(pixels.has_value());
     return std::move(*pixels);
+}
+
+uint32_t LoadedFrames(const std::string& dir, std::span<const uint8_t> ifs,
+                      const std::string& animation) {
+    auto host =
+        PreviewClient::Host::Start(PreviewClient::Options{.host_exe = R573_PREVIEW_HOST_EXE});
+    REQUIRE(host.has_value());
+    REQUIRE((*host)->Boot(dir, "iidx33").has_value());
+    const auto loaded = (*host)->LoadPackage("title", animation, ifs, false);
+    const std::string load_error = loaded.has_value() ? std::string() : loaded.error();
+    INFO(load_error);
+    REQUIRE(loaded.has_value());
+    return loaded.has_value() ? loaded->frame_count : 0;
 }
 
 struct Changed {
@@ -164,8 +182,7 @@ struct Placed {
     uint16_t depth = 0;
 };
 
-std::optional<Placed> PlaceFittingImage(Document::File& file) {
-    const std::string path = AnimationPath(file);
+std::optional<Placed> PlaceFittingImage(Document::File& file, const std::string& path) {
     REQUIRE(!path.empty());
     const std::optional<Picked> image = LargestFittingImage(file);
     REQUIRE(image.has_value());
@@ -180,7 +197,7 @@ std::optional<Placed> PlaceFittingImage(Document::File& file) {
     REQUIRE(placed.has_value());
     if (!placed) return std::nullopt;
     const std::map<uint16_t, std::string> shapes = file.ShapeImages(path);
-    CHECK(shapes.size() > 1);
+    CHECK(!shapes.empty());
     const auto named = shapes.find(*placed);
     REQUIRE(named != shapes.end());
     CHECK(named->second == image->name);
@@ -188,7 +205,8 @@ std::optional<Placed> PlaceFittingImage(Document::File& file) {
 }
 
 void CheckDrawnInsideOutline(const std::string& dir, std::span<const uint8_t> original,
-                             const Document::File& file, const Placed& placed) {
+                             const Document::File& file, const Placed& placed,
+                             const std::string& animation_name) {
     const auto animation = file.ReadAnimation(placed.path);
     REQUIRE(animation.has_value());
     const auto outlines =
@@ -203,8 +221,8 @@ void CheckDrawnInsideOutline(const std::string& dir, std::span<const uint8_t> or
     REQUIRE(host.has_value());
     REQUIRE((*host)->Boot(dir, "iidx33").has_value());
     REQUIRE((*host)->Resize(kViewWidth, kViewHeight).has_value());
-    const std::vector<uint8_t> before = RenderPixels(**host, original, false);
-    const std::vector<uint8_t> after = RenderPixels(**host, *edited, true);
+    const std::vector<uint8_t> before = RenderPixels(**host, animation_name, original, false);
+    const std::vector<uint8_t> after = RenderPixels(**host, animation_name, *edited, true);
     REQUIRE(before.size() == static_cast<std::size_t>(kViewWidth) * kViewHeight * kBgraBytes);
     REQUIRE(after.size() == before.size());
 
@@ -229,10 +247,10 @@ TEST_CASE("A package image placed as a new shape draws inside its outline") {
     auto file = Document::File::Open(bytes);
     REQUIRE(file.has_value());
     if (!file) return;
-    const std::optional<Placed> placed = PlaceFittingImage(*file);
+    const std::optional<Placed> placed = PlaceFittingImage(*file, AnimationPath(*file));
     REQUIRE(placed.has_value());
     if (!placed) return;
-    CheckDrawnInsideOutline(dir, bytes, *file, *placed);
+    CheckDrawnInsideOutline(dir, bytes, *file, *placed, "title");
 }
 
 TEST_CASE("A moved scaled and turned image draws inside the outline the document works out") {
@@ -243,7 +261,7 @@ TEST_CASE("A moved scaled and turned image draws inside the outline the document
     auto file = Document::File::Open(bytes);
     REQUIRE(file.has_value());
     if (!file) return;
-    const std::optional<Placed> placed = PlaceFittingImage(*file);
+    const std::optional<Placed> placed = PlaceFittingImage(*file, AnimationPath(*file));
     REQUIRE(placed.has_value());
     if (!placed) return;
     auto animation = file->ReadAnimation(placed->path);
@@ -262,5 +280,40 @@ TEST_CASE("A moved scaled and turned image draws inside the outline the document
     const std::string write_error = written.has_value() ? std::string() : written.error();
     INFO(write_error);
     REQUIRE(written.has_value());
-    CheckDrawnInsideOutline(dir, bytes, *file, *placed);
+    CheckDrawnInsideOutline(dir, bytes, *file, *placed, "title");
+}
+
+TEST_CASE("A new animation loads with its frames and draws an image placed on it") {
+    const std::string dir = Support::EnvVar("R573_IIDX_DIR").value_or("");
+    if (dir.empty()) SKIP("R573_IIDX_DIR not set");
+    const std::vector<uint8_t> bytes = ReadAll(dir + "/data/graphic/1/title.ifs");
+    REQUIRE(!bytes.empty());
+    auto file = Document::File::Open(bytes);
+    REQUIRE(file.has_value());
+    if (!file) return;
+    const auto path = file->AddAnimation(kNewAnimation, AnimationPath(*file), kNewFrames);
+    const std::string add_error = path.has_value() ? std::string() : path.error();
+    INFO(add_error);
+    REQUIRE(path.has_value());
+    if (!path) return;
+    const auto empty = file->Encode();
+    REQUIRE(empty.has_value());
+    if (!empty) return;
+
+    CHECK(LoadedFrames(dir, *empty, kNewAnimation) == kNewFrames);
+
+    const std::optional<Placed> placed = PlaceFittingImage(*file, *path);
+    REQUIRE(placed.has_value());
+    if (!placed) return;
+    CHECK(placed->depth == 1);
+    CheckDrawnInsideOutline(dir, *empty, *file, *placed, kNewAnimation);
+
+    const auto removed = file->RemoveAnimation(*path);
+    const std::string remove_error = removed.has_value() ? std::string() : removed.error();
+    INFO(remove_error);
+    REQUIRE(removed.has_value());
+    const auto without = file->Encode();
+    REQUIRE(without.has_value());
+    if (!without) return;
+    CHECK(LoadedFrames(dir, *without, "title") == LoadedFrames(dir, bytes, "title"));
 }

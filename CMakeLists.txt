@@ -841,6 +841,7 @@ add_executable(document_tests
     tests/document/script_source_tests.cpp
     tests/document/span_edit_tests.cpp
     tests/document/span_trim_tests.cpp
+    tests/document/animation_entries_tests.cpp
     tests/document/sprite_preview_tests.cpp
     tests/document/sprite_structure_tests.cpp
     tests/document/stage_bounds_tests.cpp

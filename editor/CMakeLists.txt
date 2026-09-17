@@ -62,6 +62,7 @@ add_executable(ifs_editor WIN32
     src/editor_clips.cpp
     src/editor_stage.cpp
     src/editor_spans.cpp
+    src/editor_animations.cpp
     src/editor_key_selection.cpp
     src/editor_ease_dialog.cpp
     src/editor_playback.cpp
