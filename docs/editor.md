@@ -217,6 +217,11 @@ saved file keep them. Only when something is hidden is the copy made, so the
 usual preview pays nothing. A hidden depth cannot be picked on stage and has no
 outline (`Window::VisibleOutlines`), and its bars are grey on the timeline
 (`Timeline::SetHiddenDepths`). Opening another document shows everything again.
+With a sprite picked in the clip box, the menu also names that sprite's export
+(`Window::NameShownSpriteExport`, through `Document::NameSpriteExport`): the box
+starts on the current name and an empty answer removes it. It is an undoable
+document edit, and the clip box keeps the sprite picked under its new label.
+
 A live window test hides the widest depth of `graphic/1/title.ifs` and requires
 the rendered frame to change and then come back exactly; comparing with the
 selection outline in the picture was seen to pass even with the filter

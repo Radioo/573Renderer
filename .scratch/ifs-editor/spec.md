@@ -280,3 +280,4 @@ captured. This milestone is the editing itself.
 - `issues/72-ungroup-sprite.md` (milestone 8)
 - `issues/73-nudge-on-stage.md` (milestone 8)
 - `issues/74-hide-depths-in-view.md` (milestone 8)
+- `issues/75-sprite-export-names.md` (milestone 8)

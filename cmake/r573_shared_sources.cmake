@@ -65,6 +65,7 @@ set(R573_EDITOR_DOCUMENT_SOURCES
     src/document/stage_snap.cpp
     src/document/animation_settings.cpp
     src/document/sprite_preview.cpp
+    src/document/sprite_exports.cpp
     src/document/stage_bounds.cpp
     src/document/stage_move.cpp
     src/document/tags.cpp

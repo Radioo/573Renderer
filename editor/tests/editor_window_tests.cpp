@@ -411,6 +411,36 @@ TEST_CASE("Depths grouped from the timeline menu become a sprite, and ungrouping
         CHECK(ungrouped.Problems().isEmpty());
         CHECK(clips->count() == before);
     }
+    {
+        Script regrouped({Choose("Group depth 1 and up here into a sprite..."), AcceptNumber(),
+                          AcceptNumber(), AcceptNumber()});
+        emit timeline->MenuRequested(QPoint(4, 4), 1, QString());
+        REQUIRE(Settle([&regrouped] { return regrouped.Finished(); }));
+        CHECK(regrouped.Problems().isEmpty());
+    }
+    clips->setCurrentIndex(1);
+    {
+        Script named({Choose("Name the export of this sprite..."), Answer("banner")});
+        emit timeline->MenuRequested(QPoint(4, 4), 0, QString());
+        REQUIRE(Settle([&named] { return named.Finished(); }));
+        CHECK(named.Problems().isEmpty());
+        CHECK(clips->currentIndex() == 1);
+        CHECK(clips->currentText().startsWith("banner"));
+    }
+    {
+        Script clash({Choose("Name the export of this sprite..."), Answer("intro")});
+        emit timeline->MenuRequested(QPoint(4, 4), 0, QString());
+        REQUIRE(Settle([&clash] { return !clash.Problems().isEmpty(); }));
+        CHECK(clips->currentText().startsWith("banner"));
+    }
+    clips->setCurrentIndex(0);
+    emit timeline->DepthChosen(1);
+    {
+        Script ungroup_again({Choose("Ungroup the sprite on depth 1 here")});
+        emit timeline->MenuRequested(QPoint(4, 4), 1, QString());
+        REQUIRE(Settle([&ungroup_again] { return ungroup_again.Finished(); }));
+        CHECK(ungroup_again.Problems().isEmpty());
+    }
     Script refused({Choose("Ungroup the sprite on depth 1 here")});
     emit timeline->MenuRequested(QPoint(4, 4), 1, QString());
     REQUIRE(Settle([&refused] { return !refused.Problems().isEmpty(); }));

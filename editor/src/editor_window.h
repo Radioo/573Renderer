@@ -145,6 +145,7 @@ private:
     QWidget* BuildTimelinePanel(QScrollArea* timeline_area);
     void FillClips();
     void RefillClipsKeepingChoice();
+    void NameShownSpriteExport();
     void ChooseClip(int index);
     void ShowClipTimeline();
     [[nodiscard]] std::optional<Placeable>

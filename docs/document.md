@@ -1052,6 +1052,29 @@ clip, depth) to a copy of the file. It is for the view only: the editor hands
 the copy to the preview host and never records it, so hiding is not an edit and
 not an undo step. `hidden_depths_tests` covers both.
 
+### Naming a sprite's export (`document/sprite_exports.h`)
+
+`NameSpriteExport(file, animation, sprite, name)` gives a sprite an export
+name, renames the one it has, or removes it when the name is empty, and
+`SpriteExportName` reads it back. The export is how the game and other
+animations find a symbol, so the rules follow those lookups (notes repo
+`Core/afp_format.md` section 9.5):
+
+- the new entry goes where the case-folded binary search expects it
+  (`InsertExport`), and a name that folds to one another symbol already uses
+  is refused;
+- the export under the animation's own name and the `aeplibset` and
+  `aep_mask_dummy` helpers every file carries are never renamed or removed,
+  and no other sprite may take those names;
+- a name another animation in the same file imports from this one (matched
+  with the same case folding) is kept, and the message names that animation;
+- names are ASCII letters, digits and underscores, and a sprite exported under
+  more than one name is left alone.
+
+Unused strings are dropped afterwards. The game's own code can also attach a
+symbol by name, which a file cannot show, so renaming a shipped export is the
+user's call. `sprite_exports_tests` covers each rule.
+
 ### Removing a frame keeps the definitions in it
 
 `RemoveFrame` drops only the per-frame commands in the frame (place, remove,
