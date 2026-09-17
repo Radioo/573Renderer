@@ -425,3 +425,21 @@ TEST_CASE("A package with no animations takes its first from another package") {
     CHECK_FALSE(Document::AddAnimation(archive, "second", archive, "afp/" + HashPath("nothing"), 2)
                     .has_value());
 }
+
+TEST_CASE("A new animation's export goes where afp-core's case-folded search finds it") {
+    Ifs::Archive archive = HelperPackage();
+    const std::string intro = "afp/" + HashPath("intro");
+    const auto path = Document::AddAnimation(archive, "Zeta", archive, intro, 2);
+    INFO(Error(path));
+    REQUIRE(path.has_value());
+    if (!path) return;
+    const AfpAnimation::Animation made = ReadBack(archive, *path);
+    CHECK(Exports(made) == std::vector<std::string>{"aep_mask_dummy 6", "aeplibset 3", "Zeta 7"});
+
+    const auto before = Ifs::Write(archive);
+    REQUIRE(before.has_value());
+    CHECK_FALSE(Document::AddAnimation(archive, "AEPLIBSET", archive, intro, 2).has_value());
+    const auto after = Ifs::Write(archive);
+    REQUIRE(after.has_value());
+    CHECK(*after == *before);
+}

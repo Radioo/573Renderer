@@ -730,10 +730,19 @@ label and placement is dropped.
 29103 files also export a sprite under the movie's own name that holds the root
 without its definitions (28945 exactly), the whole composition as a symbol
 another movie can attach. A new animation gets that sprite too, empty and with
-the root's frame count, under the next free character id, and the exports are
-kept in name order as the converter writes them. The definitions sit in root
-frame 0, and every later frame starts after them. What the editor does not do
-yet is keep that sprite in step with later edits of the root; see ticket 65.
+the root's frame count, under the next free character id, and its export is
+placed where afp-core's case-folded binary search expects it
+(`InsertExport`, shared with the sprite preview). A name that folds to one of the
+kept exports is refused, since the search could not tell the two apart. The
+definitions sit in root frame 0, and every later frame starts after them.
+
+Edits to the root do not rewrite that sprite. In IIDX 33 nothing reads it: the
+export table is read only by afp-core's attach movie exports (`0x6d`, `0x89`),
+which neither bm2dx nor afp-utils imports, by import resolution, and every IIDX
+33 animation imports only `aeplib`, and by AS3 class construction, which AS2
+content never reaches. The details are in the notes repo's `Core/afp_format.md`.
+A host that attached a movie by its own name would still see the composition as
+the converter wrote it.
 
 The header is named after the new animation (shape names are formed from it)
 and only the strings still in use are kept. The new `afp` entry copies the

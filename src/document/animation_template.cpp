@@ -3,6 +3,7 @@
 #include "document/animation_strings.h"
 #include "document/image_shape.h"
 #include "formats/afp_animation.h"
+#include "support/expected.h"
 
 #include <algorithm>
 #include <array>
@@ -65,8 +66,8 @@ AfpAnimation::Sprite EmptySprite(uint16_t id, uint32_t frames) {
 
 }
 
-AnimationTemplate EmptyLike(const AfpAnimation::Animation& like, std::string_view name,
-                            uint32_t frames) {
+Support::Expected<AnimationTemplate, std::string>
+EmptyLike(const AfpAnimation::Animation& like, std::string_view name, uint32_t frames) {
     const std::set<uint16_t> kept = HelperIds(like);
     AnimationTemplate made{.animation = like, .shapes = {}};
     AfpAnimation::Animation& animation = made.animation;
@@ -85,14 +86,20 @@ AnimationTemplate EmptyLike(const AfpAnimation::Animation& like, std::string_vie
     animation.root.frames.assign(frames, AfpAnimation::Frame{.first_tag = defined, .tag_count = 0});
     animation.root.frames.front() = AfpAnimation::Frame{.first_tag = 0, .tag_count = defined};
 
-    animation.name = InternString(animation, name);
     std::erase_if(animation.exports, [&kept](const AfpAnimation::Export& exported) {
         return !kept.contains(exported.tag);
     });
-    animation.exports.push_back(AfpAnimation::Export{.tag = self, .name = animation.name});
-    std::ranges::sort(animation.exports, {}, [&animation](const AfpAnimation::Export& exported) {
-        return StringText(animation, exported.name);
-    });
+    const std::string folded = FoldedName(name);
+    const bool clashes =
+        std::ranges::any_of(animation.exports, [&](const AfpAnimation::Export& exported) {
+            return FoldedName(StringText(animation, exported.name)) == folded;
+        });
+    if (clashes) {
+        return Support::Unexpected(std::string(name) +
+                                   " is the name of an export the animation needs");
+    }
+    InsertExport(animation, self, name);
+    animation.name = InternString(animation, name);
     CompactStrings(animation);
     return made;
 }

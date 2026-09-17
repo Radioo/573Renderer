@@ -240,12 +240,13 @@ AddAnimation(Ifs::Archive& archive, std::string_view name, const Ifs::Archive& l
     if (!like_list) return Support::Unexpected(like_list.error());
     const auto list = ListFor(archive, *like_list);
     if (!list) return Support::Unexpected(list.error());
-    const AnimationTemplate made = EmptyLike(*like, name, frames);
-    auto listed = Listed(*list, *like_list, name, made.shapes);
+    const auto made = EmptyLike(*like, name, frames);
+    if (!made) return Support::Unexpected(made.error());
+    auto listed = Listed(*list, *like_list, name, made->shapes);
     if (!listed) return Support::Unexpected(listed.error());
     auto path = PathOf(kAnimationDirectory, name);
     if (!path) return Support::Unexpected(path.error());
-    auto written = AfpAnimation::WriteStored(made.animation);
+    auto written = AfpAnimation::WriteStored(made->animation);
     if (!written) return Support::Unexpected(written.error());
 
     Ifs::Archive edited = archive;
@@ -254,7 +255,7 @@ AddAnimation(Ifs::Archive& archive, std::string_view name, const Ifs::Archive& l
         if (!ensured) return Support::Unexpected(ensured.error());
     }
     auto shapes =
-        CopyShapes(edited, like_archive, StringText(*like, like->name), name, made.shapes);
+        CopyShapes(edited, like_archive, StringText(*like, like->name), name, made->shapes);
     if (!shapes) return Support::Unexpected(shapes.error());
     auto data = AddEntry(edited, kAnimationDirectory, name, std::move(written->data));
     if (!data) return Support::Unexpected(data.error());

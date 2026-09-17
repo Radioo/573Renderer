@@ -1,6 +1,6 @@
 # A package's first animation, and the converter's exports
 
-Status: resolved, with one follow-up open
+Status: resolved
 
 Blocked by: 62.
 
@@ -25,9 +25,12 @@ animation carries.
 - Found on the way: list files were stored under an MD5 name like their
   siblings. Fixed and tested.
 
-## Open
+## The self export
 
-- The self export sprite is not updated when the root is edited, so a movie that
-  attaches this one by name sees the content as it was. Deciding whether the
-  editor should rewrite it from the root on every edit, and checking what reads
-  it in the game, is the next step.
+- Nothing in IIDX 33 reads the self export sprite (every caller of afp-core's
+  symbol lookup was read, and neither bm2dx nor afp-utils imports the attach
+  exports), so root edits leave it as it was. This is written down, not
+  changed.
+- A new animation's export is inserted in afp-core's case-folded order, and a
+  name that folds to a kept export is refused. Tested under `ci` with a name
+  byte order would have put first.

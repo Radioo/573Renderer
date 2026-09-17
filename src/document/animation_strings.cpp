@@ -3,6 +3,7 @@
 #include "formats/afp_animation.h"
 
 #include <algorithm>
+#include <cstdint>
 #include <functional>
 #include <map>
 #include <set>
@@ -94,6 +95,23 @@ void CompactStrings(AfpAnimation::Animation& animation) {
         if (found != moved.end()) id = found->second;
     });
     animation.strings = std::move(kept);
+}
+
+std::string FoldedName(std::string_view text) {
+    std::string out(text);
+    std::ranges::transform(out, out.begin(), [](char c) {
+        return (c >= 'A' && c <= 'Z') ? static_cast<char>(c - 'A' + 'a') : c;
+    });
+    return out;
+}
+
+void InsertExport(AfpAnimation::Animation& animation, uint16_t tag, std::string_view name) {
+    const AfpAnimation::StringId id = InternString(animation, name);
+    const std::string key = FoldedName(name);
+    const auto at = std::ranges::find_if(animation.exports, [&](const AfpAnimation::Export& other) {
+        return FoldedName(StringText(animation, other.name)) > key;
+    });
+    animation.exports.insert(at, AfpAnimation::Export{.tag = tag, .name = id});
 }
 
 std::string StringText(const AfpAnimation::Animation& animation, AfpAnimation::StringId id) {

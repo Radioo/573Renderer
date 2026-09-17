@@ -19,18 +19,10 @@ namespace {
 
 constexpr std::string_view kPreviewPrefix = "r573_preview_sprite_";
 
-std::string Folded(std::string_view text) {
-    std::string out(text);
-    std::ranges::transform(out, out.begin(), [](char c) {
-        return (c >= 'A' && c <= 'Z') ? static_cast<char>(c - 'A' + 'a') : c;
-    });
-    return out;
-}
-
 bool Exported(const AfpAnimation::Animation& animation, std::string_view name) {
-    const std::string wanted = Folded(name);
+    const std::string wanted = FoldedName(name);
     return std::ranges::any_of(animation.exports, [&](const AfpAnimation::Export& exported) {
-        return Folded(StringText(animation, exported.name)) == wanted;
+        return FoldedName(StringText(animation, exported.name)) == wanted;
     });
 }
 
@@ -39,15 +31,6 @@ std::string UnusedName(const AfpAnimation::Animation& animation, uint16_t sprite
     while (Exported(animation, name))
         name += "_";
     return name;
-}
-
-void InsertExport(AfpAnimation::Animation& animation, uint16_t sprite, const std::string& name) {
-    const AfpAnimation::StringId id = InternString(animation, name);
-    const std::string key = Folded(name);
-    const auto at = std::ranges::find_if(animation.exports, [&](const AfpAnimation::Export& other) {
-        return Folded(StringText(animation, other.name)) > key;
-    });
-    animation.exports.insert(at, AfpAnimation::Export{.tag = sprite, .name = id});
 }
 
 }
