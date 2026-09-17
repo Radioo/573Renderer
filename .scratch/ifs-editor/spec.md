@@ -284,3 +284,5 @@ captured. This milestone is the editing itself.
 - `issues/76-solo-and-lock.md` (milestone 8)
 - `issues/77-frame-keys.md` (milestone 8)
 - `issues/78-work-area.md` (milestone 8)
+- `issues/79-save-the-frame.md` (milestone 8)
+- `issues/80-qt-image-formats.md` (milestone 8)

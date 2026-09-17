@@ -21,6 +21,7 @@
 #include <QtGlobal>
 #include <QApplication>
 #include <QByteArray>
+#include <QColor>
 #include <QComboBox>
 #include <QDialog>
 #include <QElapsedTimer>
@@ -67,6 +68,12 @@ constexpr int kStepMs = 5;
 constexpr qint64 kLongestWaitMs = 10000;
 constexpr uint32_t kPreviewFrame = 400;
 constexpr qint64 kPlayForMs = 700;
+constexpr std::array<uint8_t, 74> kTinyPng{
+    0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44,
+    0x52, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x03, 0x08, 0x06, 0x00, 0x00, 0x00, 0xb9,
+    0xea, 0xde, 0x81, 0x00, 0x00, 0x00, 0x11, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9c, 0x63, 0xf8,
+    0xcf, 0xc0, 0xf0, 0x1f, 0x84, 0x19, 0x30, 0x18, 0x00, 0xa1, 0x79, 0x0b, 0xf5, 0x4d, 0xc4,
+    0x9a, 0x07, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82};
 constexpr uint32_t kNoDepth = 65535;
 constexpr uint32_t kFixedRate = 0x2;
 constexpr uint32_t kUpdateMatrix = 0x5;
@@ -366,6 +373,37 @@ TEST_CASE("A new animation made from the package menu opens, and removing it clo
     CHECK(AnimationNamed(*opened.tree, "fresh") == nullptr);
 }
 
+TEST_CASE("PNG and JPEG images can be added from the package menu") {
+    Opened opened;
+    Open(opened);
+    const auto add = [&](const QString& path) {
+        Script added({Choose("Add an image from a file..."), PickFile(path)});
+        RunMenu(added, *opened.tree);
+        INFO(added.Problems().join("|").toStdString());
+        CHECK(added.Problems().isEmpty());
+    };
+    const QString png = opened.dir.filePath("leaf.png");
+    QFile written(png);
+    REQUIRE(written.open(QIODevice::WriteOnly));
+    written.write(QByteArray(reinterpret_cast<const char*>(kTinyPng.data()),
+                             static_cast<qsizetype>(kTinyPng.size())));
+    written.close();
+    add(png);
+    const QString jpeg = opened.dir.filePath("stone.jpg");
+    QImage picture(3, 2, QImage::Format_ARGB32);
+    picture.fill(QColor(20, 200, 90));
+    REQUIRE(picture.save(jpeg, "JPEG"));
+    add(jpeg);
+    const auto listed = [&](const QString& name) {
+        for (QTreeWidgetItemIterator it(opened.tree); *it != nullptr; ++it) {
+            if ((*it)->text(0) == name) return true;
+        }
+        return false;
+    };
+    CHECK(listed("leaf"));
+    CHECK(listed("stone"));
+}
+
 TEST_CASE("A package with no animation takes its first from another IFS") {
     QTemporaryDir dir;
     REQUIRE(dir.isValid());
@@ -660,6 +698,17 @@ TEST_CASE("B and N set the work area on the ruler and it can be cleared") {
     CHECK(picture() == plain);
 }
 
+TEST_CASE("Saving a frame without the preview says why") {
+    Opened opened;
+    Open(opened);
+    QAction* save = ShortcutAction(opened.window, QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_S));
+    REQUIRE(save != nullptr);
+    Script script({});
+    save->trigger();
+    REQUIRE(Settle([&script] { return !script.Problems().isEmpty(); }));
+    CHECK(script.Problems().front().contains("preview"));
+}
+
 TEST_CASE("A stage drag previews through the host before it is committed") {
     const QString game = qEnvironmentVariable("R573_IIDX_DIR");
     if (game.isEmpty()) SKIP("R573_IIDX_DIR not set");
@@ -786,6 +835,51 @@ TEST_CASE("Playback stays inside the work area") {
     play->trigger();
     const QImage stopped = timeline->grab().toImage();
     CHECK(std::ranges::find(inside, stopped) != inside.end());
+    CHECK(opening.Problems().isEmpty());
+}
+
+TEST_CASE("A saved frame is the stage size, opaque, and leaves the viewport as it was") {
+    const QString game = qEnvironmentVariable("R573_IIDX_DIR");
+    if (game.isEmpty()) SKIP("R573_IIDX_DIR not set");
+    QSettings().setValue("game/directory", game);
+    Editor::Window window;
+    QSettings().remove("game/directory");
+    window.resize(1600, 900);
+    window.show();
+    Script opening({});
+    window.OpenDocument(game + "/data/graphic/1/title.ifs");
+    REQUIRE(opening.Problems().isEmpty());
+    auto* timeline = window.findChild<Editor::Timeline*>();
+    auto* viewport = window.findChild<Editor::Viewport*>();
+    REQUIRE(timeline != nullptr);
+    REQUIRE(viewport != nullptr);
+    emit timeline->FrameChosen(kPreviewFrame);
+    QApplication::processEvents();
+    const QImage before = viewport->grab().toImage();
+
+    QTemporaryDir dir;
+    REQUIRE(dir.isValid());
+    const QString path = dir.filePath("frame.png");
+    QAction* save = ShortcutAction(window, QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_S));
+    REQUIRE(save != nullptr);
+    {
+        Script saving({PickFile(path)});
+        save->trigger();
+        REQUIRE(Settle([&saving] { return saving.Finished(); }));
+        CHECK(saving.Problems().isEmpty());
+    }
+    QApplication::processEvents();
+    const QImage saved(path);
+    REQUIRE_FALSE(saved.isNull());
+    CHECK(saved.size() == QSize(1920, 1080));
+    CHECK_FALSE(saved.hasAlphaChannel());
+    bool drawn = false;
+    for (int y = 0; y < saved.height() && !drawn; y += 7) {
+        for (int x = 0; x < saved.width() && !drawn; x += 7)
+            drawn = saved.pixelColor(x, y) != QColor(0, 0, 0);
+    }
+    CHECK(drawn);
+    CHECK(viewport->grab().toImage() == before);
     CHECK(opening.Problems().isEmpty());
 }
 

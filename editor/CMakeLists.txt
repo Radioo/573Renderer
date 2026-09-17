@@ -64,6 +64,7 @@ add_executable(ifs_editor WIN32
     src/editor_spans.cpp
     src/editor_hidden.cpp
     src/editor_timeline_menu.cpp
+    src/editor_snapshot.cpp
     src/editor_animations.cpp
     src/editor_key_selection.cpp
     src/editor_ease_dialog.cpp
@@ -76,18 +77,27 @@ target_include_directories(ifs_editor PRIVATE src)
 target_link_libraries(ifs_editor PRIVATE editor_shared Qt6::Widgets ads::qtadvanceddocking-qt6
                                        d3d9.lib)
 
+set(R573_VCPKG_EXE "${R573_ROOT}/vendor/vcpkg/vcpkg.exe")
+set(R573_VCPKG_BIN "${CMAKE_BINARY_DIR}/vcpkg_installed/${VCPKG_TARGET_TRIPLET}/bin")
+
 function(r573_deploy_qt_plugin target plugin)
     get_target_property(plugin_type ${plugin} QT_PLUGIN_TYPE)
     set(plugin_dir "$<TARGET_FILE_DIR:${target}>/${plugin_type}")
+    set(beside "$<TARGET_FILE_DIR:${target}>/$<TARGET_FILE_NAME:${plugin}>")
     add_custom_command(TARGET ${target} POST_BUILD
         COMMAND "${CMAKE_COMMAND}" -E make_directory "${plugin_dir}"
-        COMMAND "${CMAKE_COMMAND}" -E copy_if_different "$<TARGET_FILE:${plugin}>" "${plugin_dir}"
+        COMMAND "${CMAKE_COMMAND}" -E copy_if_different "$<TARGET_FILE:${plugin}>" "${beside}"
+        COMMAND "${R573_VCPKG_EXE}" z-applocal "--target-binary=${beside}"
+                "--installed-bin-dir=${R573_VCPKG_BIN}"
+        COMMAND "${CMAKE_COMMAND}" -E rename "${beside}"
+                "${plugin_dir}/$<TARGET_FILE_NAME:${plugin}>"
         VERBATIM
     )
 endfunction()
 
 r573_deploy_qt_plugin(ifs_editor Qt6::QWindowsIntegrationPlugin)
 r573_deploy_qt_plugin(ifs_editor Qt6::QModernWindowsStylePlugin)
+r573_deploy_qt_plugin(ifs_editor Qt6::QJpegPlugin)
 
 add_executable(editor_widget_tests
     tests/editor_widget_tests.cpp
@@ -98,6 +108,7 @@ add_executable(editor_widget_tests
 target_include_directories(editor_widget_tests PRIVATE src)
 target_link_libraries(editor_widget_tests PRIVATE editor_shared Qt6::Widgets Catch2::Catch2)
 r573_deploy_qt_plugin(editor_widget_tests Qt6::QMinimalIntegrationPlugin)
+r573_deploy_qt_plugin(editor_widget_tests Qt6::QJpegPlugin)
 
 add_executable(editor_window_tests
     tests/editor_window_tests.cpp
@@ -111,6 +122,7 @@ add_executable(editor_window_tests
     src/editor_spans.cpp
     src/editor_hidden.cpp
     src/editor_timeline_menu.cpp
+    src/editor_snapshot.cpp
     src/editor_animations.cpp
     src/editor_key_selection.cpp
     src/editor_ease_dialog.cpp
@@ -123,3 +135,4 @@ target_include_directories(editor_window_tests PRIVATE src "${R573_ROOT}/tests/d
 target_link_libraries(editor_window_tests PRIVATE editor_shared Qt6::Widgets
                                                   ads::qtadvanceddocking-qt6 d3d9.lib Catch2::Catch2)
 r573_deploy_qt_plugin(editor_window_tests Qt6::QMinimalIntegrationPlugin)
+r573_deploy_qt_plugin(editor_window_tests Qt6::QJpegPlugin)

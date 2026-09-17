@@ -18,9 +18,12 @@
 #include "document/place_image.h"
 #include "document/stage_bounds.h"
 #include "document/timeline.h"
+#include "preview/preview_client.h"
 #include "preview/shared_texture.h"
 
+#include <QImage>
 #include <QMainWindow>
+#include <QSize>
 #include <QString>
 
 #include <cstddef>
@@ -142,6 +145,12 @@ private:
     [[nodiscard]] static std::vector<Document::InspectedRow>
     ReadOnlyRows(const std::vector<Document::Field>& fields);
     void RenderFrame();
+    struct ShownFrame {
+        QImage image;
+        PreviewClient::Frame frame;
+    };
+    [[nodiscard]] Support::Expected<ShownFrame, std::string> ReadFrame();
+    void SaveFrameAs();
     void SeekTo(uint32_t frame);
     [[nodiscard]] uint32_t ClipFrameCount() const;
     void JumpToFrame(int64_t frame);
@@ -239,6 +248,7 @@ private:
     bool symbol_shown_ = false;
     bool filling_inspector_ = false;
     std::optional<SharedTexture::Reader> reader_;
+    QSize stage_size_;
     std::map<uint16_t, Document::Box> shape_bounds_;
     std::string shape_bounds_path_;
     std::optional<AnimationChange> pending_preview_;

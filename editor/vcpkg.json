@@ -15,6 +15,8 @@
       "default-features": false,
       "features": [
         "gui",
+        "jpeg",
+        "png",
         "widgets"
       ]
     },

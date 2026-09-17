@@ -205,6 +205,9 @@ void Window::BuildMenus() {
     QAction* save_as = file->addAction(tr("Save &as..."));
     save_as->setShortcut(QKeySequence::SaveAs);
     connect(save_as, &QAction::triggered, this, [this] { SaveAs(); });
+    QAction* save_frame = file->addAction(tr("Save the &frame as PNG..."));
+    save_frame->setShortcut(QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_S));
+    connect(save_frame, &QAction::triggered, this, &Window::SaveFrameAs);
     file->addSeparator();
     create_project_action_ = file->addAction(tr("&New project..."));
     connect(create_project_action_, &QAction::triggered, this, &Window::CreateProject);
@@ -648,28 +651,15 @@ void Window::ResizeViewport() {
 }
 
 void Window::RenderFrame() {
-    const auto frame = host_.Render();
-    if (!frame) {
-        ReportOnce(QString::fromStdString(frame.error()));
+    auto read = ReadFrame();
+    if (!read) {
+        ReportOnce(QString::fromStdString(read.error()));
         return;
     }
-    if (!reader_) {
-        auto reader = SharedTexture::Reader::Create();
-        if (!reader) {
-            ReportOnce(QString::fromStdString(reader.error()));
-            return;
-        }
-        reader_ = std::move(*reader);
-    }
-    const auto pixels = reader_->Read(frame->shared_handle, frame->width, frame->height);
-    if (!pixels) {
-        ReportOnce(QString::fromStdString(pixels.error()));
-        return;
-    }
-    const QImage image(pixels->data(), static_cast<int>(frame->width),
-                       static_cast<int>(frame->height), QImage::Format_ARGB32);
-    viewport_->ShowFrame(image.copy(), QSize(static_cast<int>(frame->stage_width),
-                                             static_cast<int>(frame->stage_height)));
+    const PreviewClient::Frame* frame = &read->frame;
+    stage_size_ =
+        QSize(static_cast<int>(frame->stage_width), static_cast<int>(frame->stage_height));
+    viewport_->ShowFrame(std::move(read->image), stage_size_);
     const QSize shown(static_cast<int>(frame->width), static_cast<int>(frame->height));
     if (shown != viewport_->FittedSize(viewport_->size())) resize_timer_->start();
     timeline_->SetFrame(frame->frame);

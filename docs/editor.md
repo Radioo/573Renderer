@@ -71,12 +71,23 @@ boxes.
 vcpkg's applocal step copies the Qt DLLs next to the executable, but not the
 Qt *plugins*, and Qt aborts at startup with a message box when it cannot find
 a platform plugin. vcpkg's qtbase does not install `windeployqt` (it lives in
-qttools), so `editor/CMakeLists.txt` copies the two plugins the application
-needs straight from their imported targets in a post-build step:
-`Qt6::QWindowsIntegrationPlugin` into `platforms/` and
-`Qt6::QModernWindowsStylePlugin` into `styles/`. The destination subdirectory
-comes from each target's `QT_PLUGIN_TYPE` property, so the copy cannot drift
-from what Qt expects to find.
+qttools), so `editor/CMakeLists.txt` copies the plugins the application needs
+straight from their imported targets in a post-build step:
+`Qt6::QWindowsIntegrationPlugin` into `platforms/`,
+`Qt6::QModernWindowsStylePlugin` into `styles/` and `Qt6::QJpegPlugin` into
+`imageformats/`. The destination subdirectory comes from each target's
+`QT_PLUGIN_TYPE` property, so the copy cannot drift from what Qt expects to
+find.
+
+A plugin's own dependencies need the same care: `qjpeg.dll` needs
+`jpeg62.dll`, and vcpkg's applocal step only resolves the executable's
+dependencies, not a plugin's. Windows also looks for a plugin's dependencies
+next to the executable rather than next to the plugin, which was checked by
+hand: with `jpeg62.dll` in `imageformats/` Qt still listed no JPEG support,
+and with it beside the executable it did. So the copy puts the plugin beside
+the executable first, runs vcpkg's `z-applocal` on it there, and then moves it
+into its subdirectory, which leaves the plugin where Qt looks and its
+dependencies where Windows looks.
 
 ## Window layout
 
@@ -273,9 +284,12 @@ opens it. In a package with no animation it first asks for another IFS and which
 of its animations to copy (`Window::ChooseAnimationSource`). Removing an animation goes through `Document::RemoveAnimation`, is
 refused while the project owns depths in it, and closes it first when it is the
 one on screen. The image path goes
-through `QImage`, so the editor reads whatever image formats Qt was built with
-rather than carrying a decoder of its own, and converts to the BGRA the package
-stores. Removing a texture goes through `RemoveImage` so the texture list loses
+through `QImage`, so the editor reads image formats through Qt rather than
+carrying a decoder of its own, and converts to the BGRA the package stores.
+That means the qtbase features decide what can be added: the editor asks for
+`png` and `jpeg` on top of `gui` and `widgets` (`editor/vcpkg.json`). Without
+them Qt reads only BMP, PPM, XBM and XPM, which is what the dialog's own
+filter promised and could not deliver until the features were turned on. Removing a texture goes through `RemoveImage` so the texture list loses
 its node too; removing anything else is a plain entry removal.
 
 Ctrl and the mouse wheel zoom the timeline around the frame under the cursor,
@@ -486,6 +500,14 @@ that shares its depth and first frame.
 Scrubbing now refreshes the inspector whether or not a depth is picked, so the
 camera rows of the frame under the playhead follow the playhead; before, they
 only did while a depth was picked.
+
+`File > Save the frame as PNG...` (Ctrl+Alt+S) writes what the viewport shows
+to a PNG. It asks the host for one render at the stage size rather than the
+fitted viewport size, restores the viewport size afterwards, and composites the
+frame onto black exactly as the viewport paints it, so the file is opaque and
+matches the screen. What the host's alpha means has not been read, so this is
+deliberately not a transparent export; the renderer's own export path is where
+that belongs. Without a preview host it says so rather than writing a file.
 
 `File > Save` writes the encoded document over the opened path and `Save as...`
 asks for a new one. Whether the document is unsaved comes from the history, not
