@@ -34,6 +34,8 @@ struct Frame {
     uint32_t width = 0;
     uint32_t height = 0;
     uint32_t frame = 0;
+    uint32_t stage_width = 0;
+    uint32_t stage_height = 0;
 };
 
 class Host {

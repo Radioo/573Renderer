@@ -191,7 +191,8 @@ std::vector<uint8_t> Session::Render() {
     flatbuffers::FlatBufferBuilder builder;
     const auto frame = PreviewProtocol::CreateFrame(
         builder, static_cast<uint64_t>(std::bit_cast<uintptr_t>(frame_->handle)), view_width_,
-        view_height_, current);
+        view_height_, current, static_cast<uint32_t>(g_d3d.width),
+        static_cast<uint32_t>(g_d3d.height));
     builder.Finish(
         PreviewProtocol::CreateReplyMessage(builder, PreviewProtocol::Reply::Frame, frame.Union()));
     return Finished(builder);

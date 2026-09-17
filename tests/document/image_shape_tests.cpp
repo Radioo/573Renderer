@@ -8,6 +8,7 @@
 #include "document/image_shape.h"
 #include "document/place_image.h"
 #include "document/placement_edit.h"
+#include "document/stage_bounds.h"
 #include "document/timeline.h"
 #include "formats/afp_animation.h"
 #include "formats/big_endian.h"
@@ -174,6 +175,9 @@ TEST_CASE("Adding an image shape defines it, writes its quad and lists it") {
     CHECK(ListedShapes(*file) == std::vector<uint16_t>{5});
     CHECK(file->ShapeImages(AnimationPath()) ==
           std::map<uint16_t, std::string>{{uint16_t{5}, "added"}});
+    CHECK(file->ShapeBounds(AnimationPath()) ==
+          std::map<uint16_t, Document::Box>{
+              {uint16_t{5}, Document::Box{.left = 0, .right = 2, .top = 0, .bottom = 1}}});
     const auto written = WrittenShape(*file, 5);
     REQUIRE(written.has_value());
     const Document::ImageArea area{.atlas_width = 4, .atlas_height = 3, .uvrect = {2, 6, 2, 4}};

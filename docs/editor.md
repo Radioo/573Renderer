@@ -93,11 +93,23 @@ the window also shows it.
 
 **Viewport.** `Editor::Viewport` paints one `QImage` scaled to fit, and emits
 its new size when it is resized. The window debounces that by 120 ms, asks the
-host to resize, renders, and turns the shared texture into pixels with
+host for the largest size with the stage's aspect that fits (the `Frame` reply
+carries the stage size, so a first render at the default size tells the window
+what to ask for), renders, and turns the shared texture into pixels with
 `SharedTexture::Reader` (docs/preview_host.md). A render that fails leaves the
 last good image on screen: the error goes to the status bar every time and to a
 dialog only when it is not the error already showing, so a host that dies while
 the viewport is being dragged does not produce one dialog per frame.
+
+Clicking the viewport maps the point to stage pixels through the fitted
+image and selects the highest depth whose `Document::StageOutlines` outline
+holds it, or clears the selection; the selected depth is outlined. Dragging
+inside that outline moves the outline with the pointer, and letting go moves
+the depth by the offset: `Document::MoveOwnedDepth` through `EditAuthored` for
+an owned depth, `Document::MoveBakedDepth` through `EditAnimation` otherwise,
+each one undo step. Outlines are shown only when the viewport shows the clip
+being edited, that is the root or a sprite shown on its own. Shape boxes are
+read once per animation and read again after every edit.
 
 **Timeline.** `Editor::Timeline` draws a ruler carrying the animation's labels
 at their frames, then one row per depth from `Document::DepthRows`, with a bar

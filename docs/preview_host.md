@@ -20,7 +20,8 @@ Windows named pipe (ADR 0007).
 | `ShowSymbol` | the export name of a symbol in the loaded animation |
 
 A reply is a `ReplyMessage` holding `Done`, `Loaded` (frame count and labels),
-`Frame` (the shared texture handle as a u64, its size, the frame drawn) or
+`Frame` (the shared texture handle as a u64, its size, the frame drawn, and
+the game render size the frame was drawn at, which is the stage size) or
 `Failure` (a message). Replies are read with
 `flatbuffers::GetRoot<PreviewProtocol::ReplyMessage>`, since the schema's root
 type is the request. A receiver checks untrusted buffers with the generated
@@ -94,7 +95,8 @@ it if it does not.
 One method per request: `Boot`, `LoadPackage`, `SelectAnimation`, `Seek`,
 `Resize`, `Render`, `ShowSymbol`. Each builds its FlatBuffer, calls through
 `PreviewChannel::Client` and decodes the reply into a plain struct
-(`Loaded{frame_count, labels}`, `Frame{shared_handle, width, height, frame}`).
+(`Loaded{frame_count, labels}`,
+`Frame{shared_handle, width, height, frame, stage_width, stage_height}`).
 A `Failure` reply becomes an error carrying the request name and the host's
 message; a hung or dead host becomes a channel error naming the request that
 was outstanding, which `LastRequest()` also keeps.

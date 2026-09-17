@@ -38,6 +38,7 @@
 #include <QMessageBox>
 #include <QScrollArea>
 #include <QSettings>
+#include <QSize>
 #include <QStatusBar>
 #include <QString>
 #include <QTableWidget>
@@ -180,6 +181,8 @@ void Window::BuildPanels() {
     resize_timer_->setInterval(kResizeDelayMs);
     connect(resize_timer_, &QTimer::timeout, this, &Window::ResizeViewport);
     connect(viewport_, &Viewport::Resized, this, [this](int, int) { resize_timer_->start(); });
+    connect(viewport_, &Viewport::Picked, this, &Window::PickOnStage);
+    connect(viewport_, &Viewport::Dragged, this, &Window::MoveOnStage);
 
     ads::CDockAreaWidget* centre = docks_->setCentralWidget(MakePanel(tr("Viewport"), viewport_));
     docks_->addDockWidget(ads::LeftDockWidgetArea, MakePanel(tr("Package"), package_tree_), centre);
@@ -397,6 +400,7 @@ void Window::ShowFrame() {
                         .key_property = key_property_.toStdString(),
                         .key_frame = key_frame_,
                         .clip = clip_}));
+    UpdateOutlines(*animation);
 }
 
 bool Window::EditAnimation(const QString& name, const AnimationChange& change) {
@@ -755,8 +759,9 @@ void Window::ShowRestored() {
 
 void Window::ResizeViewport() {
     if (!host_.Running() || animation_name_.empty()) return;
-    const auto resized = host_.Resize(static_cast<uint32_t>(viewport_->width()),
-                                      static_cast<uint32_t>(viewport_->height()));
+    const QSize fitted = viewport_->FittedSize(viewport_->size());
+    const auto resized =
+        host_.Resize(static_cast<uint32_t>(fitted.width()), static_cast<uint32_t>(fitted.height()));
     if (!resized) {
         ReportOnce(QString::fromStdString(resized.error()));
         return;
@@ -785,7 +790,10 @@ void Window::RenderFrame() {
     }
     const QImage image(pixels->data(), static_cast<int>(frame->width),
                        static_cast<int>(frame->height), QImage::Format_ARGB32);
-    viewport_->ShowFrame(image.copy());
+    viewport_->ShowFrame(image.copy(), QSize(static_cast<int>(frame->stage_width),
+                                             static_cast<int>(frame->stage_height)));
+    const QSize shown(static_cast<int>(frame->width), static_cast<int>(frame->height));
+    if (shown != viewport_->FittedSize(viewport_->size())) resize_timer_->start();
     timeline_->SetFrame(frame->frame);
     statusBar()->showMessage(tr("Frame %1 of %2").arg(frame->frame).arg(frame_count_));
     last_error_.clear();
@@ -830,6 +838,7 @@ bool Window::OfferToSave() {
 }
 
 void Window::RefreshState() {
+    shape_bounds_path_.clear();
     create_project_action_->setEnabled(file_.has_value() && !project_);
     close_project_action_->setEnabled(project_.has_value());
     export_action_->setEnabled(project_.has_value() &&

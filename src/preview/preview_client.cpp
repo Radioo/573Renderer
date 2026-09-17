@@ -214,7 +214,9 @@ Support::Expected<Frame, std::string> Host::Render() {
     return Frame{.shared_handle = frame->shared_handle(),
                  .width = frame->width(),
                  .height = frame->height(),
-                 .frame = frame->frame()};
+                 .frame = frame->frame(),
+                 .stage_width = frame->stage_width(),
+                 .stage_height = frame->stage_height()};
 }
 
 }

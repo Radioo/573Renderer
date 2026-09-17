@@ -7,6 +7,7 @@
 #include "document/entry_edit.h"
 #include "document/image_shape.h"
 #include "document/outline.h"
+#include "document/stage_bounds.h"
 #include "formats/afp_animation.h"
 #include "formats/ifs_archive.h"
 #include "support/expected.h"
@@ -141,6 +142,10 @@ Support::Expected<void, std::string> File::RemoveImage(std::string_view name) {
 
 std::map<uint16_t, std::string> File::ShapeImages(std::string_view animation_path) const {
     return Document::ShapeImages(archive_, animation_path);
+}
+
+std::map<uint16_t, Box> File::ShapeBounds(std::string_view animation_path) const {
+    return Document::ShapeBounds(archive_, animation_path);
 }
 
 Support::Expected<uint16_t, std::string> File::AddImageShape(std::string_view animation_path,

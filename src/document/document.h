@@ -2,6 +2,7 @@
 
 #include "document/atlas_write.h"
 #include "document/outline.h"
+#include "document/stage_bounds.h"
 #include "formats/afp_animation.h"
 #include "formats/ifs_archive.h"
 #include "support/expected.h"
@@ -50,6 +51,8 @@ public:
 
     [[nodiscard]] std::map<uint16_t, std::string>
     ShapeImages(std::string_view animation_path) const;
+
+    [[nodiscard]] std::map<uint16_t, Box> ShapeBounds(std::string_view animation_path) const;
 
     [[nodiscard]] Support::Expected<uint16_t, std::string>
     AddImageShape(std::string_view animation_path, std::string_view image);

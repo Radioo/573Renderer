@@ -624,6 +624,47 @@ another package's image (a `0x43` shape with image-relative UVs) is not offered.
 The numbers behind each rule are in `docs/local_regression.md` under the shape
 survey.
 
+## Stage outlines (`document/stage_bounds.h`)
+
+`StageOutlines` gives the four corners, in stage pixels, of every depth a clip
+shows on a frame, so the viewport can draw a selection and find what is under
+the pointer. afp-core has no bounds query to ask instead: the movie clip rect
+getters only read back a rect a script stored. The outline follows the engine's
+own composition, read from the IIDX 33 afp-core:
+
+- A shape's box is its GE2D rect when the file carries one, otherwise the
+  bounds of its vertices (`File::ShapeBounds`).
+- A placed object maps a point through `(point - origin) * matrix`: the matrix
+  from its applied placement, translation and origin in twentieths of a pixel.
+  The origin (`0x1000000`) is held across updates that leave it out, and a new
+  object starts without one.
+- A sprite's box is the box around everything it shows on any of its frames,
+  each child mapped the same way. A sprite that places itself contributes
+  nothing the second time round.
+- Objects placed in 3D, removed ones and characters with no known box (images,
+  imports) have no outline.
+
+A sprite shown on its own is outlined in its own space, which is the stage
+space the host draws it in. `DepthAt` returns the highest depth whose outline
+holds a point, which is the object drawn on top.
+
+The sprite rule is an editor choice, the way After Effects boxes a precomposed
+layer by its whole composition: a sprite's current frame depends on its own
+playhead and scripts, which the document does not run.
+
+## Moving a depth on stage (`document/stage_move.h`)
+
+`MoveBakedDepth` moves a depth by a stage offset from the placement that is
+live on the frame. The offset is added to that placement's translation in
+twentieths of a pixel. When that placement does not carry the matrix bit (a
+colour-only update), the matrix it was showing is written into it first, with
+the bit set, because a matrix bit on its own resets the scale and rotation it
+leaves out. 3D placements are refused.
+
+`MoveOwnedDepth` does the same for a depth the project owns: it starts a
+Translation track if there is none, adds a key on the frame if there is none,
+and shifts that key.
+
 ## Clips (`document/clip.h`, `document/clip_edit.h`)
 
 A clip is the root of an animation or one of its sprites, named by a `ClipId`

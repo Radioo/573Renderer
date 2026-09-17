@@ -299,12 +299,20 @@ Those are the rules `ImageQuad` and `AddImageShape` follow.
 
 The proof that such a shape draws is in `local_dll_tests`:
 `image_shape_live_tests.cpp` places the largest image of `graphic/1/title.ifs`
-on a new depth over frames 0 to 20 with `PlaceImage`, loads the package before
-and after in a real preview host at 1920x1080, and reads frame 10 back. Some
-pixels inside the image's rectangle at the stage origin must change and none
-outside it. Ending the depth at frame 5 instead makes it fail with no pixel
-changed, which is how the check was shown to see the drawing. This is a
-content-drawn check between two different packages, not a playback state check.
+that fits in 400x400 on a new depth over frames 0 to 20 with `PlaceImage`, loads
+the package before and after in a real preview host at 1920x1080, and reads
+frame 10 back. Some pixels must change, every changed pixel must touch the
+outline `Document::StageOutlines` works out for the new depth, and the changed
+area must span at least half the outline each way. A second case gives the
+placement a scale, a skew, a move and a rotation origin first, which checks the
+outline formula against afp-core's own drawing. Ending the depth at frame 5
+makes the first fail with no pixel changed, and leaving the origin out of the
+formula makes the second fail with 2324 pixels outside, which is how both
+checks were shown to see what they check. These are content-drawn checks
+between two different packages, not playback state checks.
+
+`preview_host_process_tests.cpp` also checks that `Frame` reports the
+1920x1080 stage of IIDX 33.
 
 ## The script walker over every script in the install (`local` label)
 

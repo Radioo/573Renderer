@@ -87,6 +87,8 @@ TEST_CASE("The client drives a real preview host through a package, a seek and a
     CHECK(frame->width == kViewWidth);
     CHECK(frame->height == kViewHeight);
     CHECK(frame->frame == kSeekFrame);
+    CHECK(frame->stage_width == 1920);
+    CHECK(frame->stage_height == 1080);
     CHECK(OpensOnAnotherDevice(frame->shared_handle, frame->width, frame->height));
 
     auto reader = SharedTexture::Reader::Create();

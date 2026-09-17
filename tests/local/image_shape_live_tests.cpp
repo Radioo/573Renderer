@@ -4,12 +4,16 @@
 #include "document/document.h"
 #include "document/outline.h"
 #include "document/place_image.h"
+#include "document/placement_edit.h"
+#include "document/stage_bounds.h"
+#include "formats/afp_animation.h"
 #include "document/timeline.h"
 #include "preview/preview_client.h"
 #include "preview/shared_texture.h"
 #include "support/env.h"
 
 #include <algorithm>
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
@@ -21,6 +25,7 @@
 #include <span>
 #include <string>
 #include <utility>
+#include <variant>
 #include <vector>
 
 namespace {
@@ -30,6 +35,8 @@ constexpr uint32_t kViewHeight = 1080;
 constexpr uint32_t kShownFrame = 10;
 constexpr uint32_t kLastFrame = 20;
 constexpr std::size_t kBgraBytes = 4;
+constexpr uint32_t kLargestSide = 400;
+constexpr uint32_t kUseMatrix = 0x4;
 
 struct Picked {
     std::string name;
@@ -51,7 +58,7 @@ std::string AnimationPath(const Document::File& file) {
     return {};
 }
 
-std::optional<Picked> LargestImage(const Document::File& file) {
+std::optional<Picked> LargestFittingImage(const Document::File& file) {
     std::optional<Picked> best;
     for (const Document::Node& node : file.Nodes()) {
         for (const Document::Node& child : node.children) {
@@ -59,6 +66,8 @@ std::optional<Picked> LargestImage(const Document::File& file) {
             const auto details = file.Describe(child.path);
             if (!details || !details->texture) continue;
             const uint32_t area = details->texture->width * details->texture->height;
+            if (details->texture->width > kLargestSide || details->texture->height > kLargestSide)
+                continue;
             if (best && area <= best->width * best->height) continue;
             best = Picked{.name = details->name,
                           .width = details->texture->width,
@@ -94,10 +103,33 @@ std::vector<uint8_t> RenderPixels(PreviewClient::Host& host, std::span<const uin
 struct Changed {
     std::size_t inside = 0;
     std::size_t outside = 0;
+    std::optional<Document::Box> area;
 };
 
+bool Covers(const Document::StageOutline& outline, uint32_t x, uint32_t y) {
+    const std::vector<Document::StageOutline> only{outline};
+    const std::array<Document::Point, 4> corners{
+        Document::Point{x + 0.0, y + 0.0}, Document::Point{x + 1.0, y + 0.0},
+        Document::Point{x + 0.0, y + 1.0}, Document::Point{x + 1.0, y + 1.0}};
+    return std::ranges::any_of(corners, [&only](const Document::Point& corner) {
+        return Document::DepthAt(only, corner).has_value();
+    });
+}
+
+void Note(Changed& changed, uint32_t x, uint32_t y) {
+    if (!changed.area) {
+        changed.area =
+            Document::Box{.left = x + 0.0, .right = x + 1.0, .top = y + 0.0, .bottom = y + 1.0};
+        return;
+    }
+    changed.area->left = std::min(changed.area->left, x + 0.0);
+    changed.area->right = std::max(changed.area->right, x + 1.0);
+    changed.area->top = std::min(changed.area->top, y + 0.0);
+    changed.area->bottom = std::max(changed.area->bottom, y + 1.0);
+}
+
 Changed Compare(const std::vector<uint8_t>& before, const std::vector<uint8_t>& after,
-                const Picked& image) {
+                const Document::StageOutline& outline) {
     Changed changed;
     for (uint32_t y = 0; y < kViewHeight; y++) {
         for (uint32_t x = 0; x < kViewWidth; x++) {
@@ -106,7 +138,8 @@ Changed Compare(const std::vector<uint8_t>& before, const std::vector<uint8_t>& 
             const auto last = first + static_cast<std::ptrdiff_t>(kBgraBytes);
             if (std::equal(before.begin() + first, before.begin() + last, after.begin() + first))
                 continue;
-            if (x < image.width && y < image.height) {
+            Note(changed, x, y);
+            if (Covers(outline, x, y)) {
                 changed.inside++;
             } else {
                 changed.outside++;
@@ -116,38 +149,53 @@ Changed Compare(const std::vector<uint8_t>& before, const std::vector<uint8_t>& 
     return changed;
 }
 
+double Span(const Document::StageOutline& outline, std::size_t axis) {
+    double low = outline.corners[0].at(axis);
+    double high = low;
+    for (const Document::Point& corner : outline.corners) {
+        low = std::min(low, corner.at(axis));
+        high = std::max(high, corner.at(axis));
+    }
+    return high - low;
 }
 
-TEST_CASE("A package image placed as a new shape draws where the quad is") {
-    const std::string dir = Support::EnvVar("R573_IIDX_DIR").value_or("");
-    if (dir.empty()) SKIP("R573_IIDX_DIR not set");
+struct Placed {
+    std::string path;
+    uint16_t depth = 0;
+};
 
-    const std::vector<uint8_t> bytes = ReadAll(dir + "/data/graphic/1/title.ifs");
-    REQUIRE(!bytes.empty());
-    auto file = Document::File::Open(bytes);
-    REQUIRE(file.has_value());
-    const std::string path = AnimationPath(*file);
+std::optional<Placed> PlaceFittingImage(Document::File& file) {
+    const std::string path = AnimationPath(file);
     REQUIRE(!path.empty());
-    const std::optional<Picked> image = LargestImage(*file);
+    const std::optional<Picked> image = LargestFittingImage(file);
     REQUIRE(image.has_value());
-    if (!image) return;
-    INFO(image->name + " is " + std::to_string(image->width) + "x" + std::to_string(image->height));
-
-    const auto placed = Document::PlaceImage(*file, path, image->name,
-                                             Document::DepthSpan{.clip = {},
-                                                                 .depth = FreeDepth(*file, path),
-                                                                 .first_frame = 0,
-                                                                 .last_frame = kLastFrame});
+    if (!image) return std::nullopt;
+    const uint16_t depth = FreeDepth(file, path);
+    const auto placed = Document::PlaceImage(
+        file, path, image->name,
+        Document::DepthSpan{
+            .clip = {}, .depth = depth, .first_frame = 0, .last_frame = kLastFrame});
     const std::string place_error = placed.has_value() ? std::string() : placed.error();
     INFO(place_error);
     REQUIRE(placed.has_value());
-    if (!placed) return;
-    const std::map<uint16_t, std::string> shapes = file->ShapeImages(path);
+    if (!placed) return std::nullopt;
+    const std::map<uint16_t, std::string> shapes = file.ShapeImages(path);
     CHECK(shapes.size() > 1);
     const auto named = shapes.find(*placed);
     REQUIRE(named != shapes.end());
     CHECK(named->second == image->name);
-    const auto edited = file->Encode();
+    return Placed{.path = path, .depth = depth};
+}
+
+void CheckDrawnInsideOutline(const std::string& dir, std::span<const uint8_t> original,
+                             const Document::File& file, const Placed& placed) {
+    const auto animation = file.ReadAnimation(placed.path);
+    REQUIRE(animation.has_value());
+    const auto outlines =
+        Document::StageOutlines(*animation, {}, kShownFrame, file.ShapeBounds(placed.path));
+    const auto outline = std::ranges::find(outlines, placed.depth, &Document::StageOutline::depth);
+    REQUIRE(outline != outlines.end());
+    const auto edited = file.Encode();
     REQUIRE(edited.has_value());
 
     auto host =
@@ -155,14 +203,64 @@ TEST_CASE("A package image placed as a new shape draws where the quad is") {
     REQUIRE(host.has_value());
     REQUIRE((*host)->Boot(dir, "iidx33").has_value());
     REQUIRE((*host)->Resize(kViewWidth, kViewHeight).has_value());
-    const std::vector<uint8_t> before = RenderPixels(**host, bytes, false);
+    const std::vector<uint8_t> before = RenderPixels(**host, original, false);
     const std::vector<uint8_t> after = RenderPixels(**host, *edited, true);
     REQUIRE(before.size() == static_cast<std::size_t>(kViewWidth) * kViewHeight * kBgraBytes);
     REQUIRE(after.size() == before.size());
 
-    const Changed changed = Compare(before, after, *image);
-    INFO(std::to_string(changed.inside) + " pixels changed inside the quad, " +
+    const Changed changed = Compare(before, after, *outline);
+    INFO(std::to_string(changed.inside) + " pixels changed inside the outline, " +
          std::to_string(changed.outside) + " outside");
     CHECK(changed.inside > 0);
     CHECK(changed.outside == 0);
+    REQUIRE(changed.area.has_value());
+    if (!changed.area) return;
+    CHECK(changed.area->right - changed.area->left >= Span(*outline, 0) / 2);
+    CHECK(changed.area->bottom - changed.area->top >= Span(*outline, 1) / 2);
+}
+
+}
+
+TEST_CASE("A package image placed as a new shape draws inside its outline") {
+    const std::string dir = Support::EnvVar("R573_IIDX_DIR").value_or("");
+    if (dir.empty()) SKIP("R573_IIDX_DIR not set");
+    const std::vector<uint8_t> bytes = ReadAll(dir + "/data/graphic/1/title.ifs");
+    REQUIRE(!bytes.empty());
+    auto file = Document::File::Open(bytes);
+    REQUIRE(file.has_value());
+    if (!file) return;
+    const std::optional<Placed> placed = PlaceFittingImage(*file);
+    REQUIRE(placed.has_value());
+    if (!placed) return;
+    CheckDrawnInsideOutline(dir, bytes, *file, *placed);
+}
+
+TEST_CASE("A moved scaled and turned image draws inside the outline the document works out") {
+    const std::string dir = Support::EnvVar("R573_IIDX_DIR").value_or("");
+    if (dir.empty()) SKIP("R573_IIDX_DIR not set");
+    const std::vector<uint8_t> bytes = ReadAll(dir + "/data/graphic/1/title.ifs");
+    REQUIRE(!bytes.empty());
+    auto file = Document::File::Open(bytes);
+    REQUIRE(file.has_value());
+    if (!file) return;
+    const std::optional<Placed> placed = PlaceFittingImage(*file);
+    REQUIRE(placed.has_value());
+    if (!placed) return;
+    auto animation = file->ReadAnimation(placed->path);
+    REQUIRE(animation.has_value());
+    const auto tag = Document::LivePlacementTag(animation->root, placed->depth, 0);
+    REQUIRE(tag.has_value());
+    auto* placement =
+        std::get_if<AfpAnimation::Placement>(&animation->root.tags[tag.value_or(0)].body);
+    REQUIRE(placement != nullptr);
+    placement->flags |= kUseMatrix;
+    placement->scale = std::array<int32_t, 2>{1536, 768};
+    placement->rotate_skew = std::array<int32_t, 2>{300, -300};
+    placement->translation = std::array<int32_t, 2>{6000, 3000};
+    placement->origin = std::array<int32_t, 2>{400, 200};
+    const auto written = file->WriteAnimation(placed->path, *animation);
+    const std::string write_error = written.has_value() ? std::string() : written.error();
+    INFO(write_error);
+    REQUIRE(written.has_value());
+    CheckDrawnInsideOutline(dir, bytes, *file, *placed);
 }

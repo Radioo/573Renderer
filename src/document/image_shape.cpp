@@ -3,6 +3,7 @@
 #include "document/animation_strings.h"
 #include "document/entries.h"
 #include "document/entry_edit.h"
+#include "document/stage_bounds.h"
 #include "document/tags.h"
 #include "formats/afp_animation.h"
 #include "formats/big_endian.h"
@@ -159,6 +160,54 @@ ReadAnimationAt(const Ifs::Archive& archive, std::string_view animation_path) {
     return AfpAnimation::ReadStored(stored->bytes, script->bytes);
 }
 
+std::map<uint16_t, Ge2dShape::Shape> ReadShapes(const Ifs::Archive& archive,
+                                                std::string_view animation_path) {
+    std::map<uint16_t, Ge2dShape::Shape> shapes;
+    const auto animation = ReadAnimationAt(archive, animation_path);
+    const Ifs::Entry* magic = FindEntry(archive, "magic");
+    if (!animation || magic == nullptr) return shapes;
+    const auto order = Ge2dShape::PackageByteOrder(magic->bytes);
+    if (!order) return shapes;
+    const std::string name = StringText(*animation, animation->name);
+    for (const AfpAnimation::Tag& tag : animation->root.tags) {
+        const auto* shape = std::get_if<AfpAnimation::Shape>(&tag.body);
+        if (shape == nullptr) continue;
+        const auto stored =
+            Ifs::UnescapeName(Ifs::HashedName(std::format("{}_shape{}", name, shape->id)));
+        if (!stored) continue;
+        const Ifs::Entry* entry = FindEntry(archive, JoinPath(kShapeDirectory, *stored));
+        if (entry == nullptr) continue;
+        auto read = Ge2dShape::Read(entry->bytes, *order);
+        if (read) shapes[shape->id] = std::move(*read);
+    }
+    return shapes;
+}
+
+double Coordinate(uint32_t bits) {
+    return std::bit_cast<float>(bits);
+}
+
+std::optional<Box> BoundsOf(const Ge2dShape::Shape& shape) {
+    if (shape.rect) {
+        return Box{.left = Coordinate((*shape.rect)[0]),
+                   .right = Coordinate((*shape.rect)[1]),
+                   .top = Coordinate((*shape.rect)[2]),
+                   .bottom = Coordinate((*shape.rect)[3])};
+    }
+    if (shape.vertices.empty()) return std::nullopt;
+    Box box{.left = Coordinate(shape.vertices[0][0]),
+            .right = Coordinate(shape.vertices[0][0]),
+            .top = Coordinate(shape.vertices[0][1]),
+            .bottom = Coordinate(shape.vertices[0][1])};
+    for (const auto& vertex : shape.vertices) {
+        box.left = std::min(box.left, Coordinate(vertex[0]));
+        box.right = std::max(box.right, Coordinate(vertex[0]));
+        box.top = std::min(box.top, Coordinate(vertex[1]));
+        box.bottom = std::max(box.bottom, Coordinate(vertex[1]));
+    }
+    return box;
+}
+
 Support::Expected<void, std::string> WriteShape(Ifs::Archive& archive, std::string_view animation,
                                                 uint16_t id, std::string_view image) {
     const auto area = FindImage(archive, image);
@@ -235,24 +284,19 @@ Support::Expected<uint16_t, std::string> NextCharacterId(const AfpAnimation::Ani
 std::map<uint16_t, std::string> ShapeImages(const Ifs::Archive& archive,
                                             std::string_view animation_path) {
     std::map<uint16_t, std::string> images;
-    const auto animation = ReadAnimationAt(archive, animation_path);
-    const Ifs::Entry* magic = FindEntry(archive, "magic");
-    if (!animation || magic == nullptr) return images;
-    const auto order = Ge2dShape::PackageByteOrder(magic->bytes);
-    if (!order) return images;
-    const std::string name = StringText(*animation, animation->name);
-    for (const AfpAnimation::Tag& tag : animation->root.tags) {
-        const auto* shape = std::get_if<AfpAnimation::Shape>(&tag.body);
-        if (shape == nullptr) continue;
-        const auto stored =
-            Ifs::UnescapeName(Ifs::HashedName(std::format("{}_shape{}", name, shape->id)));
-        if (!stored) continue;
-        const Ifs::Entry* entry = FindEntry(archive, JoinPath(kShapeDirectory, *stored));
-        if (entry == nullptr) continue;
-        const auto read = Ge2dShape::Read(entry->bytes, *order);
-        if (read && read->texture_names.size() == 1) images[shape->id] = read->texture_names[0];
+    for (const auto& [id, shape] : ReadShapes(archive, animation_path)) {
+        if (shape.texture_names.size() == 1) images[id] = shape.texture_names[0];
     }
     return images;
+}
+
+std::map<uint16_t, Box> ShapeBounds(const Ifs::Archive& archive, std::string_view animation_path) {
+    std::map<uint16_t, Box> bounds;
+    for (const auto& [id, shape] : ReadShapes(archive, animation_path)) {
+        const auto box = BoundsOf(shape);
+        if (box) bounds[id] = *box;
+    }
+    return bounds;
 }
 
 Support::Expected<uint16_t, std::string>

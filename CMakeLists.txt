@@ -829,6 +829,8 @@ add_executable(document_tests
     tests/document/script_source_tests.cpp
     tests/document/sprite_preview_tests.cpp
     tests/document/sprite_structure_tests.cpp
+    tests/document/stage_bounds_tests.cpp
+    tests/document/stage_move_tests.cpp
     tests/document/timeline_tests.cpp
 )
 target_include_directories(document_tests PRIVATE tests/document)

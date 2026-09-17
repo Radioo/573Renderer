@@ -13,6 +13,7 @@
 #include "support/expected.h"
 #include "document/outline.h"
 #include "document/place_image.h"
+#include "document/stage_bounds.h"
 #include "preview/shared_texture.h"
 
 #include <QMainWindow>
@@ -21,6 +22,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <map>
 #include <optional>
 #include <string>
 #include <vector>
@@ -127,6 +129,10 @@ private:
     void StopPlayback();
     [[nodiscard]] bool Playing() const;
     void ChooseDepth(uint32_t depth);
+    [[nodiscard]] bool OutlinesMatchView() const;
+    void UpdateOutlines(const AfpAnimation::Animation& animation);
+    void PickOnStage(double x, double y);
+    void MoveOnStage(uint16_t depth, double dx, double dy);
     void ResizeViewport();
     void Reload();
     bool Save();
@@ -171,6 +177,8 @@ private:
     bool symbol_shown_ = false;
     bool filling_inspector_ = false;
     std::optional<SharedTexture::Reader> reader_;
+    std::map<uint16_t, Document::Box> shape_bounds_;
+    std::string shape_bounds_path_;
     QString last_error_;
 };
 
