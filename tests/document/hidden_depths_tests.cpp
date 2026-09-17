@@ -97,8 +97,8 @@ TEST_CASE("A view without hidden depths leaves the document itself alone") {
     const auto before = file->Encode();
 
     const auto view = Document::ViewWithout(
-        *file, {Document::HiddenDepth{.animation = path, .clip = {}, .depth = 61},
-                Document::HiddenDepth{
+        *file, {Document::DepthInClip{.animation = path, .clip = {}, .depth = 61},
+                Document::DepthInClip{
                     .animation = path, .clip = Document::ClipId{.sprite = kSprite}, .depth = 62}});
     REQUIRE(view.has_value());
     if (!view) return;
@@ -113,6 +113,6 @@ TEST_CASE("A view without hidden depths leaves the document itself alone") {
 
     CHECK_FALSE(
         Document::ViewWithout(
-            *file, {Document::HiddenDepth{.animation = "afp/missing", .clip = {}, .depth = 1}})
+            *file, {Document::DepthInClip{.animation = "afp/missing", .clip = {}, .depth = 1}})
             .has_value());
 }

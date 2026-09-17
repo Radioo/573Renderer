@@ -127,6 +127,18 @@ Script::Step Choose(const QString& text) {
     };
 }
 
+Script::Step Look(const QString& text, bool& found) {
+    return [text, &found] {
+        auto* menu = qobject_cast<QMenu*>(QApplication::activePopupWidget());
+        if (menu == nullptr) return false;
+        const QList<QAction*> actions = menu->actions();
+        found = std::ranges::any_of(
+            actions, [&text](const QAction* action) { return action->text() == text; });
+        menu->close();
+        return true;
+    };
+}
+
 Script::Step Answer(const QString& text) {
     return [text] {
         auto* dialog = qobject_cast<QInputDialog*>(QApplication::activeModalWidget());
@@ -530,6 +542,46 @@ TEST_CASE("A depth hidden in the view cannot be picked and leaves the document a
     }
     CHECK(pick() == "2");
     CHECK_FALSE(undo->isEnabled());
+}
+
+TEST_CASE("Solo hides every other depth, and a locked depth cannot be picked on stage") {
+    Opened opened;
+    Open(opened, true);
+    auto* timeline = opened.window.findChild<Editor::Timeline*>();
+    auto* viewport = opened.window.findChild<Editor::Viewport*>();
+    REQUIRE(timeline != nullptr);
+    REQUIRE(viewport != nullptr);
+    const auto run = [&](std::vector<Script::Step> steps) {
+        Script script(std::move(steps));
+        emit timeline->MenuRequested(QPoint(4, 4), 0, QString());
+        REQUIRE(Settle([&script] { return script.Finished(); }));
+        CHECK(script.Problems().isEmpty());
+    };
+    const auto pick = [&] {
+        emit timeline->DepthChosen(1);
+        emit viewport->Picked(1, 1);
+        return RowValue(*opened.inspector, "Depth");
+    };
+
+    emit timeline->DepthChosen(2);
+    run({Choose("Solo depth 2 in the view")});
+    emit timeline->DepthChosen(1);
+    bool one_hidden = false;
+    run({Look("Show depth 1 in the view", one_hidden)});
+    CHECK(one_hidden);
+    emit timeline->DepthChosen(2);
+    bool two_hidden = true;
+    run({Look("Show depth 2 in the view", two_hidden)});
+    CHECK_FALSE(two_hidden);
+    CHECK(pick() == "2");
+    run({Choose("Show every hidden depth")});
+
+    emit timeline->DepthChosen(2);
+    run({Choose("Lock depth 2 on stage")});
+    CHECK(pick() != "2");
+    emit timeline->DepthChosen(2);
+    run({Choose("Unlock depth 2 on stage")});
+    CHECK(pick() == "2");
 }
 
 TEST_CASE("A stage drag previews through the host before it is committed") {

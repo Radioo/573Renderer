@@ -514,6 +514,11 @@ void Timeline::SetHiddenDepths(std::vector<uint16_t> depths) {
     update();
 }
 
+void Timeline::SetLockedDepths(std::vector<uint16_t> depths) {
+    locked_depths_ = std::move(depths);
+    update();
+}
+
 void Timeline::paintEvent(QPaintEvent* event) {
     QPainter painter(this);
     painter.fillRect(event->rect(), palette().color(QPalette::Base));
@@ -559,7 +564,10 @@ void Timeline::paintEvent(QPaintEvent* event) {
                          selected_depth_ == lane.depth ? kSelectedRow : kRow);
         painter.setPen(palette().color(QPalette::Text));
         painter.drawText(QRect(0, y, kGutterWidth - 6, kRowHeight),
-                         Qt::AlignRight | Qt::AlignVCenter, QString::number(lane.depth));
+                         Qt::AlignRight | Qt::AlignVCenter,
+                         std::ranges::find(locked_depths_, lane.depth) != locked_depths_.end()
+                             ? tr("%1 L").arg(lane.depth)
+                             : QString::number(lane.depth));
         const bool hidden = std::ranges::find(hidden_depths_, lane.depth) != hidden_depths_.end();
         if (row != rows_.end()) {
             for (const Document::Span& span : row->spans) {

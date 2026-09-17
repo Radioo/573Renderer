@@ -1047,7 +1047,7 @@ the editor's own groups.
 `HideDepths(animation, clip, depths)` drops every placement and remove of those
 depths from one clip in a single pass, rebuilding the frame ranges, and leaves
 everything else, including the same depth numbers in other clips, alone.
-`ViewWithout(file, hidden)` applies a list of `HiddenDepth` entries (animation,
+`ViewWithout(file, hidden)` applies a list of `DepthInClip` entries (animation,
 clip, depth) to a copy of the file. It is for the view only: the editor hands
 the copy to the preview host and never records it, so hiding is not an edit and
 not an undo step. `hidden_depths_tests` covers both.

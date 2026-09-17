@@ -20,6 +20,7 @@
 #include <QObject>
 #include <QPoint>
 #include <QPointF>
+#include <QRect>
 #include <QSize>
 #include <QtGlobal>
 
@@ -229,6 +230,22 @@ TEST_CASE("A hidden depth's bars are drawn grey") {
     CHECK(timeline.grab().toImage().pixelColor(inside) == QColor(92, 92, 98));
     timeline.SetHiddenDepths({});
     CHECK(timeline.grab().toImage().pixelColor(inside) == QColor(70, 128, 196));
+}
+
+TEST_CASE("A locked depth is marked in the gutter") {
+    Editor::Timeline timeline;
+    timeline.resize(kTimelineWidth, 200);
+    timeline.ShowAnimation(
+        11,
+        {Document::DepthRow{.depth = 3,
+                            .spans = {Document::Span{.first_frame = 1, .last_frame = 9}}}},
+        {});
+    const QRect gutter(0, kDepthRowY - 6, 56, 12);
+    const QImage plain = timeline.grab(gutter).toImage();
+    timeline.SetLockedDepths({3});
+    CHECK(timeline.grab(gutter).toImage() != plain);
+    timeline.SetLockedDepths({});
+    CHECK(timeline.grab(gutter).toImage() == plain);
 }
 
 TEST_CASE("Dragging a bar's edge asks to trim that span") {

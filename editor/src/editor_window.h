@@ -175,7 +175,10 @@ private:
     [[nodiscard]] bool IsHidden(uint16_t depth) const;
     void ToggleHidden(uint16_t depth);
     void ShowEveryDepth();
-    void UpdateHiddenRows();
+    void UpdateViewRows();
+    [[nodiscard]] bool IsLocked(uint16_t depth) const;
+    void ToggleLocked(uint16_t depth);
+    void SoloDepth(uint16_t depth);
     [[nodiscard]] std::vector<Document::StageOutline>
     VisibleOutlines(const AfpAnimation::Animation& animation) const;
     [[nodiscard]] bool OwnsDepthIn(const Document::GroupRange& range) const;
@@ -212,7 +215,8 @@ private:
     std::optional<Document::Project> project_;
     QString project_folder_;
     std::vector<Document::AuthoredDepth> authored_;
-    std::vector<Document::HiddenDepth> hidden_;
+    std::vector<Document::DepthInClip> hidden_;
+    std::vector<Document::DepthInClip> locked_;
     QString key_property_;
     std::optional<uint32_t> key_frame_;
     std::optional<Document::KeyClip> copied_keys_;

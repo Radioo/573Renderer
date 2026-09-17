@@ -40,6 +40,7 @@ public:
     }
     void SelectDepth(std::optional<uint16_t> depth);
     void SetHiddenDepths(std::vector<uint16_t> depths);
+    void SetLockedDepths(std::vector<uint16_t> depths);
     void Clear();
     void SetFrame(uint32_t frame);
 
@@ -101,6 +102,7 @@ private:
     std::optional<uint16_t> keyed_depth_;
     std::optional<uint16_t> selected_depth_;
     std::vector<uint16_t> hidden_depths_;
+    std::vector<uint16_t> locked_depths_;
     std::vector<Document::Track> tracks_;
     std::vector<Document::KeyRef> selected_keys_;
     std::optional<uint32_t> drag_from_;

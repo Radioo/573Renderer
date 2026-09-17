@@ -217,6 +217,14 @@ saved file keep them. Only when something is hidden is the copy made, so the
 usual preview pays nothing. A hidden depth cannot be picked on stage and has no
 outline (`Window::VisibleOutlines`), and its bars are grey on the timeline
 (`Timeline::SetHiddenDepths`). Opening another document shows everything again.
+
+Solo (`Window::SoloDepth`) hides every other depth of the picked clip in the
+same way, replacing whatever was hidden in that clip, and `Show every hidden
+depth` undoes it. Lock (`Window::ToggleLocked`) is view state too: a locked
+depth has no outline and cannot be picked or dragged on stage, while the
+timeline and the inspector still reach it, and its number carries an `L` in the
+timeline gutter (`Timeline::SetLockedDepths`). Both are forgotten when another
+document opens.
 With a sprite picked in the clip box, the menu also names that sprite's export
 (`Window::NameShownSpriteExport`, through `Document::NameSpriteExport`): the box
 starts on the current name and an empty answer removes it. It is an undoable

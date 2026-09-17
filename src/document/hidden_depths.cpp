@@ -64,15 +64,15 @@ Support::Expected<void, std::string> HideDepths(AfpAnimation::Animation& animati
 }
 
 Support::Expected<File, std::string> ViewWithout(const File& file,
-                                                 const std::vector<HiddenDepth>& hidden) {
+                                                 const std::vector<DepthInClip>& hidden) {
     File view = file;
     std::set<std::string> animations;
-    for (const HiddenDepth& one : hidden)
+    for (const DepthInClip& one : hidden)
         animations.insert(one.animation);
     for (const std::string& path : animations) {
         auto animation = view.ReadAnimation(path);
         if (!animation) return Support::Unexpected(animation.error());
-        for (const HiddenDepth& one : hidden) {
+        for (const DepthInClip& one : hidden) {
             if (one.animation != path) continue;
             auto hid = HideDepths(*animation, one.clip, {one.depth});
             if (!hid) return Support::Unexpected(hid.error());

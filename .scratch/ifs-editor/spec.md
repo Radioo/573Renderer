@@ -281,3 +281,4 @@ captured. This milestone is the editing itself.
 - `issues/73-nudge-on-stage.md` (milestone 8)
 - `issues/74-hide-depths-in-view.md` (milestone 8)
 - `issues/75-sprite-export-names.md` (milestone 8)
+- `issues/76-solo-and-lock.md` (milestone 8)

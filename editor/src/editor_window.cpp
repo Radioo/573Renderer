@@ -307,6 +307,7 @@ void Window::OpenDocument(const QString& path) {
     file_ = std::move(*file);
     history_.Clear();
     hidden_.clear();
+    locked_.clear();
     document_path_ = path;
     package_name_ = QFileInfo(path).completeBaseName().toStdString();
     CloseAnimation();

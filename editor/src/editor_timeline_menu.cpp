@@ -54,7 +54,12 @@ void Window::ShowTimelineMenu(const QPoint& where, uint32_t frame, const QString
     QAction* hide = depth_ ? menu.addAction(hidden ? tr("Show depth %1 in the view").arg(*depth_)
                                                    : tr("Hide depth %1 in the view").arg(*depth_))
                            : nullptr;
+    QAction* solo = depth_ ? menu.addAction(tr("Solo depth %1 in the view").arg(*depth_)) : nullptr;
     QAction* show_all = hidden_.empty() ? nullptr : menu.addAction(tr("Show every hidden depth"));
+    const bool locked = depth_ && IsLocked(static_cast<uint16_t>(*depth_));
+    QAction* lock = depth_ ? menu.addAction(locked ? tr("Unlock depth %1 on stage").arg(*depth_)
+                                                   : tr("Lock depth %1 on stage").arg(*depth_))
+                           : nullptr;
     QAction* export_name =
         clip_.sprite ? menu.addAction(tr("Name the export of this sprite...")) : nullptr;
     menu.addSeparator();
@@ -163,6 +168,14 @@ void Window::ShowTimelineMenu(const QPoint& where, uint32_t frame, const QString
     }
     if (chosen == show_all) {
         ShowEveryDepth();
+        return;
+    }
+    if (chosen == solo) {
+        SoloDepth(static_cast<uint16_t>(*depth_));
+        return;
+    }
+    if (chosen == lock) {
+        ToggleLocked(static_cast<uint16_t>(*depth_));
         return;
     }
     if (chosen == hide) {

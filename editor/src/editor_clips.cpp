@@ -238,7 +238,7 @@ void Window::ShowClipTimeline() {
     const bool from_model = !host_.Running() || (clip_.sprite && !symbol_shown_);
     const uint32_t count = from_model ? details->frame_count : frame_count_;
     timeline_->ShowAnimation(count, details->depths, details->labels);
-    UpdateHiddenRows();
+    UpdateViewRows();
     frame_ = count == 0 ? 0 : std::min(frame_, count - 1);
     timeline_->SetFrame(frame_);
 }

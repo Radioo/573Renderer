@@ -11,18 +11,18 @@
 
 namespace Document {
 
-struct HiddenDepth {
+struct DepthInClip {
     std::string animation;
     ClipId clip;
     uint16_t depth = 0;
 
-    friend bool operator==(const HiddenDepth&, const HiddenDepth&) = default;
+    friend bool operator==(const DepthInClip&, const DepthInClip&) = default;
 };
 
 [[nodiscard]] Support::Expected<void, std::string>
 HideDepths(AfpAnimation::Animation& animation, ClipId clip, const std::vector<uint16_t>& depths);
 
 [[nodiscard]] Support::Expected<File, std::string>
-ViewWithout(const File& file, const std::vector<HiddenDepth>& hidden);
+ViewWithout(const File& file, const std::vector<DepthInClip>& hidden);
 
 }
