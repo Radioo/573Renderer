@@ -3,6 +3,7 @@
 #include "editor_timeline.h"
 #include "editor_viewport.h"
 
+#include "document/characters.h"
 #include "document/clip.h"
 #include "document/outline.h"
 #include "document/sprite_preview.h"
@@ -10,11 +11,13 @@
 #include <QAction>
 #include <QComboBox>
 #include <QHBoxLayout>
+#include <QInputDialog>
 #include <QLabel>
 #include <QScrollArea>
 #include <QSignalBlocker>
 #include <QStatusBar>
 #include <QString>
+#include <QStringList>
 #include <QVBoxLayout>
 #include <QVariant>
 #include <QWidget>
@@ -46,6 +49,24 @@ QWidget* Window::BuildTimelinePanel(QScrollArea* timeline_area) {
     layout->addLayout(header);
     layout->addWidget(timeline_area);
     return panel;
+}
+
+std::optional<uint16_t> Window::ChooseCharacter(const AfpAnimation::Animation& animation) {
+    const std::vector<Document::CharacterSummary> characters = Document::Characters(animation);
+    if (characters.empty()) {
+        ReportProblem(tr("This animation defines nothing that can be placed"));
+        return std::nullopt;
+    }
+    QStringList labels;
+    for (const Document::CharacterSummary& one : characters)
+        labels.append(QString::fromStdString(one.label));
+    bool answered = false;
+    const QString picked =
+        QInputDialog::getItem(this, tr("Add a depth"), tr("Place"), labels, 0, false, &answered);
+    if (!answered) return std::nullopt;
+    const auto index = labels.indexOf(picked);
+    if (index < 0) return std::nullopt;
+    return characters[static_cast<std::size_t>(index)].id;
 }
 
 void Window::FillClips() {

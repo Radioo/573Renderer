@@ -795,9 +795,11 @@ add_executable(document_tests
     tests/document/atlas_tests.cpp
     tests/document/authored_control_bits_tests.cpp
     tests/document/authored_group_tests.cpp
+    tests/document/authored_new_track_tests.cpp
     tests/document/authored_sprite_tests.cpp
     tests/document/authored_tests.cpp
     tests/document/camera_edit_tests.cpp
+    tests/document/characters_tests.cpp
     tests/document/clip_edit_tests.cpp
     tests/document/clip_tests.cpp
     tests/document/document_tests.cpp

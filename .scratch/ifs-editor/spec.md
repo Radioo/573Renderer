@@ -251,3 +251,8 @@ captured. This milestone is the editing itself.
 - `issues/43-isolated-sprite-preview.md` (milestone 8)
 - `issues/44-control-bits.md` (milestone 8)
 - `issues/45-group-resets.md` (milestone 8)
+- `issues/46-undo-authored-content.md` (milestone 8)
+- `issues/47-choose-what-to-place.md` (milestone 8)
+- `issues/48-timeline-zoom.md` (milestone 8)
+- `issues/49-start-animating-a-property.md` (milestone 8)
+- `issues/50-place-a-texture.md` (milestone 8)

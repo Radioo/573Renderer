@@ -208,9 +208,8 @@ void CountOwn(const AfpAnimation::Animation& animation, Document::ClipId clip, u
     counts.owned++;
     const AfpAnimation::Container* original = Document::FindClip(animation, clip);
     if (original != nullptr) {
-        for (const auto& [on, shown] :
-             Document::ReplayDepth(*original, depth, authored->authored.first_frame,
-                                   authored->authored.last_frame)) {
+        for (const auto& [on, shown] : Document::ReplayDepth(
+                 *original, depth, authored->authored.first_frame, authored->authored.last_frame)) {
             counts.frames_compared++;
             const Document::AppliedState keyed =
                 Document::KeyedState(authored->authored, authored->baked, on);
@@ -256,9 +255,10 @@ void CountOwnSpans(const AfpAnimation::Animation& animation, Document::ClipId cl
 void ReportOwn(const std::string& scope, const OwnCounts& counts) {
     std::cerr << std::format("[own {}] {} frames compared with the game, {} disagree\n", scope,
                              counts.frames_compared, counts.frames_disagree);
-    for (const auto& [what, count] : counts.disagreements)
+    for (const auto& [what, count] : counts.disagreements) {
         std::cerr << std::format("[own {}] game and keyframes disagree on{}: {}\n", scope, what,
                                  count);
+    }
     std::cerr << std::format("[own {}] {} tried, {} owned, {} detach exact, {} detach differs\n",
                              scope, counts.tried, counts.owned, counts.detach_exact,
                              counts.detach_differs);

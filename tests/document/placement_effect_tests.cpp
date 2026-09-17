@@ -8,7 +8,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <optional>
-#include <utility>
 #include <vector>
 
 namespace {
@@ -34,8 +33,7 @@ AfpAnimation::Placement Placed(uint32_t flags) {
     return placement;
 }
 
-std::optional<Document::AppliedState> StateOn(const AfpAnimation::Container& clip,
-                                              uint32_t frame) {
+std::optional<Document::AppliedState> StateOn(const AfpAnimation::Container& clip, uint32_t frame) {
     for (const auto& [on, state] : Document::ReplayDepth(clip, kDepth, 0, 8)) {
         if (on == frame) return state;
     }
@@ -54,6 +52,7 @@ TEST_CASE("A created object starts from the identity and takes what it carries")
 
     const auto state = StateOn(clip, 0);
     REQUIRE(state.has_value());
+    if (!state) return;
     CHECK(state->matrix == std::array<double, 6>{2.0, 0.0, 0.0, 0.5, 0.0, 0.0});
     CHECK(state->multiply == std::array<double, 4>{1.0, 1.0, 1.0, 1.0});
     CHECK(state->add == std::array<double, 4>{1.0, 0.0, 0.0, 0.0});
@@ -71,6 +70,7 @@ TEST_CASE("A matrix update resets the parts of the matrix it does not carry") {
 
     const auto state = StateOn(clip, 1);
     REQUIRE(state.has_value());
+    if (!state) return;
     CHECK(state->matrix == std::array<double, 6>{1.0, 0.0, 0.0, 1.0, 30.0, 40.0});
 }
 
@@ -85,6 +85,7 @@ TEST_CASE("An update without the matrix bit leaves the matrix alone") {
 
     const auto state = StateOn(clip, 1);
     REQUIRE(state.has_value());
+    if (!state) return;
     CHECK(state->matrix[0] == 2.0);
     CHECK(state->multiply == std::array<double, 4>{0.0, 1.0, 1.0, 1.0});
 }
@@ -98,6 +99,7 @@ TEST_CASE("A colour update resets the colour it does not carry") {
 
     const auto state = StateOn(clip, 1);
     REQUIRE(state.has_value());
+    if (!state) return;
     CHECK(state->add == std::array<double, 4>{0.0, 0.0, 0.0, 0.0});
 }
 
@@ -110,6 +112,7 @@ TEST_CASE("A short scale is read over the long one, as the game parses it") {
 
     const auto state = StateOn(clip, 0);
     REQUIRE(state.has_value());
+    if (!state) return;
     CHECK(state->matrix[0] == 0.5);
     CHECK(state->matrix[3] == 0.5);
 }
@@ -123,6 +126,7 @@ TEST_CASE("A packed colour is read over the unpacked one, byte by byte") {
 
     const auto state = StateOn(clip, 0);
     REQUIRE(state.has_value());
+    if (!state) return;
     CHECK(state->multiply == std::array<double, 4>{1.0, 0.0, 0.0, 1.0});
 }
 
@@ -136,6 +140,7 @@ TEST_CASE("A 3D update resets only the translation") {
 
     const auto state = StateOn(clip, 1);
     REQUIRE(state.has_value());
+    if (!state) return;
     CHECK(state->matrix[4] == 0.0);
     CHECK(state->matrix[5] == 0.0);
     CHECK(state->matrix[0] == 1.0);

@@ -1,7 +1,5 @@
 #include "document/history.h"
 
-#include "document/document.h"
-
 #include <optional>
 #include <string>
 #include <utility>
@@ -20,9 +18,9 @@ void History::Clear() {
     clean_depth_ = 0;
 }
 
-void History::Record(std::string name, File before) {
+void History::Record(std::string name, Snapshot before) {
     redo_.clear();
-    undo_.push_back(Step{.name = std::move(name), .file = std::move(before)});
+    undo_.push_back(Step{.name = std::move(name), .state = std::move(before)});
     if (undo_.size() > limit_) {
         undo_.erase(undo_.begin());
         if (clean_depth_) {
@@ -44,20 +42,20 @@ const std::string& History::RedoName() const {
     return redo_.empty() ? kNothing : redo_.back().name;
 }
 
-std::optional<File> History::Undo(File current) {
+std::optional<Snapshot> History::Undo(Snapshot current) {
     if (undo_.empty()) return std::nullopt;
     Step step = std::move(undo_.back());
     undo_.pop_back();
-    redo_.push_back(Step{.name = step.name, .file = std::move(current)});
-    return std::move(step.file);
+    redo_.push_back(Step{.name = step.name, .state = std::move(current)});
+    return std::move(step.state);
 }
 
-std::optional<File> History::Redo(File current) {
+std::optional<Snapshot> History::Redo(Snapshot current) {
     if (redo_.empty()) return std::nullopt;
     Step step = std::move(redo_.back());
     redo_.pop_back();
-    undo_.push_back(Step{.name = step.name, .file = std::move(current)});
-    return std::move(step.file);
+    undo_.push_back(Step{.name = step.name, .state = std::move(current)});
+    return std::move(step.state);
 }
 
 bool History::Saved() const {

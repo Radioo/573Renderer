@@ -70,8 +70,18 @@ BakedFor(const AfpAnimation::Animation& animation, const AuthoredDepth& authored
                                 std::string>
 AuthoredPlacements(const AuthoredDepth& authored, const BakedDepth& baked);
 
+[[nodiscard]] std::vector<std::string> PropertiesToAdd(const AuthoredDepth& authored,
+                                                       const BakedDepth& baked);
+
+[[nodiscard]] Support::Expected<void, std::string>
+AddTrack(AuthoredDepth& authored, const BakedDepth& baked, std::string_view property);
+
 [[nodiscard]] AppliedState KeyedState(const AuthoredDepth& authored, const BakedDepth& baked,
                                       uint32_t frame);
+
+[[nodiscard]] Support::Expected<void, std::string>
+CheckDrawnAsKeyed(const AfpAnimation::Container& clip, const AuthoredDepth& authored,
+                  const BakedDepth& baked);
 
 [[nodiscard]] Support::Expected<void, std::string> WriteAuthored(AfpAnimation::Animation& animation,
                                                                  const AuthoredDepth& authored,

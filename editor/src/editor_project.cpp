@@ -249,15 +249,13 @@ void Window::EditOwnedScript() {
     if (!answered) return;
 
     const std::string taken = edited.trimmed().toStdString();
-    for (Document::AuthoredDepth& one : authored_) {
-        if (one.animation != owned->animation || one.depth != owned->depth ||
-            one.first_frame != owned->first_frame) {
-            continue;
-        }
-        one.script = taken.empty() ? std::nullopt : std::optional<std::string>(taken);
+    if (!EditAuthored(
+            tr("Script of depth %1").arg(*depth_), [&taken](Document::AuthoredDepth& one) {
+                one.script = taken.empty() ? std::nullopt : std::optional<std::string>(taken);
+                return Support::Expected<void, std::string>{};
+            })) {
+        return;
     }
-    SaveProject();
-    RefreshState();
     statusBar()->showMessage(taken.empty()
                                  ? tr("Depth %1 keeps the script it was given").arg(*depth_)
                                  : tr("The project writes the script of depth %1").arg(*depth_));
@@ -278,7 +276,8 @@ void Window::ExportToPackage() {
         ReportProblem(QString::fromStdString(exported.error()));
         return;
     }
-    history_.Record(tr("Export").toStdString(), std::move(before));
+    history_.Record(tr("Export").toStdString(),
+                    Document::Snapshot{.file = std::move(before), .authored = authored_});
     SaveProject();
     RefreshState();
     Reload();
@@ -299,6 +298,8 @@ void Window::OwnSelectedDepth(uint32_t frame) {
         ReportProblem(QString::fromStdString(owned.error()));
         return;
     }
+    history_.Record(tr("Own depth %1").arg(*depth_).toStdString(),
+                    Document::Snapshot{.file = *file_, .authored = authored_});
     authored_.push_back(std::move(owned->authored));
     SaveProject();
     RefreshState();

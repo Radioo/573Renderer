@@ -102,7 +102,7 @@ TEST_CASE("An edited package reloads and afp-core reports the edited animation")
 
     Document::History history;
     CHECK(history.Saved());
-    history.Record("move and label", *file);
+    history.Record("move and label", Document::Snapshot{.file = *file, .authored = {}});
     const auto written = file->WriteAnimation(path, *animation);
     const std::string write_error = written.has_value() ? std::string() : written.error();
     INFO(write_error);
@@ -130,10 +130,10 @@ TEST_CASE("An edited package reloads and afp-core reports the edited animation")
     CHECK(frame->frame == kSeekFrame);
 
     CHECK_FALSE(history.Saved());
-    auto undone = history.Undo(*file);
+    auto undone = history.Undo(Document::Snapshot{.file = *file, .authored = {}});
     REQUIRE(undone.has_value());
     CHECK(history.Saved());
-    const Document::File restored = std::move(undone).value_or(Document::File{});
+    const Document::File restored = undone ? std::move(undone->file) : Document::File{};
     const auto undone_bytes = restored.Encode();
     REQUIRE(undone_bytes.has_value());
     const auto back = (*host)->LoadPackage("title", "title", *undone_bytes, true);

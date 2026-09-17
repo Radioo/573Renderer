@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <optional>
 #include <string_view>
@@ -38,15 +39,15 @@ constexpr std::array<GroupMember, 9> kMembers{{
      .group = PropertyGroup::Colour,
      .identity = {255, 255, 255, 255},
      .width = 4},
-    {.property = "Add colour", .group = PropertyGroup::Colour, .identity = {0, 0, 0, 0}, .width = 4},
+    {.property = "Add colour",
+     .group = PropertyGroup::Colour,
+     .identity = {0, 0, 0, 0},
+     .width = 4},
     {.property = "Packed multiply colour",
      .group = PropertyGroup::Colour,
      .identity = {0xFFFFFFFF},
      .width = 1},
-    {.property = "Packed add colour",
-     .group = PropertyGroup::Colour,
-     .identity = {0},
-     .width = 1},
+    {.property = "Packed add colour", .group = PropertyGroup::Colour, .identity = {0}, .width = 1},
 }};
 
 const GroupMember* MemberFor(std::string_view property) {

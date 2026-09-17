@@ -207,10 +207,18 @@ per-frame placement actually carries over a span, which is what the shape of
 detaches it again and requires the clip to come back identical.
 
 It owns spans in the root and in every sprite, and reports the two separately.
-On IIDX 33 it owns 187191 root spans and 563889 sprite spans and gets every one
-of them back identical; the rest are refused for a stated reason, the largest
-being an update that carries flags of its own (22076 in roots, 47098 in
-sprites), which is the obvious next thing for own to learn.
+On IIDX 33 it owns 209251 root spans and 610965 sprite spans, 99.2% of the
+826810 in the install, and gets every one of them back identical. The rest are
+refused for a stated reason: filters (4737), a character swapped mid-span (1640)
+and deformation curves (217). Before tickets 44 and 45 it refused another 69174
+spans whose updates used different control bits.
+
+For every span it owns it also replays the shipped placements with the game's
+rule (`Document::ReplayDepth`) and compares each frame with what the keyframes
+say (`Document::KeyedState`): 35291707 root frames and 93222908 sprite frames,
+with no disagreement. That comparison is what shows own records what the game
+draws, including the 135000 or so updates that reset a matrix part and the
+375758 that reset a colour.
 
 That second half is the proof behind ticket 30's byte-for-byte line, and it is
 what found the three things own was dropping: the non-presence flag bits, the

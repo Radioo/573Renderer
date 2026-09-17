@@ -87,6 +87,7 @@ private:
     void MoveKey(const QString& property, uint32_t from, uint32_t to);
     void ShowKeyMenu(const QPoint& where, const QString& property, uint32_t frame, bool on_key);
     bool ApplyKeyEdit(const QString& value);
+    void StartAnimating();
     void OpenProject(const QString& folder);
     [[nodiscard]] std::string TargetBuild() const;
     void FillTree();
@@ -111,6 +112,7 @@ private:
     void FillClips();
     void ChooseClip(int index);
     void ShowClipTimeline();
+    [[nodiscard]] std::optional<uint16_t> ChooseCharacter(const AfpAnimation::Animation& animation);
     bool LoadViewportClip();
     void TogglePlay();
     void StepPlayback();

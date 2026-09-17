@@ -1,6 +1,6 @@
 # Matrix and colour updates reset what they do not carry
 
-Status: ready-for-agent
+Status: resolved
 
 Blocked by: 44.
 

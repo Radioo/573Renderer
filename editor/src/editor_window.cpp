@@ -420,7 +420,8 @@ bool Window::EditAnimation(const QString& name, const AnimationChange& change) {
         ShowFrame();
         return false;
     }
-    history_.Record(name.toStdString(), std::move(before));
+    history_.Record(name.toStdString(),
+                    Document::Snapshot{.file = std::move(before), .authored = authored_});
     RefreshState();
     Reload();
     ShowFrame();
@@ -480,7 +481,8 @@ void Window::EditDocument(const QString& name, const DocumentChange& change) {
         ReportProblem(QString::fromStdString(changed.error()));
         return;
     }
-    history_.Record(name.toStdString(), std::move(before));
+    history_.Record(name.toStdString(),
+                    Document::Snapshot{.file = std::move(before), .authored = authored_});
     RefreshState();
     FillTree();
     Reload();
@@ -587,6 +589,8 @@ void Window::ShowTimelineMenu(const QPoint& where, uint32_t frame, const QString
         authored ? menu.addAction(tr("Detach depth %1 back to baked data").arg(*depth_)) : nullptr;
     QAction* script =
         authored ? menu.addAction(tr("Edit the script of depth %1...").arg(*depth_)) : nullptr;
+    QAction* start =
+        authored ? menu.addAction(tr("Start animating depth %1...").arg(*depth_)) : nullptr;
     menu.addSeparator();
     const auto animation = file_->ReadAnimation(animation_path_);
     const AfpAnimation::Container* shown =
@@ -610,6 +614,10 @@ void Window::ShowTimelineMenu(const QPoint& where, uint32_t frame, const QString
     }
     if (chosen == script) {
         EditOwnedScript();
+        return;
+    }
+    if (chosen == start) {
+        StartAnimating();
         return;
     }
     if (chosen == add_camera) {
@@ -652,12 +660,15 @@ void Window::ShowTimelineMenu(const QPoint& where, uint32_t frame, const QString
             QInputDialog::getInt(this, tr("Add a depth"), tr("Last frame"), static_cast<int>(frame),
                                  static_cast<int>(frame),
                                  std::max(clip_frames - 1, static_cast<int>(frame)), 1, &answered);
-        if (!answered) return;
+        if (!answered || !animation) return;
+        const std::optional<uint16_t> character = ChooseCharacter(*animation);
+        if (!character) return;
         const auto depth = static_cast<uint16_t>(*depth_);
         const auto until = static_cast<uint32_t>(last);
+        const uint16_t placed = *character;
         EditAnimation(tr("Add depth %1").arg(*depth_),
-                      [clip, depth, frame, until](AfpAnimation::Animation& edited) {
-                          return Document::AddDepth(edited, clip, depth, 0, frame, until);
+                      [clip, depth, placed, frame, until](AfpAnimation::Animation& edited) {
+                          return Document::AddDepth(edited, clip, depth, placed, frame, until);
                       });
         return;
     }
@@ -711,17 +722,21 @@ void Window::ShowTimelineMenu(const QPoint& where, uint32_t frame, const QString
 
 void Window::Undo() {
     if (!file_) return;
-    auto restored = history_.Undo(*file_);
+    auto restored = history_.Undo(Document::Snapshot{.file = *file_, .authored = authored_});
     if (!restored) return;
-    file_ = std::move(*restored);
+    file_ = std::move(restored->file);
+    authored_ = std::move(restored->authored);
+    SaveProject();
     ShowRestored();
 }
 
 void Window::Redo() {
     if (!file_) return;
-    auto restored = history_.Redo(*file_);
+    auto restored = history_.Redo(Document::Snapshot{.file = *file_, .authored = authored_});
     if (!restored) return;
-    file_ = std::move(*restored);
+    file_ = std::move(restored->file);
+    authored_ = std::move(restored->authored);
+    SaveProject();
     ShowRestored();
 }
 

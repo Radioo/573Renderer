@@ -16,6 +16,9 @@
 class QContextMenuEvent;
 class QMouseEvent;
 class QPaintEvent;
+class QPainter;
+class QScrollArea;
+class QWheelEvent;
 
 namespace Editor {
 
@@ -47,6 +50,7 @@ protected:
     void mouseMoveEvent(QMouseEvent* event) override;
     void mouseReleaseEvent(QMouseEvent* event) override;
     void contextMenuEvent(QContextMenuEvent* event) override;
+    void wheelEvent(QWheelEvent* event) override;
 
 private:
     struct Lane {
@@ -58,6 +62,10 @@ private:
     [[nodiscard]] std::vector<Lane> Lanes() const;
     [[nodiscard]] std::optional<std::size_t> LaneAt(int y) const;
     [[nodiscard]] int FrameToX(uint32_t frame) const;
+    [[nodiscard]] double PixelsPerFrame() const;
+    void ApplyZoom();
+    [[nodiscard]] QScrollArea* ScrollArea() const;
+    void DrawTicks(QPainter& painter) const;
     [[nodiscard]] uint32_t XToFrame(int x) const;
     [[nodiscard]] std::optional<uint32_t> KeyNear(std::size_t track, int x) const;
     void ChooseAt(int x, int y);
@@ -74,6 +82,7 @@ private:
     std::optional<uint32_t> selected_key_;
     std::optional<std::size_t> dragging_;
     std::optional<uint32_t> drag_from_;
+    std::optional<double> zoom_;
 };
 
 }

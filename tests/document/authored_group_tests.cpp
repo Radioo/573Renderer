@@ -11,7 +11,6 @@
 
 #include <algorithm>
 #include <array>
-#include <cstddef>
 #include <cstdint>
 #include <string>
 #include <utility>
@@ -100,9 +99,9 @@ TEST_CASE("Easing a colour keeps a held add colour on every frame the game draws
 
     auto owned = Document::OwnDepth(animation, kRoot, "afp/a", kDepth, 0);
     REQUIRE(owned.has_value());
-    REQUIRE(Document::SetKeyEaseAt(owned->authored, "Multiply colour", 0, Document::Ease::Linear,
-                                   {})
-                .has_value());
+    REQUIRE(
+        Document::SetKeyEaseAt(owned->authored, "Multiply colour", 0, Document::Ease::Linear, {})
+            .has_value());
 
     for (const auto& [frame, state] : Exported(animation, owned->authored)) {
         INFO("frame " << frame);
@@ -125,10 +124,10 @@ TEST_CASE("A frame that resets a scale the depth animates is owned as a key at t
     CHECK(Document::SampleTrack(*std::ranges::find(owned->authored.tracks, std::string("Scale"),
                                                    &Document::Track::property),
                                 3) == std::vector<int64_t>{1024, 1024});
-    CHECK(Document::SampleTrack(*std::ranges::find(owned->authored.tracks,
-                                                   std::string("Translation"),
-                                                   &Document::Track::property),
-                                1) == std::vector<int64_t>{0, 0});
+    CHECK(
+        Document::SampleTrack(*std::ranges::find(owned->authored.tracks, std::string("Translation"),
+                                                 &Document::Track::property),
+                              1) == std::vector<int64_t>{0, 0});
 
     const AfpAnimation::Animation before = animation;
     const auto baked = Document::BakedFor(animation, owned->authored);
@@ -155,4 +154,19 @@ TEST_CASE("What the keyframes say is what the game draws on every exported frame
         INFO("frame " << frame);
         CHECK(state == Document::KeyedState(owned->authored, *baked, frame));
     }
+}
+
+TEST_CASE("A span the game would draw differently from its keyframes is caught") {
+    AfpAnimation::Animation animation = Scaled();
+    const auto owned = Document::OwnDepth(animation, kRoot, "afp/a", kDepth, 0);
+    REQUIRE(owned.has_value());
+    if (!owned) return;
+    CHECK(Document::CheckDrawnAsKeyed(animation.root, owned->authored, owned->baked).has_value());
+
+    const auto& moved = animation.root.frames[kLast];
+    auto& placement = std::get<AfpAnimation::Placement>(animation.root.tags[moved.first_tag].body);
+    placement.scale.reset();
+    const auto caught = Document::CheckDrawnAsKeyed(animation.root, owned->authored, owned->baked);
+    REQUIRE_FALSE(caught.has_value());
+    CHECK(caught.error().find("frame 4") != std::string::npos);
 }

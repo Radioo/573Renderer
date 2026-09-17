@@ -122,6 +122,14 @@ format that are kept byte for byte cannot be disturbed from the inspector.
 records the document as it was, with a name a user recognises; `Undo(current)`
 hands back the recorded document and keeps the current one for `Redo`.
 
+A step is a `Snapshot`: the `File` and the project's authored content
+(`std::vector<AuthoredDepth>`) together. The authored content is not stored in
+the file until export, so a history of files alone undid a keyframe edit in the
+viewport while leaving the keyframe changed, and the next export wrote the
+undone edit back. With both in one step, undo and redo can never leave the two
+disagreeing, and an edit that only changes authored content, such as owning a
+depth, is undone the same way as any other.
+
 Snapshots rather than deltas is a deliberate choice: an undone edit is then
 proved by comparing two `Document::File` values, which is what the `ci` tests
 do, and no edit can forget to write its own inverse. The cost is a copy of the
@@ -391,6 +399,10 @@ fresh on a create, ignored while nothing is placed, cleared by a remove.
 changes own or export compares the two on every exported frame, and the `local`
 survey compares them over every owned span of the install, which is what makes
 "what the keyframes say is what the game draws" a checked statement.
+`WriteAuthored` makes the same comparison after it writes a depth
+(`CheckDrawnAsKeyed`) and refuses the write when any frame disagrees, so a
+future mistake in the writer stops an export with the frame it would get wrong
+instead of shipping it.
 
 `property_groups.h` says which properties belong to which group and what each
 one's identity is: the five matrix properties (scale, rotate, translation and
@@ -414,6 +426,18 @@ On other frames it writes nothing of the group, so the game holds it, which is
 what the held keyframes say. An unedited span writes exactly the fields it had.
 An eased translation next to a held scale now writes the scale on every eased
 frame as well, where it used to be dropped and drawn at 1.
+
+### Starting a new property
+
+`PropertiesToAdd` lists what an owned depth could start animating: scale,
+rotate, translation, multiply and add colour, each only when neither of its
+encodings is animated already, and in a 3D span only the colours. `AddTrack`
+starts one with a single keyframe at its identity on the first frame. The
+identities are the ones the game resets to, so a new track draws nothing new
+until its keyframes change, and the group rules above take it from there. Ratio,
+blend, origin, the 3D fields and HSV are not offered: their values on an object
+that never set them have not been read from the game, and a guessed starting
+value would move what is drawn.
 
 `OwnDepth` takes the clip to own a depth in, and `BakedFor` and `WriteAuthored`
 read the clip off the `AuthoredDepth`, so a sprite depth is captured from and
@@ -552,6 +576,17 @@ Exporting the same project a second time changes nothing, which is what proves
 the baked half can be re-derived; without it the project could not store only
 the authored half. A depth the project does not own is not touched at all,
 because export only ever writes the spans it was given.
+
+## Characters (`document/characters.h`)
+
+A placement names what it shows by character id. An animation's characters are
+the sprites (`AP2_DEFINE_SPRITE`), images (`AP2_IMAGE`, a package texture found
+by name) and shapes (`AP2_SHAPE`, host geometry) defined in its root, plus the
+assets it imports from other animations, all in one id space. `Characters` lists
+them in id order, labelled the way a person would pick one: a sprite by its
+export name, an image by its texture name, an import by its asset name and the
+animation it comes from. The editor's add depth offers exactly this list, so a
+new depth is always pointed at something the animation can actually place.
 
 ## Clips (`document/clip.h`, `document/clip_edit.h`)
 

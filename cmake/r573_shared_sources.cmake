@@ -36,6 +36,7 @@ set(R573_EDITOR_DOCUMENT_SOURCES
     src/document/authored.cpp
     src/document/animation_strings.cpp
     src/document/camera_edit.cpp
+    src/document/characters.cpp
     src/document/clip.cpp
     src/document/clip_edit.cpp
     src/document/entries.cpp

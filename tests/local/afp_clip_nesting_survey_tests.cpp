@@ -2,6 +2,7 @@
 
 #include "document/document.h"
 #include "document/outline.h"
+#include "document/placement_effect.h"
 #include "formats/afp_animation.h"
 #include "support/env.h"
 
@@ -16,6 +17,8 @@
 #include <iostream>
 #include <iterator>
 #include <map>
+#include <optional>
+#include <set>
 #include <string>
 #include <utility>
 #include <variant>
@@ -41,6 +44,7 @@ struct Counts {
     std::map<std::string, std::size_t> export_order;
     std::map<std::string, std::size_t> control_bits;
     std::map<std::string, std::size_t> resets;
+    std::map<std::string, std::size_t> characters;
     std::map<std::size_t, std::size_t> deepest;
 };
 
@@ -150,141 +154,152 @@ void CountControlBits(const AfpAnimation::Container& clip, Counts& counts) {
     }
 }
 
-struct Effective {
-    std::array<double, 6> matrix{1.0, 0.0, 0.0, 1.0, 0.0, 0.0};
-    std::array<double, 4> multiply{1.0, 1.0, 1.0, 1.0};
-    std::array<double, 4> add{0.0, 0.0, 0.0, 0.0};
-    bool long_scale = false;
-    bool short_scale = false;
+struct Carried {
+    bool scale = false;
+    bool rotate = false;
+    bool translation = false;
+    bool multiply = false;
+    bool add = false;
 };
 
-std::array<double, 4> Unpacked(uint32_t packed) {
-    return {static_cast<double>((packed >> 24) & 0xFF) / 255.0,
-            static_cast<double>((packed >> 16) & 0xFF) / 255.0,
-            static_cast<double>((packed >> 8) & 0xFF) / 255.0,
-            static_cast<double>(packed & 0xFF) / 255.0};
+Carried CarriedParts(const AfpAnimation::Placement& placement) {
+    return Carried{
+        .scale = placement.scale || placement.short_scale,
+        .rotate = placement.rotate_skew || placement.short_rotate_skew,
+        .translation = placement.translation.has_value(),
+        .multiply = placement.multiply_colour || placement.packed_multiply_colour,
+        .add = placement.add_colour || placement.packed_add_colour,
+    };
 }
 
-std::array<double, 4> Scaled(const std::array<int16_t, 4>& colour) {
-    return {colour[0] / 255.0, colour[1] / 255.0, colour[2] / 255.0, colour[3] / 255.0};
+bool Moved(const Document::AppliedState& before, const Document::AppliedState& after,
+           std::size_t first, std::size_t second) {
+    return before.matrix.at(first) != after.matrix.at(first) ||
+           before.matrix.at(second) != after.matrix.at(second);
 }
 
-void ApplyMatrix(const AfpAnimation::Placement& placement, Effective& state, bool fresh,
-                 Counts& counts) {
-    std::array<double, 6> next{1.0, 0.0, 0.0, 1.0, 0.0, 0.0};
-    std::array<bool, 6> carried{};
-    if (placement.scale) {
-        next[0] = (*placement.scale)[0] / 1024.0;
-        next[3] = (*placement.scale)[1] / 1024.0;
-        carried[0] = carried[3] = true;
+void CountMatrixResets(const AfpAnimation::Placement& placement, const Carried& carried,
+                       const Document::AppliedState& before, const Document::AppliedState& after,
+                       Counts& counts) {
+    if ((placement.flags & 0x04000000U) != 0) {
+        if (!carried.translation && Moved(before, after, 4, 5))
+            counts.resets["3D update resets a held translation"]++;
+        return;
     }
-    if (placement.rotate_skew) {
-        next[1] = (*placement.rotate_skew)[0] / 1024.0;
-        next[2] = (*placement.rotate_skew)[1] / 1024.0;
-        carried[1] = carried[2] = true;
-    }
-    if (placement.translation) {
-        next[4] = (*placement.translation)[0];
-        next[5] = (*placement.translation)[1];
-        carried[4] = carried[5] = true;
-    }
-    if (placement.short_scale) {
-        next[0] = (*placement.short_scale)[0] / 32768.0;
-        next[3] = (*placement.short_scale)[1] / 32768.0;
-        carried[0] = carried[3] = true;
-    }
-    if (placement.short_rotate_skew) {
-        next[1] = (*placement.short_rotate_skew)[0] / 32768.0;
-        next[2] = (*placement.short_rotate_skew)[1] / 32768.0;
-        carried[1] = carried[2] = true;
-    }
-    if (!fresh) {
-        const std::array<const char*, 6> names{"scale", "rotate", "rotate", "scale", "translation",
-                                               "translation"};
-        std::map<std::string, bool> mattered;
-        for (std::size_t i = 0; i < 6; i++) {
-            if (carried[i]) continue;
-            const double identity = (i == 0 || i == 3) ? 1.0 : 0.0;
-            if (state.matrix[i] != identity) mattered[names[i]] = true;
-        }
-        for (const auto& [name, yes] : mattered)
-            counts.resets[std::string("2D update resets a held ") + name]++;
-        if (mattered.empty()) counts.resets["2D update resets nothing held"]++;
-    }
-    state.matrix = next;
+    const bool scale = !carried.scale && Moved(before, after, 0, 3);
+    const bool rotate = !carried.rotate && Moved(before, after, 1, 2);
+    const bool translation = !carried.translation && Moved(before, after, 4, 5);
+    if (scale) counts.resets["2D update resets a held scale"]++;
+    if (rotate) counts.resets["2D update resets a held rotate"]++;
+    if (translation) counts.resets["2D update resets a held translation"]++;
+    if (!scale && !rotate && !translation) counts.resets["2D update resets nothing held"]++;
 }
 
-void ApplyColour(const AfpAnimation::Placement& placement, Effective& state, bool fresh,
-                 Counts& counts) {
-    std::array<double, 4> multiply{1.0, 1.0, 1.0, 1.0};
-    std::array<double, 4> add{0.0, 0.0, 0.0, 0.0};
-    bool has_multiply = false;
-    bool has_add = false;
-    if (placement.multiply_colour) {
-        multiply = Scaled(*placement.multiply_colour);
-        has_multiply = true;
+void CountColourResets(const Carried& carried, const Document::AppliedState& before,
+                       const Document::AppliedState& after, Counts& counts) {
+    const bool multiply = !carried.multiply && before.multiply != after.multiply;
+    const bool add = !carried.add && before.add != after.add;
+    if (multiply) counts.resets["colour update resets a held multiply"]++;
+    if (add) counts.resets["colour update resets a held add"]++;
+    if (!multiply && !add) counts.resets["colour update resets nothing held"]++;
+}
+
+void NoteEncodings(const AfpAnimation::Placement& placement, std::pair<bool, bool>& seen,
+                   Counts& counts) {
+    if (placement.scale) seen.first = true;
+    if (placement.short_scale) seen.second = true;
+    if (placement.scale && placement.short_scale)
+        counts.resets["placement carries both scale encodings"]++;
+    if (placement.multiply_colour && placement.packed_multiply_colour)
+        counts.resets["placement carries both multiply encodings"]++;
+}
+
+struct Replay {
+    std::map<uint16_t, Document::AppliedState> live;
+    std::map<uint16_t, std::pair<bool, bool>> encodings;
+};
+
+void ReplayTag(const AfpAnimation::Tag& tag, Replay& replay, Counts& counts) {
+    if (const auto* remove = std::get_if<AfpAnimation::Remove>(&tag.body)) {
+        replay.live.erase(remove->depth);
+        return;
     }
-    if (placement.add_colour) {
-        add = Scaled(*placement.add_colour);
-        has_add = true;
-    }
-    if (placement.packed_multiply_colour) {
-        multiply = Unpacked(*placement.packed_multiply_colour);
-        has_multiply = true;
-    }
-    if (placement.packed_add_colour) {
-        add = Unpacked(*placement.packed_add_colour);
-        has_add = true;
-    }
-    if (!fresh) {
-        const bool lost_multiply = !has_multiply && state.multiply != std::array<double, 4>{1.0, 1.0, 1.0, 1.0};
-        const bool lost_add = !has_add && state.add != std::array<double, 4>{0.0, 0.0, 0.0, 0.0};
-        if (lost_multiply) counts.resets["colour update resets a held multiply"]++;
-        if (lost_add) counts.resets["colour update resets a held add"]++;
-        if (!lost_multiply && !lost_add) counts.resets["colour update resets nothing held"]++;
-    }
-    state.multiply = multiply;
-    state.add = add;
+    const auto* placement = std::get_if<AfpAnimation::Placement>(&tag.body);
+    if (placement == nullptr) return;
+    const bool update = (placement->flags & 0x1U) != 0;
+    if (update && !replay.live.contains(placement->depth)) return;
+    if (!update) replay.live[placement->depth] = Document::AppliedState{};
+    NoteEncodings(*placement, replay.encodings[placement->depth], counts);
+    Document::AppliedState& state = replay.live[placement->depth];
+    const Document::AppliedState before = state;
+    Document::ApplyPlacement(state, *placement);
+    if (!update) return;
+    const Carried carried = CarriedParts(*placement);
+    if ((placement->flags & 0x4U) != 0)
+        CountMatrixResets(*placement, carried, before, state, counts);
+    if ((placement->flags & 0x8U) != 0) CountColourResets(carried, before, state, counts);
 }
 
 void ReplayClip(const AfpAnimation::Container& clip, Counts& counts) {
-    std::map<uint16_t, Effective> live;
-    std::map<uint16_t, std::pair<bool, bool>> encodings;
+    Replay replay;
     for (const AfpAnimation::Frame& frame : clip.frames) {
         for (uint32_t i = 0; i < frame.tag_count; i++) {
             const std::size_t index = frame.first_tag + i;
             if (index >= clip.tags.size()) break;
-            const AfpAnimation::Tag& tag = clip.tags[index];
-            if (const auto* remove = std::get_if<AfpAnimation::Remove>(&tag.body)) {
-                live.erase(remove->depth);
-                continue;
-            }
-            const auto* placement = std::get_if<AfpAnimation::Placement>(&tag.body);
-            if (placement == nullptr) continue;
-            const bool update = (placement->flags & 0x1U) != 0;
-            const auto found = live.find(placement->depth);
-            if (update && found == live.end()) continue;
-            const bool fresh = !update;
-            if (fresh) live[placement->depth] = Effective{};
-            Effective& state = live[placement->depth];
-            auto& seen = encodings[placement->depth];
-            if (placement->scale) seen.first = true;
-            if (placement->short_scale) seen.second = true;
-            if (placement->scale && placement->short_scale)
-                counts.resets["placement carries both scale encodings"]++;
-            if (placement->multiply_colour && placement->packed_multiply_colour)
-                counts.resets["placement carries both multiply encodings"]++;
-            const bool three_d = (placement->flags & 0x04000000U) != 0;
-            if ((placement->flags & 0x4U) != 0 && !three_d) ApplyMatrix(*placement, state, fresh, counts);
-            if ((placement->flags & 0x4U) != 0 && three_d && !fresh && !placement->translation &&
-                (state.matrix[4] != 0.0 || state.matrix[5] != 0.0)) {
-                counts.resets["3D update resets a held translation"]++;
-            }
-            if ((placement->flags & 0x8U) != 0) ApplyColour(*placement, state, fresh, counts);
+            ReplayTag(clip.tags[index], replay, counts);
         }
     }
-    for (const auto& [depth, seen] : encodings) {
+    for (const auto& [depth, seen] : replay.encodings) {
         if (seen.first && seen.second) counts.resets["depth uses both scale encodings"]++;
+    }
+}
+
+std::optional<std::pair<uint16_t, std::string>> Defined(const AfpAnimation::Tag& tag) {
+    if (const auto* sprite = std::get_if<AfpAnimation::Sprite>(&tag.body))
+        return std::pair<uint16_t, std::string>{sprite->id, "sprite"};
+    if (const auto* image = std::get_if<AfpAnimation::Image>(&tag.body))
+        return std::pair<uint16_t, std::string>{image->id, "image"};
+    if (const auto* shape = std::get_if<AfpAnimation::Shape>(&tag.body))
+        return std::pair<uint16_t, std::string>{shape->id, "shape"};
+    return std::nullopt;
+}
+
+std::map<uint16_t, std::string> DefinedKinds(const AfpAnimation::Animation& animation,
+                                             Counts& counts) {
+    std::map<uint16_t, std::string> kinds;
+    for (const AfpAnimation::Tag& tag : animation.root.tags) {
+        if (const auto* image = std::get_if<AfpAnimation::Image>(&tag.body))
+            counts.characters[std::format("image flags {:#x}", image->flags)]++;
+        const auto defined = Defined(tag);
+        if (!defined) continue;
+        counts.characters["defined " + defined->second]++;
+        if (kinds.contains(defined->first)) counts.characters["id defined twice"]++;
+        kinds[defined->first] = defined->second;
+    }
+    for (const AfpAnimation::Import& imported : animation.imports) {
+        for (const AfpAnimation::ImportedAsset& asset : imported.assets)
+            kinds.try_emplace(asset.tag, "import");
+    }
+    return kinds;
+}
+
+void CountPlaced(const AfpAnimation::Container& clip, const std::map<uint16_t, std::string>& kinds,
+                 Counts& counts) {
+    for (const AfpAnimation::Tag& tag : clip.tags) {
+        const auto* placement = std::get_if<AfpAnimation::Placement>(&tag.body);
+        if (placement == nullptr || !placement->character) continue;
+        const auto kind = kinds.find(*placement->character);
+        counts.characters["places " +
+                          (kind == kinds.end() ? std::string("unknown id") : kind->second)]++;
+    }
+}
+
+void CountCharacters(const AfpAnimation::Animation& animation, Counts& counts) {
+    const std::map<uint16_t, std::string> kinds = DefinedKinds(animation, counts);
+    CountPlaced(animation.root, kinds, counts);
+    for (const AfpAnimation::Tag& tag : animation.root.tags) {
+        if (const auto* sprite = std::get_if<AfpAnimation::Sprite>(&tag.body))
+            CountPlaced(sprite->container, kinds, counts);
     }
 }
 
@@ -326,6 +341,7 @@ void CountAnimation(const AfpAnimation::Animation& animation, Counts& counts) {
     CountSpriteFrames(animation.root, counts);
     CountControlBits(animation.root, counts);
     ReplayClip(animation.root, counts);
+    CountCharacters(animation, counts);
     for (const AfpAnimation::Tag& tag : animation.root.tags) {
         if (const auto* sprite = std::get_if<AfpAnimation::Sprite>(&tag.body))
             CountControlBits(sprite->container, counts);
@@ -348,12 +364,48 @@ void CountAnimation(const AfpAnimation::Animation& animation, Counts& counts) {
     if (nested > root) counts.mostly_nested++;
 }
 
+void TextureNames(const std::vector<Document::Node>& nodes, std::set<std::string>& names) {
+    for (const Document::Node& node : nodes) {
+        if (node.role == Document::Role::Texture) names.insert(node.name);
+        TextureNames(node.children, names);
+    }
+}
+
+void CountImageNames(const AfpAnimation::Animation& animation,
+                     const std::set<std::string>& textures, Counts& counts) {
+    for (const AfpAnimation::Tag& tag : animation.root.tags) {
+        const auto* image = std::get_if<AfpAnimation::Image>(&tag.body);
+        if (image == nullptr) continue;
+        const std::string name =
+            image->name < animation.strings.size() ? animation.strings[image->name] : std::string();
+        std::string dashed = name;
+        std::ranges::replace(dashed, '_', '-');
+        std::string underscored = name;
+        std::ranges::replace(underscored, '-', '_');
+        std::string where = "in no texture list";
+        if (textures.contains(name)) {
+            where = "names a texture as written";
+        } else if (textures.contains(dashed)) {
+            where = "names a texture once _ becomes -";
+        } else if (textures.contains(underscored)) {
+            where = "names a texture once - becomes _";
+        }
+        counts.characters["image " + where +
+                          (name.find('_') != std::string::npos ? ", has _" : ", no _")]++;
+    }
+}
+
 void CountNodes(const Document::File& file, const std::vector<Document::Node>& nodes,
                 Counts& counts) {
     for (const Document::Node& node : nodes) {
         if (node.role == Document::Role::Animation) {
             const auto animation = file.ReadAnimation(node.path);
-            if (animation) CountAnimation(*animation, counts);
+            if (animation) {
+                CountAnimation(*animation, counts);
+                std::set<std::string> textures;
+                TextureNames(file.Nodes(), textures);
+                CountImageNames(*animation, textures, counts);
+            }
         }
         CountNodes(file, node.children, counts);
     }
@@ -387,6 +439,8 @@ TEST_CASE("How much of a shipped animation lives inside its sprites") {
         counts.root_cameras, counts.sprite_cameras, counts.sprite_labels, counts.exported_sprites);
     for (const auto& [order, count] : counts.sprite_label_order)
         std::cerr << std::format("[nesting] sprite labels {}: {}\n", order, count);
+    for (const auto& [what, count] : counts.characters)
+        std::cerr << std::format("[nesting] characters, {}: {}\n", what, count);
     for (const auto& [what, count] : counts.resets)
         std::cerr << std::format("[nesting] reset, {}: {}\n", what, count);
     for (const auto& [bits, count] : counts.control_bits)

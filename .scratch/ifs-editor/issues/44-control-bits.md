@@ -1,6 +1,6 @@
 # Owning spans whose updates use different control bits
 
-Status: ready-for-agent
+Status: resolved
 
 Blocked by: 42.
 

@@ -11,9 +11,14 @@
 #include <QPaintEvent>
 #include <QPolygon>
 #include <QRect>
+#include <QScrollArea>
+#include <QScrollBar>
 #include <QString>
+#include <QWheelEvent>
 
 #include <algorithm>
+#include <array>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <optional>
@@ -33,6 +38,11 @@ constexpr int kLabelReach = 30;
 constexpr int kKeyReach = 6;
 constexpr int kKeyRadius = 4;
 constexpr int kPropertyIndent = 8;
+constexpr double kZoomStep = 1.25;
+constexpr double kMostPixelsPerFrame = 48.0;
+constexpr int kTickSpacing = 60;
+constexpr int kTickHeight = 6;
+constexpr std::array<uint32_t, 10> kTickSteps{1, 2, 5, 10, 20, 50, 100, 200, 500, 1000};
 
 const QColor kRuler(58, 58, 62);
 const QColor kRow(40, 40, 44);
@@ -61,6 +71,7 @@ void Timeline::ShowAnimation(uint32_t frame_count, std::vector<Document::DepthRo
     selected_property_.clear();
     selected_key_.reset();
     Resize();
+    ApplyZoom();
     update();
 }
 
@@ -92,13 +103,25 @@ void Timeline::Clear() {
     tracks_.clear();
     selected_property_.clear();
     selected_key_.reset();
+    zoom_.reset();
     setMinimumHeight(kEmptyHeight);
+    setMinimumWidth(0);
     update();
 }
 
 void Timeline::SetFrame(uint32_t frame) {
     frame_ = frame;
+    if (zoom_) {
+        if (auto* area = ScrollArea())
+            area->ensureVisible(FrameToX(frame), area->verticalScrollBar()->value(), kTickSpacing,
+                                0);
+    }
     update();
+}
+
+QScrollArea* Timeline::ScrollArea() const {
+    return qobject_cast<QScrollArea*>(parentWidget() != nullptr ? parentWidget()->parentWidget()
+                                                                : nullptr);
 }
 
 void Timeline::Resize() {
@@ -123,6 +146,65 @@ std::optional<std::size_t> Timeline::LaneAt(int y) const {
     const std::vector<Lane> lanes = Lanes();
     if (static_cast<std::size_t>(lane) >= lanes.size()) return std::nullopt;
     return static_cast<std::size_t>(lane);
+}
+
+double Timeline::PixelsPerFrame() const {
+    if (frame_count_ <= 1) return 0.0;
+    return static_cast<double>(width() - kGutterWidth - 1) / static_cast<double>(frame_count_ - 1);
+}
+
+void Timeline::ApplyZoom() {
+    if (!zoom_ || frame_count_ <= 1) {
+        setMinimumWidth(0);
+        return;
+    }
+    setMinimumWidth(kGutterWidth + 1 +
+                    static_cast<int>(std::ceil(*zoom_ * static_cast<double>(frame_count_ - 1))));
+}
+
+void Timeline::wheelEvent(QWheelEvent* event) {
+    if ((event->modifiers() & Qt::ControlModifier) == 0 || frame_count_ <= 1) {
+        QWidget::wheelEvent(event);
+        return;
+    }
+    event->accept();
+    QScrollArea* area = ScrollArea();
+    const int cursor = static_cast<int>(event->position().x());
+    const int scrolled = area != nullptr ? area->horizontalScrollBar()->value() : 0;
+    const uint32_t anchor = XToFrame(cursor);
+    const double factor = event->angleDelta().y() > 0 ? kZoomStep : 1.0 / kZoomStep;
+    const double wanted = std::min(PixelsPerFrame() * factor, kMostPixelsPerFrame);
+    const int visible = area != nullptr ? area->viewport()->width() : width();
+    const double fits =
+        static_cast<double>(visible - kGutterWidth - 1) / static_cast<double>(frame_count_ - 1);
+    if (wanted <= fits) {
+        zoom_.reset();
+    } else {
+        zoom_ = wanted;
+    }
+    ApplyZoom();
+    resize(std::max(minimumWidth(), visible), height());
+    if (area != nullptr)
+        area->horizontalScrollBar()->setValue(FrameToX(anchor) - (cursor - scrolled));
+    update();
+}
+
+void Timeline::DrawTicks(QPainter& painter) const {
+    const double spacing = PixelsPerFrame();
+    if (spacing <= 0.0) return;
+    uint32_t step = kTickSteps.back();
+    for (const uint32_t candidate : kTickSteps) {
+        if (spacing * candidate >= kTickSpacing) {
+            step = candidate;
+            break;
+        }
+    }
+    painter.setPen(palette().color(QPalette::Mid));
+    for (uint32_t frame = 0; frame < frame_count_; frame += step) {
+        const int x = FrameToX(frame);
+        painter.drawLine(x, kRulerHeight - kTickHeight, x, kRulerHeight);
+        painter.drawText(x + 2, kRulerHeight - kTickHeight - 2, QString::number(frame));
+    }
 }
 
 int Timeline::FrameToX(uint32_t frame) const {
@@ -253,6 +335,7 @@ void Timeline::paintEvent(QPaintEvent* event) {
     }
 
     painter.fillRect(QRect(0, 0, width(), kRulerHeight), kRuler);
+    DrawTicks(painter);
     painter.setPen(palette().color(QPalette::BrightText));
     painter.drawText(QRect(0, 0, kGutterWidth, kRulerHeight), Qt::AlignCenter,
                      QString::number(frame_));

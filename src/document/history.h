@@ -1,5 +1,6 @@
 #pragma once
 
+#include "document/authored.h"
 #include "document/document.h"
 
 #include <cstddef>
@@ -11,13 +12,18 @@ namespace Document {
 
 constexpr std::size_t kDefaultHistorySteps = 32;
 
+struct Snapshot {
+    File file;
+    std::vector<AuthoredDepth> authored;
+};
+
 class History {
 public:
     explicit History(std::size_t limit = kDefaultHistorySteps) : limit_(limit) {}
 
     void Clear();
 
-    void Record(std::string name, File before);
+    void Record(std::string name, Snapshot before);
 
     [[nodiscard]] bool CanUndo() const { return !undo_.empty(); }
 
@@ -27,9 +33,9 @@ public:
 
     [[nodiscard]] const std::string& RedoName() const;
 
-    [[nodiscard]] std::optional<File> Undo(File current);
+    [[nodiscard]] std::optional<Snapshot> Undo(Snapshot current);
 
-    [[nodiscard]] std::optional<File> Redo(File current);
+    [[nodiscard]] std::optional<Snapshot> Redo(Snapshot current);
 
     void MarkSaved() { clean_depth_ = undo_.size(); }
 
@@ -38,7 +44,7 @@ public:
 private:
     struct Step {
         std::string name;
-        File file;
+        Snapshot state;
     };
 
     std::size_t limit_;

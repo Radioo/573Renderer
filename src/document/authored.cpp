@@ -12,6 +12,7 @@
 #include "support/expected.h"
 
 #include <algorithm>
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <optional>
@@ -30,6 +31,19 @@ constexpr uint32_t kUseMatrix = 0x4;
 constexpr uint32_t kUseColour = 0x8;
 constexpr uint32_t kControlBits = kUseMatrix | kUseColour;
 constexpr uint32_t kThreeD = 0x04000000;
+
+struct StartableProperty {
+    std::string_view property;
+    std::string_view twin;
+};
+
+constexpr std::array<StartableProperty, 5> kStartable{{
+    {.property = "Scale", .twin = "Short scale"},
+    {.property = "Rotate skew", .twin = "Short rotate skew"},
+    {.property = "Translation", .twin = {}},
+    {.property = "Multiply colour", .twin = "Packed multiply colour"},
+    {.property = "Add colour", .twin = "Packed add colour"},
+}};
 
 struct Placed {
     uint32_t frame = 0;
@@ -361,8 +375,36 @@ AuthoredPlacements(const AuthoredDepth& authored, const BakedDepth& baked) {
     return out;
 }
 
-AppliedState KeyedState(const AuthoredDepth& authored, const BakedDepth& baked,
-                        uint32_t frame) {
+std::vector<std::string> PropertiesToAdd(const AuthoredDepth& authored, const BakedDepth& baked) {
+    const bool three_d = ThreeD(baked.create);
+    std::vector<std::string> out;
+    for (const StartableProperty& startable : kStartable) {
+        if (GroupOf(startable.property, three_d) == PropertyGroup::None) continue;
+        const bool animated = std::ranges::any_of(authored.tracks, [&](const Track& track) {
+            return track.property == startable.property || track.property == startable.twin;
+        });
+        if (!animated) out.emplace_back(startable.property);
+    }
+    return out;
+}
+
+Support::Expected<void, std::string> AddTrack(AuthoredDepth& authored, const BakedDepth& baked,
+                                              std::string_view property) {
+    const std::vector<std::string> startable = PropertiesToAdd(authored, baked);
+    if (std::ranges::find(startable, property) == startable.end()) {
+        return Support::Unexpected(std::string(property) +
+                                   " is not a property this depth can start animating");
+    }
+    const std::optional<std::vector<int64_t>> identity = IdentityOf(property);
+    if (!identity) return Support::Unexpected(std::string(property) + " has no resting value");
+    authored.tracks.push_back(Track{
+        .property = std::string(property),
+        .keys = {Keyframe{
+            .frame = authored.first_frame, .value = *identity, .ease = Ease::Hold, .bezier = {}}}});
+    return {};
+}
+
+AppliedState KeyedState(const AuthoredDepth& authored, const BakedDepth& baked, uint32_t frame) {
     AfpAnimation::Placement placement;
     placement.flags = kUseMatrix | kUseColour | (baked.create.flags & kThreeD);
     for (const Track& track : authored.tracks) {
@@ -376,6 +418,18 @@ AppliedState KeyedState(const AuthoredDepth& authored, const BakedDepth& baked,
     AppliedState state;
     ApplyPlacement(state, placement);
     return state;
+}
+
+Support::Expected<void, std::string> CheckDrawnAsKeyed(const AfpAnimation::Container& clip,
+                                                       const AuthoredDepth& authored,
+                                                       const BakedDepth& baked) {
+    for (const auto& [frame, shown] :
+         ReplayDepth(clip, authored.depth, authored.first_frame, authored.last_frame)) {
+        if (shown == KeyedState(authored, baked, frame)) continue;
+        return Support::Unexpected("frame " + std::to_string(frame) + " would not show depth " +
+                                   std::to_string(authored.depth) + " the way its keyframes say");
+    }
+    return {};
 }
 
 Support::Expected<void, std::string> WriteAuthored(AfpAnimation::Animation& animation,
@@ -416,7 +470,7 @@ Support::Expected<void, std::string> WriteAuthored(AfpAnimation::Animation& anim
         InsertTag(clip, (*placements)[at].first,
                   AfpAnimation::Tag{std::move((*placements)[at].second)});
     }
-    return {};
+    return CheckDrawnAsKeyed(clip, authored, baked);
 }
 
 }

@@ -136,10 +136,19 @@ rather than carrying a decoder of its own, and converts to the BGRA the package
 stores. Removing a texture goes through `RemoveImage` so the texture list loses
 its node too; removing anything else is a plain entry removal.
 
+Ctrl and the mouse wheel zoom the timeline around the frame under the cursor,
+which stays put; the zoom is held as pixels per frame and turns the widget's
+minimum width into what the scroll area scrolls over, and zooming out until the
+animation fits the panel goes back to fitting it. The zoom is kept across the
+reload that follows an edit. The ruler marks every 1, 2, 5, 10, 20, 50, 100,
+200, 500 or 1000 frames, whichever first puts the marks 60 pixels apart, and
+while zoomed the playhead is kept in view.
+
 Right-clicking the timeline offers the label edits: add one at the frame under
 the cursor, and rename, move or remove the label the cursor is near. Below the
 labels it offers the structure edits: insert or remove a frame at that point,
-and add or remove the selected depth over a range. Last it offers the camera:
+and add or remove the selected depth over a range; adding one asks which of the
+animation's characters it places. Last it offers the camera:
 add one on that frame when it has none, remove the one it has. The widget
 does not own the dialogs; it emits the position, the frame and the label it
 found and the window builds the menu.
@@ -156,8 +165,13 @@ row per instruction. Every edit, a field or a label or a call argument, goes
 through the same `EditAnimation` step: read the animation, apply the change,
 record the history, write it back, reload.
 
-Every edit is recorded in a `Document::History` before it is applied, named
-after the field and depth it changed, and `Edit > Undo` / `Edit > Redo` restore
+Every edit is recorded in a `Document::History` before it is applied, together
+with the project's authored content, and undo and redo restore both and write
+the manifest again, so the keyframes, the owned depths and the scripts follow
+undo exactly as the package does. Owning a depth and editing a script are steps
+of their own; a script edit goes through `EditAuthored`, so it is compiled and
+shown straight away and changes only the owned depth it was made on. Each step
+is named after the field and depth it changed, and `Edit > Undo` / `Edit > Redo` restore
 the document and run the same reload loop so the viewport follows. The menu
 items carry the name of the step they would undo or redo and are disabled when
 there is nothing to do.
@@ -183,6 +197,11 @@ project owns: the file is copied into the project's `sources/` folder under the
 name given, and export packs it into the project's own atlas. That is different
 from the plain add, which writes an image straight into the package as baked
 data.
+
+An owned depth's timeline menu also offers to start animating a property it does
+not animate yet, from `Document::PropertiesToAdd`; the new property's lane
+appears with one keyframe at its resting value, selected so its value can be
+typed straight away.
 
 An owned depth's timeline menu also offers to edit its script. The box opens on
 the source the project holds, or on the depth's baked script read back as source

@@ -112,6 +112,41 @@ bool Window::ApplyKeyEdit(const QString& value) {
                         });
 }
 
+void Window::StartAnimating() {
+    if (!file_ || !depth_ || animation_path_.empty()) return;
+    const std::optional<std::size_t> at = AuthoredIndexAt(static_cast<uint16_t>(*depth_), frame_);
+    if (!at) return;
+    const auto animation = file_->ReadAnimation(animation_path_);
+    if (!animation) {
+        ReportProblem(QString::fromStdString(animation.error()));
+        return;
+    }
+    const auto baked = Document::BakedFor(*animation, authored_[*at]);
+    if (!baked) {
+        ReportProblem(QString::fromStdString(baked.error()));
+        return;
+    }
+    QStringList choices;
+    for (const std::string& property : Document::PropertiesToAdd(authored_[*at], *baked))
+        choices.append(QString::fromStdString(property));
+    if (choices.isEmpty()) {
+        ReportProblem(tr("Depth %1 already animates everything it can").arg(*depth_));
+        return;
+    }
+    bool answered = false;
+    const QString picked = QInputDialog::getItem(this, tr("Start animating"), tr("Property"),
+                                                 choices, 0, false, &answered);
+    if (!answered) return;
+    const std::string property = picked.toStdString();
+    const Document::BakedDepth resting = *baked;
+    if (EditAuthored(tr("Animate %1 on depth %2").arg(picked).arg(*depth_),
+                     [&property, &resting](Document::AuthoredDepth& owned) {
+                         return Document::AddTrack(owned, resting, property);
+                     })) {
+        ChooseKey(picked, authored_[*at].first_frame);
+    }
+}
+
 void Window::MoveKey(const QString& property, uint32_t from, uint32_t to) {
     const std::string name = property.toStdString();
     if (EditAuthored(tr("Move the %1 keyframe to frame %2").arg(property).arg(to),
