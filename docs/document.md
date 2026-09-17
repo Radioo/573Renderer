@@ -300,11 +300,21 @@ colour bit does the same for the colour fields; a character, ratio, blend or
 origin it carries replaces the first placement's; filters and HSV replace the
 pair together, since the game keeps them in one list; a name only fills a gap,
 as the game only names an object that has none; clip actions on an update are
-ignored, as the game only takes them on a create. 3D placements, and updates
-that carry a class name, geometry, curves, controllers or discarded words, are
-refused rather than guessed. The result is checked against `ReplayDepth`: the
-depth must show the same state on every frame the trim keeps, or the trim is
-refused.
+ignored, as the game only takes them on a create. A 3D span (the first
+placement carries `0x4000000`) folds by the parser's 3D rule instead: the
+matrix bit replaces only the translation, a `tz` or a 3x3 matrix replaces its
+own part, and the 2D scale and rotation fields are left as they are, since the
+parser does not copy them in 3D. A span whose updates switch between 2D and 3D
+is refused, because whether a 2D update takes an object out of 3D mode has not
+been read. Updates that carry a class name, geometry, curves, controllers or
+discarded words are refused rather than guessed. The result is checked against
+`ReplayDepth`: the depth must show the same state on every frame the trim
+keeps, or the trim is refused. That replay follows only the 2D matrix and the
+colours, so for 3D spans the proof is a render: `span_trim_live_tests`
+(`local_dll`) trims a 3D span of IIDX 33's `arena.ifs` (`x_panel_broken`) ten
+frames later and requires three kept frames to draw byte for byte as before,
+and checks that removing the depth changes those frames, so the comparison can
+see the depth. Skipping the 3D fold was seen to fail it.
 
 `TrimAuthored` cuts a project-owned depth's keyframes to the new range: a track
 that had keys before the new first frame gets a key there holding the value it

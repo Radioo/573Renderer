@@ -166,15 +166,52 @@ TEST_CASE("Moving a span's start later folds the skipped updates into its first 
     CHECK(Document::ReplayDepth(animation.root, kDepth, 4, 7) == shown);
 }
 
-TEST_CASE("A start that would fold a 3D update is refused") {
+TEST_CASE("Moving a 3D span's start later keeps the translation, depth and 3D matrix it reached") {
+    AfpAnimation::Animation animation = Clip(10);
+    Add(animation, kDepth, 1, 7);
+    auto& create = std::get<AfpAnimation::Placement>(animation.root.tags.at(0).body);
+    create.flags |= kThreeD;
+    create.translation = std::array<int32_t, 2>{10, 10};
+    create.scale = std::array<int32_t, 2>{2048, 2048};
+    create.matrix_3d = std::array<int32_t, 9>{1024, 0, 0, 0, 1024, 0, 0, 0, 1024};
+    AfpAnimation::Placement moved = Update(kUseMatrix | kThreeD);
+    moved.translation = std::array<int32_t, 2>{100, 0};
+    Document::InsertTag(animation.root, 2, AfpAnimation::Tag{moved});
+    AfpAnimation::Placement deeper = Update(kThreeD);
+    deeper.translation_z = int32_t{50};
+    Document::InsertTag(animation.root, 3, AfpAnimation::Tag{deeper});
+    AfpAnimation::Placement turned = Update(kThreeD);
+    turned.matrix_3d = std::array<int32_t, 9>{0, 1024, 0, -1024, 0, 0, 0, 0, 1024};
+    Document::InsertTag(animation.root, 4, AfpAnimation::Tag{turned});
+    AfpAnimation::Placement recentred = Update(kUseMatrix | kThreeD);
+    Document::InsertTag(animation.root, 5, AfpAnimation::Tag{recentred});
+    AfpAnimation::Placement later = Update(kUseMatrix | kThreeD);
+    later.translation = std::array<int32_t, 2>{300, 0};
+    Document::InsertTag(animation.root, 6, AfpAnimation::Tag{later});
+    const auto shown = Document::ReplayDepth(animation.root, kDepth, 6, 7);
+
+    const auto trimmed =
+        Document::TrimSpan(animation, kRoot, kDepth, 1, {.first_frame = 6, .last_frame = 7});
+    INFO(Error(trimmed));
+    REQUIRE(trimmed.has_value());
+    CHECK(PlacementFrames(animation) == std::vector<uint32_t>{6, 6});
+    const AfpAnimation::Placement& folded = CreateOf(animation);
+    CHECK((folded.flags & kThreeD) != 0);
+    CHECK_FALSE(folded.translation.has_value());
+    CHECK(folded.scale == std::array<int32_t, 2>{2048, 2048});
+    CHECK(folded.translation_z == int32_t{50});
+    CHECK(folded.matrix_3d == std::array<int32_t, 9>{0, 1024, 0, -1024, 0, 0, 0, 0, 1024});
+    CHECK(Document::ReplayDepth(animation.root, kDepth, 6, 7) == shown);
+}
+
+TEST_CASE("A span that switches between 2D and 3D is not folded") {
     AfpAnimation::Animation animation = Clip(10);
     Add(animation, kDepth, 1, 7);
     Document::InsertTag(animation.root, 2, AfpAnimation::Tag{Update(kUseMatrix | kThreeD)});
     const AfpAnimation::Animation before = animation;
-    CHECK_FALSE(Document::TrimSpan(animation, kRoot, kDepth, 1, {3, 7}).has_value());
-    CHECK_FALSE(Document::TrimSpan(animation, kRoot, kDepth, 9, {3, 7}).has_value());
+    CHECK_FALSE(Document::TrimSpan(animation, kRoot, kDepth, 1, {.first_frame = 3, .last_frame = 7})
+                    .has_value());
     CHECK(animation == before);
-    CHECK(Document::TrimSpan(animation, kRoot, kDepth, 1, {1, 7}).has_value());
 }
 
 TEST_CASE("An owned depth's keyframes are cut to the trimmed range and keep their values") {

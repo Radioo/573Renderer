@@ -719,6 +719,7 @@ add_executable(local_dll_tests
     tests/local/sprite_preview_tests.cpp
     tests/local/image_shape_live_tests.cpp
     tests/local/animation_settings_live_tests.cpp
+    tests/local/span_trim_live_tests.cpp
     src/qpro/qpro_dll.cpp
     src/gc2d/gc_package.cpp
     src/preset/defaults/defaults.cpp

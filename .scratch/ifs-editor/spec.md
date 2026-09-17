@@ -274,3 +274,4 @@ captured. This milestone is the editing itself.
 - `issues/66-duplicate-spans.md` (milestone 8)
 - `issues/67-live-stage-preview.md` (milestone 8)
 - `issues/68-stage-snapping.md` (milestone 8)
+- `issues/69-trim-3d-spans.md` (milestone 8)

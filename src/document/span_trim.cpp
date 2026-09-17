@@ -40,9 +40,9 @@ std::string FrameText(uint32_t frame) {
 Support::Expected<void, std::string> CheckFoldable(const AfpAnimation::Placement& create,
                                                    const AfpAnimation::Placement& update,
                                                    uint32_t frame) {
-    if (((create.flags | update.flags) & kThreeD) != 0) {
-        return Support::Unexpected(FrameText(frame) +
-                                   " places the depth in 3D, which a trim cannot fold");
+    if (((create.flags ^ update.flags) & kThreeD) != 0) {
+        return Support::Unexpected(
+            FrameText(frame) + " switches the depth between 2D and 3D, which a trim cannot fold");
     }
     if (update.class_name || update.geometry || update.curves || update.colour_controller ||
         update.grid_controller || update.discarded_words) {
@@ -58,6 +58,12 @@ void FoldMatrix(AfpAnimation::Placement& create, const AfpAnimation::Placement& 
     create.translation = update.translation;
     create.short_scale = update.short_scale;
     create.short_rotate_skew = update.short_rotate_skew;
+}
+
+void FoldMatrix3d(AfpAnimation::Placement& create, const AfpAnimation::Placement& update) {
+    if ((update.flags & kUseMatrix) != 0) create.translation = update.translation;
+    if (update.translation_z) create.translation_z = update.translation_z;
+    if (update.matrix_3d) create.matrix_3d = update.matrix_3d;
 }
 
 void FoldColour(AfpAnimation::Placement& create, const AfpAnimation::Placement& update) {
@@ -84,7 +90,11 @@ Support::Expected<void, std::string> Fold(AfpAnimation::Placement& create,
                                           const AfpAnimation::Placement& update, uint32_t frame) {
     auto foldable = CheckFoldable(create, update, frame);
     if (!foldable) return Support::Unexpected(foldable.error());
-    if ((update.flags & kUseMatrix) != 0) FoldMatrix(create, update);
+    if ((create.flags & kThreeD) != 0) {
+        FoldMatrix3d(create, update);
+    } else if ((update.flags & kUseMatrix) != 0) {
+        FoldMatrix(create, update);
+    }
     if ((update.flags & kUseColour) != 0) FoldColour(create, update);
     FoldHeld(create, update);
     create.flags |= update.flags & (kUseMatrix | kUseColour);
