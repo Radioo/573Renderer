@@ -6,6 +6,8 @@
 #include "formats/afp_animation.h"
 
 #include <array>
+#include <cmath>
+#include <numbers>
 #include <cstddef>
 #include <cstdint>
 #include <map>
@@ -51,6 +53,18 @@ std::array<Point, 4> Rect(double left, double top, double right, double bottom) 
     return {Point{left, top}, Point{right, top}, Point{right, bottom}, Point{left, bottom}};
 }
 
+Document::StageOutline Outline(uint16_t depth, const std::array<Point, 4>& corners) {
+    return {.depth = depth, .corners = corners, .anchor = {}, .linear = {}};
+}
+
+bool Near(double a, double b) {
+    return std::abs(a - b) < 1e-9;
+}
+
+bool Near(const Point& a, const Point& b) {
+    return Near(a[0], b[0]) && Near(a[1], b[1]);
+}
+
 }
 
 TEST_CASE("A placed shape is outlined where its matrix puts it, in pixels") {
@@ -64,6 +78,8 @@ TEST_CASE("A placed shape is outlined where its matrix puts it, in pixels") {
     REQUIRE(outlines.size() == 1);
     CHECK(outlines[0].depth == 3);
     CHECK(outlines[0].corners == Rect(10, 20, 30, 24));
+    CHECK(outlines[0].anchor == Point{10, 20});
+    CHECK(outlines[0].linear == Document::Linear{.a = 2, .b = 0, .c = 0, .d = 1});
 }
 
 TEST_CASE("The rotation origin is taken off before the matrix and held by updates") {
@@ -149,13 +165,56 @@ TEST_CASE("A sprite that places itself does not recurse forever") {
 
 TEST_CASE("A point picks the highest depth whose outline holds it") {
     const std::vector<Document::StageOutline> outlines{
-        Document::StageOutline{.depth = 1, .corners = Rect(0, 0, 10, 10)},
-        Document::StageOutline{.depth = 4, .corners = Rect(5, 5, 20, 20)},
-        Document::StageOutline{
-            .depth = 6, .corners = {Point{30, 0}, Point{40, 10}, Point{30, 20}, Point{20, 10}}}};
+        Outline(1, Rect(0, 0, 10, 10)), Outline(4, Rect(5, 5, 20, 20)),
+        Outline(6, {Point{30, 0}, Point{40, 10}, Point{30, 20}, Point{20, 10}})};
     CHECK(Document::DepthAt(outlines, {2, 2}) == uint16_t{1});
     CHECK(Document::DepthAt(outlines, {7, 7}) == uint16_t{4});
     CHECK(Document::DepthAt(outlines, {30, 10}) == uint16_t{6});
     CHECK_FALSE(Document::DepthAt(outlines, {21, 1}).has_value());
     CHECK_FALSE(Document::DepthAt(outlines, {50, 50}).has_value());
+}
+
+TEST_CASE("Scaling works along the object's own axes and turning is about its anchor") {
+    const Document::Linear turned =
+        Document::Reshaped({.a = 2, .b = 0, .c = 0, .d = 1},
+                           {.scale_x = 1, .scale_y = 3, .turn = std::numbers::pi / 2});
+    CHECK(Near(turned.a, 0));
+    CHECK(Near(turned.b, 2));
+    CHECK(Near(turned.c, -3));
+    CHECK(Near(turned.d, 0));
+}
+
+TEST_CASE("Dragging a corner scales the object so that corner follows the pointer") {
+    const Document::StageOutline outline{.depth = 1,
+                                         .corners = Rect(10, 20, 30, 24),
+                                         .anchor = {10, 20},
+                                         .linear = {.a = 2, .b = 0, .c = 0, .d = 1}};
+    const Document::Reshape reshape = Document::ScaleToReach(outline, {30, 24}, {50, 22});
+    CHECK(Near(reshape.scale_x, 2));
+    CHECK(Near(reshape.scale_y, 0.5));
+    CHECK(reshape.turn == 0);
+    const Document::StageOutline scaled = Document::ReshapedOutline(outline, reshape);
+    CHECK(Near(scaled.corners[2], {50, 22}));
+    CHECK(Near(scaled.corners[0], {10, 20}));
+    CHECK(scaled.anchor == outline.anchor);
+}
+
+TEST_CASE("Dragging around the anchor turns the object by the angle swept") {
+    const Document::StageOutline outline{
+        .depth = 1, .corners = Rect(0, 0, 10, 4), .anchor = {0, 0}, .linear = {}};
+    const Document::Reshape reshape = Document::TurnToReach(outline, {10, 0}, {0, 10});
+    CHECK(Near(reshape.turn, std::numbers::pi / 2));
+    const Document::StageOutline turned = Document::ReshapedOutline(outline, reshape);
+    CHECK(Near(turned.corners[1], {0, 10}));
+    CHECK(Near(turned.corners[2], {-4, 10}));
+}
+
+TEST_CASE("A flat object cannot be scaled from a drag") {
+    const Document::StageOutline outline{.depth = 1,
+                                         .corners = Rect(0, 0, 0, 0),
+                                         .anchor = {0, 0},
+                                         .linear = {.a = 0, .b = 0, .c = 0, .d = 0}};
+    const Document::Reshape reshape = Document::ScaleToReach(outline, {1, 1}, {5, 5});
+    CHECK(reshape.scale_x == 1);
+    CHECK(reshape.scale_y == 1);
 }

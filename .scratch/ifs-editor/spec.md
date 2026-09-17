@@ -257,3 +257,4 @@ captured. This milestone is the editing itself.
 - `issues/49-start-animating-a-property.md` (milestone 8)
 - `issues/50-place-a-texture.md` (milestone 8)
 - `issues/51-select-and-move-on-stage.md` (milestone 8)
+- `issues/52-scale-and-turn-on-stage.md` (milestone 8)

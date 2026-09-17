@@ -36,6 +36,7 @@ signals:
     void Resized(int width, int height);
     void Picked(double x, double y);
     void Dragged(uint16_t depth, double dx, double dy);
+    void Reshaped(uint16_t depth, double scale_x, double scale_y, double turn);
 
 protected:
     void paintEvent(QPaintEvent* event) override;
@@ -45,19 +46,27 @@ protected:
     void mouseReleaseEvent(QMouseEvent* event) override;
 
 private:
+    enum class Gesture : uint8_t { None, Move, Scale, Turn };
+
     [[nodiscard]] QRectF Target() const;
     [[nodiscard]] std::optional<QPointF> ToStage(QPointF widget) const;
     [[nodiscard]] QPointF ToWidget(const Document::Point& stage) const;
     [[nodiscard]] const Document::StageOutline* SelectedOutline() const;
-    void DrawOutline(QPainter& painter, const Document::StageOutline& outline, QPointF shift) const;
+    [[nodiscard]] QPointF TurnHandle(const Document::StageOutline& outline) const;
+    [[nodiscard]] Gesture GestureAt(const Document::StageOutline& outline, QPointF widget,
+                                    Document::Point stage) const;
+    [[nodiscard]] Document::StageOutline Preview(const Document::StageOutline& outline) const;
+    void DrawSelection(QPainter& painter, const Document::StageOutline& outline) const;
 
     QImage frame_;
     QSize stage_;
     QString message_;
     std::vector<Document::StageOutline> outlines_;
     std::optional<uint16_t> selected_;
-    std::optional<QPointF> drag_start_;
-    QPointF drag_offset_;
+    Gesture gesture_ = Gesture::None;
+    QPointF press_;
+    Document::Point grab_{};
+    Document::Point pointer_{};
     bool dragging_ = false;
 };
 

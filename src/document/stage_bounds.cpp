@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
@@ -21,6 +22,7 @@ namespace Document {
 namespace {
 
 constexpr double kPixelsPerUnit = 0.05;
+constexpr double kSmallest = 1e-9;
 constexpr uint32_t kUpdateExisting = 0x1;
 constexpr uint32_t kThreeD = 0x04000000;
 constexpr std::size_t kScaleX = 0;
@@ -140,6 +142,21 @@ private:
     std::set<uint16_t> visiting_;
 };
 
+std::optional<Point> ToLocal(const StageOutline& outline, Point point) {
+    const Linear& m = outline.linear;
+    const double determinant = (m.a * m.d) - (m.b * m.c);
+    if (std::abs(determinant) < kSmallest) return std::nullopt;
+    const double x = point[0] - outline.anchor[0];
+    const double y = point[1] - outline.anchor[1];
+    return Point{((x * m.d) - (y * m.c)) / determinant, ((y * m.a) - (x * m.b)) / determinant};
+}
+
+Point FromLocal(const StageOutline& outline, Point local) {
+    const Linear& m = outline.linear;
+    return {outline.anchor[0] + (m.a * local[0]) + (m.c * local[1]),
+            outline.anchor[1] + (m.b * local[0]) + (m.d * local[1])};
+}
+
 double Cross(Point from, Point to, Point point) {
     return ((to[0] - from[0]) * (point[1] - from[1])) - ((to[1] - from[1]) * (point[0] - from[0]));
 }
@@ -171,13 +188,57 @@ std::vector<StageOutline> StageOutlines(const AfpAnimation::Animation& animation
         if (object.three_d || !object.character) continue;
         const std::optional<Box> box = bounds.Of(*object.character);
         if (!box) continue;
-        StageOutline outline{.depth = depth, .corners = {}};
+        const std::array<double, 6>& m = object.state.matrix;
+        StageOutline outline{
+            .depth = depth,
+            .corners = {},
+            .anchor = {m[kMoveX] * kPixelsPerUnit, m[kMoveY] * kPixelsPerUnit},
+            .linear = {.a = m[kScaleX], .b = m[kSkewB], .c = m[kSkewC], .d = m[kScaleY]}};
         const std::array<Point, 4> corners = Corners(*box);
         for (std::size_t i = 0; i < corners.size(); i++)
             outline.corners.at(i) = Place(object, corners.at(i));
         outlines.push_back(outline);
     }
     return outlines;
+}
+
+Linear Reshaped(const Linear& linear, const Reshape& reshape) {
+    const double a = reshape.scale_x * linear.a;
+    const double b = reshape.scale_x * linear.b;
+    const double c = reshape.scale_y * linear.c;
+    const double d = reshape.scale_y * linear.d;
+    const double cos = std::cos(reshape.turn);
+    const double sin = std::sin(reshape.turn);
+    return {.a = (a * cos) - (b * sin),
+            .b = (a * sin) + (b * cos),
+            .c = (c * cos) - (d * sin),
+            .d = (c * sin) + (d * cos)};
+}
+
+StageOutline ReshapedOutline(const StageOutline& outline, const Reshape& reshape) {
+    StageOutline out = outline;
+    out.linear = Reshaped(outline.linear, reshape);
+    for (Point& corner : out.corners) {
+        const std::optional<Point> local = ToLocal(outline, corner);
+        if (local) corner = FromLocal(out, *local);
+    }
+    return out;
+}
+
+Reshape ScaleToReach(const StageOutline& outline, Point from, Point to) {
+    const std::optional<Point> start = ToLocal(outline, from);
+    const std::optional<Point> end = ToLocal(outline, to);
+    Reshape reshape;
+    if (!start || !end) return reshape;
+    if (std::abs((*start)[0]) > kSmallest) reshape.scale_x = (*end)[0] / (*start)[0];
+    if (std::abs((*start)[1]) > kSmallest) reshape.scale_y = (*end)[1] / (*start)[1];
+    return reshape;
+}
+
+Reshape TurnToReach(const StageOutline& outline, Point from, Point to) {
+    const double before = std::atan2(from[1] - outline.anchor[1], from[0] - outline.anchor[0]);
+    const double after = std::atan2(to[1] - outline.anchor[1], to[0] - outline.anchor[0]);
+    return {.scale_x = 1, .scale_y = 1, .turn = after - before};
 }
 
 std::optional<uint16_t> DepthAt(const std::vector<StageOutline>& outlines, Point point) {

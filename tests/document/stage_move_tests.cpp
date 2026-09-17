@@ -9,6 +9,7 @@
 #include "formats/afp_animation.h"
 
 #include <array>
+#include <numbers>
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -108,4 +109,58 @@ TEST_CASE("Moving an owned depth keys its translation on that frame") {
     if (!moved || !held) return;
     CHECK(moved->matrix[4] == 0.0);
     CHECK(held->matrix[4] == 100.0);
+}
+
+TEST_CASE("Reshaping a depth changes its scale and rotation and keeps its anchor") {
+    AfpAnimation::Animation animation = Placed(0);
+    REQUIRE(
+        Document::ReshapeBakedDepth(animation, kRoot, kDepth, 1,
+                                    {.scale_x = 1.5, .scale_y = 1, .turn = std::numbers::pi / 2})
+            .has_value());
+    const auto state = StateOn(animation, 1);
+    REQUIRE(state.has_value());
+    if (!state) return;
+    CHECK(state->matrix == std::array<double, 6>{0.0, 3.0, -1.0, 0.0, 100.0, 40.0});
+}
+
+TEST_CASE("Reshaping keeps a short scale short while it fits") {
+    AfpAnimation::Animation animation = Placed(0);
+    auto& create = std::get<AfpAnimation::Placement>(animation.root.tags[0].body);
+    create.scale.reset();
+    create.short_scale = std::array<int16_t, 2>{16384, 16384};
+    REQUIRE(Document::ReshapeBakedDepth(animation, kRoot, kDepth, 0,
+                                        {.scale_x = 1.5, .scale_y = 1, .turn = 0})
+                .has_value());
+    const auto& reshaped = std::get<AfpAnimation::Placement>(animation.root.tags[0].body);
+    CHECK(reshaped.short_scale == std::array<int16_t, 2>{24576, 16384});
+    CHECK_FALSE(reshaped.scale.has_value());
+
+    REQUIRE(Document::ReshapeBakedDepth(animation, kRoot, kDepth, 0,
+                                        {.scale_x = 4, .scale_y = 1, .turn = 0})
+                .has_value());
+    const auto& grown = std::get<AfpAnimation::Placement>(animation.root.tags[0].body);
+    CHECK_FALSE(grown.short_scale.has_value());
+    CHECK(grown.scale == std::array<int32_t, 2>{3072, 512});
+}
+
+TEST_CASE("Reshaping an owned depth keys its scale and rotation on that frame") {
+    const AfpAnimation::Animation animation = Placed(0);
+    auto owned = Document::OwnDepth(animation, kRoot, "afp/a", kDepth, 0);
+    REQUIRE(owned.has_value());
+    if (!owned) return;
+    REQUIRE(Document::ReshapeOwnedDepth(owned->authored, owned->baked, 2,
+                                        {.scale_x = 0.5, .scale_y = 1, .turn = std::numbers::pi})
+                .has_value());
+    AfpAnimation::Animation written = animation;
+    const auto result = Document::WriteAuthored(written, owned->authored, owned->baked);
+    const std::string error = result.has_value() ? std::string() : result.error();
+    INFO(error);
+    REQUIRE(result.has_value());
+    const auto turned = StateOn(written, 2);
+    const auto held = StateOn(written, 0);
+    REQUIRE(turned.has_value());
+    REQUIRE(held.has_value());
+    if (!turned || !held) return;
+    CHECK(turned->matrix == std::array<double, 6>{-1.0, 0.0, 0.0, -1.0, 100.0, 40.0});
+    CHECK(held->matrix == std::array<double, 6>{2.0, 0.0, 0.0, 1.0, 100.0, 40.0});
 }

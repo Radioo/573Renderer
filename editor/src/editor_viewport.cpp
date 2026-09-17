@@ -26,8 +26,16 @@ namespace {
 constexpr int kMinimumWidth = 320;
 constexpr int kMinimumHeight = 180;
 constexpr double kDragThreshold = 3.0;
+constexpr double kHandleReach = 7.0;
+constexpr double kHandleSize = 7.0;
+constexpr double kTurnDistance = 28.0;
+constexpr double kAnchorSize = 6.0;
 constexpr int kOutlineWidth = 2;
 const QColor kSelectedColour(80, 200, 255);
+
+QPointF Middle(QPointF a, QPointF b) {
+    return (a + b) / 2.0;
+}
 
 }
 
@@ -91,12 +99,65 @@ const Document::StageOutline* Viewport::SelectedOutline() const {
     return nullptr;
 }
 
-void Viewport::DrawOutline(QPainter& painter, const Document::StageOutline& outline,
-                           QPointF shift) const {
+QPointF Viewport::TurnHandle(const Document::StageOutline& outline) const {
+    QPointF centre;
+    for (const Document::Point& corner : outline.corners)
+        centre += ToWidget(corner) / static_cast<double>(outline.corners.size());
+    const QPointF top = Middle(ToWidget(outline.corners[0]), ToWidget(outline.corners[1]));
+    QLineF away(centre, top);
+    if (away.length() < 1.0) away = QLineF(top, top + QPointF(0, -1));
+    away.setLength(away.length() + kTurnDistance);
+    return away.p2();
+}
+
+Viewport::Gesture Viewport::GestureAt(const Document::StageOutline& outline, QPointF widget,
+                                      Document::Point stage) const {
+    for (const Document::Point& corner : outline.corners) {
+        if (QLineF(ToWidget(corner), widget).length() <= kHandleReach) return Gesture::Scale;
+    }
+    if (QLineF(TurnHandle(outline), widget).length() <= kHandleReach) return Gesture::Turn;
+    const std::vector<Document::StageOutline> only{outline};
+    return Document::DepthAt(only, stage) ? Gesture::Move : Gesture::None;
+}
+
+Document::StageOutline Viewport::Preview(const Document::StageOutline& outline) const {
+    if (!dragging_) return outline;
+    switch (gesture_) {
+    case Gesture::Move: {
+        Document::StageOutline moved = outline;
+        const double dx = pointer_[0] - grab_[0];
+        const double dy = pointer_[1] - grab_[1];
+        for (Document::Point& corner : moved.corners)
+            corner = {corner[0] + dx, corner[1] + dy};
+        moved.anchor = {moved.anchor[0] + dx, moved.anchor[1] + dy};
+        return moved;
+    }
+    case Gesture::Scale:
+        return Document::ReshapedOutline(outline, Document::ScaleToReach(outline, grab_, pointer_));
+    case Gesture::Turn:
+        return Document::ReshapedOutline(outline, Document::TurnToReach(outline, grab_, pointer_));
+    case Gesture::None:
+        break;
+    }
+    return outline;
+}
+
+void Viewport::DrawSelection(QPainter& painter, const Document::StageOutline& outline) const {
     QPolygonF polygon;
     for (const Document::Point& corner : outline.corners)
-        polygon << ToWidget({corner[0] + shift.x(), corner[1] + shift.y()});
+        polygon << ToWidget(corner);
+    painter.setBrush(Qt::NoBrush);
     painter.drawPolygon(polygon);
+    const QPointF handle = TurnHandle(outline);
+    painter.drawLine(Middle(polygon[0], polygon[1]), handle);
+    const QPointF anchor = ToWidget(outline.anchor);
+    painter.drawLine(anchor - QPointF(kAnchorSize, 0), anchor + QPointF(kAnchorSize, 0));
+    painter.drawLine(anchor - QPointF(0, kAnchorSize), anchor + QPointF(0, kAnchorSize));
+    painter.setBrush(kSelectedColour);
+    const QPointF half(kHandleSize / 2, kHandleSize / 2);
+    for (const QPointF& corner : polygon)
+        painter.drawRect(QRectF(corner - half, corner + half));
+    painter.drawEllipse(handle, kHandleSize / 2, kHandleSize / 2);
 }
 
 void Viewport::paintEvent(QPaintEvent* event) {
@@ -112,9 +173,8 @@ void Viewport::paintEvent(QPaintEvent* event) {
     const Document::StageOutline* selected = SelectedOutline();
     if (selected == nullptr || stage_.isEmpty()) return;
     painter.setRenderHint(QPainter::Antialiasing);
-    painter.setBrush(Qt::NoBrush);
     painter.setPen(QPen(kSelectedColour, kOutlineWidth));
-    DrawOutline(painter, *selected, dragging_ ? drag_offset_ : QPointF());
+    DrawSelection(painter, Preview(*selected));
 }
 
 void Viewport::resizeEvent(QResizeEvent* event) {
@@ -123,38 +183,65 @@ void Viewport::resizeEvent(QResizeEvent* event) {
 }
 
 void Viewport::mousePressEvent(QMouseEvent* event) {
-    drag_start_.reset();
+    gesture_ = Gesture::None;
     dragging_ = false;
     if (event->button() != Qt::LeftButton) return;
     const std::optional<QPointF> stage = ToStage(event->position());
     if (!stage) return;
-    emit Picked(stage->x(), stage->y());
+    const Document::Point point{stage->x(), stage->y()};
     const Document::StageOutline* selected = SelectedOutline();
-    if (selected == nullptr) return;
-    const std::vector<Document::StageOutline> only{*selected};
-    if (Document::DepthAt(only, {stage->x(), stage->y()})) drag_start_ = event->position();
+    Gesture gesture =
+        selected != nullptr ? GestureAt(*selected, event->position(), point) : Gesture::None;
+    if (gesture != Gesture::Scale && gesture != Gesture::Turn) {
+        emit Picked(point[0], point[1]);
+        selected = SelectedOutline();
+        gesture =
+            selected != nullptr && GestureAt(*selected, event->position(), point) == Gesture::Move
+                ? Gesture::Move
+                : Gesture::None;
+    }
+    gesture_ = gesture;
+    press_ = event->position();
+    grab_ = point;
+    pointer_ = point;
 }
 
 void Viewport::mouseMoveEvent(QMouseEvent* event) {
-    if (!drag_start_ || (event->buttons() & Qt::LeftButton) == 0) return;
-    if (!dragging_ && QLineF(*drag_start_, event->position()).length() < kDragThreshold) return;
-    const std::optional<QPointF> from = ToStage(*drag_start_);
-    const std::optional<QPointF> to = ToStage(event->position());
-    if (!from || !to) return;
+    if (gesture_ == Gesture::None || (event->buttons() & Qt::LeftButton) == 0) return;
+    if (!dragging_ && QLineF(press_, event->position()).length() < kDragThreshold) return;
+    const std::optional<QPointF> stage = ToStage(event->position());
+    if (!stage) return;
     dragging_ = true;
-    drag_offset_ = *to - *from;
+    pointer_ = {stage->x(), stage->y()};
     update();
 }
 
 void Viewport::mouseReleaseEvent(QMouseEvent* event) {
     if (event->button() != Qt::LeftButton) return;
-    const bool moved = dragging_ && selected_.has_value();
-    const QPointF offset = drag_offset_;
-    drag_start_.reset();
+    const Gesture gesture = dragging_ ? gesture_ : Gesture::None;
+    const Document::StageOutline* selected = SelectedOutline();
+    gesture_ = Gesture::None;
     dragging_ = false;
-    drag_offset_ = QPointF();
     update();
-    if (moved) emit Dragged(*selected_, offset.x(), offset.y());
+    if (selected == nullptr) return;
+    const Document::StageOutline outline = *selected;
+    switch (gesture) {
+    case Gesture::Move:
+        emit Dragged(outline.depth, pointer_[0] - grab_[0], pointer_[1] - grab_[1]);
+        break;
+    case Gesture::Scale: {
+        const Document::Reshape reshape = Document::ScaleToReach(outline, grab_, pointer_);
+        emit Reshaped(outline.depth, reshape.scale_x, reshape.scale_y, reshape.turn);
+        break;
+    }
+    case Gesture::Turn: {
+        const Document::Reshape reshape = Document::TurnToReach(outline, grab_, pointer_);
+        emit Reshaped(outline.depth, reshape.scale_x, reshape.scale_y, reshape.turn);
+        break;
+    }
+    case Gesture::None:
+        break;
+    }
 }
 
 }

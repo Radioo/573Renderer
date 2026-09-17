@@ -47,6 +47,7 @@ constexpr std::array<uint32_t, 10> kTickSteps{1, 2, 5, 10, 20, 50, 100, 200, 500
 const QColor kRuler(58, 58, 62);
 const QColor kRow(40, 40, 44);
 const QColor kPropertyRow(34, 34, 38);
+const QColor kSelectedRow(44, 66, 88);
 const QColor kBar(70, 128, 196);
 const QColor kKey(210, 210, 216);
 const QColor kKeySelected(240, 190, 80);
@@ -94,7 +95,14 @@ void Timeline::SelectKey(const QString& property, std::optional<uint32_t> frame)
     update();
 }
 
+void Timeline::SelectDepth(std::optional<uint16_t> depth) {
+    if (selected_depth_ == depth) return;
+    selected_depth_ = depth;
+    update();
+}
+
 void Timeline::Clear() {
+    selected_depth_.reset();
     frame_count_ = 0;
     frame_ = 0;
     rows_.clear();
@@ -383,7 +391,8 @@ void Timeline::paintEvent(QPaintEvent* event) {
         }
 
         const auto row = std::ranges::find(rows_, lane.depth, &Document::DepthRow::depth);
-        painter.fillRect(QRect(0, y, width(), kRowHeight - 1), kRow);
+        painter.fillRect(QRect(0, y, width(), kRowHeight - 1),
+                         selected_depth_ == lane.depth ? kSelectedRow : kRow);
         painter.setPen(palette().color(QPalette::Text));
         painter.drawText(QRect(0, y, kGutterWidth - 6, kRowHeight),
                          Qt::AlignRight | Qt::AlignVCenter, QString::number(lane.depth));

@@ -6,6 +6,7 @@
 #include "document/keyframes.h"
 #include "document/placement_edit.h"
 #include "document/placement_effect.h"
+#include "document/stage_bounds.h"
 #include "formats/afp_animation.h"
 #include "support/expected.h"
 
@@ -27,6 +28,11 @@ namespace Document {
 namespace {
 
 constexpr std::string_view kTranslation = "Translation";
+constexpr std::string_view kScale = "Scale";
+constexpr std::string_view kShortScale = "Short scale";
+constexpr std::string_view kRotateSkew = "Rotate skew";
+constexpr std::string_view kShortRotateSkew = "Short rotate skew";
+constexpr double kShortUnit = 32768.0;
 constexpr uint32_t kUseMatrix = 0x4;
 constexpr uint32_t kThreeD = 0x04000000;
 constexpr double kUnitsPerPixel = 20.0;
@@ -57,6 +63,57 @@ void CarryMatrix(AfpAnimation::Placement& placement, const AppliedState& state) 
     placement.flags |= kUseMatrix;
 }
 
+std::optional<int32_t> Encoded(double value, double unit, int64_t lowest, int64_t highest) {
+    const double scaled = std::round(value * unit);
+    if (scaled < static_cast<double>(lowest) || scaled > static_cast<double>(highest))
+        return std::nullopt;
+    return static_cast<int32_t>(scaled);
+}
+
+std::optional<std::array<int32_t, 2>> LongPair(double first, double second) {
+    const auto x = Encoded(first, kLongUnit, std::numeric_limits<int32_t>::min(),
+                           std::numeric_limits<int32_t>::max());
+    const auto y = Encoded(second, kLongUnit, std::numeric_limits<int32_t>::min(),
+                           std::numeric_limits<int32_t>::max());
+    if (!x || !y) return std::nullopt;
+    return std::array<int32_t, 2>{*x, *y};
+}
+
+std::optional<std::array<int16_t, 2>> ShortPair(double first, double second) {
+    const auto x = Encoded(first, kShortUnit, std::numeric_limits<int16_t>::min(),
+                           std::numeric_limits<int16_t>::max());
+    const auto y = Encoded(second, kShortUnit, std::numeric_limits<int16_t>::min(),
+                           std::numeric_limits<int16_t>::max());
+    if (!x || !y) return std::nullopt;
+    return std::array<int16_t, 2>{static_cast<int16_t>(*x), static_cast<int16_t>(*y)};
+}
+
+Linear LinearOf(const AppliedState& state) {
+    const std::array<double, 6>& m = state.matrix;
+    return {.a = m[kScaleX], .b = m[kSkewB], .c = m[kSkewC], .d = m[kScaleY]};
+}
+
+Support::Expected<void, std::string> WritePart(std::optional<std::array<int32_t, 2>>& long_form,
+                                               std::optional<std::array<int16_t, 2>>& short_form,
+                                               double first, double second, bool identity) {
+    if (short_form) {
+        const auto packed = ShortPair(first, second);
+        if (packed) {
+            short_form = packed;
+            return {};
+        }
+        short_form.reset();
+    }
+    if (identity) {
+        long_form.reset();
+        return {};
+    }
+    const auto packed = LongPair(first, second);
+    if (!packed) return Support::Unexpected(std::string("the new matrix does not fit a placement"));
+    long_form = packed;
+    return {};
+}
+
 Support::Expected<void, std::string> Shift(AfpAnimation::Placement& placement, StageOffset offset) {
     std::array<int32_t, 2> moved = placement.translation.value_or(std::array<int32_t, 2>{0, 0});
     const int64_t x = static_cast<int64_t>(moved[0]) + Units(offset.x);
@@ -70,6 +127,50 @@ Support::Expected<void, std::string> Shift(AfpAnimation::Placement& placement, S
     moved = {static_cast<int32_t>(x), static_cast<int32_t>(y)};
     placement.translation = moved;
     return {};
+}
+
+bool Tracks(const AuthoredDepth& authored, std::string_view property) {
+    return std::ranges::any_of(
+        authored.tracks, [property](const Track& track) { return track.property == property; });
+}
+
+Support::Expected<Track*, std::string> KeyedTrack(AuthoredDepth& authored, const BakedDepth& baked,
+                                                  std::string_view property, uint32_t frame) {
+    if (!Tracks(authored, property)) {
+        auto added = AddTrack(authored, baked, property);
+        if (!added) return Support::Unexpected(added.error());
+    }
+    if (!KeyAt(authored, property, frame)) {
+        auto keyed = AddKeyAt(authored, property, frame);
+        if (!keyed) return Support::Unexpected(keyed.error());
+    }
+    const auto track = std::ranges::find(authored.tracks, property, &Track::property);
+    if (track == authored.tracks.end())
+        return Support::Unexpected(std::string(property) + " has no track to key");
+    return &*track;
+}
+
+Support::Expected<void, std::string> KeyValue(AuthoredDepth& authored, const BakedDepth& baked,
+                                              std::string_view property, uint32_t frame,
+                                              const std::vector<int64_t>& value) {
+    auto track = KeyedTrack(authored, baked, property, frame);
+    if (!track) return Support::Unexpected(track.error());
+    return SetKeyframeValue(**track, frame, value);
+}
+
+Support::Expected<void, std::string> KeyPart(AuthoredDepth& authored, const BakedDepth& baked,
+                                             uint32_t frame, std::string_view long_name,
+                                             std::string_view short_name,
+                                             std::array<double, 2> part) {
+    if (Tracks(authored, short_name)) {
+        const auto packed = ShortPair(part[0], part[1]);
+        if (!packed)
+            return Support::Unexpected(std::string(short_name) + " cannot hold the new matrix");
+        return KeyValue(authored, baked, short_name, frame, {(*packed)[0], (*packed)[1]});
+    }
+    const auto packed = LongPair(part[0], part[1]);
+    if (!packed) return Support::Unexpected(std::string("the new matrix does not fit a placement"));
+    return KeyValue(authored, baked, long_name, frame, {(*packed)[0], (*packed)[1]});
 }
 
 }
@@ -95,25 +196,55 @@ Support::Expected<void, std::string> MoveBakedDepth(AfpAnimation::Animation& ani
     return Shift(*placement, offset);
 }
 
+Support::Expected<void, std::string> ReshapeBakedDepth(AfpAnimation::Animation& animation,
+                                                       ClipId clip, uint16_t depth, uint32_t frame,
+                                                       const Reshape& reshape) {
+    auto found = RequireClip(animation, clip);
+    if (!found) return Support::Unexpected(found.error());
+    AfpAnimation::Container& target = **found;
+    const std::optional<std::size_t> tag = LivePlacementTag(target, depth, frame);
+    const auto shown = ReplayDepth(target, depth, frame, frame);
+    auto* placement = tag ? std::get_if<AfpAnimation::Placement>(&target.tags[*tag].body) : nullptr;
+    if (placement == nullptr || shown.empty()) {
+        return Support::Unexpected("depth " + std::to_string(depth) + " holds nothing on frame " +
+                                   std::to_string(frame));
+    }
+    if ((placement->flags & kThreeD) != 0)
+        return Support::Unexpected("depth " + std::to_string(depth) + " is placed in 3D");
+    if ((placement->flags & kUseMatrix) == 0) CarryMatrix(*placement, shown.back().second);
+    const Linear next = Reshaped(LinearOf(shown.back().second), reshape);
+    auto scaled = WritePart(placement->scale, placement->short_scale, next.a, next.d,
+                            next.a == 1.0 && next.d == 1.0);
+    if (!scaled) return Support::Unexpected(scaled.error());
+    return WritePart(placement->rotate_skew, placement->short_rotate_skew, next.b, next.c,
+                     next.b == 0.0 && next.c == 0.0);
+}
+
+Support::Expected<void, std::string> ReshapeOwnedDepth(AuthoredDepth& authored,
+                                                       const BakedDepth& baked, uint32_t frame,
+                                                       const Reshape& reshape) {
+    if ((baked.create.flags & kThreeD) != 0)
+        return Support::Unexpected("depth " + std::to_string(authored.depth) + " is placed in 3D");
+    const Linear next = Reshaped(LinearOf(KeyedState(authored, baked, frame)), reshape);
+    AuthoredDepth edited = authored;
+    auto scaled = KeyPart(edited, baked, frame, kScale, kShortScale, {next.a, next.d});
+    if (!scaled) return Support::Unexpected(scaled.error());
+    auto turned = KeyPart(edited, baked, frame, kRotateSkew, kShortRotateSkew, {next.b, next.c});
+    if (!turned) return Support::Unexpected(turned.error());
+    authored = std::move(edited);
+    return {};
+}
+
 Support::Expected<void, std::string> MoveOwnedDepth(AuthoredDepth& authored,
                                                     const BakedDepth& baked, uint32_t frame,
                                                     StageOffset offset) {
     if ((baked.create.flags & kThreeD) != 0)
         return Support::Unexpected("depth " + std::to_string(authored.depth) + " is placed in 3D");
     AuthoredDepth edited = authored;
-    const bool tracked = std::ranges::any_of(
-        edited.tracks, [](const Track& track) { return track.property == kTranslation; });
-    if (!tracked) {
-        auto added = AddTrack(edited, baked, kTranslation);
-        if (!added) return Support::Unexpected(added.error());
-    }
-    if (!KeyAt(edited, kTranslation, frame)) {
-        auto keyed = AddKeyAt(edited, kTranslation, frame);
-        if (!keyed) return Support::Unexpected(keyed.error());
-    }
-    const auto track = std::ranges::find(edited.tracks, kTranslation, &Track::property);
+    auto track = KeyedTrack(edited, baked, kTranslation, frame);
+    if (!track) return Support::Unexpected(track.error());
     const std::optional<Keyframe> key = KeyAt(edited, kTranslation, frame);
-    if (track == edited.tracks.end() || !key || key->value.size() != 2)
+    if (!key || key->value.size() != 2)
         return Support::Unexpected(std::string("the translation track has no key to move"));
     AfpAnimation::Placement moved;
     moved.translation = std::array<int32_t, 2>{static_cast<int32_t>(key->value[0]),
@@ -121,7 +252,7 @@ Support::Expected<void, std::string> MoveOwnedDepth(AuthoredDepth& authored,
     auto shifted = Shift(moved, offset);
     if (!shifted) return Support::Unexpected(shifted.error());
     const std::vector<int64_t> value{(*moved.translation)[0], (*moved.translation)[1]};
-    auto set = SetKeyframeValue(*track, frame, value);
+    auto set = SetKeyframeValue(**track, frame, value);
     if (!set) return Support::Unexpected(set.error());
     authored = std::move(edited);
     return {};

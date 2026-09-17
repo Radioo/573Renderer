@@ -644,6 +644,9 @@ own composition, read from the IIDX 33 afp-core:
 - Objects placed in 3D, removed ones and characters with no known box (images,
   imports) have no outline.
 
+Each outline also carries its anchor, the stage point the object's rotation
+origin lands on (its translation), and the 2x2 part of its matrix.
+
 A sprite shown on its own is outlined in its own space, which is the stage
 space the host draws it in. `DepthAt` returns the highest depth whose outline
 holds a point, which is the object drawn on top.
@@ -664,6 +667,26 @@ leaves out. 3D placements are refused.
 `MoveOwnedDepth` does the same for a depth the project owns: it starts a
 Translation track if there is none, adds a key on the frame if there is none,
 and shifts that key.
+
+### Scaling and turning about the anchor
+
+A `Reshape` is a scale along the object's own axes and a turn about its anchor.
+Because the anchor is where the translation puts the origin, neither changes
+the translation: the 2x2 part becomes `S * M * R` in the row-vector form afp-core
+uses, with `S` the scale and `R` the turn (positive is clockwise on screen, as
+y points down). `ScaleToReach` works out the scale that takes a grabbed point
+to the pointer in the object's own coordinates, so a dragged corner follows the
+pointer exactly; `TurnToReach` takes the angle swept around the anchor.
+`ReshapedOutline` applies either to an outline for a live preview. An object
+whose matrix is flat cannot be scaled from a drag.
+
+`ReshapeBakedDepth` writes the new 2x2 into the live placement (carrying the
+matrix first, as for a move). A placement that uses the short forms keeps them
+while the value fits a s16 at `/32768`; otherwise the long form at `/1024` is
+written and the short one dropped. A part that ends up as the identity is left
+out, which the matrix bit reads as the identity. `ReshapeOwnedDepth` keys Scale
+and Rotate skew on the frame (or their short twins when the depth tracks those),
+starting either track when it is missing.
 
 ## Clips (`document/clip.h`, `document/clip_edit.h`)
 

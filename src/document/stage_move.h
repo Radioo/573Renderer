@@ -2,6 +2,7 @@
 
 #include "document/authored.h"
 #include "document/clip.h"
+#include "document/stage_bounds.h"
 #include "formats/afp_animation.h"
 #include "support/expected.h"
 
@@ -23,5 +24,14 @@ MoveBakedDepth(AfpAnimation::Animation& animation, ClipId clip, uint16_t depth, 
                                                                   const BakedDepth& baked,
                                                                   uint32_t frame,
                                                                   StageOffset offset);
+
+[[nodiscard]] Support::Expected<void, std::string>
+ReshapeBakedDepth(AfpAnimation::Animation& animation, ClipId clip, uint16_t depth, uint32_t frame,
+                  const Reshape& reshape);
+
+[[nodiscard]] Support::Expected<void, std::string> ReshapeOwnedDepth(AuthoredDepth& authored,
+                                                                     const BakedDepth& baked,
+                                                                     uint32_t frame,
+                                                                     const Reshape& reshape);
 
 }

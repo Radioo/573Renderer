@@ -183,6 +183,7 @@ void Window::BuildPanels() {
     connect(viewport_, &Viewport::Resized, this, [this](int, int) { resize_timer_->start(); });
     connect(viewport_, &Viewport::Picked, this, &Window::PickOnStage);
     connect(viewport_, &Viewport::Dragged, this, &Window::MoveOnStage);
+    connect(viewport_, &Viewport::Reshaped, this, &Window::ReshapeOnStage);
 
     ads::CDockAreaWidget* centre = docks_->setCentralWidget(MakePanel(tr("Viewport"), viewport_));
     docks_->addDockWidget(ads::LeftDockWidgetArea, MakePanel(tr("Package"), package_tree_), centre);
@@ -391,6 +392,8 @@ void Window::ShowFrame() {
     const Document::AuthoredDepth* owned =
         depth_ ? AuthoredAt(static_cast<uint16_t>(*depth_), frame_) : nullptr;
     ShowKeysForDepth(owned);
+    timeline_->SelectDepth(depth_ ? std::optional<uint16_t>(static_cast<uint16_t>(*depth_))
+                                  : std::nullopt);
     FillInspector(Document::InspectFrame(
         *animation, Document::Selection{
                         .depth = depth_ ? std::optional<uint16_t>(static_cast<uint16_t>(*depth_))

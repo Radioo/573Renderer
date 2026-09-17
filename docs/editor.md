@@ -107,7 +107,14 @@ holds it, or clears the selection; the selected depth is outlined. Dragging
 inside that outline moves the outline with the pointer, and letting go moves
 the depth by the offset: `Document::MoveOwnedDepth` through `EditAuthored` for
 an owned depth, `Document::MoveBakedDepth` through `EditAnimation` otherwise,
-each one undo step. Outlines are shown only when the viewport shows the clip
+each one undo step. The selection also shows a square on each corner, a round
+handle above the top edge and a cross at the anchor. Dragging a corner scales
+the object along its own axes so the corner follows the pointer; dragging the
+round handle turns it about the anchor. Both preview on the outline and are
+applied on release through `Document::ReshapeOwnedDepth` or
+`Document::ReshapeBakedDepth`. Pressing a handle keeps the selection even when
+the handle lies outside the outline. The timeline shades the selected depth's
+row. Outlines are shown only when the viewport shows the clip
 being edited, that is the root or a sprite shown on its own. Shape boxes are
 read once per animation and read again after every edit.
 

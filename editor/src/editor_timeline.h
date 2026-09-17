@@ -32,6 +32,7 @@ public:
                        std::vector<Document::AnimationLabel> labels);
     void ShowKeys(std::optional<uint16_t> depth, std::vector<Document::Track> tracks);
     void SelectKey(const QString& property, std::optional<uint32_t> frame);
+    void SelectDepth(std::optional<uint16_t> depth);
     void Clear();
     void SetFrame(uint32_t frame);
 
@@ -77,6 +78,7 @@ private:
     std::vector<Document::DepthRow> rows_;
     std::vector<Document::AnimationLabel> labels_;
     std::optional<uint16_t> keyed_depth_;
+    std::optional<uint16_t> selected_depth_;
     std::vector<Document::Track> tracks_;
     QString selected_property_;
     std::optional<uint32_t> selected_key_;
