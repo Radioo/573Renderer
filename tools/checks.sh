@@ -29,6 +29,7 @@ if ! grep -q "Editor build succeeded" "$EDITOR_LOG"; then
 fi
 rm -f "$EDITOR_LOG"
 "$ROOT/build-editor/editor_widget_tests.exe"
+"$ROOT/build-editor/editor_window_tests.exe"
 
 CTEST_EXE="ctest"
 if [ -f build/CMakeCache.txt ]; then

@@ -200,9 +200,17 @@ void Window::ShowClipTimeline() {
 void Window::ShowAnimation(const std::string& name) {
     StopPlayback();
     animation_name_ = name;
+    frame_ = 0;
+    root_frame_ = 0;
+    symbol_shown_ = false;
+    depth_.reset();
     if (!host_.Running()) {
         viewport_->ShowMessage(
             tr("Choose a game install to preview %1").arg(QString::fromStdString(name)));
+        frame_count_ = 0;
+        FillClips();
+        ShowClipTimeline();
+        ShowFrame();
         return;
     }
     const auto encoded = file_->Encode();
@@ -216,10 +224,6 @@ void Window::ShowAnimation(const std::string& name) {
         return;
     }
     frame_count_ = loaded->frame_count;
-    frame_ = 0;
-    root_frame_ = 0;
-    symbol_shown_ = false;
-    depth_.reset();
     FillClips();
     ShowClipTimeline();
     ResizeViewport();
@@ -245,7 +249,7 @@ void Window::SeekTo(uint32_t frame) {
 }
 
 void Window::Reload() {
-    if (!host_.Running() || animation_name_.empty() || !file_) return;
+    if (animation_name_.empty() || !file_) return;
     LoadViewportClip();
     ShowClipTimeline();
     SeekViewport(symbol_shown_ ? frame_ : root_frame_);

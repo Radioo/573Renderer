@@ -46,6 +46,20 @@ an ease handle past the segment's time. `tools/checks.sh` builds the editor and
 runs them. Two mutations (moving the turn handle, clearing the selection on a
 Ctrl press) were each seen to fail a case before the tests were trusted.
 
+`build-editor/editor_window_tests.exe` builds the whole `Editor::Window` from the
+same sources, with no host, and drives it the way a user would. Its `main` points
+`QSettings` at a temporary INI directory under its own organisation name, so it
+never reads the user's game install or layout. Each case writes a small package
+to a temporary directory and opens it. Context menus are raised by emitting the
+widget's `customContextMenuRequested` signal; a `Script` of steps, run from a
+timer while the menu and its dialogs block, picks a menu item by selecting it
+and pressing Return (which is what makes `QMenu::exec` return it), fills in
+`QInputDialog`s, and closes any warning box while keeping its text so a case can
+check what was reported. The cases cover opening an animation without a host,
+editing and undoing an animation setting, making and removing an animation from
+the package menu, refusing a taken name, and the background option. Putting back
+the old early return for a missing host was seen to fail four assertions.
+
 ## Qt plugin deployment
 
 vcpkg's applocal step copies the Qt DLLs next to the executable, but not the
@@ -86,6 +100,13 @@ built needs no copying. The application starts the host on the install it
 remembers, or on the one the user picks from the File menu, and stops it on
 close; a host that fails to start or refuses a request shows in a warning box
 and leaves the window and its document alone.
+
+Nothing but the picture needs the host. Without one, choosing an animation
+still fills the clip list, the timeline (its frame count and depths come from the
+document, `Document::DescribeClip`) and the inspector, and every edit reruns the
+same refresh (`Window::Reload` skips only the host calls), so an IFS can be
+edited without a game install; the viewport says which install to choose for a
+preview.
 
 ## Panels
 

@@ -96,3 +96,26 @@ add_executable(editor_widget_tests
 target_include_directories(editor_widget_tests PRIVATE src)
 target_link_libraries(editor_widget_tests PRIVATE editor_shared Qt6::Widgets Catch2::Catch2)
 r573_deploy_qt_plugin(editor_widget_tests Qt6::QMinimalIntegrationPlugin)
+
+add_executable(editor_window_tests
+    tests/editor_window_tests.cpp
+    src/editor_window.cpp
+    src/editor_files.cpp
+    src/editor_host.cpp
+    src/editor_project.cpp
+    src/editor_keys.cpp
+    src/editor_clips.cpp
+    src/editor_stage.cpp
+    src/editor_spans.cpp
+    src/editor_animations.cpp
+    src/editor_key_selection.cpp
+    src/editor_ease_dialog.cpp
+    src/editor_playback.cpp
+    src/editor_layout.cpp
+    src/editor_timeline.cpp
+    src/editor_viewport.cpp
+)
+target_include_directories(editor_window_tests PRIVATE src "${R573_ROOT}/tests/document")
+target_link_libraries(editor_window_tests PRIVATE editor_shared Qt6::Widgets
+                                                  ads::qtadvanceddocking-qt6 d3d9.lib Catch2::Catch2)
+r573_deploy_qt_plugin(editor_window_tests Qt6::QMinimalIntegrationPlugin)

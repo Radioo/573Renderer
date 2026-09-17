@@ -269,3 +269,4 @@ captured. This milestone is the editing itself.
 - `issues/61-filter-lists.md` (milestone 8)
 - `issues/62-add-and-remove-animations.md` (milestone 8)
 - `issues/63-animation-settings.md` (milestone 8)
+- `issues/64-window-tests-and-editing-without-a-host.md` (milestone 8)
