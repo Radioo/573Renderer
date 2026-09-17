@@ -1,9 +1,15 @@
 cmake_minimum_required(VERSION 3.25)
-project(IfsEditor LANGUAGES CXX)
+if(NOT PROJECT_NAME)
+    project(IfsEditor LANGUAGES CXX)
+endif()
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
+if(MSVC)
+    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
+endif()
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
 
 add_compile_definitions(NOMINMAX)
 
@@ -25,15 +31,19 @@ find_program(R573_FLATC flatc REQUIRED)
 
 set(R573_PREVIEW_SCHEMA "${R573_ROOT}/src/preview/preview_host.fbs")
 set(R573_PREVIEW_GENERATED "${CMAKE_BINARY_DIR}/generated/preview_host_generated.h")
-add_custom_command(
-    OUTPUT "${R573_PREVIEW_GENERATED}"
-    COMMAND "${R573_FLATC}" --cpp --scoped-enums -o "${CMAKE_BINARY_DIR}/generated"
-            "${R573_PREVIEW_SCHEMA}"
-    DEPENDS "${R573_PREVIEW_SCHEMA}"
-    COMMENT "Generating the preview host protocol from preview_host.fbs"
-    VERBATIM
-)
-add_custom_target(editor_preview_schema DEPENDS "${R573_PREVIEW_GENERATED}")
+if(TARGET r573_preview_schema)
+    add_custom_target(editor_preview_schema DEPENDS r573_preview_schema)
+else()
+    add_custom_command(
+        OUTPUT "${R573_PREVIEW_GENERATED}"
+        COMMAND "${R573_FLATC}" --cpp --scoped-enums -o "${CMAKE_BINARY_DIR}/generated"
+                "${R573_PREVIEW_SCHEMA}"
+        DEPENDS "${R573_PREVIEW_SCHEMA}"
+        COMMENT "Generating the preview host protocol from preview_host.fbs"
+        VERBATIM
+    )
+    add_custom_target(editor_preview_schema DEPENDS "${R573_PREVIEW_GENERATED}")
+endif()
 
 add_library(editor_shared STATIC
     ${R573_EDITOR_SUPPORT_SOURCES}
@@ -86,11 +96,11 @@ function(r573_deploy_qt_plugin target plugin)
     set(beside "$<TARGET_FILE_DIR:${target}>/$<TARGET_FILE_NAME:${plugin}>")
     add_custom_command(TARGET ${target} POST_BUILD
         COMMAND "${CMAKE_COMMAND}" -E make_directory "${plugin_dir}"
+        COMMAND "${CMAKE_COMMAND}" -E copy_if_different "$<TARGET_FILE:${plugin}>" "${plugin_dir}"
         COMMAND "${CMAKE_COMMAND}" -E copy_if_different "$<TARGET_FILE:${plugin}>" "${beside}"
         COMMAND "${R573_VCPKG_EXE}" z-applocal "--target-binary=${beside}"
                 "--installed-bin-dir=${R573_VCPKG_BIN}"
-        COMMAND "${CMAKE_COMMAND}" -E rename "${beside}"
-                "${plugin_dir}/$<TARGET_FILE_NAME:${plugin}>"
+        COMMAND "${CMAKE_COMMAND}" -E rm -f "${beside}"
         VERBATIM
     )
 endfunction()

@@ -9,30 +9,56 @@
     "hash-library",
     "nlohmann-json",
     "stb",
-    "tl-expected",
-    {
-      "name": "imgui",
-      "default-features": false,
-      "features": [
-        "dx9-binding",
-        "test-engine",
-        "win32-binding"
+    "tl-expected"
+  ],
+  "features": {
+    "editor": {
+      "description": "The Qt 6 IFS editor application",
+      "dependencies": [
+        {
+          "name": "qtbase",
+          "default-features": false,
+          "features": [
+            "gui",
+            "jpeg",
+            "png",
+            "widgets"
+          ]
+        },
+        "qt-advanced-docking-system"
       ]
     },
-    {
-      "name": "ffmpeg",
-      "default-features": false,
-      "features": [
-        "aom",
-        "avcodec",
-        "avformat",
-        "swscale",
-        "nvcodec",
-        "vpx",
-        "webp",
-        "x265"
+    "renderer": {
+      "description": "The 573Renderer application and its tools",
+      "dependencies": [
+        {
+          "name": "imgui",
+          "default-features": false,
+          "features": [
+            "dx9-binding",
+            "test-engine",
+            "win32-binding"
+          ]
+        },
+        {
+          "name": "ffmpeg",
+          "default-features": false,
+          "features": [
+            "aom",
+            "avcodec",
+            "avformat",
+            "swscale",
+            "nvcodec",
+            "vpx",
+            "webp",
+            "x265"
+          ]
+        },
+        "dxsdk-d3dx"
       ]
-    },
-    "dxsdk-d3dx"
+    }
+  },
+  "default-features": [
+    "renderer"
   ]
 }

@@ -1,6 +1,10 @@
 {
   "version": 6,
-  "cmakeMinimumRequired": { "major": 3, "minor": 25, "patch": 0 },
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 25,
+    "patch": 0
+  },
   "configurePresets": [
     {
       "name": "base",
@@ -31,7 +35,10 @@
       "hidden": true,
       "inherits": "base",
       "binaryDir": "${sourceDir}/build32",
-      "architecture": { "value": "x86", "strategy": "external" },
+      "architecture": {
+        "value": "x86",
+        "strategy": "external"
+      },
       "cacheVariables": {
         "VCPKG_TARGET_TRIPLET": "x86-windows-static"
       }
@@ -50,6 +57,18 @@
       "binaryDir": "${sourceDir}/build-asan",
       "cacheVariables": {
         "R573_ASAN": "ON"
+      }
+    },
+    {
+      "name": "editor",
+      "inherits": "base",
+      "binaryDir": "${sourceDir}/build-editor",
+      "cacheVariables": {
+        "VCPKG_TARGET_TRIPLET": "x64-windows",
+        "VCPKG_MANIFEST_FEATURES": "editor",
+        "R573_BUILD_EDITOR": "ON",
+        "R573_BUILD_RENDERER": "OFF",
+        "VCPKG_MANIFEST_NO_DEFAULT_FEATURES": "ON"
       }
     }
   ],
@@ -73,6 +92,10 @@
     {
       "name": "asan",
       "configurePreset": "asan"
+    },
+    {
+      "name": "editor",
+      "configurePreset": "editor"
     }
   ]
 }

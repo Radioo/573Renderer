@@ -1,19 +1,38 @@
 # The IFS editor application
 
-`editor/` is a separate CMake project producing `ifs_editor.exe`, the Qt 6
-Widgets front end for the IFS editor. It is not part of the renderer build and
-nothing in `build/` depends on it.
+`editor/` produces `ifs_editor.exe`, the Qt 6 Widgets front end for the IFS
+editor. It is part of the root CMake project but not of the renderer's build:
+nothing in `build/` depends on it, and the renderer's own build never
+configures it.
 
-## Why a separate project
+## One project, two profiles
 
 The renderer links everything statically (`x64-windows-static`, `/MT`) so
 `573Renderer.exe` ships as one file. Qt in that triplet is a very long build
-and vcpkg's Qt is only routinely exercised dynamically, so the editor gets its
-own manifest and its own triplet (`x64-windows`) and its own binary directory
-(`build-editor/`). The two projects share source rather than targets:
-`cmake/r573_shared_sources.cmake` lists the support, format and preview
-sources both consume, so a file added to the renderer's format layer is picked
-up by the editor with no second list to keep in step.
+and vcpkg's Qt is only routinely exercised dynamically, so the editor is built
+with the dynamic triplet (`x64-windows`) into its own binary directory
+(`build-editor/`). A binary directory can only hold one triplet, so the two
+live in the same CMake project as two configure presets rather than as two
+projects:
+
+- `dev` (and `ci`, `dev32`, ...) build the renderer. `R573_BUILD_EDITOR` is
+  off, so `editor/` is never added.
+- `editor` sets `R573_BUILD_EDITOR=ON` and `R573_BUILD_RENDERER=OFF`. The root
+  `CMakeLists.txt` adds `editor/` and then returns before the renderer's own
+  targets, so the editor profile configures nothing of the renderer.
+
+vcpkg follows the same split through manifest features: `vcpkg.json` keeps the
+shared libraries in its core dependencies, puts `imgui`, `ffmpeg` and
+`dxsdk-d3dx` behind a `renderer` feature that is in `default-features`, and Qt
+behind an `editor` feature. The `editor` preset asks for the `editor` feature
+with `VCPKG_MANIFEST_NO_DEFAULT_FEATURES`, so building the editor does not
+build ffmpeg, and building the renderer does not build Qt.
+
+Being one project is what lets an IDE list both sets of targets: pick the
+profile and the run configurations follow. The two still share source rather
+than targets: `cmake/r573_shared_sources.cmake` lists the support, format and
+preview sources both consume, so a file added to the renderer's format layer is
+picked up by the editor with no second list to keep in step.
 
 The editor links no renderer app, GUI or backend code. Everything it needs
 from the engine happens in the preview host process (docs/preview_host.md).
@@ -26,9 +45,10 @@ editor\build.bat
 
 Same shape as the renderer's `build.bat`: vswhere locates Visual Studio,
 `vcvarsall x64` sets the toolchain up, vcpkg is bootstrapped if needed, then
-`cmake --preset editor` and `cmake --build --preset editor`. The preset writes
-to `build-editor/` (gitignored) and sets `VCPKG_HOST_TRIPLET` to
-`x64-windows` so `flatc` is found as a host tool. Running plain `cmake` from a
+`cmake --preset editor` and `cmake --build --preset editor` from the repository
+root. The preset writes to `build-editor/` (gitignored) and inherits
+`VCPKG_HOST_TRIPLET` `x64-windows` from `base`, so `flatc` is found as a host
+tool. Running plain `cmake` from a
 shell with no Visual Studio environment fails at the compiler check with
 `LNK1104: cannot open file 'kernel32.lib'`, which is what the batch file
 exists to prevent.
@@ -287,10 +307,11 @@ one on screen. The image path goes
 through `QImage`, so the editor reads image formats through Qt rather than
 carrying a decoder of its own, and converts to the BGRA the package stores.
 That means the qtbase features decide what can be added: the editor asks for
-`png` and `jpeg` on top of `gui` and `widgets` (`editor/vcpkg.json`). Without
-them Qt reads only BMP, PPM, XBM and XPM, which is what the dialog's own
-filter promised and could not deliver until the features were turned on. Removing a texture goes through `RemoveImage` so the texture list loses
-its node too; removing anything else is a plain entry removal.
+`png` and `jpeg` on top of `gui` and `widgets` in the root manifest's `editor`
+feature. Without them Qt reads only BMP, PPM, XBM and XPM, which is what the
+dialog's own filter promised and could not deliver until the features were
+turned on. Removing a texture goes through `RemoveImage` so the texture list
+loses its node too; removing anything else is a plain entry removal.
 
 Ctrl and the mouse wheel zoom the timeline around the frame under the cursor,
 which stays put; the zoom is held as pixels per frame and turns the widget's

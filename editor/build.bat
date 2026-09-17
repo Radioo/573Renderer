@@ -39,7 +39,7 @@ if not exist "%VCPKG_ROOT%\vcpkg.exe" (
     )
 )
 
-cd /d "%EDITOR_ROOT%"
+cd /d "%ROOT%"
 
 if exist "%ROOT%\build-editor\CMakeCache.txt" (
     echo [Editor] Reusing existing configure - ninja re-runs CMake if inputs changed

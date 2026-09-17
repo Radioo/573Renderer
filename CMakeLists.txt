@@ -10,6 +10,15 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 add_compile_definitions(NOMINMAX)
 
+option(R573_BUILD_EDITOR "Build the IFS editor (Qt 6, dynamic triplet)" OFF)
+option(R573_BUILD_RENDERER "Build the renderer, its tools and its tests" ON)
+if(R573_BUILD_EDITOR)
+    add_subdirectory(editor)
+endif()
+if(NOT R573_BUILD_RENDERER)
+    return()
+endif()
+
 option(R573_ASAN "Build with AddressSanitizer" OFF)
 if(R573_ASAN AND MSVC)
     add_compile_options(/fsanitize=address)
