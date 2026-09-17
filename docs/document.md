@@ -272,6 +272,14 @@ because afp-core stops on it (`AFP_UNUSED_DEPTH used` in the placement parser).
 A script that addresses the depth by number (`swapDepths`, a target path) is not
 followed.
 
+`DuplicateSpan` copies a span onto another depth under the same rules: every
+placement of the span and the remove that closes it is copied with the new
+depth into the frame it came from, placements at the end of the frame and the
+remove first, as `AddDepth` orders them. The copy replays exactly like the
+original (`ReplayDepth`), including its instance name, its clip actions and its
+end frames. A copy of a project-owned depth is baked data; the project keeps
+owning only the original.
+
 `ShiftAuthored` moves a project-owned depth's range and every keyframe by the
 same frames, so the project keeps describing the span after `MoveSpan`.
 

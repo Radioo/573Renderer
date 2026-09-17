@@ -23,6 +23,10 @@ namespace Document {
 ChangeSpanDepth(AfpAnimation::Animation& animation, ClipId clip, uint16_t depth, uint32_t frame,
                 uint16_t to);
 
+[[nodiscard]] Support::Expected<void, std::string> DuplicateSpan(AfpAnimation::Animation& animation,
+                                                                 ClipId clip, uint16_t depth,
+                                                                 uint32_t frame, uint16_t to);
+
 [[nodiscard]] Support::Expected<void, std::string> ShiftAuthored(AuthoredDepth& authored,
                                                                  int64_t by);
 

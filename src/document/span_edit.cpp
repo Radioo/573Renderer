@@ -79,6 +79,34 @@ Support::Expected<void, std::string> PlaceShifted(AfpAnimation::Container& clip,
     return {};
 }
 
+std::string NothingAt(uint16_t depth, uint32_t frame) {
+    return "depth " + std::to_string(depth) + " holds nothing on frame " + std::to_string(frame);
+}
+
+Support::Expected<Span, std::string> FreeTarget(const AfpAnimation::Container& clip, uint16_t depth,
+                                                uint32_t frame, uint16_t to) {
+    if (to == kUnusedDepth)
+        return Support::Unexpected("depth " + std::to_string(to) + " is reserved by the game");
+    const std::optional<Span> span = SpanOfDepth(clip, depth, frame);
+    if (!span) return Support::Unexpected(NothingAt(depth, frame));
+    if (to == depth) return *span;
+    auto free = CheckFree(clip, to, span->first_frame, span->last_frame);
+    if (!free) return Support::Unexpected(free.error());
+    if (TouchedBetween(clip, to, span->first_frame, span->last_frame + 1)) {
+        return Support::Unexpected("depth " + std::to_string(to) +
+                                   " is placed or removed while this span is on the stage");
+    }
+    return *span;
+}
+
+uint32_t FrameOfTag(const AfpAnimation::Container& clip, std::size_t index) {
+    for (uint32_t frame = 0; frame < clip.frames.size(); frame++) {
+        const AfpAnimation::Frame& owner = clip.frames[frame];
+        if (index >= owner.first_tag && index < owner.first_tag + owner.tag_count) return frame;
+    }
+    return 0;
+}
+
 }
 
 std::optional<Span> SpanOfDepth(const AfpAnimation::Container& clip, uint16_t depth,
@@ -133,24 +161,44 @@ Support::Expected<void, std::string> ChangeSpanDepth(AfpAnimation::Animation& an
     auto found = RequireClip(animation, clip);
     if (!found) return Support::Unexpected(found.error());
     AfpAnimation::Container& target = **found;
-    if (to == kUnusedDepth)
-        return Support::Unexpected("depth " + std::to_string(to) + " is reserved by the game");
-    const std::optional<Span> span = SpanOfDepth(target, depth, frame);
-    if (!span) {
-        return Support::Unexpected("depth " + std::to_string(depth) + " holds nothing on frame " +
-                                   std::to_string(frame));
+    if (to == depth) {
+        if (!SpanOfDepth(target, depth, frame)) return Support::Unexpected(NothingAt(depth, frame));
+        return {};
     }
-    if (to == depth) return {};
-    auto free = CheckFree(target, to, span->first_frame, span->last_frame);
-    if (!free) return Support::Unexpected(free.error());
-    if (TouchedBetween(target, to, span->first_frame, span->last_frame + 1)) {
-        return Support::Unexpected("depth " + std::to_string(to) +
-                                   " is placed or removed while this span is on the stage");
-    }
+    auto span = FreeTarget(target, depth, frame, to);
+    if (!span) return Support::Unexpected(span.error());
     for (const std::size_t index : SpanTags(target, depth, *span)) {
         auto& body = target.tags[index].body;
         if (auto* placement = std::get_if<AfpAnimation::Placement>(&body)) placement->depth = to;
         if (auto* remove = std::get_if<AfpAnimation::Remove>(&body)) remove->depth = to;
+    }
+    return {};
+}
+
+Support::Expected<void, std::string> DuplicateSpan(AfpAnimation::Animation& animation, ClipId clip,
+                                                   uint16_t depth, uint32_t frame, uint16_t to) {
+    auto found = RequireClip(animation, clip);
+    if (!found) return Support::Unexpected(found.error());
+    AfpAnimation::Container& target = **found;
+    auto span = FreeTarget(target, depth, frame, to);
+    if (!span) return Support::Unexpected(span.error());
+    if (to == depth)
+        return Support::Unexpected(std::string("a span is duplicated onto another depth"));
+
+    std::vector<std::pair<uint32_t, AfpAnimation::Tag>> copies;
+    for (const std::size_t index : SpanTags(target, depth, *span)) {
+        AfpAnimation::Tag copy = target.tags[index];
+        if (auto* placement = std::get_if<AfpAnimation::Placement>(&copy.body))
+            placement->depth = to;
+        if (auto* remove = std::get_if<AfpAnimation::Remove>(&copy.body)) remove->depth = to;
+        copies.emplace_back(FrameOfTag(target, index), std::move(copy));
+    }
+    for (auto& [at, copy] : copies) {
+        if (std::holds_alternative<AfpAnimation::Remove>(copy.body)) {
+            InsertTagFirst(target, at, std::move(copy));
+        } else {
+            InsertTag(target, at, std::move(copy));
+        }
     }
     return {};
 }

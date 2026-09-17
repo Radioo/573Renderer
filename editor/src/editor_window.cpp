@@ -629,6 +629,9 @@ void Window::ShowTimelineMenu(const QPoint& where, uint32_t frame, const QString
     QAction* restack =
         depth_ ? menu.addAction(tr("Move depth %1 here to another depth...").arg(*depth_))
                : nullptr;
+    QAction* duplicate =
+        depth_ ? menu.addAction(tr("Duplicate depth %1 here onto another depth...").arg(*depth_))
+               : nullptr;
     menu.addSeparator();
     const bool authored =
         depth_ != std::nullopt && AuthoredAt(static_cast<uint16_t>(*depth_), frame) != nullptr;
@@ -729,8 +732,10 @@ void Window::ShowTimelineMenu(const QPoint& where, uint32_t frame, const QString
                       });
         return;
     }
-    if (chosen == restack) {
-        MoveSpanToDepth(static_cast<uint16_t>(*depth_), frame);
+    if (chosen == restack || chosen == duplicate) {
+        const auto depth = static_cast<uint16_t>(*depth_);
+        if (chosen == restack) MoveSpanToDepth(depth, frame);
+        if (chosen == duplicate) DuplicateSpanToDepth(depth, frame);
         return;
     }
     if (chosen == remove_depth) {

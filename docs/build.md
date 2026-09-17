@@ -61,6 +61,16 @@ depends on and is easy to find in Task Manager / shortcuts.
   LNK2038 RuntimeLibrary errors. Switching the triplet later invalidates the
   entire vcpkg binary cache for it - every dependency rebuilds from scratch.
 
+### `LNK1236` on a member of a static library
+
+Four times in one session, a link failed with `fatal error LNK1236: corrupt or
+invalid COFF sections` naming a member of `r573_document.lib` or
+`editor_shared.lib`. `dumpbin /headers` read the named object without complaint,
+and deleting only the `.lib` and building again linked the same objects
+successfully; touching the source and rebuilding did not reproduce it, and the
+compiler, linker and `lib.exe` all come from the same toolset. The cause is not
+known. When it happens, delete the library named in the message and build again.
+
 ## Dependencies (vcpkg manifest mode)
 
 Declared in `vcpkg.json`; resolved on first configure via the vcpkg toolchain

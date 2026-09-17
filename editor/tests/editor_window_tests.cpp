@@ -1,17 +1,20 @@
 #include <catch2/catch_session.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include "editor_timeline.h"
 #include "editor_window.h"
 #include "sample_package.h"
 
 #include "document/animation_strings.h"
 #include "document/document.h"
+#include "document/frame_edit.h"
 #include "formats/ifs_archive.h"
 
 #include <QAction>
 #include <QApplication>
 #include <QByteArray>
 #include <QDialog>
+#include <QElapsedTimer>
 #include <QDir>
 #include <QFile>
 #include <QFileDialog>
@@ -46,6 +49,7 @@
 namespace {
 
 constexpr int kStepMs = 5;
+constexpr qint64 kLongestWaitMs = 10000;
 constexpr uint32_t kFixedRate = 0x2;
 const QString kAnimationKind = "animation";
 
@@ -54,6 +58,7 @@ public:
     using Step = std::function<bool()>;
 
     explicit Script(std::vector<Step> steps) : steps_(steps.begin(), steps.end()) {
+        running_.start();
         timer_.setInterval(kStepMs);
         QObject::connect(&timer_, &QTimer::timeout, [this] { Run(); });
         timer_.start();
@@ -64,6 +69,7 @@ public:
 
 private:
     void Run() {
+        if (running_.elapsed() > kLongestWaitMs && GiveUp()) return;
         if (auto* box = qobject_cast<QMessageBox*>(QApplication::activeModalWidget())) {
             problems_.append(box->text());
             box->reject();
@@ -73,8 +79,19 @@ private:
         if (steps_.front()()) steps_.pop_front();
     }
 
+    bool GiveUp() {
+        QWidget* open = QApplication::activeModalWidget();
+        if (open == nullptr) open = QApplication::activePopupWidget();
+        if (open == nullptr) return false;
+        problems_.append(QString("timed out with %1 open").arg(open->metaObject()->className()));
+        steps_.clear();
+        open->close();
+        return true;
+    }
+
     std::deque<Step> steps_;
     QStringList problems_;
+    QElapsedTimer running_;
     QTimer timer_;
 };
 
@@ -115,6 +132,15 @@ Script::Step AnswerNumber(int number) {
     };
 }
 
+Script::Step AcceptNumber() {
+    return [] {
+        auto* dialog = qobject_cast<QInputDialog*>(QApplication::activeModalWidget());
+        if (dialog == nullptr) return false;
+        dialog->accept();
+        return true;
+    };
+}
+
 QString WritePackage(const QTemporaryDir& dir) {
     const auto bytes = Ifs::Write(SamplePackage::SampleArchive());
     REQUIRE(bytes.has_value());
@@ -125,6 +151,7 @@ QString WritePackage(const QTemporaryDir& dir) {
     REQUIRE(animation.has_value());
     animation->name = Document::InternString(*animation, "intro");
     animation->flags |= kFixedRate;
+    REQUIRE(Document::AddDepth(*animation, {}, 1, 7, 0, 2).has_value());
     REQUIRE(file->WriteAnimation(path, *animation).has_value());
     const auto encoded = file->Encode();
     REQUIRE(encoded.has_value());
@@ -209,10 +236,17 @@ void Open(Opened& opened) {
     REQUIRE(opened.inspector != nullptr);
 }
 
+bool Settle(const std::function<bool()>& done) {
+    QElapsedTimer waited;
+    waited.start();
+    while (!done() && waited.elapsed() < kLongestWaitMs)
+        QApplication::processEvents();
+    return done();
+}
+
 void RunMenu(Script& script, QTreeWidget& tree) {
     emit tree.customContextMenuRequested(QPoint(4, 4));
-    while (!script.Finished())
-        QApplication::processEvents();
+    REQUIRE(Settle([&script] { return script.Finished(); }));
 }
 
 }
@@ -282,13 +316,34 @@ TEST_CASE("A package with no animation takes its first from another IFS") {
     CHECK(RowValue(*inspector, "Frame rate") == "60");
 }
 
+TEST_CASE("A span duplicated from the timeline menu lands on the next free depth") {
+    Opened opened;
+    Open(opened);
+    auto* timeline = opened.window.findChild<Editor::Timeline*>();
+    REQUIRE(timeline != nullptr);
+    emit timeline->DepthChosen(1);
+    CHECK(RowValue(*opened.inspector, "Depth") == "1");
+    {
+        Script duplicated({Choose("Duplicate depth 1 here onto another depth..."), AcceptNumber()});
+        emit timeline->MenuRequested(QPoint(4, 4), 1, QString());
+        REQUIRE(Settle([&duplicated] { return duplicated.Finished(); }));
+        CHECK(duplicated.Problems().isEmpty());
+        CHECK(RowValue(*opened.inspector, "Depth") == "2");
+    }
+
+    emit timeline->DepthChosen(1);
+    Script refused({Choose("Duplicate depth 1 here onto another depth..."), AnswerNumber(2)});
+    emit timeline->MenuRequested(QPoint(4, 4), 1, QString());
+    REQUIRE(Settle([&refused] { return !refused.Problems().isEmpty(); }));
+    CHECK(refused.Problems().front().contains("depth 2"));
+}
+
 TEST_CASE("A taken name is refused with a message and adds nothing") {
     Opened opened;
     Open(opened);
     Script refused({Choose("New animation..."), Answer("intro"), AnswerNumber(3)});
     RunMenu(refused, *opened.tree);
-    while (refused.Problems().isEmpty())
-        QApplication::processEvents();
+    REQUIRE(Settle([&refused] { return !refused.Problems().isEmpty(); }));
     CHECK(refused.Problems().front().contains("already"));
     int animations = 0;
     for (QTreeWidgetItemIterator it(opened.tree); *it != nullptr; ++it)

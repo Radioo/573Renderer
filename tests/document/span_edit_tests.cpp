@@ -5,11 +5,14 @@
 #include "document/clip.h"
 #include "document/frame_edit.h"
 #include "document/keyframes.h"
+#include "document/placement_effect.h"
+#include "document/tags.h"
 #include "document/span_edit.h"
 #include "document/timeline.h"
 #include "formats/afp_animation.h"
 
 #include <algorithm>
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <optional>
@@ -168,4 +171,38 @@ TEST_CASE("An owned depth's range and keyframes follow its span") {
     CHECK(authored.tracks[0].keys[1].frame == 5);
     CHECK_FALSE(Document::ShiftAuthored(authored, -4).has_value());
     CHECK(authored.first_frame == 3);
+}
+
+TEST_CASE("A duplicated span plays the same on its new depth and the original stays") {
+    AfpAnimation::Animation animation = Clip(8);
+    Add(animation, kDepth, 1, 4);
+    AfpAnimation::Placement moved;
+    moved.flags = 0x1 | 0x4;
+    moved.depth = kDepth;
+    moved.translation = std::array<int32_t, 2>{200, 40};
+    Document::InsertTag(animation.root, 3, AfpAnimation::Tag{moved});
+    Add(animation, kDepth, 6, 7);
+
+    const auto duplicated = Document::DuplicateSpan(animation, kRoot, kDepth, 2, 9);
+    INFO((duplicated.has_value() ? std::string() : duplicated.error()));
+    REQUIRE(duplicated.has_value());
+    CHECK(SpansOf(animation, kDepth) == std::vector<Document::Span>{{1, 4}, {6, 7}});
+    CHECK(SpansOf(animation, 9) == std::vector<Document::Span>{{1, 4}});
+    CHECK(Removes(animation, 9) == 1);
+    const std::vector<uint16_t> original = EndFrames(animation, kDepth);
+    CHECK(EndFrames(animation, 9) == std::vector<uint16_t>(original.begin(), original.begin() + 2));
+    CHECK(Document::ReplayDepth(animation.root, 9, 1, 5) ==
+          Document::ReplayDepth(animation.root, kDepth, 1, 5));
+}
+
+TEST_CASE("A span is only duplicated onto a depth that is free over its frames") {
+    AfpAnimation::Animation animation = Clip(8);
+    Add(animation, kDepth, 1, 3);
+    Add(animation, 5, 3, 6);
+    const AfpAnimation::Animation before = animation;
+    CHECK_FALSE(Document::DuplicateSpan(animation, kRoot, kDepth, 2, 5).has_value());
+    CHECK_FALSE(Document::DuplicateSpan(animation, kRoot, kDepth, 2, kDepth).has_value());
+    CHECK_FALSE(Document::DuplicateSpan(animation, kRoot, kDepth, 2, 0x3000).has_value());
+    CHECK_FALSE(Document::DuplicateSpan(animation, kRoot, kDepth, 6, 9).has_value());
+    CHECK(animation == before);
 }

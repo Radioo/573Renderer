@@ -59,6 +59,12 @@ check what was reported. The cases cover opening an animation without a host,
 editing and undoing an animation setting, making and removing an animation from
 the package menu, refusing a taken name, and the background option. Putting back
 the old early return for a missing host was seen to fail four assertions.
+Every wait is bounded: `Settle` gives up after ten seconds, and a `Script` still
+running after that closes whatever dialog or menu is open and records a timeout,
+so a step that never matches fails the case instead of hanging the gate (seen by
+giving the duplicate case a step that cannot match). A case that needs a second
+script closes the first one first, because a live script also takes the warning
+boxes.
 
 ## Qt plugin deployment
 
@@ -160,7 +166,10 @@ pixels of a bar's start or end, where the pointer turns into a sizing arrow,
 trims the span instead (`Document::TrimSpan`, or `Document::TrimOwnedSpan` for
 an owned depth, whose trimmed keyframes are then kept). The timeline menu
 offers to move the span under the playhead to another depth number
-(`Document::ChangeSpanDepth`), which moves an owned depth's record with it.
+(`Document::ChangeSpanDepth`), which moves an owned depth's record with it, and
+to duplicate it onto another depth (`Window::DuplicateSpanToDepth`, suggesting
+the first depth above every depth the clip uses), after which the copy is the
+selected depth.
 
 **Timeline.** `Editor::Timeline` draws a ruler carrying the animation's labels
 at their frames, then one row per depth from `Document::DepthRows`, with a bar
