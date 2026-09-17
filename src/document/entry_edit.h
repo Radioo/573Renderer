@@ -14,6 +14,9 @@ namespace Document {
 [[nodiscard]] Support::Expected<std::string, std::string> StoredName(std::string_view directory,
                                                                      std::string_view logical_name);
 
+[[nodiscard]] Support::Expected<void, std::string> EnsureDirectory(Ifs::Archive& archive,
+                                                                   std::string_view path);
+
 [[nodiscard]] Support::Expected<void, std::string> AddEntry(Ifs::Archive& archive,
                                                             std::string_view directory,
                                                             std::string_view logical_name,

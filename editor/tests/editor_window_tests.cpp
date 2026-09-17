@@ -11,12 +11,15 @@
 #include <QAction>
 #include <QApplication>
 #include <QByteArray>
+#include <QDialog>
 #include <QDir>
 #include <QFile>
+#include <QFileDialog>
 #include <QEvent>
 #include <QInputDialog>
 #include <QKeyEvent>
 #include <QKeySequence>
+#include <QLineEdit>
 #include <QList>
 #include <QMenu>
 #include <QMessageBox>
@@ -133,6 +136,31 @@ QString WritePackage(const QTemporaryDir& dir) {
     return out;
 }
 
+Script::Step PickFile(const QString& path) {
+    return [path] {
+        auto* dialog = qobject_cast<QFileDialog*>(QApplication::activeModalWidget());
+        if (dialog == nullptr) return false;
+        auto* name = dialog->findChild<QLineEdit*>("fileNameEdit");
+        if (name == nullptr) return false;
+        name->setText(QDir::toNativeSeparators(path));
+        static_cast<QDialog*>(dialog)->accept();
+        return true;
+    };
+}
+
+QString WriteImagesOnly(const QTemporaryDir& dir) {
+    Ifs::Archive archive = SamplePackage::SampleArchive();
+    std::erase_if(archive.entries, [](const Ifs::Entry& entry) { return entry.name == "afp"; });
+    const auto encoded = Ifs::Write(archive);
+    REQUIRE(encoded.has_value());
+    const QString out = dir.filePath("images.ifs");
+    QFile written(out);
+    REQUIRE(written.open(QIODevice::WriteOnly));
+    written.write(QByteArray(reinterpret_cast<const char*>(encoded->data()),
+                             static_cast<qsizetype>(encoded->size())));
+    return out;
+}
+
 QTreeWidgetItem* AnimationNamed(QTreeWidget& tree, const QString& name) {
     for (QTreeWidgetItemIterator it(&tree); *it != nullptr; ++it) {
         if ((*it)->text(0) == name && (*it)->text(1) == kAnimationKind) return *it;
@@ -233,6 +261,27 @@ TEST_CASE("A new animation made from the package menu opens, and removing it clo
     CHECK(AnimationNamed(*opened.tree, "fresh") == nullptr);
 }
 
+TEST_CASE("A package with no animation takes its first from another IFS") {
+    QTemporaryDir dir;
+    REQUIRE(dir.isValid());
+    const QString like = WritePackage(dir);
+    Editor::Window window;
+    window.OpenDocument(WriteImagesOnly(dir));
+    auto* tree = window.findChild<QTreeWidget*>();
+    auto* inspector = window.findChild<QTableWidget*>();
+    REQUIRE(tree != nullptr);
+    REQUIRE(inspector != nullptr);
+    CHECK(AnimationNamed(*tree, "intro") == nullptr);
+    Script added({Choose("New animation..."), PickFile(like), Answer("intro"), Answer("first"),
+                  AnswerNumber(8)});
+    RunMenu(added, *tree);
+    CHECK(added.Problems().isEmpty());
+    QTreeWidgetItem* first = AnimationNamed(*tree, "first");
+    REQUIRE(first != nullptr);
+    CHECK(tree->currentItem() == first);
+    CHECK(RowValue(*inspector, "Frame rate") == "60");
+}
+
 TEST_CASE("A taken name is refused with a message and adds nothing") {
     Opened opened;
     Open(opened);
@@ -271,6 +320,7 @@ int main(int argc, char** argv) {
     QTemporaryDir settings;
     QSettings::setDefaultFormat(QSettings::IniFormat);
     QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, settings.path());
+    QApplication::setAttribute(Qt::AA_DontUseNativeDialogs);
     QApplication app(argc, argv);
     QApplication::setOrganizationName("573RendererWindowTests");
     QApplication::setApplicationName("IFS Editor window tests");

@@ -291,7 +291,7 @@ TEST_CASE("A new animation loads with its frames and draws an image placed on it
     auto file = Document::File::Open(bytes);
     REQUIRE(file.has_value());
     if (!file) return;
-    const auto path = file->AddAnimation(kNewAnimation, AnimationPath(*file), kNewFrames);
+    const auto path = file->AddAnimation(kNewAnimation, *file, AnimationPath(*file), kNewFrames);
     const std::string add_error = path.has_value() ? std::string() : path.error();
     INFO(add_error);
     REQUIRE(path.has_value());
@@ -316,4 +316,44 @@ TEST_CASE("A new animation loads with its frames and draws an image placed on it
     REQUIRE(without.has_value());
     if (!without) return;
     CHECK(LoadedFrames(dir, *without, "title") == LoadedFrames(dir, bytes, "title"));
+}
+
+TEST_CASE("A package with no animation plays its first one, copied from another package") {
+    const std::string dir = Support::EnvVar("R573_IIDX_DIR").value_or("");
+    if (dir.empty()) SKIP("R573_IIDX_DIR not set");
+    const std::vector<uint8_t> title_bytes = ReadAll(dir + "/data/graphic/1/title.ifs");
+    auto title = Document::File::Open(title_bytes);
+    REQUIRE(title.has_value());
+    if (!title) return;
+
+    std::optional<Document::File> plain;
+    for (const auto& entry : std::filesystem::directory_iterator(dir + "/data/graphic/1")) {
+        if (!entry.is_regular_file() || entry.path().extension() != ".ifs") continue;
+        auto candidate = Document::File::Open(ReadAll(entry.path()));
+        if (!candidate) continue;
+        const bool has_animation = std::ranges::any_of(
+            candidate->Nodes(), [](const Document::Node& node) { return node.name == "afp"; });
+        const bool has_textures = std::ranges::any_of(
+            candidate->Nodes(), [](const Document::Node& node) { return node.name == "tex"; });
+        if (has_animation || !has_textures) continue;
+        INFO(entry.path().filename().string());
+        plain = std::move(*candidate);
+        break;
+    }
+    REQUIRE(plain.has_value());
+    if (!plain) return;
+    const auto path = plain->AddAnimation(kNewAnimation, *title, AnimationPath(*title), kNewFrames);
+    const std::string add_error = path.has_value() ? std::string() : path.error();
+    INFO(add_error);
+    REQUIRE(path.has_value());
+    if (!path) return;
+    const auto empty = plain->Encode();
+    REQUIRE(empty.has_value());
+    if (!empty) return;
+    CHECK(LoadedFrames(dir, *empty, kNewAnimation) == kNewFrames);
+
+    const std::optional<Placed> placed = PlaceFittingImage(*plain, *path);
+    REQUIRE(placed.has_value());
+    if (!placed) return;
+    CheckDrawnInsideOutline(dir, *empty, *plain, *placed, kNewAnimation);
 }

@@ -170,7 +170,7 @@ TEST_CASE("A drawn background fills the stage size in the header's colour") {
     auto file = Document::File::Open(ReadAll(dir + "/data/graphic/1/title.ifs"));
     REQUIRE(file.has_value());
     if (!file) return;
-    const auto path = file->AddAnimation(kScene, TitlePath(*file), kFrames);
+    const auto path = file->AddAnimation(kScene, *file, TitlePath(*file), kFrames);
     REQUIRE(path.has_value());
     if (!path) return;
     const std::string image = SmallestImage(*file);

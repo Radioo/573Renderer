@@ -120,6 +120,11 @@ private:
     void ShowTimelineMenu(const QPoint& where, uint32_t frame, const QString& label);
     void ShowPackageMenu(const QPoint& where);
     bool EditDocument(const QString& name, const DocumentChange& change);
+    struct AnimationSource {
+        std::optional<Document::File> other;
+        std::string path;
+    };
+    [[nodiscard]] std::optional<AnimationSource> ChooseAnimationSource();
     void AddNewAnimation();
     void RemoveAnimation(const std::string& path, const QString& name);
     void CloseAnimation();

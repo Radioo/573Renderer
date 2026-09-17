@@ -270,3 +270,4 @@ captured. This milestone is the editing itself.
 - `issues/62-add-and-remove-animations.md` (milestone 8)
 - `issues/63-animation-settings.md` (milestone 8)
 - `issues/64-window-tests-and-editing-without-a-host.md` (milestone 8)
+- `issues/65-first-animation-and-converter-exports.md` (milestone 8)

@@ -708,16 +708,42 @@ afp-utils loads a package's animations from `afp/afplist.xml`: for each `afp`
 entry it reads `afp/<name>` and `afp/bsi/<name>`, then the shape files its `geo`
 array lists. So an animation exists when all three agree.
 
-`AddAnimation` makes a new, empty one from an animation already in the package.
-It copies that animation's header (container and data versions, magic, flags,
-stage rect, frame rate, background colour, byte order form) and its imports,
-because every IIDX 33 animation imports the same library and the header is what
-decides the stage size and the rate. It drops the exports and the content, gives
-the root the requested number of empty frames, names the header after the new
-animation (shape names are formed from it) and keeps only the strings still in
-use. The new `afp` entry copies the first entry's node and attribute types, with
-the name alone and no `geo` child: afp-utils skips a missing `geo` array, and
-`AddImageShape` creates it with the first shape.
+`AddAnimation` makes a new, empty one from a template animation, which can be
+in the same package or in another one, so a package with images and no
+animation can get its first. It copies the template's header (container and
+data versions, magic, flags, stage rect, frame rate, background colour, byte
+order form) and its imports, because every IIDX 33 animation imports the same
+library and the header is what decides the stage size and the rate.
+
+The content the converter puts in every IIDX 33 animation comes along too
+(measured by `afp_header_survey_tests`, `docs/local_regression.md`). Every file
+exports two one-frame sprites: `aeplibset`, which places the imported `aeplib`
+class (character 2) at depth 0 and is what brings the script library into the
+movie, and `aep_mask_dummy`, which places a solid shape at depth 1. They are the
+same in all 29110 files. `EmptyLike` (`document/animation_template.h`) keeps the
+definitions those two exports need, following the characters their placements
+name, and the shapes among them, whose `geo/<template>_shape<id>` files are
+copied as `geo/<new name>_shape<id>` and listed in the new `geo` array. A
+template without the shape file is refused. Every other definition, export,
+label and placement is dropped.
+
+29103 files also export a sprite under the movie's own name that holds the root
+without its definitions (28945 exactly), the whole composition as a symbol
+another movie can attach. A new animation gets that sprite too, empty and with
+the root's frame count, under the next free character id, and the exports are
+kept in name order as the converter writes them. The definitions sit in root
+frame 0, and every later frame starts after them. What the editor does not do
+yet is keep that sprite in step with later edits of the root; see ticket 65.
+
+The header is named after the new animation (shape names are formed from it)
+and only the strings still in use are kept. The new `afp` entry copies the
+template list's first entry for its node and attribute types, with the name and
+only the `geo` array the kept shapes need: afp-utils skips an entry without one.
+When the package has no animation list yet, the list is made from the
+template's with no entries, and the `afp`, `afp/bsi` and `geo` directories are
+made as needed (`EnsureDirectory`). The list files keep readable names
+(`afplist_Exml`, `texturelist_Exml`) while every other file in `afp`, `tex` and
+`geo` is stored under its MD5 (`StoredName`).
 
 The name has to be new, 1 to 52 bytes of printable ASCII, without slashes.
 afp-utils reads the name into a 64-byte buffer and forms `<name>_shape<id>` in

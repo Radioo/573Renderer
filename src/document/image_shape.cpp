@@ -134,22 +134,6 @@ Support::Expected<void, std::string> ListShape(Ifs::Archive& archive, std::strin
     return ReplaceEntry(archive, kAnimationList, std::move(*written));
 }
 
-void EnsureShapeDirectory(Ifs::Archive& archive) {
-    if (FindEntry(archive, kShapeDirectory) != nullptr) return;
-    Ifs::Entry directory;
-    directory.kind = Ifs::EntryKind::Directory;
-    directory.name = std::string(kShapeDirectory);
-    directory.type = BinaryXml::Type::kVoid;
-    directory.time = static_cast<int32_t>(archive.time);
-    for (const Ifs::Entry& sibling : archive.entries) {
-        if (sibling.kind != Ifs::EntryKind::Directory) continue;
-        directory.type = sibling.type;
-        directory.time = sibling.time;
-        break;
-    }
-    archive.entries.push_back(std::move(directory));
-}
-
 Support::Expected<AfpAnimation::Animation, std::string>
 ReadAnimationAt(const Ifs::Archive& archive, std::string_view animation_path) {
     const std::string script_path = ScriptPath(animation_path);
@@ -218,7 +202,8 @@ Support::Expected<void, std::string> WriteShape(Ifs::Archive& archive, std::stri
     if (!order) return Support::Unexpected(order.error());
     auto bytes = Ge2dShape::Write(ImageQuad(image, *area, MeshPackage(archive)), *order);
     if (!bytes) return Support::Unexpected(bytes.error());
-    EnsureShapeDirectory(archive);
+    auto directory = EnsureDirectory(archive, kShapeDirectory);
+    if (!directory) return Support::Unexpected(directory.error());
     auto added = AddEntry(archive, kShapeDirectory, std::format("{}_shape{}", animation, id),
                           std::move(*bytes));
     if (!added) return Support::Unexpected(added.error());

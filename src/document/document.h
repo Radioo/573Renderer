@@ -58,7 +58,8 @@ public:
     AddImageShape(std::string_view animation_path, std::string_view image);
 
     [[nodiscard]] Support::Expected<std::string, std::string>
-    AddAnimation(std::string_view name, std::string_view like_path, uint32_t frames);
+    AddAnimation(std::string_view name, const File& like, std::string_view like_path,
+                 uint32_t frames);
 
     [[nodiscard]] Support::Expected<void, std::string> RemoveAnimation(std::string_view path);
 

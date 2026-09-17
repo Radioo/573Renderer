@@ -164,9 +164,11 @@ Support::Expected<void, std::string> File::RemoveAnimation(std::string_view path
     return {};
 }
 
-Support::Expected<std::string, std::string>
-File::AddAnimation(std::string_view name, std::string_view like_path, uint32_t frames) {
-    auto added = Document::AddAnimation(archive_, name, like_path, frames);
+Support::Expected<std::string, std::string> File::AddAnimation(std::string_view name,
+                                                               const File& like,
+                                                               std::string_view like_path,
+                                                               uint32_t frames) {
+    auto added = Document::AddAnimation(archive_, name, like.archive_, like_path, frames);
     if (!added) return Support::Unexpected(added.error());
     outline_ = Outline::Build(archive_);
     return *added;

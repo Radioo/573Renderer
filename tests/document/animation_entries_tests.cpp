@@ -15,8 +15,11 @@
 #include "formats/ifs_names.h"
 
 #include <algorithm>
+#include <cstddef>
 #include <cstdint>
 #include <string>
+#include <utility>
+#include <variant>
 #include <vector>
 
 namespace {
@@ -87,11 +90,137 @@ std::string Error(const auto& result) {
     return result.has_value() ? std::string() : result.error();
 }
 
+constexpr uint32_t kUseMatrix = 0x4;
+
+AfpAnimation::Tag Placed(uint16_t depth, uint16_t character) {
+    AfpAnimation::Placement placement;
+    placement.flags = kUseMatrix;
+    placement.depth = depth;
+    placement.character = character;
+    return AfpAnimation::Tag{placement};
+}
+
+AfpAnimation::Sprite OneFrameSprite(uint16_t id, AfpAnimation::Tag placed) {
+    AfpAnimation::Sprite sprite{.id = id, .container = {}};
+    sprite.container.frames = {AfpAnimation::Frame{.first_tag = 0, .tag_count = 1}};
+    sprite.container.tags = {std::move(placed)};
+    return sprite;
+}
+
+std::vector<uint8_t> ListWithGeo(const std::string& name, uint16_t shape) {
+    BinaryXml::Node geo{.type = BinaryXml::Type::kU16 | BinaryXml::kArrayFlag,
+                        .name = "geo",
+                        .value = {static_cast<uint8_t>(shape >> 8), static_cast<uint8_t>(shape)},
+                        .attributes = {},
+                        .children = {}};
+    BinaryXml::Node named = SamplePackage::Attribute("name", name);
+    named.value.push_back(0);
+    BinaryXml::Node listed{.type = BinaryXml::Type::kVoid,
+                           .name = "afp",
+                           .value = {},
+                           .attributes = {named},
+                           .children = {geo}};
+    BinaryXml::Document doc;
+    doc.root = BinaryXml::Node{.type = BinaryXml::Type::kVoid,
+                               .name = "afplist",
+                               .value = {},
+                               .attributes = {},
+                               .children = {listed}};
+    return *BinaryXml::Write(doc);
+}
+
+Ifs::Archive HelperPackage() {
+    AfpAnimation::Animation like = SamplePackage::SampleAnimation();
+    like.flags = 0xC3;
+    like.strings = {"",          "intro",  "aeplib", "__Packages.aeplib", "aep_mask_dummy",
+                    "aeplibset", "x_other"};
+    like.name = 1;
+    like.imports = {AfpAnimation::Import{
+        .movie = 2, .assets = {AfpAnimation::ImportedAsset{.tag = 2, .name = 3}}}};
+    like.import_initializers = AfpAnimation::ImportInitializers{
+        .leading_word = 0, .entries = {AfpAnimation::ImportInitializer{.tag = 2, .frame = 0}}};
+    like.root.labels.clear();
+    like.root.tags = {AfpAnimation::Tag{OneFrameSprite(3, Placed(0, 2))},
+                      AfpAnimation::Tag{AfpAnimation::Shape{.unread_word = 0, .id = 5}},
+                      AfpAnimation::Tag{OneFrameSprite(6, Placed(1, 5))},
+                      AfpAnimation::Tag{OneFrameSprite(9, Placed(1, 5))}, Placed(5, 9)};
+    like.root.frames = {AfpAnimation::Frame{.first_tag = 0, .tag_count = 5},
+                        AfpAnimation::Frame{.first_tag = 5, .tag_count = 0},
+                        AfpAnimation::Frame{.first_tag = 5, .tag_count = 0}};
+    like.exports = {AfpAnimation::Export{.tag = 6, .name = 4},
+                    AfpAnimation::Export{.tag = 3, .name = 5},
+                    AfpAnimation::Export{.tag = 9, .name = 6}};
+    const auto stored = AfpAnimation::WriteStored(like);
+    REQUIRE(stored.has_value());
+    Ifs::Archive archive = SamplePackage::SampleArchive();
+    for (Ifs::Entry& directory : archive.entries) {
+        if (directory.name != "afp") continue;
+        directory.children = {
+            SamplePackage::File("afplist_Exml", ListWithGeo("intro", 5)),
+            SamplePackage::File(Ifs::HashedName("intro"), stored->data),
+            SamplePackage::Directory(
+                "bsi", {SamplePackage::File(Ifs::HashedName("intro"), stored->script)})};
+    }
+    archive.entries.push_back(SamplePackage::Directory(
+        "geo", {SamplePackage::File(Ifs::HashedName("intro_shape5"), {1, 2, 3, 4})}));
+    return archive;
+}
+
+std::vector<std::string> RootDefinitions(const AfpAnimation::Animation& animation) {
+    std::vector<std::string> kinds;
+    const AfpAnimation::Frame& first = animation.root.frames.at(0);
+    for (uint32_t i = 0; i < first.tag_count; i++) {
+        const AfpAnimation::Tag& tag = animation.root.tags.at(first.first_tag + i);
+        if (const auto* sprite = std::get_if<AfpAnimation::Sprite>(&tag.body)) {
+            kinds.push_back("sprite " + std::to_string(sprite->id) + " of " +
+                            std::to_string(sprite->container.frames.size()));
+        } else if (const auto* shape = std::get_if<AfpAnimation::Shape>(&tag.body)) {
+            kinds.push_back("shape " + std::to_string(shape->id));
+        } else {
+            kinds.emplace_back("other");
+        }
+    }
+    return kinds;
+}
+
+std::vector<std::string> Exports(const AfpAnimation::Animation& animation) {
+    std::vector<std::string> exports;
+    exports.reserve(animation.exports.size());
+    for (const AfpAnimation::Export& exported : animation.exports) {
+        exports.push_back(Document::StringText(animation, exported.name) + " " +
+                          std::to_string(exported.tag));
+    }
+    return exports;
+}
+
+const Ifs::Entry* Stored(const Ifs::Archive& archive, const std::string& directory,
+                         const std::string& logical) {
+    for (const Ifs::Entry& entry : archive.entries) {
+        if (entry.name != directory) continue;
+        for (const Ifs::Entry& child : entry.children) {
+            if (child.name == Ifs::HashedName(logical)) return &child;
+        }
+    }
+    return nullptr;
+}
+
+AfpAnimation::Animation ReadBack(const Ifs::Archive& archive, const std::string& path) {
+    const auto encoded = Ifs::Write(archive);
+    REQUIRE(encoded.has_value());
+    auto file = Document::File::Open(*encoded);
+    REQUIRE(file.has_value());
+    auto made = file->ReadAnimation(path);
+    INFO(Error(made));
+    REQUIRE(made.has_value());
+    return *made;
+}
+
 }
 
 TEST_CASE("A new animation takes another's header and starts with empty frames") {
     Ifs::Archive archive = Package();
-    const auto path = Document::AddAnimation(archive, "fresh", "afp/" + HashPath("intro"), 30);
+    const auto path =
+        Document::AddAnimation(archive, "fresh", archive, "afp/" + HashPath("intro"), 30);
     INFO(Error(path));
     REQUIRE(path.has_value());
     if (!path) return;
@@ -113,9 +242,9 @@ TEST_CASE("A new animation takes another's header and starts with empty frames")
     CHECK(Document::StringText(*made, made->name) == "fresh");
     CHECK(made->strings == std::vector<std::string>{"", "fresh"});
     CHECK(made->root.frames.size() == 30);
-    CHECK(made->root.tags.empty());
+    CHECK(RootDefinitions(*made) == std::vector<std::string>{"sprite 0 of 30"});
     CHECK(made->root.labels.empty());
-    CHECK(made->exports.empty());
+    CHECK(Exports(*made) == std::vector<std::string>{"fresh 0"});
     CHECK(made->container_version == like.container_version);
     CHECK(made->magic == like.magic);
     CHECK(made->data_version == like.data_version);
@@ -148,7 +277,8 @@ TEST_CASE("A new animation keeps what its template imports") {
     REQUIRE(Document::ReplaceEntry(archive, "afp/bsi/" + HashPath("intro"), stored->script)
                 .has_value());
 
-    const auto path = Document::AddAnimation(archive, "fresh", "afp/" + HashPath("intro"), 2);
+    const auto path =
+        Document::AddAnimation(archive, "fresh", archive, "afp/" + HashPath("intro"), 2);
     INFO(Error(path));
     REQUIRE(path.has_value());
     if (!path) return;
@@ -177,32 +307,33 @@ TEST_CASE("A new animation needs a free and loadable name, a frame and a templat
     Ifs::Archive archive = Package();
     const auto before = Ifs::Write(archive);
     REQUIRE(before.has_value());
-    CHECK_FALSE(Document::AddAnimation(archive, "intro", like, 1).has_value());
-    CHECK_FALSE(Document::AddAnimation(archive, "", like, 1).has_value());
-    CHECK_FALSE(Document::AddAnimation(archive, std::string(53, 'a'), like, 1).has_value());
-    CHECK_FALSE(Document::AddAnimation(archive, "a/b", like, 1).has_value());
-    CHECK_FALSE(Document::AddAnimation(archive, "tab\there", like, 1).has_value());
-    CHECK_FALSE(Document::AddAnimation(archive, "caf\xc3\xa9", like, 1).has_value());
-    CHECK_FALSE(Document::AddAnimation(archive, "fresh", like, 0).has_value());
+    CHECK_FALSE(Document::AddAnimation(archive, "intro", archive, like, 1).has_value());
+    CHECK_FALSE(Document::AddAnimation(archive, "", archive, like, 1).has_value());
     CHECK_FALSE(
-        Document::AddAnimation(archive, "fresh", "afp/" + HashPath("nothing"), 1).has_value());
+        Document::AddAnimation(archive, std::string(53, 'a'), archive, like, 1).has_value());
+    CHECK_FALSE(Document::AddAnimation(archive, "a/b", archive, like, 1).has_value());
+    CHECK_FALSE(Document::AddAnimation(archive, "tab\there", archive, like, 1).has_value());
+    CHECK_FALSE(Document::AddAnimation(archive, "caf\xc3\xa9", archive, like, 1).has_value());
+    CHECK_FALSE(Document::AddAnimation(archive, "fresh", archive, like, 0).has_value());
+    CHECK_FALSE(Document::AddAnimation(archive, "fresh", archive, "afp/" + HashPath("nothing"), 1)
+                    .has_value());
     const auto after = Ifs::Write(archive);
     REQUIRE(after.has_value());
     CHECK(*after == *before);
-    CHECK(Document::AddAnimation(archive, std::string(52, 'a'), like, 1).has_value());
+    CHECK(Document::AddAnimation(archive, std::string(52, 'a'), archive, like, 1).has_value());
 }
 
 TEST_CASE("Removing an animation takes its data, byte order, listing and shapes") {
     Ifs::Archive archive = Package();
     const std::string intro = "afp/" + HashPath("intro");
-    const auto fresh = Document::AddAnimation(archive, "fresh", intro, 4);
+    const auto fresh = Document::AddAnimation(archive, "fresh", archive, intro, 4);
     REQUIRE(fresh.has_value());
     if (!fresh) return;
     REQUIRE(Document::AddImage(archive, "added", 4, 3, std::vector<uint8_t>(48, 0x40)).has_value());
     const auto shape = Document::AddImageShape(archive, *fresh, "added");
     INFO(Error(shape));
     REQUIRE(shape.has_value());
-    const auto kept = Document::AddAnimation(archive, "kept", intro, 4);
+    const auto kept = Document::AddAnimation(archive, "kept", archive, intro, 4);
     REQUIRE(kept.has_value());
     if (!kept) return;
     const auto other = Document::AddImageShape(archive, *kept, "added");
@@ -226,7 +357,7 @@ TEST_CASE("Removing an animation takes its data, byte order, listing and shapes"
 TEST_CASE("An animation another one imports, or one that is not listed, is not removed") {
     Ifs::Archive archive = Package();
     const std::string intro = "afp/" + HashPath("intro");
-    const auto fresh = Document::AddAnimation(archive, "fresh", intro, 4);
+    const auto fresh = Document::AddAnimation(archive, "fresh", archive, intro, 4);
     REQUIRE(fresh.has_value());
     if (!fresh) return;
     AfpAnimation::Animation importer = SamplePackage::SampleAnimation();
@@ -251,4 +382,46 @@ TEST_CASE("An animation another one imports, or one that is not listed, is not r
     REQUIRE(after.has_value());
     CHECK(*after == *before);
     CHECK(Document::RemoveAnimation(archive, intro).has_value());
+}
+
+TEST_CASE("A new animation keeps the template's library helpers and exports itself") {
+    Ifs::Archive archive = HelperPackage();
+    const auto path =
+        Document::AddAnimation(archive, "fresh", archive, "afp/" + HashPath("intro"), 4);
+    INFO(Error(path));
+    REQUIRE(path.has_value());
+    if (!path) return;
+    const AfpAnimation::Animation made = ReadBack(archive, *path);
+    CHECK(made.root.frames.size() == 4);
+    for (std::size_t frame = 1; frame < made.root.frames.size(); frame++) {
+        CHECK(made.root.frames[frame].first_tag == 4);
+        CHECK(made.root.frames[frame].tag_count == 0);
+    }
+    CHECK(RootDefinitions(made) ==
+          std::vector<std::string>{"sprite 3 of 1", "shape 5", "sprite 6 of 1", "sprite 7 of 4"});
+    CHECK(Exports(made) == std::vector<std::string>{"aep_mask_dummy 6", "aeplibset 3", "fresh 7"});
+    const Ifs::Entry* shape = Stored(archive, "geo", "fresh_shape5");
+    REQUIRE(shape != nullptr);
+    CHECK(shape->bytes == std::vector<uint8_t>{1, 2, 3, 4});
+    const std::vector<BinaryXml::Node> listings = Listings(archive);
+    REQUIRE(listings.size() == 2);
+    REQUIRE(listings[1].children.size() == 1);
+    CHECK(listings[1].children[0].value == std::vector<uint8_t>{0, 5});
+}
+
+TEST_CASE("A package with no animations takes its first from another package") {
+    const Ifs::Archive from = HelperPackage();
+    Ifs::Archive archive = SamplePackage::SampleArchive();
+    std::erase_if(archive.entries, [](const Ifs::Entry& entry) { return entry.name == "afp"; });
+    const auto path = Document::AddAnimation(archive, "first", from, "afp/" + HashPath("intro"), 2);
+    INFO(Error(path));
+    REQUIRE(path.has_value());
+    if (!path) return;
+    const AfpAnimation::Animation made = ReadBack(archive, *path);
+    CHECK(made.root.frames.size() == 2);
+    CHECK(Exports(made) == std::vector<std::string>{"aep_mask_dummy 6", "aeplibset 3", "first 7"});
+    CHECK(ListedNames(archive) == std::vector<std::vector<uint8_t>>{Bytes("first")});
+    CHECK(Stored(archive, "geo", "first_shape5") != nullptr);
+    CHECK_FALSE(Document::AddAnimation(archive, "second", archive, "afp/" + HashPath("nothing"), 2)
+                    .has_value());
 }

@@ -7,16 +7,20 @@
 #include "document/outline.h"
 #include "support/expected.h"
 
+#include <QFileDialog>
 #include <QInputDialog>
 #include <QLineEdit>
 #include <QSettings>
 #include <QString>
+#include <QStringList>
 
 #include <algorithm>
+#include <cstddef>
 #include <cstdint>
 #include <limits>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace Editor {
@@ -25,25 +29,60 @@ namespace {
 
 constexpr int kMostFrames = std::numeric_limits<uint16_t>::max();
 
-std::optional<std::string> AnyAnimation(const std::vector<Document::Node>& nodes) {
+void CollectAnimations(const std::vector<Document::Node>& nodes,
+                       std::vector<const Document::Node*>& found) {
     for (const Document::Node& node : nodes) {
-        if (node.role == Document::Role::Animation) return node.path;
-        if (auto found = AnyAnimation(node.children)) return found;
+        if (node.role == Document::Role::Animation) found.push_back(&node);
+        CollectAnimations(node.children, found);
     }
-    return std::nullopt;
 }
 
+std::vector<const Document::Node*> Animations(const Document::File& file) {
+    std::vector<const Document::Node*> found;
+    CollectAnimations(file.Nodes(), found);
+    return found;
+}
+
+}
+
+std::optional<Window::AnimationSource> Window::ChooseAnimationSource() {
+    const std::vector<const Document::Node*> own = Animations(*file_);
+    if (!own.empty()) {
+        return AnimationSource{.other = std::nullopt,
+                               .path =
+                                   animation_path_.empty() ? own.front()->path : animation_path_};
+    }
+    const QString chosen = QFileDialog::getOpenFileName(
+        this, tr("Take the new animation's stage, frame rate and library from"), QString(),
+        tr("IFS files (*.ifs);;All files (*)"));
+    if (chosen.isEmpty()) return std::nullopt;
+    auto other = Document::File::Open(ReadFileBytes(chosen));
+    if (!other) {
+        ReportProblem(QString::fromStdString(other.error()));
+        return std::nullopt;
+    }
+    const std::vector<const Document::Node*> theirs = Animations(*other);
+    if (theirs.empty()) {
+        ReportProblem(tr("%1 has no animation either").arg(chosen));
+        return std::nullopt;
+    }
+    QStringList names;
+    for (const Document::Node* node : theirs)
+        names.append(QString::fromStdString(node->name));
+    bool answered = false;
+    const QString picked = QInputDialog::getItem(this, tr("New animation"), tr("Copy from"), names,
+                                                 0, false, &answered);
+    if (!answered) return std::nullopt;
+    const std::string path = theirs[static_cast<std::size_t>(names.indexOf(picked))]->path;
+    return AnimationSource{.other = std::move(*other), .path = path};
 }
 
 void Window::AddNewAnimation() {
     if (!file_) return;
-    const std::optional<std::string> like =
-        animation_path_.empty() ? AnyAnimation(file_->Nodes()) : animation_path_;
-    if (!like) {
-        ReportProblem(tr("This package has no animation to take a stage size and frame rate from"));
-        return;
-    }
-    const auto template_animation = file_->ReadAnimation(*like);
+    std::optional<AnimationSource> source = ChooseAnimationSource();
+    if (!source) return;
+    const Document::File& from = source->other ? *source->other : *file_;
+    const auto template_animation = from.ReadAnimation(source->path);
     if (!template_animation) {
         ReportProblem(QString::fromStdString(template_animation.error()));
         return;
@@ -59,17 +98,18 @@ void Window::AddNewAnimation() {
     if (!answered) return;
 
     const std::string logical = name.toStdString();
-    const std::string like_path = *like;
     std::string made;
     const bool added =
-        EditDocument(tr("New animation %1").arg(name), [&logical, &like_path, frames,
-                                                        &made](Document::File& document) {
-            using Added = Support::Expected<void, std::string>;
-            auto path = document.AddAnimation(logical, like_path, static_cast<uint32_t>(frames));
-            if (!path) return Added(Support::Unexpected(path.error()));
-            made = *path;
-            return Added();
-        });
+        EditDocument(tr("New animation %1").arg(name),
+                     [&logical, &source, frames, &made](Document::File& document) {
+                         using Added = Support::Expected<void, std::string>;
+                         const Document::File& like = source->other ? *source->other : document;
+                         auto path = document.AddAnimation(logical, like, source->path,
+                                                           static_cast<uint32_t>(frames));
+                         if (!path) return Added(Support::Unexpected(path.error()));
+                         made = *path;
+                         return Added();
+                     });
     if (added) SelectEntry(QString::fromStdString(made));
 }
 

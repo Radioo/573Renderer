@@ -9,10 +9,9 @@
 
 namespace Document {
 
-[[nodiscard]] Support::Expected<std::string, std::string> AddAnimation(Ifs::Archive& archive,
-                                                                       std::string_view name,
-                                                                       std::string_view like_path,
-                                                                       uint32_t frames);
+[[nodiscard]] Support::Expected<std::string, std::string>
+AddAnimation(Ifs::Archive& archive, std::string_view name, const Ifs::Archive& like_archive,
+             std::string_view like_path, uint32_t frames);
 
 [[nodiscard]] Support::Expected<void, std::string> RemoveAnimation(Ifs::Archive& archive,
                                                                    std::string_view path);

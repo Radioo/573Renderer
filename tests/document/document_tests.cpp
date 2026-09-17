@@ -4,6 +4,7 @@
 #include "sample_package.h"
 
 #include "document/document.h"
+#include "document/entry_edit.h"
 #include "document/outline.h"
 #include "formats/afp_animation.h"
 #include "formats/ifs_archive.h"
@@ -209,4 +210,11 @@ TEST_CASE("An added image survives an encode and a reopen") {
     const auto details = reopened->Describe("tex/" + HashPath("added"));
     REQUIRE(details.has_value());
     CHECK(details->name == "added");
+}
+
+TEST_CASE("Package list files keep readable names while their siblings are hashed") {
+    CHECK(Document::StoredName("afp", "afplist.xml") == std::string("afplist_Exml"));
+    CHECK(Document::StoredName("tex", "texturelist.xml") == std::string("texturelist_Exml"));
+    CHECK(Document::StoredName("afp", "intro") == Ifs::HashedName("intro"));
+    CHECK(Document::StoredName("afp/bsi", "afplist.xml") == Ifs::HashedName("afplist.xml"));
 }

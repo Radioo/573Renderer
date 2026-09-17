@@ -1,6 +1,7 @@
 #include "document/animation_entries.h"
 
 #include "document/animation_strings.h"
+#include "document/animation_template.h"
 #include "document/entries.h"
 #include "document/entry_edit.h"
 #include "formats/afp_animation.h"
@@ -11,6 +12,7 @@
 #include "support/expected.h"
 
 #include <algorithm>
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <format>
@@ -30,6 +32,10 @@ constexpr std::string_view kAnimationList = "afp/afplist.xml";
 constexpr std::string_view kEntryName = "afp";
 constexpr std::string_view kNameAttribute = "name";
 constexpr std::string_view kShapeList = "geo";
+constexpr std::string_view kListFile = "afplist.xml";
+constexpr std::array<std::string_view, 2> kAnimationDirectories{kAnimationDirectory,
+                                                                kScriptDirectory};
+constexpr uint8_t kShapeListType = BinaryXml::Type::kU16 | BinaryXml::kArrayFlag;
 constexpr std::size_t kLongestName = 52;
 constexpr std::size_t kShapeIdBytes = 2;
 constexpr char kFirstPrintable = ' ';
@@ -95,11 +101,21 @@ Support::Expected<void, std::string> CheckName(std::string_view name) {
     return {};
 }
 
+Support::Expected<BinaryXml::Document, std::string> ListFor(const Ifs::Archive& archive,
+                                                            const BinaryXml::Document& like_list) {
+    if (FindEntry(archive, kAnimationList) != nullptr) return ReadList(archive);
+    BinaryXml::Document fresh = like_list;
+    fresh.root.children.clear();
+    return fresh;
+}
+
 Support::Expected<std::vector<uint8_t>, std::string> Listed(const BinaryXml::Document& list,
-                                                            std::string_view name) {
-    const auto template_listing = std::ranges::find_if(list.root.children, IsListing);
-    if (template_listing == list.root.children.end())
-        return Support::Unexpected(std::string("the animation list names no animation"));
+                                                            const BinaryXml::Document& like_list,
+                                                            std::string_view name,
+                                                            const std::vector<uint16_t>& shapes) {
+    const auto template_listing = std::ranges::find_if(like_list.root.children, IsListing);
+    if (template_listing == like_list.root.children.end())
+        return Support::Unexpected(std::string("the template's animation list names nothing"));
     const bool taken = std::ranges::any_of(list.root.children, [&](const BinaryXml::Node& node) {
         return IsListing(node) && ListedName(node) == name;
     });
@@ -107,7 +123,18 @@ Support::Expected<std::vector<uint8_t>, std::string> Listed(const BinaryXml::Doc
 
     BinaryXml::Document edited = list;
     BinaryXml::Node listing = *template_listing;
+    BinaryXml::Node geo{.type = kShapeListType,
+                        .name = std::string(kShapeList),
+                        .value = {},
+                        .attributes = {},
+                        .children = {}};
+    const auto template_geo =
+        std::ranges::find(listing.children, kShapeList, &BinaryXml::Node::name);
+    if (template_geo != listing.children.end()) geo.type = template_geo->type;
     listing.children.clear();
+    for (const uint16_t id : shapes)
+        BigEndian::AppendU16(geo.value, id);
+    if (!shapes.empty()) listing.children.push_back(std::move(geo));
     BinaryXml::Node named = *NameOf(listing);
     const bool terminated = !named.value.empty() && named.value.back() == 0;
     named.value.assign(name.begin(), name.end());
@@ -117,16 +144,26 @@ Support::Expected<std::vector<uint8_t>, std::string> Listed(const BinaryXml::Doc
     return BinaryXml::Write(edited);
 }
 
-AfpAnimation::Animation EmptyLike(const AfpAnimation::Animation& like, std::string_view name,
-                                  uint32_t frames) {
-    AfpAnimation::Animation made = like;
-    made.exports.clear();
-    made.root = AfpAnimation::Container{};
-    if (like.root.script_labels) made.root.script_labels = std::vector<AfpAnimation::Label>{};
-    made.root.frames.assign(frames, AfpAnimation::Frame{.first_tag = 0, .tag_count = 0});
-    made.name = InternString(made, name);
-    CompactStrings(made);
-    return made;
+Support::Expected<void, std::string> CopyShapes(Ifs::Archive& archive,
+                                                const Ifs::Archive& like_archive,
+                                                std::string_view like_name, std::string_view name,
+                                                const std::vector<uint16_t>& shapes) {
+    if (shapes.empty()) return {};
+    auto directory = EnsureDirectory(archive, kShapeDirectory);
+    if (!directory) return Support::Unexpected(directory.error());
+    for (const uint16_t id : shapes) {
+        const auto source = PathOf(kShapeDirectory, std::format("{}_shape{}", like_name, id));
+        if (!source) return Support::Unexpected(source.error());
+        const Ifs::Entry* shape = FindEntry(like_archive, *source);
+        if (shape == nullptr) {
+            return Support::Unexpected(
+                std::format("the template has no shape file for shape {}", id));
+        }
+        auto added =
+            AddEntry(archive, kShapeDirectory, std::format("{}_shape{}", name, id), shape->bytes);
+        if (!added) return Support::Unexpected(added.error());
+    }
+    return {};
 }
 
 struct Unlisted {
@@ -191,30 +228,41 @@ Support::Expected<void, std::string> CheckNotImported(const Ifs::Archive& archiv
 
 }
 
-Support::Expected<std::string, std::string> AddAnimation(Ifs::Archive& archive,
-                                                         std::string_view name,
-                                                         std::string_view like_path,
-                                                         uint32_t frames) {
+Support::Expected<std::string, std::string>
+AddAnimation(Ifs::Archive& archive, std::string_view name, const Ifs::Archive& like_archive,
+             std::string_view like_path, uint32_t frames) {
     auto named = CheckName(name);
     if (!named) return Support::Unexpected(named.error());
     if (frames == 0) return Support::Unexpected(std::string("an animation needs a frame"));
-    const auto like = ReadAt(archive, like_path);
+    const auto like = ReadAt(like_archive, like_path);
     if (!like) return Support::Unexpected(like.error());
-    const auto list = ReadList(archive);
+    const auto like_list = ReadList(like_archive);
+    if (!like_list) return Support::Unexpected(like_list.error());
+    const auto list = ListFor(archive, *like_list);
     if (!list) return Support::Unexpected(list.error());
-    auto listed = Listed(*list, name);
+    const AnimationTemplate made = EmptyLike(*like, name, frames);
+    auto listed = Listed(*list, *like_list, name, made.shapes);
     if (!listed) return Support::Unexpected(listed.error());
     auto path = PathOf(kAnimationDirectory, name);
     if (!path) return Support::Unexpected(path.error());
-    auto written = AfpAnimation::WriteStored(EmptyLike(*like, name, frames));
+    auto written = AfpAnimation::WriteStored(made.animation);
     if (!written) return Support::Unexpected(written.error());
 
     Ifs::Archive edited = archive;
+    for (const std::string_view directory : kAnimationDirectories) {
+        auto ensured = EnsureDirectory(edited, directory);
+        if (!ensured) return Support::Unexpected(ensured.error());
+    }
+    auto shapes =
+        CopyShapes(edited, like_archive, StringText(*like, like->name), name, made.shapes);
+    if (!shapes) return Support::Unexpected(shapes.error());
     auto data = AddEntry(edited, kAnimationDirectory, name, std::move(written->data));
     if (!data) return Support::Unexpected(data.error());
     auto order = AddEntry(edited, kScriptDirectory, name, std::move(written->script));
     if (!order) return Support::Unexpected(order.error());
-    auto relisted = ReplaceEntry(edited, kAnimationList, std::move(*listed));
+    auto relisted = FindEntry(edited, kAnimationList) != nullptr
+                        ? ReplaceEntry(edited, kAnimationList, std::move(*listed))
+                        : AddEntry(edited, kAnimationDirectory, kListFile, std::move(*listed));
     if (!relisted) return Support::Unexpected(relisted.error());
     archive = std::move(edited);
     return *path;

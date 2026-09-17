@@ -232,6 +232,31 @@ placement differed so the next fix does not have to be guessed. It is a `local`
 test because it needs the install and takes minutes; `document_tests` covers the
 same operations on clips built in code.
 
+## What an animation header holds besides its content (`local` label)
+
+`afp_header_survey_tests` (tests/local/afp_header_survey_tests.cpp) reads every
+animation under `data` and counts what surrounds the content, which is what a
+new animation copies. Over IIDX 33's 29110 animations:
+
+- Every file exports `aep_mask_dummy` and `aeplibset`, both one-frame sprites
+  identical in every file: `aeplibset` places the `aeplib` import (character 2)
+  at depth 0, `aep_mask_dummy` places a shape at depth 1.
+- 29103 export a sprite under the movie's own name, never placed on the root;
+  28945 of those are exactly the root without its sprite and shape definitions,
+  with the same frame count in all 29103. Three exports is the most common count
+  (23209 files).
+- Imports are `aeplib` with the asset `__Packages.aeplib` (27286) or `aeplib`
+  (1824) at tag 2, and the import initializers are always word 0 with `(2, 0)`.
+- 1914 stage sizes, most often 260x350 (4992) and 1920x1080 (2811); 25258 files
+  store the background colour byte swapped and 3852 do not, and every string
+  table is scrambled; 27554 backgrounds are opaque black; 4194 roots carry
+  script labels.
+
+A second case checks how `graphic/1/title.ifs` lays those definitions out:
+exports in name order (`aep_mask_dummy` 6, `aeplibset` 3, `title` 335), and root
+frame 0 opening with sprite 3, the solid shape 5 and sprite 6. The survey case
+reads every IFS, so a full run takes a few minutes.
+
 ## How updates use filters (`local` label)
 
 `filter_span_survey_tests` (tests/local/filter_span_survey_tests.cpp) looks at

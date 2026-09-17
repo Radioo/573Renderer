@@ -23,6 +23,7 @@ namespace Document {
 namespace {
 
 constexpr std::array<std::string_view, 4> kHashedDirectories{"tex", "afp", "afp/bsi", "geo"};
+constexpr std::array<std::string_view, 2> kListFiles{"afp/afplist.xml", "tex/texturelist.xml"};
 
 uint8_t TypeOfSiblings(const std::vector<Ifs::Entry>& siblings) {
     for (const Ifs::Entry& entry : siblings) {
@@ -36,10 +37,46 @@ uint8_t TypeOfSiblings(const std::vector<Ifs::Entry>& siblings) {
 Support::Expected<std::string, std::string> StoredName(std::string_view directory,
                                                        std::string_view logical_name) {
     if (logical_name.empty()) return Support::Unexpected(std::string("an entry needs a name"));
-    if (std::ranges::find(kHashedDirectories, directory) != kHashedDirectories.end()) {
+    const bool list =
+        std::ranges::find(kListFiles, JoinPath(directory, logical_name)) != kListFiles.end();
+    if (!list && std::ranges::find(kHashedDirectories, directory) != kHashedDirectories.end()) {
         return Ifs::HashedName(logical_name);
     }
     return Ifs::EscapeName(logical_name);
+}
+
+Support::Expected<void, std::string> EnsureDirectory(Ifs::Archive& archive, std::string_view path) {
+    const std::size_t slash = path.rfind('/');
+    const std::string_view parent_path =
+        slash == std::string_view::npos ? std::string_view() : path.substr(0, slash);
+    const std::string_view leaf = slash == std::string_view::npos ? path : path.substr(slash + 1);
+    std::vector<Ifs::Entry>* siblings = &archive.entries;
+    if (!parent_path.empty()) {
+        Ifs::Entry* parent = FindEntry(archive, parent_path);
+        if (parent == nullptr || parent->kind != Ifs::EntryKind::Directory)
+            return Support::Unexpected(std::string(parent_path) + " is not a directory here");
+        siblings = &parent->children;
+    }
+    const Ifs::Entry* existing = FindEntry(archive, path);
+    if (existing != nullptr) {
+        if (existing->kind == Ifs::EntryKind::Directory) return {};
+        return Support::Unexpected(std::string(path) + " is a file, not a directory");
+    }
+    auto escaped = Ifs::EscapeName(leaf);
+    if (!escaped) return Support::Unexpected(escaped.error());
+    Ifs::Entry directory;
+    directory.kind = Ifs::EntryKind::Directory;
+    directory.name = std::move(*escaped);
+    directory.type = BinaryXml::Type::kVoid;
+    directory.time = static_cast<int32_t>(archive.time);
+    const auto sibling =
+        std::ranges::find(archive.entries, Ifs::EntryKind::Directory, &Ifs::Entry::kind);
+    if (sibling != archive.entries.end()) {
+        directory.type = sibling->type;
+        directory.time = sibling->time;
+    }
+    siblings->push_back(std::move(directory));
+    return {};
 }
 
 Support::Expected<void, std::string> AddEntry(Ifs::Archive& archive, std::string_view directory,
