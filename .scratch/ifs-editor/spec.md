@@ -258,3 +258,4 @@ captured. This milestone is the editing itself.
 - `issues/50-place-a-texture.md` (milestone 8)
 - `issues/51-select-and-move-on-stage.md` (milestone 8)
 - `issues/52-scale-and-turn-on-stage.md` (milestone 8)
+- `issues/53-keyframe-selection.md` (milestone 8)

@@ -817,7 +817,7 @@ on every frame, and the user thins it out and re-eases it without the render
 moving underneath them. On a bezier segment the two halves cannot carry the
 shape of the whole, so the curve does change there.
 
-`AddKeyAt` and `MoveKeyTo` refuse a frame outside the range the depth was owned
+`AddKeyAt` and the selection edits below refuse a frame outside the range the depth was owned
 over, because `AuthoredPlacements` only writes inside that range and a keyframe
 beyond it would be silently dropped at export.
 
@@ -832,6 +832,25 @@ arity the keyframe already holds, which is the same rule the placement fields
 use, so a keyframe and the placement field it feeds are typed the same way.
 `KeyAt` and `KeyValueText` are the read side, so a widget showing a keyframe
 does not reimplement the lookup or the joining.
+
+## Keyframe selections (`document/key_selection.h`)
+
+A selection is a list of `KeyRef`, a property and a frame. Every selection edit
+works on a copy of the depth and keeps it only when all of it succeeded, so a
+paste or a move that fails halfway leaves nothing behind.
+
+- `CopyKeys` returns a `KeyClip`: the selected keyframes grouped by track in the
+  depth's track order, their frames counted from the earliest selected one, so
+  the spacing between tracks is kept.
+- `PasteKeys` puts a clip down with its first frame at a given frame. A keyframe
+  landing on an existing one replaces its value and ease. A property the depth
+  does not animate yet is started with `AddTrack`, which also refuses the ones
+  that cannot be started (a short twin of a tracked property, for one). It
+  returns the pasted keyframes so the editor can select them.
+- `RemoveKeys` removes them all; a track still keeps its last keyframe.
+- `ShiftKeys` moves them all by the same number of frames. A move that would
+  land on a keyframe that is not moving, or leave the owned range, is refused.
+  It returns where the keyframes went.
 
 ## Export drift (`document/project_drift.h`)
 

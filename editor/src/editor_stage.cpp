@@ -52,22 +52,12 @@ void Window::PickOnStage(double x, double y) {
     ShowFrame();
 }
 
-void Window::EditOnStage(uint16_t depth, const QString& name, const OwnedStageChange& owned,
+void Window::EditOnStage(uint16_t depth, const QString& name, const OwnedChange& owned,
                          const AnimationChange& baked) {
     if (!file_ || animation_path_.empty()) return;
     depth_ = depth;
     if (AuthoredIndexAt(depth, frame_)) {
-        const auto animation = file_->ReadAnimation(animation_path_);
-        if (!animation) {
-            ReportOnce(QString::fromStdString(animation.error()));
-            return;
-        }
-        EditAuthored(name, [&animation, &owned](Document::AuthoredDepth& authored) {
-            using Changed = Support::Expected<void, std::string>;
-            const auto from = Document::BakedFor(*animation, authored);
-            if (!from) return Changed(Support::Unexpected(from.error()));
-            return owned(authored, *from);
-        });
+        EditOwned(name, owned);
         return;
     }
     EditAnimation(name, baked);

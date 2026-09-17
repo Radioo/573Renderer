@@ -59,6 +59,7 @@ const QColor kPlayhead(230, 90, 90);
 
 Timeline::Timeline(QWidget* parent) : QWidget(parent) {
     setMinimumHeight(kEmptyHeight);
+    setFocusPolicy(Qt::ClickFocus);
 }
 
 void Timeline::ShowAnimation(uint32_t frame_count, std::vector<Document::DepthRow> rows,
@@ -69,30 +70,39 @@ void Timeline::ShowAnimation(uint32_t frame_count, std::vector<Document::DepthRo
     frame_ = 0;
     keyed_depth_.reset();
     tracks_.clear();
-    selected_property_.clear();
-    selected_key_.reset();
+    selected_keys_.clear();
     Resize();
     ApplyZoom();
     update();
 }
 
 void Timeline::ShowKeys(std::optional<uint16_t> depth, std::vector<Document::Track> tracks) {
+    if (keyed_depth_ != depth) selected_keys_.clear();
     keyed_depth_ = depth;
     tracks_ = std::move(tracks);
-    if (std::ranges::none_of(tracks_, [this](const Document::Track& track) {
-            return QString::fromStdString(track.property) == selected_property_;
-        })) {
-        selected_property_.clear();
-        selected_key_.reset();
-    }
+    std::erase_if(selected_keys_, [this](const Document::KeyRef& key) {
+        const auto track = std::ranges::find(tracks_, key.property, &Document::Track::property);
+        return track == tracks_.end() ||
+               std::ranges::find(track->keys, key.frame, &Document::Keyframe::frame) ==
+                   track->keys.end();
+    });
     Resize();
     update();
 }
 
 void Timeline::SelectKey(const QString& property, std::optional<uint32_t> frame) {
-    selected_property_ = property;
-    selected_key_ = frame;
+    selected_keys_.clear();
+    if (frame) selected_keys_.push_back({.property = property.toStdString(), .frame = *frame});
     update();
+}
+
+void Timeline::SelectKeys(std::vector<Document::KeyRef> keys) {
+    selected_keys_ = std::move(keys);
+    update();
+}
+
+bool Timeline::IsSelected(const Document::KeyRef& key) const {
+    return std::ranges::find(selected_keys_, key) != selected_keys_.end();
 }
 
 void Timeline::SelectDepth(std::optional<uint16_t> depth) {
@@ -103,14 +113,13 @@ void Timeline::SelectDepth(std::optional<uint16_t> depth) {
 
 void Timeline::Clear() {
     selected_depth_.reset();
+    selected_keys_.clear();
     frame_count_ = 0;
     frame_ = 0;
     rows_.clear();
     labels_.clear();
     keyed_depth_.reset();
     tracks_.clear();
-    selected_property_.clear();
-    selected_key_.reset();
     zoom_.reset();
     setMinimumHeight(kEmptyHeight);
     setMinimumWidth(0);
@@ -249,12 +258,7 @@ void Timeline::ChooseAt(int x, int y) {
     if (lane) {
         const std::vector<Lane> lanes = Lanes();
         const Lane& found = lanes[*lane];
-        if (found.is_property) {
-            const std::optional<uint32_t> key = KeyNear(found.track, x);
-            if (key) emit KeyChosen(QString::fromStdString(tracks_[found.track].property), *key);
-        } else {
-            emit DepthChosen(found.depth);
-        }
+        if (!found.is_property) emit DepthChosen(found.depth);
     }
     const uint32_t frame = XToFrame(x);
     if (frame == frame_) return;
@@ -293,25 +297,72 @@ void Timeline::contextMenuEvent(QContextMenuEvent* event) {
     emit MenuRequested(event->globalPos(), XToFrame(x), LabelNear(x));
 }
 
+void Timeline::PressKeys(const Lane& lane, QPoint at, bool toggle) {
+    const std::optional<uint32_t> key = KeyNear(lane.track, at.x());
+    if (!key) {
+        band_kept_ = toggle ? selected_keys_ : std::vector<Document::KeyRef>{};
+        if (!toggle) selected_keys_.clear();
+        band_from_ = at;
+        band_to_ = at;
+        update();
+        return;
+    }
+    const Document::KeyRef pressed{.property = tracks_[lane.track].property, .frame = *key};
+    if (toggle && IsSelected(pressed)) {
+        std::erase(selected_keys_, pressed);
+        update();
+        return;
+    }
+    if (!toggle && !IsSelected(pressed)) selected_keys_.clear();
+    if (!IsSelected(pressed)) selected_keys_.push_back(pressed);
+    drag_from_ = *key;
+    drag_to_ = *key;
+    update();
+    emit KeyChosen(QString::fromStdString(pressed.property), pressed.frame);
+}
+
+void Timeline::SelectBand(bool adding) {
+    std::vector<Document::KeyRef> chosen = adding ? band_kept_ : std::vector<Document::KeyRef>{};
+    const QRect band = QRect(*band_from_, band_to_).normalized();
+    int y = kRulerHeight;
+    for (const Lane& lane : Lanes()) {
+        const QRect row(0, y, width(), kRowHeight);
+        y += kRowHeight;
+        if (!lane.is_property || !band.intersects(row)) continue;
+        const Document::Track& track = tracks_[lane.track];
+        for (const Document::Keyframe& key : track.keys) {
+            const int x = FrameToX(key.frame);
+            if (x < band.left() - kKeyRadius || x > band.right() + kKeyRadius) continue;
+            const Document::KeyRef found{.property = track.property, .frame = key.frame};
+            if (std::ranges::find(chosen, found) == chosen.end()) chosen.push_back(found);
+        }
+    }
+    selected_keys_ = std::move(chosen);
+}
+
 void Timeline::mousePressEvent(QMouseEvent* event) {
+    drag_from_.reset();
+    band_from_.reset();
+    if (event->button() != Qt::LeftButton) return;
+    const bool toggle = (event->modifiers() & Qt::ControlModifier) != 0;
     const std::optional<std::size_t> lane = LaneAt(event->pos().y());
     if (lane) {
         const std::vector<Lane> lanes = Lanes();
-        const Lane& found = lanes[*lane];
-        if (found.is_property) {
-            const std::optional<uint32_t> key = KeyNear(found.track, event->pos().x());
-            if (key) {
-                dragging_ = found.track;
-                drag_from_ = key;
-            }
-        }
+        if (lanes[*lane].is_property) PressKeys(lanes[*lane], event->pos(), toggle);
     }
-    ChooseAt(event->pos().x(), event->pos().y());
+    if (!(band_from_ && toggle)) ChooseAt(event->pos().x(), event->pos().y());
 }
 
 void Timeline::mouseMoveEvent(QMouseEvent* event) {
     if ((event->buttons() & Qt::LeftButton) == 0) return;
-    if (dragging_) {
+    if (drag_from_) {
+        drag_to_ = XToFrame(event->pos().x());
+        update();
+        return;
+    }
+    if (band_from_) {
+        band_to_ = event->pos();
+        SelectBand((event->modifiers() & Qt::ControlModifier) != 0);
         update();
         return;
     }
@@ -319,18 +370,39 @@ void Timeline::mouseMoveEvent(QMouseEvent* event) {
 }
 
 void Timeline::mouseReleaseEvent(QMouseEvent* event) {
-    if (!dragging_ || !drag_from_) {
-        dragging_.reset();
-        drag_from_.reset();
-        return;
-    }
-    const std::size_t track = *dragging_;
-    const uint32_t from = *drag_from_;
-    dragging_.reset();
+    if (event->button() != Qt::LeftButton) return;
+    const std::optional<uint32_t> from = drag_from_;
     drag_from_.reset();
-    const uint32_t to = XToFrame(event->pos().x());
-    if (to == from || track >= tracks_.size()) return;
-    emit KeyMoved(QString::fromStdString(tracks_[track].property), from, to);
+    band_from_.reset();
+    update();
+    if (!from) return;
+    const int64_t by =
+        static_cast<int64_t>(XToFrame(event->pos().x())) - static_cast<int64_t>(*from);
+    if (by != 0) emit KeysShifted(by);
+}
+
+void Timeline::DrawKeys(QPainter& painter, const Document::Track& track, int y) const {
+    const int64_t shift =
+        drag_from_ ? static_cast<int64_t>(drag_to_) - static_cast<int64_t>(*drag_from_) : 0;
+    const int middle = y + kRowHeight / 2;
+    for (const Document::Keyframe& key : track.keys) {
+        const bool selected = IsSelected({.property = track.property, .frame = key.frame});
+        const int64_t shown = static_cast<int64_t>(key.frame) + (selected ? shift : 0);
+        const int x = FrameToX(static_cast<uint32_t>(std::clamp<int64_t>(
+            shown, 0, frame_count_ > 0 ? static_cast<int64_t>(frame_count_ - 1) : 0)));
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(selected ? kKeySelected : kKey);
+        if (key.ease == Document::Ease::Hold) {
+            painter.drawRect(QRect(x - kKeyRadius + 1, middle - kKeyRadius + 1, 2 * kKeyRadius - 2,
+                                   2 * kKeyRadius - 2));
+        } else {
+            const QPolygon diamond({QPoint(x, middle - kKeyRadius), QPoint(x + kKeyRadius, middle),
+                                    QPoint(x, middle + kKeyRadius),
+                                    QPoint(x - kKeyRadius, middle)});
+            painter.drawPolygon(diamond);
+        }
+    }
+    painter.setBrush(Qt::NoBrush);
 }
 
 void Timeline::paintEvent(QPaintEvent* event) {
@@ -368,24 +440,7 @@ void Timeline::paintEvent(QPaintEvent* event) {
                 painter.drawLine(FrameToX(track.keys.front().frame), y + kRowHeight / 2,
                                  FrameToX(track.keys.back().frame), y + kRowHeight / 2);
             }
-            const bool selected_row = QString::fromStdString(track.property) == selected_property_;
-            for (const Document::Keyframe& key : track.keys) {
-                const int x = FrameToX(key.frame);
-                const int middle = y + kRowHeight / 2;
-                const bool selected = selected_row && selected_key_ == key.frame;
-                painter.setPen(Qt::NoPen);
-                painter.setBrush(selected ? kKeySelected : kKey);
-                if (key.ease == Document::Ease::Hold) {
-                    painter.drawRect(QRect(x - kKeyRadius + 1, middle - kKeyRadius + 1,
-                                           2 * kKeyRadius - 2, 2 * kKeyRadius - 2));
-                } else {
-                    const QPolygon diamond(
-                        {QPoint(x, middle - kKeyRadius), QPoint(x + kKeyRadius, middle),
-                         QPoint(x, middle + kKeyRadius), QPoint(x - kKeyRadius, middle)});
-                    painter.drawPolygon(diamond);
-                }
-            }
-            painter.setBrush(Qt::NoBrush);
+            DrawKeys(painter, track, y);
             y += kRowHeight;
             continue;
         }
@@ -411,6 +466,11 @@ void Timeline::paintEvent(QPaintEvent* event) {
     const int playhead = FrameToX(frame_);
     painter.setPen(kPlayhead);
     painter.drawLine(playhead, 0, playhead, height());
+    if (band_from_) {
+        painter.setPen(kKeySelected);
+        painter.setBrush(Qt::NoBrush);
+        painter.drawRect(QRect(*band_from_, band_to_).normalized());
+    }
 }
 
 }

@@ -7,6 +7,7 @@
 #include "document/clip.h"
 #include "document/history.h"
 #include "document/inspector.h"
+#include "document/key_selection.h"
 #include "document/playback.h"
 #include "document/project.h"
 #include "formats/afp_animation.h"
@@ -56,7 +57,7 @@ using DocumentChange = std::function<Support::Expected<void, std::string>(Docume
 using AuthoredChange =
     std::function<Support::Expected<void, std::string>(Document::AuthoredDepth&)>;
 
-using OwnedStageChange = std::function<Support::Expected<void, std::string>(
+using OwnedChange = std::function<Support::Expected<void, std::string>(
     Document::AuthoredDepth&, const Document::BakedDepth&)>;
 
 class Timeline;
@@ -95,7 +96,14 @@ private:
     void ShowKeysForDepth(const Document::AuthoredDepth* owned);
     bool EditAuthored(const QString& name, const AuthoredChange& change);
     void ChooseKey(const QString& property, uint32_t frame);
-    void MoveKey(const QString& property, uint32_t from, uint32_t to);
+    void FocusKey(const QString& property, uint32_t frame);
+    bool EditOwned(const QString& name, const OwnedChange& change);
+    void AddKeyActions();
+    void CopySelectedKeys();
+    void PasteCopiedKeys();
+    void RemoveSelectedKeys();
+    void SelectAllKeys();
+    void ShiftSelectedKeys(int64_t by);
     void ShowKeyMenu(const QPoint& where, const QString& property, uint32_t frame, bool on_key);
     bool ApplyKeyEdit(const QString& value);
     void StartAnimating();
@@ -135,7 +143,7 @@ private:
     [[nodiscard]] bool OutlinesMatchView() const;
     void UpdateOutlines(const AfpAnimation::Animation& animation);
     void PickOnStage(double x, double y);
-    void EditOnStage(uint16_t depth, const QString& name, const OwnedStageChange& owned,
+    void EditOnStage(uint16_t depth, const QString& name, const OwnedChange& owned,
                      const AnimationChange& baked);
     void MoveOnStage(uint16_t depth, double dx, double dy);
     void ReshapeOnStage(uint16_t depth, double scale_x, double scale_y, double turn);
@@ -172,6 +180,7 @@ private:
     std::vector<Document::AuthoredDepth> authored_;
     QString key_property_;
     std::optional<uint32_t> key_frame_;
+    std::optional<Document::KeyClip> copied_keys_;
     std::string package_name_;
     std::string animation_path_;
     std::string animation_name_;

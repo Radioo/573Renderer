@@ -11,7 +11,6 @@
 #include <optional>
 #include <string>
 #include <string_view>
-#include <utility>
 #include <vector>
 
 namespace Document {
@@ -173,21 +172,6 @@ Support::Expected<void, std::string> SetKeyframeEase(Track& track, uint32_t fram
     if (!shaped) return Support::Unexpected(shaped.error());
     found->ease = ease;
     found->bezier = bezier;
-    return {};
-}
-
-Support::Expected<void, std::string> RetimeKeyframe(Track& track, uint32_t from, uint32_t to) {
-    if (from == to) return {};
-    const auto found = Find(track, from);
-    if (found == track.keys.end())
-        return Support::Unexpected("frame " + std::to_string(from) + " holds no keyframe");
-    if (Find(track, to) != track.keys.end())
-        return Support::Unexpected("frame " + std::to_string(to) + " already holds a keyframe");
-    Keyframe moved = *found;
-    moved.frame = to;
-    track.keys.erase(found);
-    const auto at = std::ranges::upper_bound(track.keys, to, {}, &Keyframe::frame);
-    track.keys.insert(at, std::move(moved));
     return {};
 }
 

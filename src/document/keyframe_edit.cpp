@@ -71,15 +71,6 @@ Support::Expected<void, std::string> RemoveKeyAt(AuthoredDepth& authored, std::s
     return RemoveKeyframe(**track, frame);
 }
 
-Support::Expected<void, std::string> MoveKeyTo(AuthoredDepth& authored, std::string_view property,
-                                               uint32_t from, uint32_t to) {
-    auto within = InRange(authored, to);
-    if (!within) return Support::Unexpected(within.error());
-    auto track = TrackOf(authored, property);
-    if (!track) return Support::Unexpected(track.error());
-    return RetimeKeyframe(**track, from, to);
-}
-
 Support::Expected<void, std::string> SetKeyValueAt(AuthoredDepth& authored,
                                                    std::string_view property, uint32_t frame,
                                                    std::string_view value) {

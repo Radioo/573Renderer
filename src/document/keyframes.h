@@ -53,9 +53,6 @@ SetKeyframeValue(Track& track, uint32_t frame, const std::vector<int64_t>& value
 [[nodiscard]] Support::Expected<void, std::string> SetKeyframeEase(Track& track, uint32_t frame,
                                                                    Ease ease, Bezier bezier);
 
-[[nodiscard]] Support::Expected<void, std::string> RetimeKeyframe(Track& track, uint32_t from,
-                                                                  uint32_t to);
-
 [[nodiscard]] Support::Expected<void, std::string> RemoveKeyframe(Track& track, uint32_t frame);
 
 }

@@ -123,28 +123,13 @@ TEST_CASE("A keyframe that would break the track is refused") {
     CHECK(track.keys.size() == 1);
 }
 
-TEST_CASE("A keyframe can be given a new value, a new ease and a new time") {
+TEST_CASE("A keyframe can be given a new value and a new ease") {
     Document::Track track = Two(0, 1000, Document::Ease::Linear);
     REQUIRE(Document::SetKeyframeValue(track, 20, {2000, 200}).has_value());
     CHECK(Sampled(track, 20) == std::vector<int64_t>{2000, 200});
 
     REQUIRE(Document::SetKeyframeEase(track, 10, Document::Ease::Hold, {}).has_value());
     CHECK(Sampled(track, 15) == std::vector<int64_t>{0, 0});
-
-    REQUIRE(Document::RetimeKeyframe(track, 20, 40).has_value());
-    CHECK(track.keys.back().frame == 40);
-    CHECK(Sampled(track, 40) == std::vector<int64_t>{2000, 200});
-    CHECK(Document::CheckTrack(track).has_value());
-}
-
-TEST_CASE("Retiming a keyframe past its neighbour keeps the track in order") {
-    Document::Track track{.property = "Translation",
-                          .keys = {Key(10, {0}), Key(20, {1}), Key(30, {2})}};
-    REQUIRE(Document::RetimeKeyframe(track, 10, 25).has_value());
-    CHECK(track.keys[0].frame == 20);
-    CHECK(track.keys[1].frame == 25);
-    CHECK(track.keys[2].frame == 30);
-    CHECK(track.keys[1].value == std::vector<int64_t>{0});
     CHECK(Document::CheckTrack(track).has_value());
 }
 
@@ -153,8 +138,6 @@ TEST_CASE("An edit to a keyframe that is not there is refused") {
     CHECK_FALSE(Document::SetKeyframeValue(track, 11, {1, 1}).has_value());
     CHECK_FALSE(Document::SetKeyframeValue(track, 10, {1}).has_value());
     CHECK_FALSE(Document::SetKeyframeEase(track, 11, Document::Ease::Hold, {}).has_value());
-    CHECK_FALSE(Document::RetimeKeyframe(track, 11, 12).has_value());
-    CHECK_FALSE(Document::RetimeKeyframe(track, 10, 20).has_value());
     CHECK_FALSE(Document::RemoveKeyframe(track, 11).has_value());
     CHECK(track == Two(0, 1000, Document::Ease::Linear));
 }

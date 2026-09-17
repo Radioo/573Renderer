@@ -82,23 +82,6 @@ TEST_CASE("A property nothing animates is not a property that can be keyed") {
     CHECK(added.error().find("Rotate skew") != std::string::npos);
 }
 
-TEST_CASE("A keyframe moves to another frame inside the range") {
-    Document::AuthoredDepth depth = Depth();
-    REQUIRE(Document::AddKeyAt(depth, "Translation", 4).has_value());
-    REQUIRE(Document::MoveKeyTo(depth, "Translation", 4, 6).has_value());
-
-    const Document::Track& track = TrackOf(depth, "Translation");
-    REQUIRE(track.keys.size() == 3);
-    CHECK(track.keys[1].frame == 6);
-    CHECK(std::ranges::is_sorted(track.keys, {}, &Document::Keyframe::frame));
-}
-
-TEST_CASE("A keyframe cannot be moved outside the authored range") {
-    Document::AuthoredDepth depth = Depth();
-    CHECK_FALSE(Document::MoveKeyTo(depth, "Translation", 8, 12).has_value());
-    CHECK(TrackOf(depth, "Translation").keys.back().frame == 8);
-}
-
 TEST_CASE("A keyframe value is set where the keyframe is") {
     Document::AuthoredDepth depth = Depth();
     REQUIRE(Document::SetKeyValueAt(depth, "Translation", 8, "1600, 0").has_value());
@@ -168,7 +151,6 @@ TEST_CASE("Removing the last keyframe of a property is refused") {
 TEST_CASE("A keyframe of a property the depth does not animate cannot be reached") {
     Document::AuthoredDepth depth = Depth();
     CHECK_FALSE(Document::RemoveKeyAt(depth, "Multiply colour", 0).has_value());
-    CHECK_FALSE(Document::MoveKeyTo(depth, "Multiply colour", 0, 1).has_value());
     CHECK_FALSE(Document::SetKeyValueAt(depth, "Multiply colour", 0, "1").has_value());
     CHECK_FALSE(Document::SetKeyEaseAt(depth, "Multiply colour", 0, Document::Ease::Linear, {})
                     .has_value());

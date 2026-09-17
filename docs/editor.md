@@ -248,9 +248,17 @@ nobody touched asks nothing.
 Selecting an owned depth opens its animated properties as lanes under its depth
 row on the timeline, one per track, with a mark at every keyframe: a diamond for
 a keyframe the animation eases out of and a square for one it holds. Clicking a
-mark selects that keyframe, dragging it retimes it, and right-clicking a lane
-offers to add a keyframe where there is none, and to remove one or change how it
-leaves its frame where there is. An ease of bezier asks for its four control
+mark selects that keyframe alone, Ctrl-clicking adds or drops it, and dragging
+across empty lane space draws a box that selects every keyframe it touches (with
+Ctrl, on top of what was selected). Dragging a selected mark moves the whole
+selection by the same number of frames, shown live, as one undo step
+(`Document::ShiftKeys`). With the timeline focused, Ctrl+C copies the selection,
+Ctrl+V pastes it with its earliest keyframe on the playhead into the depth
+selected there (starting any track it does not have yet), Delete removes it and
+Ctrl+A selects every keyframe of the depth. Right-clicking a lane offers the same
+copy, paste and delete, to add a keyframe where there is none, and to remove one
+or change how it leaves its frame where there is. The copied keyframes are kept
+by the window, so they can be pasted into another owned depth. An ease of bezier asks for its four control
 points as `x1, y1, x2, y2`.
 
 With a keyframe selected the inspector carries three rows for it above the

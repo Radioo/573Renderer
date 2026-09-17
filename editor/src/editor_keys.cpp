@@ -95,10 +95,8 @@ bool Window::EditAuthored(const QString& name, const AuthoredChange& change) {
 }
 
 void Window::ChooseKey(const QString& property, uint32_t frame) {
-    key_property_ = property;
-    key_frame_ = frame;
     timeline_->SelectKey(property, frame);
-    ShowFrame();
+    FocusKey(property, frame);
 }
 
 bool Window::ApplyKeyEdit(const QString& value) {
@@ -147,16 +145,6 @@ void Window::StartAnimating() {
     }
 }
 
-void Window::MoveKey(const QString& property, uint32_t from, uint32_t to) {
-    const std::string name = property.toStdString();
-    if (EditAuthored(tr("Move the %1 keyframe to frame %2").arg(property).arg(to),
-                     [&name, from, to](Document::AuthoredDepth& owned) {
-                         return Document::MoveKeyTo(owned, name, from, to);
-                     })) {
-        ChooseKey(property, to);
-    }
-}
-
 void Window::ShowKeyMenu(const QPoint& where, const QString& property, uint32_t frame,
                          bool on_key) {
     if (!depth_) return;
@@ -177,6 +165,18 @@ void Window::ShowKeyMenu(const QPoint& where, const QString& property, uint32_t 
     QAction* hold = ease != nullptr ? ease->addAction(tr("Hold")) : nullptr;
     QAction* linear = ease != nullptr ? ease->addAction(tr("Linear")) : nullptr;
     QAction* bezier = ease != nullptr ? ease->addAction(tr("Bezier...")) : nullptr;
+    menu.addSeparator();
+    const std::size_t selected = timeline_->SelectedKeys().size();
+    QAction* copy =
+        selected > 0
+            ? menu.addAction(tr("Copy %n keyframe(s)", nullptr, static_cast<int>(selected)))
+            : nullptr;
+    QAction* paste =
+        copied_keys_ ? menu.addAction(tr("Paste keyframes at frame %1").arg(frame_)) : nullptr;
+    QAction* erase =
+        selected > 0
+            ? menu.addAction(tr("Delete %n keyframe(s)", nullptr, static_cast<int>(selected)))
+            : nullptr;
     if (key) {
         for (QAction* one : {hold, linear, bezier})
             one->setCheckable(true);
@@ -188,6 +188,18 @@ void Window::ShowKeyMenu(const QPoint& where, const QString& property, uint32_t 
     const QAction* chosen = menu.exec(where);
     if (chosen == nullptr) return;
 
+    if (chosen == copy) {
+        CopySelectedKeys();
+        return;
+    }
+    if (chosen == paste) {
+        PasteCopiedKeys();
+        return;
+    }
+    if (chosen == erase) {
+        RemoveSelectedKeys();
+        return;
+    }
     if (chosen == add) {
         EditAuthored(tr("Add a %1 keyframe at frame %2").arg(property).arg(frame),
                      [&name, frame](Document::AuthoredDepth& owned) {

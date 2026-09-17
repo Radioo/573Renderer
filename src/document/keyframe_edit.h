@@ -17,9 +17,6 @@ AddKeyAt(AuthoredDepth& authored, std::string_view property, uint32_t frame);
 [[nodiscard]] Support::Expected<void, std::string>
 RemoveKeyAt(AuthoredDepth& authored, std::string_view property, uint32_t frame);
 
-[[nodiscard]] Support::Expected<void, std::string>
-MoveKeyTo(AuthoredDepth& authored, std::string_view property, uint32_t from, uint32_t to);
-
 [[nodiscard]] Support::Expected<void, std::string> SetKeyValueAt(AuthoredDepth& authored,
                                                                  std::string_view property,
                                                                  uint32_t frame,

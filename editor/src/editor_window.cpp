@@ -165,8 +165,9 @@ void Window::BuildPanels() {
     connect(timeline_, &Timeline::FrameChosen, this, &Window::SeekTo);
     connect(timeline_, &Timeline::DepthChosen, this, &Window::ChooseDepth);
     connect(timeline_, &Timeline::MenuRequested, this, &Window::ShowTimelineMenu);
-    connect(timeline_, &Timeline::KeyChosen, this, &Window::ChooseKey);
-    connect(timeline_, &Timeline::KeyMoved, this, &Window::MoveKey);
+    connect(timeline_, &Timeline::KeyChosen, this, &Window::FocusKey);
+    connect(timeline_, &Timeline::KeysShifted, this, &Window::ShiftSelectedKeys);
+    AddKeyActions();
     connect(timeline_, &Timeline::KeyMenuRequested, this, &Window::ShowKeyMenu);
     auto* timeline_area = new QScrollArea;
     timeline_area->setWidget(timeline_);

@@ -1,10 +1,12 @@
 #pragma once
 
+#include "document/key_selection.h"
 #include "document/keyframes.h"
 #include "document/outline.h"
 #include "document/timeline.h"
 
 #include <QPoint>
+#include <QRect>
 #include <QString>
 #include <QWidget>
 
@@ -32,6 +34,10 @@ public:
                        std::vector<Document::AnimationLabel> labels);
     void ShowKeys(std::optional<uint16_t> depth, std::vector<Document::Track> tracks);
     void SelectKey(const QString& property, std::optional<uint32_t> frame);
+    void SelectKeys(std::vector<Document::KeyRef> keys);
+    [[nodiscard]] const std::vector<Document::KeyRef>& SelectedKeys() const {
+        return selected_keys_;
+    }
     void SelectDepth(std::optional<uint16_t> depth);
     void Clear();
     void SetFrame(uint32_t frame);
@@ -40,7 +46,7 @@ signals:
     void FrameChosen(uint32_t frame);
     void DepthChosen(uint32_t depth);
     void KeyChosen(const QString& property, uint32_t frame);
-    void KeyMoved(const QString& property, uint32_t from, uint32_t to);
+    void KeysShifted(int64_t by);
     void MenuRequested(const QPoint& where, uint32_t frame, const QString& label);
     void KeyMenuRequested(const QPoint& where, const QString& property, uint32_t frame,
                           bool on_key);
@@ -70,6 +76,10 @@ private:
     [[nodiscard]] uint32_t XToFrame(int x) const;
     [[nodiscard]] std::optional<uint32_t> KeyNear(std::size_t track, int x) const;
     void ChooseAt(int x, int y);
+    void PressKeys(const Lane& lane, QPoint at, bool toggle);
+    [[nodiscard]] bool IsSelected(const Document::KeyRef& key) const;
+    void SelectBand(bool adding);
+    void DrawKeys(QPainter& painter, const Document::Track& track, int y) const;
     void Resize();
     [[nodiscard]] QString LabelNear(int x) const;
 
@@ -80,10 +90,12 @@ private:
     std::optional<uint16_t> keyed_depth_;
     std::optional<uint16_t> selected_depth_;
     std::vector<Document::Track> tracks_;
-    QString selected_property_;
-    std::optional<uint32_t> selected_key_;
-    std::optional<std::size_t> dragging_;
+    std::vector<Document::KeyRef> selected_keys_;
     std::optional<uint32_t> drag_from_;
+    uint32_t drag_to_ = 0;
+    std::optional<QPoint> band_from_;
+    QPoint band_to_;
+    std::vector<Document::KeyRef> band_kept_;
     std::optional<double> zoom_;
 };
 
