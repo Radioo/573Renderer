@@ -18,6 +18,7 @@ Windows named pipe (ADR 0007).
 | `Resize` | viewport width and height |
 | `Render` | none |
 | `ShowSymbol` | the export name of a symbol in the loaded animation |
+| `BackgroundFill` | whether the animation's background is drawn |
 
 A reply is a `ReplyMessage` holding `Done`, `Loaded` (frame count and labels),
 `Frame` (the shared texture handle as a u64, its size, the frame drawn, and
@@ -68,6 +69,7 @@ unloads and exits with code 0.
 | `Resize` | drops the shared texture so the next render makes one at the new size | `Done` |
 | `Render` | draws one frame at the game's render size, copies it into the shared texture (scaled when the viewport size differs) | `Frame` |
 | `ShowSymbol` | `AttachSymbol`: attaches the named symbol onto the root movie clip, so the root clip now plays that symbol from frame 0 | `Loaded` |
+| `BackgroundFill` | `SetBackgroundDrawn`: sets or clears movie flag `0x20` on the stream, and remembers the choice so every later load, reload, animation switch and symbol applies it again | `Done` |
 
 `Loaded` carries the root clip's frame count and labels read back from
 afp-core. `Frame` carries the root clip's current frame. A request the host
@@ -93,7 +95,7 @@ destructor closes the pipe, gives the host five seconds to exit and terminates
 it if it does not.
 
 One method per request: `Boot`, `LoadPackage`, `SelectAnimation`, `Seek`,
-`Resize`, `Render`, `ShowSymbol`. Each builds its FlatBuffer, calls through
+`Resize`, `Render`, `ShowSymbol`, `SetBackgroundDrawn`. Each builds its FlatBuffer, calls through
 `PreviewChannel::Client` and decodes the reply into a plain struct
 (`Loaded{frame_count, labels}`,
 `Frame{shared_handle, width, height, frame, stage_width, stage_height}`).

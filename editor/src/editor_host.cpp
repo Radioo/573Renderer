@@ -78,6 +78,11 @@ Support::Expected<void, std::string> Host::Resize(uint32_t width, uint32_t heigh
     return host_->Resize(width, height);
 }
 
+Support::Expected<void, std::string> Host::SetBackgroundDrawn(bool drawn) {
+    if (host_ == nullptr) return Support::Unexpected(std::string("no preview host is running"));
+    return host_->SetBackgroundDrawn(drawn);
+}
+
 Support::Expected<PreviewClient::Frame, std::string> Host::Render() {
     if (host_ == nullptr) return Support::Unexpected(std::string("no preview host is running"));
     return host_->Render();

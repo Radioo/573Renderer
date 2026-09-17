@@ -268,3 +268,4 @@ captured. This milestone is the editing itself.
 - `issues/60-trim-spans.md` (milestone 8)
 - `issues/61-filter-lists.md` (milestone 8)
 - `issues/62-add-and-remove-animations.md` (milestone 8)
+- `issues/63-animation-settings.md` (milestone 8)

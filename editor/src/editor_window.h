@@ -123,6 +123,7 @@ private:
     void AddNewAnimation();
     void RemoveAnimation(const std::string& path, const QString& name);
     void CloseAnimation();
+    void DrawBackground(bool drawn);
     void SelectEntry(const QString& path);
     void Undo();
     void Redo();
@@ -168,6 +169,7 @@ private:
     ads::CDockManager* docks_ = nullptr;
     QTreeWidget* package_tree_ = nullptr;
     QTableWidget* inspector_ = nullptr;
+    QAction* background_action_ = nullptr;
     Viewport* viewport_ = nullptr;
     Timeline* timeline_ = nullptr;
     QTimer* resize_timer_ = nullptr;

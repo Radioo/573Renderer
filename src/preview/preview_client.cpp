@@ -199,6 +199,18 @@ Support::Expected<void, std::string> Host::Resize(uint32_t width, uint32_t heigh
     return {};
 }
 
+Support::Expected<void, std::string> Host::SetBackgroundDrawn(bool drawn) {
+    flatbuffers::FlatBufferBuilder builder;
+    const auto fill = PreviewProtocol::CreateBackgroundFill(builder, drawn);
+    builder.Finish(PreviewProtocol::CreateRequestMessage(
+        builder, PreviewProtocol::Request::BackgroundFill, fill.Union()));
+    auto reply = Call(Finished(builder), "BackgroundFill");
+    if (!reply) return Support::Unexpected(reply.error());
+    auto message = Decode(*reply, "BackgroundFill");
+    if (!message) return Support::Unexpected(message.error());
+    return {};
+}
+
 Support::Expected<Frame, std::string> Host::Render() {
     flatbuffers::FlatBufferBuilder builder;
     const auto render = PreviewProtocol::CreateRender(builder);

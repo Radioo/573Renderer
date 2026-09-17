@@ -303,6 +303,14 @@ an HSV filter, and, on a filter's rows, to remove that filter
 (`Window::ShowInspectorMenu`). The value row is the one editable cell an owned depth has, because
 the placement rows below it are produced from the keyframes rather than edited.
 
+With no depth selected on the root timeline the inspector shows the
+animation's settings instead (stage size, frame rate, background colour and
+whether the header's colour is used), and editing one is an undoable animation
+edit like any other. `Playback > Draw the background colour` asks the preview
+host to draw the animation's background (`Window::DrawBackground`). It is off by
+default, as in the game, is remembered in the settings and is sent again
+whenever the host starts.
+
 What those rows are is `Document::InspectFrame`, not window code: `ShowFrame`
 reads the animation, works out which depth the project owns here, and hands the
 selection to it. `FillInspector` copies the rows into the table and stores each

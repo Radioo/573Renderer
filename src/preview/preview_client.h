@@ -68,6 +68,8 @@ public:
 
     [[nodiscard]] Support::Expected<Frame, std::string> Render();
 
+    [[nodiscard]] Support::Expected<void, std::string> SetBackgroundDrawn(bool drawn);
+
     [[nodiscard]] const std::string& LastRequest() const { return client_.LastRequest(); }
 
 private:

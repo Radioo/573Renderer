@@ -1,5 +1,6 @@
 #include "document/inspector.h"
 
+#include "document/animation_settings.h"
 #include "document/authored.h"
 #include "document/camera_edit.h"
 #include "document/clip.h"
@@ -117,6 +118,10 @@ std::vector<InspectedRow> InspectFrame(const AfpAnimation::Animation& animation,
         } else {
             AppendPlacement(rows, animation, *placement, owned);
         }
+    }
+    if (!selection.depth && selection.clip == ClipId{}) {
+        for (const Field& field : AnimationSettingFields(animation))
+            rows.push_back(InspectedRow{.field = field, .edits = EditTarget::Animation});
     }
     AppendCamera(rows, *clip, selection.frame);
     return rows;

@@ -88,15 +88,19 @@ TEST_CASE("A depth that holds nothing on a frame says so and edits nothing") {
     }));
 }
 
-TEST_CASE("Nothing selected inspects nothing") {
+TEST_CASE("Nothing selected inspects only the animation's settings") {
     const AfpAnimation::Animation animation = Scene();
-    CHECK(Document::InspectFrame(animation, Document::Selection{.depth = std::nullopt,
-                                                                .frame = 0,
-                                                                .owned = nullptr,
-                                                                .key_property = {},
-                                                                .key_frame = std::nullopt,
-                                                                .clip = {}})
-              .empty());
+    const std::vector<Document::InspectedRow> rows =
+        Document::InspectFrame(animation, Document::Selection{.depth = std::nullopt,
+                                                              .frame = 0,
+                                                              .owned = nullptr,
+                                                              .key_property = {},
+                                                              .key_frame = std::nullopt,
+                                                              .clip = {}});
+    CHECK(rows.size() == 4);
+    CHECK(std::ranges::all_of(rows, [](const Document::InspectedRow& row) {
+        return row.edits == Document::EditTarget::Animation;
+    }));
 }
 
 TEST_CASE("An owned depth keeps its own row alongside the placement fields") {

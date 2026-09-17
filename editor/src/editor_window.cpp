@@ -6,6 +6,7 @@
 #include "editor_timeline.h"
 #include "editor_viewport.h"
 
+#include "document/animation_settings.h"
 #include "document/authored.h"
 #include "document/camera_edit.h"
 #include "document/clip_edit.h"
@@ -236,6 +237,10 @@ void Window::BuildMenus() {
     loop_action_->setChecked(QSettings().value(kLoopKey, true).toBool());
     connect(loop_action_, &QAction::toggled, this,
             [this](bool on) { QSettings().setValue(kLoopKey, on); });
+    background_action_ = play->addAction(tr("Draw the &background colour"));
+    background_action_->setCheckable(true);
+    background_action_->setChecked(QSettings().value(kBackgroundKey, false).toBool());
+    connect(background_action_, &QAction::toggled, this, &Window::DrawBackground);
 
     QMenu* edit = menuBar()->addMenu(tr("&Edit"));
     undo_action_ = edit->addAction(tr("&Undo"));
@@ -275,6 +280,7 @@ void Window::StartHost(const QString& game_dir) {
         return;
     }
     statusBar()->showMessage(tr("Preview host running on %1").arg(game_dir));
+    DrawBackground(background_action_->isChecked());
     if (!animation_name_.empty()) ShowAnimation(animation_name_);
 }
 
@@ -456,6 +462,12 @@ void Window::ApplyFieldEdit(QTableWidgetItem* item) {
                       [clip, field, value, frame](AfpAnimation::Animation& animation) {
                           return Document::EditCameraField(animation, clip, frame, field, value);
                       });
+        return;
+    }
+    if (edits == Document::EditTarget::Animation) {
+        EditAnimation(name->text(), [field, value](AfpAnimation::Animation& animation) {
+            return Document::SetAnimationSetting(animation, field, value);
+        });
         return;
     }
     if (!depth_) return;

@@ -1,5 +1,7 @@
 #include "editor_window.h"
 
+#include "editor_files.h"
+
 #include "document/authored.h"
 #include "document/document.h"
 #include "document/outline.h"
@@ -7,6 +9,7 @@
 
 #include <QInputDialog>
 #include <QLineEdit>
+#include <QSettings>
 #include <QString>
 
 #include <algorithm>
@@ -68,6 +71,17 @@ void Window::AddNewAnimation() {
             return Added();
         });
     if (added) SelectEntry(QString::fromStdString(made));
+}
+
+void Window::DrawBackground(bool drawn) {
+    QSettings().setValue(kBackgroundKey, drawn);
+    if (!host_.Running()) return;
+    const auto set = host_.SetBackgroundDrawn(drawn);
+    if (!set) {
+        ReportProblem(QString::fromStdString(set.error()));
+        return;
+    }
+    RenderFrame();
 }
 
 void Window::RemoveAnimation(const std::string& path, const QString& name) {

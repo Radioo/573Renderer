@@ -36,10 +36,12 @@ private:
     std::vector<uint8_t> LoadPackage(const PreviewProtocol::LoadPackage& load);
     std::vector<uint8_t> Resize(const PreviewProtocol::Resize& resize);
     std::vector<uint8_t> Render();
+    std::vector<uint8_t> Loaded(std::vector<uint8_t> reply) const;
 
     HWND window_ = nullptr;
     bool booted_ = false;
     bool package_loaded_ = false;
+    bool background_drawn_ = false;
     std::optional<SharedFrame::Target> frame_;
     uint32_t view_width_ = 0;
     uint32_t view_height_ = 0;

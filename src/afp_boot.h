@@ -90,6 +90,8 @@ bool AttachSymbol(const AfpFuncs& afp, const std::string& name);
 
 void SetStreamPaused(const AfpFuncs& afp, bool paused);
 
+void SetBackgroundDrawn(const AfpFuncs& afp, bool drawn);
+
 struct ChildClip {
     std::string name;
     float screen_x = 0.0f;

@@ -676,6 +676,32 @@ draws, which `File::ShapeImages` reads from `geo/`, unless an export names it.
 The editor's add depth offers exactly this list, so a new depth is always
 pointed at something the animation can actually place.
 
+### Animation settings (`document/animation_settings.h`)
+
+With no depth chosen on the root timeline, the inspector shows the animation's
+own settings, all editable (`EditTarget::Animation`), which `AnimationSettingFields`
+reads and `SetAnimationSetting` writes into the header:
+
+- **Stage size**, width and height: the header rect's maximum minus its minimum.
+  An edit keeps the minimum and moves the maximum, and has to fit the u16 rect.
+- **Frame rate**: shown to four decimals, stored as fixed point (`x1024`,
+  rounded) when header flag `0x2` is set, which every IIDX 33 animation does,
+  otherwise as a float.
+- **Background colour**: r, g, b, a, 0 to 255 each.
+- **Use background colour**: header flag `0x1`, on or off.
+
+What afp-core does with them (IIDX 33, notes repo `Core/afp_format.md` section
+2): the stage size and the colour only matter where a movie's background is
+drawn, which the host decides with movie flag `0x20`. A drawn background is the
+stage rectangle from (0, 0) through the layer's matrix, in the header colour
+when `Use background colour` is on and opaque black when it is off. bm2dx never
+sets that flag, so no IIDX 33 screen draws it; the preview does when asked
+(`Playback > Draw the background colour`). The stage size is also the clip
+rectangle of a movie the host puts in background mode 2, which bm2dx does for
+the mode select layer. The editor's playback runs at the frame rate
+(`document/playback.h`); how afp-core's own stream timing uses it was not
+traced for this.
+
 ### Adding and removing animations (`document/animation_entries.h`)
 
 afp-utils loads a package's animations from `afp/afplist.xml`: for each `afp`

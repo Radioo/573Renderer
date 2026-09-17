@@ -37,6 +37,8 @@ public:
 
     [[nodiscard]] Support::Expected<PreviewClient::Frame, std::string> Render();
 
+    [[nodiscard]] Support::Expected<void, std::string> SetBackgroundDrawn(bool drawn);
+
 private:
     std::unique_ptr<PreviewClient::Host> host_;
     std::string package_;

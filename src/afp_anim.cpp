@@ -18,6 +18,12 @@
 #include <vector>
 #include "app_globals.h"
 
+namespace {
+
+constexpr uint32_t kDrawBackground = 0x20;
+
+}
+
 void AfpManager::Shutdown(EngineSession& es) {
     AfpFuncs& afp = es.afp;
     AfpuFuncs const& afpu = es.afpu;
@@ -113,6 +119,12 @@ bool AfpManager::AttachSymbol(const AfpFuncs& afp, const std::string& name) {
     int const rc = afp.afp_mc_attach_movie(mc_id, name.c_str());
     LOG("AFP", "AttachSymbol('%s') mc=0x%08x -> %d", name.c_str(), (uint32_t)mc_id, rc);
     return rc >= 0;
+}
+
+void AfpManager::SetBackgroundDrawn(const AfpFuncs& afp, bool drawn) {
+    if (g_engine.stream_id == Runtime::kModernNoStream || (int)g_engine.stream_id < 0) return;
+    if (afp.afp_set_flag_mask == nullptr) return;
+    afp.afp_set_flag_mask(g_engine.stream_id, kDrawBackground, drawn ? kDrawBackground : 0);
 }
 
 void AfpManager::SetStreamPaused(const AfpFuncs& afp, bool paused) {

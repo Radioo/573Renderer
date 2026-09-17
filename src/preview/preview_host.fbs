@@ -32,7 +32,11 @@ table ShowSymbol {
   name:string;
 }
 
-union Request { Boot, LoadPackage, SelectAnimation, Seek, Resize, Render, ShowSymbol }
+table BackgroundFill {
+  drawn:bool;
+}
+
+union Request { Boot, LoadPackage, SelectAnimation, Seek, Resize, Render, ShowSymbol, BackgroundFill }
 
 table RequestMessage {
   request:Request;

@@ -73,6 +73,11 @@ std::vector<uint8_t> SeekReply(const PreviewProtocol::Seek& seek) {
     return Done();
 }
 
+bool IsFailure(std::span<const uint8_t> reply) {
+    return flatbuffers::GetRoot<PreviewProtocol::ReplyMessage>(reply.data())->reply_type() ==
+           PreviewProtocol::Reply::Failure;
+}
+
 std::vector<uint8_t> SelectAnimationReply(const PreviewProtocol::SelectAnimation& select) {
     if (select.name() == nullptr) return Failure("SelectAnimation needs a name");
     if (!AfpManager::SwitchAnimation(g_engine, select.name()->str(), true))
@@ -114,9 +119,14 @@ std::vector<uint8_t> Session::Handle(std::span<const uint8_t> request) {
     if (!booted_) return Failure("the host has not booted a game yet");
     if (const auto* load = message->request_as_LoadPackage()) return LoadPackage(*load);
     if (const auto* select = message->request_as_SelectAnimation())
-        return SelectAnimationReply(*select);
+        return Loaded(SelectAnimationReply(*select));
     if (const auto* seek = message->request_as_Seek()) return SeekReply(*seek);
-    if (const auto* show = message->request_as_ShowSymbol()) return ShowSymbolReply(*show);
+    if (const auto* show = message->request_as_ShowSymbol()) return Loaded(ShowSymbolReply(*show));
+    if (const auto* fill = message->request_as_BackgroundFill()) {
+        background_drawn_ = fill->drawn();
+        AfpManager::SetBackgroundDrawn(g_afp, background_drawn_);
+        return Done();
+    }
     if (const auto* resize = message->request_as_Resize()) return Resize(*resize);
     if (message->request_as_Render() != nullptr) return Render();
     return Failure("unknown request");
@@ -162,7 +172,12 @@ std::vector<uint8_t> Session::LoadPackage(const PreviewProtocol::LoadPackage& lo
     if (!ok)
         return Failure("package " + package + " with animation " + animation + " did not load");
     package_loaded_ = true;
-    return LoadedReply();
+    return Loaded(LoadedReply());
+}
+
+std::vector<uint8_t> Session::Loaded(std::vector<uint8_t> reply) const {
+    if (!IsFailure(reply)) AfpManager::SetBackgroundDrawn(g_afp, background_drawn_);
+    return reply;
 }
 
 std::vector<uint8_t> Session::Resize(const PreviewProtocol::Resize& resize) {
