@@ -99,7 +99,21 @@ struct Reshape {
     double scale_x = 0;
     double scale_y = 0;
     double turn = 0;
+    bool finished = false;
 };
+
+struct Move {
+    QPointF by;
+    bool finished = false;
+};
+
+template <typename T> std::vector<T> Finished(const std::vector<T>& all) {
+    std::vector<T> done;
+    for (const T& one : all) {
+        if (one.finished) done.push_back(one);
+    }
+    return done;
+}
 
 }
 
@@ -256,48 +270,59 @@ TEST_CASE("Clicking the stage reports where in stage pixels") {
 TEST_CASE("Dragging inside the selection moves it by the stage offset") {
     Editor::Viewport viewport;
     ShowStage(viewport);
-    std::vector<QPointF> moves;
+    std::vector<Move> moves;
     QObject::connect(&viewport, &Editor::Viewport::Dragged,
-                     [&moves](uint16_t depth, double dx, double dy) {
+                     [&moves](uint16_t depth, double dx, double dy, bool finished) {
                          CHECK(depth == 5);
-                         moves.emplace_back(dx, dy);
+                         moves.push_back({.by = QPointF(dx, dy), .finished = finished});
                      });
     Drag(viewport, {150, 100}, {200, 150});
-    REQUIRE(moves.size() == 1);
-    CHECK_THAT(moves[0].x(), WithinAbs(100, 1e-9));
-    CHECK_THAT(moves[0].y(), WithinAbs(100, 1e-9));
+    REQUIRE(moves.size() == 3);
+    CHECK_FALSE(moves[0].finished);
+    CHECK_THAT(moves[0].by.x(), WithinAbs(50, 1e-9));
+    CHECK_FALSE(moves[1].finished);
+    CHECK(moves[2].finished);
+    CHECK_THAT(moves[2].by.x(), WithinAbs(100, 1e-9));
+    CHECK_THAT(moves[2].by.y(), WithinAbs(100, 1e-9));
+    CHECK(moves[1].by == moves[2].by);
 
     Drag(viewport, {400, 400}, {420, 420});
-    CHECK(moves.size() == 1);
+    CHECK(moves.size() == 3);
     Click(viewport, {150, 100});
-    CHECK(moves.size() == 1);
+    CHECK(moves.size() == 3);
 }
 
 TEST_CASE("Dragging a corner scales and the round handle turns") {
     Editor::Viewport viewport;
     ShowStage(viewport);
     std::vector<Reshape> reshapes;
-    QObject::connect(&viewport, &Editor::Viewport::Reshaped,
-                     [&reshapes](uint16_t depth, double sx, double sy, double turn) {
-                         reshapes.push_back(
-                             {.depth = depth, .scale_x = sx, .scale_y = sy, .turn = turn});
-                     });
+    QObject::connect(
+        &viewport, &Editor::Viewport::Reshaped,
+        [&reshapes](uint16_t depth, double sx, double sy, double turn, bool finished) {
+            reshapes.push_back(
+                {.depth = depth, .scale_x = sx, .scale_y = sy, .turn = turn, .finished = finished});
+        });
     Drag(viewport, {250, 150}, {350, 150});
-    REQUIRE(reshapes.size() == 1);
-    CHECK(reshapes[0].depth == 5);
-    CHECK_THAT(reshapes[0].scale_x, WithinAbs(1.5, 1e-9));
-    CHECK_THAT(reshapes[0].scale_y, WithinAbs(1.0, 1e-9));
-    CHECK(reshapes[0].turn == 0);
+    REQUIRE(reshapes.size() == 3);
+    CHECK_FALSE(reshapes[0].finished);
+    CHECK_THAT(reshapes[0].scale_x, WithinAbs(1.25, 1e-9));
+    const std::vector<Reshape> scaled = Finished(reshapes);
+    REQUIRE(scaled.size() == 1);
+    CHECK(scaled[0].depth == 5);
+    CHECK_THAT(scaled[0].scale_x, WithinAbs(1.5, 1e-9));
+    CHECK_THAT(scaled[0].scale_y, WithinAbs(1.0, 1e-9));
+    CHECK(scaled[0].turn == 0);
 
     const QPointF handle(150, 22);
     const QPointF anchor(50, 50);
     const QPointF to(250, 50);
     Drag(viewport, handle, to);
-    REQUIRE(reshapes.size() == 2);
+    const std::vector<Reshape> turned = Finished(reshapes);
+    REQUIRE(turned.size() == 2);
     const double expected = std::atan2(to.y() - anchor.y(), to.x() - anchor.x()) -
                             std::atan2(handle.y() - anchor.y(), handle.x() - anchor.x());
-    CHECK_THAT(reshapes[1].turn, WithinAbs(expected, 1e-9));
-    CHECK(reshapes[1].scale_x == 1);
+    CHECK_THAT(turned[1].turn, WithinAbs(expected, 1e-9));
+    CHECK(turned[1].scale_x == 1);
 }
 
 TEST_CASE("Dragging an ease handle moves it and keeps it inside the segment's time") {

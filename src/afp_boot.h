@@ -33,6 +33,11 @@ bool LoadPackageFromMemory(EngineSession& es, const AvsManager::MemoryIfs& ifs,
 bool ReloadPackageFromMemory(EngineSession& es, const AvsManager::MemoryIfs& ifs,
                              const std::string& package, const std::string& animation);
 
+bool LoadTexturePackageFromMemory(EngineSession& es, const AvsManager::MemoryIfs& ifs,
+                                  const std::string& package);
+
+void UnloadTexturePackage(EngineSession& es);
+
 void UmountPackagesAndData(AvsFuncs& avs);
 
 [[nodiscard]] bool SwitchAnimation(EngineSession& es, const std::string& anim_name,

@@ -114,6 +114,8 @@ void __cdecl GetNearFar(float* near_val, float* far_val);
 char __cdecl FindTexture(void* name, void* data);
 
 void MarkPersistentBoundary();
+int PersistentBoundary();
+void RestorePersistentBoundary(int slot);
 
 void ResetAllTextures();
 

@@ -154,7 +154,22 @@ round handle turns it about the anchor. Both preview on the outline and are
 applied on release through `Document::ReshapeOwnedDepth` or
 `Document::ReshapeBakedDepth`. Pressing a handle keeps the selection even when
 the handle lies outside the outline. The timeline shades the selected depth's
-row. Outlines are shown only when the viewport shows the clip
+row.
+
+While a drag is under way the viewport also emits `Dragged` and `Reshaped` with
+`finished` false on every pointer move, and once more with `finished` true on
+release. An unfinished one is a preview (`Window::PreviewOnStage`): the change
+is applied to a copy of the document, an owned depth through the same
+`BakedFor` and `WriteAuthored` steps `EditAuthored` takes, and the copy is sent
+to the host and rendered at the current frame. The document and the undo
+history are untouched. Previews are coalesced through a zero-length timer, so
+a host that is slower than the mouse only ever renders the latest offset. The
+finished one commits as before; if the commit is refused after a preview, the
+view is reloaded from the document. On `graphic/1/title.ifs` one preview takes
+about a quarter of a second, most of it encoding and splitting the 28 MB
+package (the textures are not reloaded, see `docs/preview_host.md`).
+
+Outlines are shown only when the viewport shows the clip
 being edited, that is the root or a sprite shown on its own. Shape boxes are
 read once per animation and read again after every edit.
 

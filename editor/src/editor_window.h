@@ -146,7 +146,7 @@ private:
     [[nodiscard]] std::optional<Placeable>
     ChoosePlaceable(const AfpAnimation::Animation& animation);
     void PlaceImage(const std::string& image, const Document::DepthSpan& span);
-    bool LoadViewportClip();
+    bool LoadViewportClip(const Document::File& file);
     void TogglePlay();
     void StepPlayback();
     void StopPlayback();
@@ -156,9 +156,11 @@ private:
     void UpdateOutlines(const AfpAnimation::Animation& animation);
     void PickOnStage(double x, double y);
     void EditOnStage(uint16_t depth, const QString& name, const OwnedChange& owned,
-                     const AnimationChange& baked);
-    void MoveOnStage(uint16_t depth, double dx, double dy);
-    void ReshapeOnStage(uint16_t depth, double scale_x, double scale_y, double turn);
+                     const AnimationChange& baked, bool finished);
+    void PreviewOnStage(AnimationChange change);
+    void RunStagePreview();
+    void MoveOnStage(uint16_t depth, double dx, double dy, bool finished);
+    void ReshapeOnStage(uint16_t depth, double scale_x, double scale_y, double turn, bool finished);
     void MoveSpanInTime(uint16_t depth, uint32_t frame, int64_t by);
     void MoveSpanToDepth(uint16_t depth, uint32_t frame);
     void DuplicateSpanToDepth(uint16_t depth, uint32_t frame);
@@ -211,6 +213,9 @@ private:
     std::optional<SharedTexture::Reader> reader_;
     std::map<uint16_t, Document::Box> shape_bounds_;
     std::string shape_bounds_path_;
+    std::optional<AnimationChange> pending_preview_;
+    bool preview_scheduled_ = false;
+    bool previewed_ = false;
     QString last_error_;
 };
 

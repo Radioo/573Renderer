@@ -214,6 +214,28 @@ void Viewport::mouseMoveEvent(QMouseEvent* event) {
     dragging_ = true;
     pointer_ = {stage->x(), stage->y()};
     update();
+    const Document::StageOutline* selected = SelectedOutline();
+    if (selected != nullptr) EmitGesture(gesture_, *selected, false);
+}
+
+void Viewport::EmitGesture(Gesture gesture, const Document::StageOutline& outline, bool finished) {
+    switch (gesture) {
+    case Gesture::Move:
+        emit Dragged(outline.depth, pointer_[0] - grab_[0], pointer_[1] - grab_[1], finished);
+        break;
+    case Gesture::Scale: {
+        const Document::Reshape reshape = Document::ScaleToReach(outline, grab_, pointer_);
+        emit Reshaped(outline.depth, reshape.scale_x, reshape.scale_y, reshape.turn, finished);
+        break;
+    }
+    case Gesture::Turn: {
+        const Document::Reshape reshape = Document::TurnToReach(outline, grab_, pointer_);
+        emit Reshaped(outline.depth, reshape.scale_x, reshape.scale_y, reshape.turn, finished);
+        break;
+    }
+    case Gesture::None:
+        break;
+    }
 }
 
 void Viewport::mouseReleaseEvent(QMouseEvent* event) {
@@ -225,23 +247,7 @@ void Viewport::mouseReleaseEvent(QMouseEvent* event) {
     update();
     if (selected == nullptr) return;
     const Document::StageOutline outline = *selected;
-    switch (gesture) {
-    case Gesture::Move:
-        emit Dragged(outline.depth, pointer_[0] - grab_[0], pointer_[1] - grab_[1]);
-        break;
-    case Gesture::Scale: {
-        const Document::Reshape reshape = Document::ScaleToReach(outline, grab_, pointer_);
-        emit Reshaped(outline.depth, reshape.scale_x, reshape.scale_y, reshape.turn);
-        break;
-    }
-    case Gesture::Turn: {
-        const Document::Reshape reshape = Document::TurnToReach(outline, grab_, pointer_);
-        emit Reshaped(outline.depth, reshape.scale_x, reshape.scale_y, reshape.turn);
-        break;
-    }
-    case Gesture::None:
-        break;
-    }
+    EmitGesture(gesture, outline, true);
 }
 
 }

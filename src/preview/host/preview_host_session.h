@@ -34,6 +34,9 @@ public:
 private:
     std::vector<uint8_t> Boot(const PreviewProtocol::Boot& boot);
     std::vector<uint8_t> LoadPackage(const PreviewProtocol::LoadPackage& load);
+    bool LoadContent(const std::vector<uint8_t>& ifs, const std::string& package,
+                     const std::string& animation);
+    bool LoadTextures(const std::vector<uint8_t>& ifs, const std::string& package);
     std::vector<uint8_t> Resize(const PreviewProtocol::Resize& resize);
     std::vector<uint8_t> Render();
     std::vector<uint8_t> Loaded(std::vector<uint8_t> reply) const;
@@ -42,6 +45,8 @@ private:
     bool booted_ = false;
     bool package_loaded_ = false;
     bool background_drawn_ = false;
+    std::vector<uint8_t> texture_bytes_;
+    std::optional<uint32_t> resume_frame_;
     std::optional<SharedFrame::Target> frame_;
     uint32_t view_width_ = 0;
     uint32_t view_height_ = 0;

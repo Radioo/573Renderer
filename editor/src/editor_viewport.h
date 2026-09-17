@@ -35,8 +35,8 @@ public:
 signals:
     void Resized(int width, int height);
     void Picked(double x, double y);
-    void Dragged(uint16_t depth, double dx, double dy);
-    void Reshaped(uint16_t depth, double scale_x, double scale_y, double turn);
+    void Dragged(uint16_t depth, double dx, double dy, bool finished);
+    void Reshaped(uint16_t depth, double scale_x, double scale_y, double turn, bool finished);
 
 protected:
     void paintEvent(QPaintEvent* event) override;
@@ -56,6 +56,7 @@ private:
     [[nodiscard]] Gesture GestureAt(const Document::StageOutline& outline, QPointF widget,
                                     Document::Point stage) const;
     [[nodiscard]] Document::StageOutline Preview(const Document::StageOutline& outline) const;
+    void EmitGesture(Gesture gesture, const Document::StageOutline& outline, bool finished);
     void DrawSelection(QPainter& painter, const Document::StageOutline& outline) const;
 
     QImage frame_;

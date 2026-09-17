@@ -2,15 +2,21 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "editor_timeline.h"
+#include "editor_viewport.h"
 #include "editor_window.h"
 #include "sample_package.h"
 
 #include "document/animation_strings.h"
 #include "document/document.h"
+#include "document/outline.h"
+#include "document/stage_bounds.h"
 #include "document/frame_edit.h"
 #include "formats/ifs_archive.h"
 
 #include <QAction>
+#include <QImage>
+#include <QPixmap>
+#include <QtGlobal>
 #include <QApplication>
 #include <QByteArray>
 #include <QDialog>
@@ -39,8 +45,12 @@
 #include <QTreeWidgetItemIterator>
 #include <QWidget>
 
+#include <algorithm>
+#include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <deque>
+#include <span>
 #include <functional>
 #include <string>
 #include <utility>
@@ -50,6 +60,7 @@ namespace {
 
 constexpr int kStepMs = 5;
 constexpr qint64 kLongestWaitMs = 10000;
+constexpr uint32_t kPreviewFrame = 400;
 constexpr uint32_t kFixedRate = 0x2;
 const QString kAnimationKind = "animation";
 
@@ -336,6 +347,97 @@ TEST_CASE("A span duplicated from the timeline menu lands on the next free depth
     emit timeline->MenuRequested(QPoint(4, 4), 1, QString());
     REQUIRE(Settle([&refused] { return !refused.Problems().isEmpty(); }));
     CHECK(refused.Problems().front().contains("depth 2"));
+}
+
+TEST_CASE("A stage drag only changes the document when it ends") {
+    Opened opened;
+    Open(opened);
+    auto* timeline = opened.window.findChild<Editor::Timeline*>();
+    auto* viewport = opened.window.findChild<Editor::Viewport*>();
+    REQUIRE(timeline != nullptr);
+    REQUIRE(viewport != nullptr);
+    QAction* undo = ShortcutAction(opened.window, QKeySequence(QKeySequence::Undo));
+    REQUIRE(undo != nullptr);
+    emit timeline->DepthChosen(1);
+    const std::string before = RowValue(*opened.inspector, "Translation");
+    CHECK_FALSE(undo->isEnabled());
+
+    Script script({});
+    emit viewport->Dragged(1, 5, 0, false);
+    emit viewport->Dragged(1, 10, 0, false);
+    QApplication::processEvents();
+    CHECK(RowValue(*opened.inspector, "Translation") == before);
+    CHECK_FALSE(undo->isEnabled());
+
+    emit viewport->Dragged(1, 10, 0, true);
+    QApplication::processEvents();
+    CHECK(script.Problems().isEmpty());
+    CHECK(RowValue(*opened.inspector, "Translation") == "200, 0");
+    CHECK(undo->isEnabled());
+    undo->trigger();
+    CHECK(RowValue(*opened.inspector, "Translation") == before);
+}
+
+TEST_CASE("A stage drag previews through the host before it is committed") {
+    const QString game = qEnvironmentVariable("R573_IIDX_DIR");
+    if (game.isEmpty()) SKIP("R573_IIDX_DIR not set");
+    const QString title = game + "/data/graphic/1/title.ifs";
+    QSettings().setValue("game/directory", game);
+    Editor::Window window;
+    QSettings().remove("game/directory");
+    window.resize(1600, 900);
+    window.show();
+    Script opening({});
+    window.OpenDocument(title);
+    REQUIRE(opening.Problems().isEmpty());
+
+    QFile read(title);
+    REQUIRE(read.open(QIODevice::ReadOnly));
+    const QByteArray bytes = read.readAll();
+    const auto file = Document::File::Open(
+        std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(bytes.constData()),
+                                 static_cast<std::size_t>(bytes.size())));
+    REQUIRE(file.has_value());
+    if (!file) return;
+    std::string path;
+    for (const Document::Node& node : file->Nodes()) {
+        for (const Document::Node& child : node.children) {
+            if (child.role == Document::Role::Animation && child.name == "title") path = child.path;
+        }
+    }
+    const auto animation = file->ReadAnimation(path);
+    REQUIRE(animation.has_value());
+    if (!animation) return;
+    const auto outlines =
+        Document::StageOutlines(*animation, {}, kPreviewFrame, file->ShapeBounds(path));
+    REQUIRE(!outlines.empty());
+    const auto widest = std::ranges::max_element(outlines, {}, [](const auto& outline) {
+        return std::abs(outline.corners[1][0] - outline.corners[0][0]);
+    });
+
+    auto* timeline = window.findChild<Editor::Timeline*>();
+    auto* viewport = window.findChild<Editor::Viewport*>();
+    REQUIRE(timeline != nullptr);
+    REQUIRE(viewport != nullptr);
+    QAction* undo = ShortcutAction(window, QKeySequence(QKeySequence::Undo));
+    REQUIRE(undo != nullptr);
+    emit timeline->FrameChosen(kPreviewFrame);
+    emit timeline->DepthChosen(widest->depth);
+    QApplication::processEvents();
+    const QImage before = viewport->grab().toImage();
+
+    emit viewport->Dragged(widest->depth, 300, 150, false);
+    QApplication::processEvents();
+    QApplication::processEvents();
+    const QImage during = viewport->grab().toImage();
+    CHECK(during != before);
+    CHECK_FALSE(undo->isEnabled());
+
+    emit viewport->Dragged(widest->depth, 0, 0, false);
+    QApplication::processEvents();
+    QApplication::processEvents();
+    CHECK(viewport->grab().toImage() == before);
+    CHECK(opening.Problems().isEmpty());
 }
 
 TEST_CASE("A taken name is refused with a message and adds nothing") {

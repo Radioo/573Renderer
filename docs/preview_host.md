@@ -76,6 +76,33 @@ afp-core. `Frame` carries the root clip's current frame. A request the host
 cannot serve gets a `Failure` naming what went wrong. Any request other than
 `Boot` gets one until a boot succeeds.
 
+### Textures are loaded once
+
+Loading `graphic/1/title.ifs` takes afp-utils about 4.7 seconds, nearly all of
+it creating the package's textures, and a reload used to pay that again on
+every edit. The host therefore splits each package it is sent
+(`Document::SplitPreviewPackages`): one package holds `tex/` with the root
+files (`magic`, the version files, `_info_`), the other holds everything but
+`tex/`. The texture half is loaded as `<package>__preview_textures` through
+`AfpManager::LoadTexturePackageFromMemory`, which raises the persistent texture
+boundary over its textures so that unloading the scene package keeps them, and
+it is replaced (`AfpManager::UnloadTexturePackage`, which puts the boundary
+back) only when its bytes differ from the last ones. The content half is
+loaded and reloaded under the package's own name as before; a reload of
+`title.ifs` now takes about 170 ms. Shapes find their images in the texture
+package because afp-utils looks image names up across every loaded package.
+When a package has no `tex/`, or does not parse, it is loaded whole. Replacing
+the textures unloads the scene first and seeks back to the frame it was on.
+
+`tests/local/afp_reload_tests.cpp` renders frame 300 of `title.ifs` from the
+whole package, from the two halves and after a reload of the content half, and
+requires the three frames to be identical byte for byte (the check was seen to
+fail with the textures left out of their half). It also checks that texture
+slots come back: releasing the scene textures now rewinds the next free slot to
+the persistent boundary. Before that, every reload of `title.ifs` used 8 new
+slots of 1024 and never gave them back, so a long editing session would have
+run out and started dropping textures.
+
 Test: `tests/local/preview_host_process_tests.cpp` (`local_dll`) starts
 `preview_host.exe`, boots IIDX 33, sends `graphic/1/title.ifs` as bytes,
 checks the frame count and `loop` label, seeks to frame 300, resizes to

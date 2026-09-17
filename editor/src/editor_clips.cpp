@@ -123,7 +123,7 @@ void Window::ChooseClip(int index) {
     key_property_.clear();
     key_frame_.reset();
     frame_ = clip_.sprite ? 0 : root_frame_;
-    LoadViewportClip();
+    if (file_) LoadViewportClip(*file_);
     ShowClipTimeline();
     SeekViewport(frame_);
     ShowFrame();
@@ -138,13 +138,13 @@ void Window::ChooseClip(int index) {
                                  .arg(root_frame_));
 }
 
-bool Window::LoadViewportClip() {
+bool Window::LoadViewportClip(const Document::File& file) {
     symbol_shown_ = false;
-    if (!host_.Running() || !file_ || animation_path_.empty()) return false;
+    if (!host_.Running() || animation_path_.empty()) return false;
     std::vector<uint8_t> bytes;
     std::string symbol;
     if (clip_.sprite) {
-        auto preview = Document::PreviewSymbolFor(*file_, animation_path_, clip_);
+        auto preview = Document::PreviewSymbolFor(file, animation_path_, clip_);
         if (!preview) {
             ReportOnce(QString::fromStdString(preview.error()));
             return false;
@@ -152,7 +152,7 @@ bool Window::LoadViewportClip() {
         bytes = std::move(preview->ifs);
         symbol = std::move(preview->name);
     } else {
-        auto encoded = file_->Encode();
+        auto encoded = file.Encode();
         if (!encoded) {
             ReportOnce(QString::fromStdString(encoded.error()));
             return false;
@@ -250,7 +250,7 @@ void Window::SeekTo(uint32_t frame) {
 
 void Window::Reload() {
     if (animation_name_.empty() || !file_) return;
-    LoadViewportClip();
+    LoadViewportClip(*file_);
     ShowClipTimeline();
     SeekViewport(symbol_shown_ ? frame_ : root_frame_);
     ShowFrame();

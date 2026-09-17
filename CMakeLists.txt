@@ -452,7 +452,8 @@ add_executable(preview_host
     src/preview/host/preview_host_main.cpp
     src/preview/host/preview_host_session.cpp
 )
-target_link_libraries(preview_host PRIVATE r573_afp_host r573_preview_protocol r573::warnings)
+target_link_libraries(preview_host PRIVATE r573_afp_host r573_preview_protocol r573_document
+                                           r573::warnings)
 
 add_executable(renderer WIN32 src/main.cpp)
 target_link_libraries(renderer PRIVATE r573_app r573::warnings)
@@ -851,6 +852,7 @@ add_executable(document_tests
     tests/document/span_trim_tests.cpp
     tests/document/animation_entries_tests.cpp
     tests/document/animation_settings_tests.cpp
+    tests/document/preview_packages_tests.cpp
     tests/document/sprite_preview_tests.cpp
     tests/document/sprite_structure_tests.cpp
     tests/document/stage_bounds_tests.cpp

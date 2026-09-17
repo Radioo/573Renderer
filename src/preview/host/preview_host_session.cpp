@@ -4,7 +4,9 @@
 #include "app_globals.h"
 #include "avs_boot.h"
 #include "backend/afp_profiles.h"
+#include "document/preview_packages.h"
 #include "engine_dlls.h"
+#include "formats/ifs_archive.h"
 #include "game_profile.h"
 #include "preview_host_generated.h"
 #include "render_seh.h"
@@ -18,6 +20,7 @@
 
 #include <bit>
 #include <cstdint>
+#include <optional>
 #include <span>
 #include <string>
 #include <utility>
@@ -30,6 +33,7 @@ namespace {
 constexpr const char* kWindowClass = "r573_preview_host";
 constexpr const char* kRamfsPoint = "/preview_ifs/package";
 constexpr const char* kPackagePoint = "/afp/packages";
+constexpr const char* kTextureSuffix = "__preview_textures";
 
 std::vector<uint8_t> Finished(const flatbuffers::FlatBufferBuilder& builder) {
     const std::span<const uint8_t> bytes(builder.GetBufferPointer(), builder.GetSize());
@@ -107,6 +111,7 @@ HWND CreateHiddenWindow(int width, int height) {
 
 Session::~Session() {
     if (package_loaded_) AfpManager::UnloadPackages(g_engine);
+    AfpManager::UnloadTexturePackage(g_engine);
     if (window_ != nullptr) DestroyWindow(window_);
 }
 
@@ -161,18 +166,60 @@ std::vector<uint8_t> Session::Boot(const PreviewProtocol::Boot& boot) {
 std::vector<uint8_t> Session::LoadPackage(const PreviewProtocol::LoadPackage& load) {
     if (load.package() == nullptr || load.animation() == nullptr || load.ifs() == nullptr)
         return Failure("LoadPackage needs a package, an animation and IFS bytes");
-    const AvsManager::MemoryIfs ifs{.bytes = {load.ifs()->begin(), load.ifs()->end()},
-                                    .ramfs_mountpoint = kRamfsPoint,
-                                    .mountpoint = kPackagePoint};
+    const std::vector<uint8_t> bytes(load.ifs()->begin(), load.ifs()->end());
     const std::string package = load.package()->str();
     const std::string animation = load.animation()->str();
-    const bool ok = package_loaded_
-                        ? AfpManager::ReloadPackageFromMemory(g_engine, ifs, package, animation)
-                        : AfpManager::LoadPackageFromMemory(g_engine, ifs, package, animation);
-    if (!ok)
+    std::vector<uint8_t> content = bytes;
+    std::vector<uint8_t> textures;
+    const auto archive = Ifs::Read(bytes);
+    if (archive) {
+        const Document::PreviewPackages split = Document::SplitPreviewPackages(*archive);
+        auto written_textures = Ifs::Write(split.textures);
+        auto written_content = Ifs::Write(split.content);
+        if (Document::HasTextures(split) && written_textures && written_content) {
+            textures = std::move(*written_textures);
+            content = std::move(*written_content);
+        }
+    }
+    if (textures != texture_bytes_ && !LoadTextures(textures, package))
+        return Failure("the textures of package " + package + " did not load");
+    if (!LoadContent(content, package, animation))
         return Failure("package " + package + " with animation " + animation + " did not load");
-    package_loaded_ = true;
     return Loaded(LoadedReply());
+}
+
+bool Session::LoadTextures(const std::vector<uint8_t>& ifs, const std::string& package) {
+    uint32_t frame = 0;
+    const bool had_frame =
+        package_loaded_ && AfpManager::ReadMcPlayhead(g_afp, &frame, nullptr, nullptr);
+    if (package_loaded_) AfpManager::UnloadPackages(g_engine);
+    package_loaded_ = false;
+    resume_frame_ = had_frame ? std::optional<uint32_t>(frame) : std::nullopt;
+    AfpManager::UnloadTexturePackage(g_engine);
+    texture_bytes_.clear();
+    if (ifs.empty()) return true;
+    const AvsManager::MemoryIfs memory{
+        .bytes = ifs, .ramfs_mountpoint = kRamfsPoint, .mountpoint = kPackagePoint};
+    if (!AfpManager::LoadTexturePackageFromMemory(g_engine, memory, package + kTextureSuffix))
+        return false;
+    texture_bytes_ = ifs;
+    return true;
+}
+
+bool Session::LoadContent(const std::vector<uint8_t>& ifs, const std::string& package,
+                          const std::string& animation) {
+    const AvsManager::MemoryIfs memory{
+        .bytes = ifs, .ramfs_mountpoint = kRamfsPoint, .mountpoint = kPackagePoint};
+    const bool ok = package_loaded_
+                        ? AfpManager::ReloadPackageFromMemory(g_engine, memory, package, animation)
+                        : AfpManager::LoadPackageFromMemory(g_engine, memory, package, animation);
+    if (!ok) return false;
+    package_loaded_ = true;
+    if (resume_frame_) {
+        AfpManager::SeekFrame(g_afp, static_cast<int>(*resume_frame_));
+        resume_frame_.reset();
+    }
+    return true;
 }
 
 std::vector<uint8_t> Session::Loaded(std::vector<uint8_t> reply) const {
