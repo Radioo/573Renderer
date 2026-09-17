@@ -156,6 +156,12 @@ applied on release through `Document::ReshapeOwnedDepth` or
 the handle lies outside the outline. The timeline shades the selected depth's
 row.
 
+Moving snaps (`Document::SnapMove`) to the stage's edges and centre and to the
+other outlines' edges and centres within 6 screen pixels, drawing the lines it
+snapped to in pink while the drag lasts. Holding Alt during the drag moves
+freely. `View > Snap while moving on stage` turns snapping off and is
+remembered; it is on by default. Scaling and turning do not snap.
+
 While a drag is under way the viewport also emits `Dragged` and `Reshaped` with
 `finished` false on every pointer move, and once more with `finished` true on
 release. An unfinished one is a preview (`Window::PreviewOnStage`): the change

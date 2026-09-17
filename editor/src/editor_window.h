@@ -129,6 +129,7 @@ private:
     void RemoveAnimation(const std::string& path, const QString& name);
     void CloseAnimation();
     void DrawBackground(bool drawn);
+    void AddViewMenu();
     void SelectEntry(const QString& path);
     void Undo();
     void Redo();

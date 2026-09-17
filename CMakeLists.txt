@@ -853,6 +853,7 @@ add_executable(document_tests
     tests/document/animation_entries_tests.cpp
     tests/document/animation_settings_tests.cpp
     tests/document/preview_packages_tests.cpp
+    tests/document/stage_snap_tests.cpp
     tests/document/sprite_preview_tests.cpp
     tests/document/sprite_structure_tests.cpp
     tests/document/stage_bounds_tests.cpp

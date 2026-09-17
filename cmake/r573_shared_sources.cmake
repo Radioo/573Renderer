@@ -59,6 +59,7 @@ set(R573_EDITOR_DOCUMENT_SOURCES
     src/document/animation_entries.cpp
     src/document/animation_template.cpp
     src/document/preview_packages.cpp
+    src/document/stage_snap.cpp
     src/document/animation_settings.cpp
     src/document/sprite_preview.cpp
     src/document/stage_bounds.cpp

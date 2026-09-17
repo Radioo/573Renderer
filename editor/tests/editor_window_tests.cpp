@@ -472,6 +472,27 @@ TEST_CASE("The background option is remembered without a preview host") {
     CHECK_FALSE(QSettings().value("preview/background").toBool());
 }
 
+TEST_CASE("Stage snapping is on until it is turned off, and the choice is kept") {
+    Opened opened;
+    Open(opened);
+    QAction* snap = nullptr;
+    const QList<QAction*> actions = opened.window.findChildren<QAction*>();
+    for (QAction* action : actions) {
+        if (action->text() == "&Snap while moving on stage") snap = action;
+    }
+    REQUIRE(snap != nullptr);
+    CHECK(snap->isChecked());
+    snap->setChecked(false);
+    CHECK_FALSE(QSettings().value("stage/snap", true).toBool());
+    Editor::Window reopened;
+    const QList<QAction*> again = reopened.findChildren<QAction*>();
+    const auto kept =
+        std::ranges::find(again, QString("&Snap while moving on stage"), &QAction::text);
+    REQUIRE(kept != again.end());
+    CHECK_FALSE((*kept)->isChecked());
+    snap->setChecked(true);
+}
+
 int main(int argc, char** argv) {
     qputenv("QT_QPA_PLATFORM", "minimal");
     QTemporaryDir settings;

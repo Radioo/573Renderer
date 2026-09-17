@@ -292,6 +292,31 @@ TEST_CASE("Dragging inside the selection moves it by the stage offset") {
     CHECK(moves.size() == 3);
 }
 
+TEST_CASE("A snapping drag lands on the stage edge and shows its guide unless Alt is held") {
+    Editor::Viewport viewport;
+    ShowStage(viewport);
+    viewport.SetSnapping(true);
+    std::vector<Move> moves;
+    QObject::connect(&viewport, &Editor::Viewport::Dragged,
+                     [&moves](uint16_t, double dx, double dy, bool finished) {
+                         moves.push_back({.by = QPointF(dx, dy), .finished = finished});
+                     });
+    Send(viewport, QEvent::MouseButtonPress, {150, 100}, Qt::LeftButton);
+    Send(viewport, QEvent::MouseMove, {104, 100}, Qt::LeftButton);
+    const QImage during = viewport.grab().toImage();
+    CHECK(during.pixelColor(0, 10) == QColor(255, 80, 200));
+    Send(viewport, QEvent::MouseButtonRelease, {104, 100}, Qt::NoButton);
+    REQUIRE(Finished(moves).size() == 1);
+    CHECK_THAT(Finished(moves)[0].by.x(), WithinAbs(-100, 1e-9));
+    CHECK_THAT(Finished(moves)[0].by.y(), WithinAbs(0, 1e-9));
+    CHECK(viewport.grab().toImage().pixelColor(0, 10) != QColor(255, 80, 200));
+
+    moves.clear();
+    Drag(viewport, {150, 100}, {104, 100}, Qt::AltModifier);
+    REQUIRE(Finished(moves).size() == 1);
+    CHECK_THAT(Finished(moves)[0].by.x(), WithinAbs(-92, 1e-9));
+}
+
 TEST_CASE("Dragging a corner scales and the round handle turns") {
     Editor::Viewport viewport;
     ShowStage(viewport);

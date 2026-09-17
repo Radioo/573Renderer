@@ -1,5 +1,6 @@
 #include "editor_window.h"
 
+#include "editor_files.h"
 #include "editor_viewport.h"
 
 #include "document/authored.h"
@@ -9,6 +10,10 @@
 #include "formats/afp_animation.h"
 #include "support/expected.h"
 
+#include <QAction>
+#include <QMenu>
+#include <QMenuBar>
+#include <QSettings>
 #include <QString>
 #include <QTimer>
 
@@ -20,6 +25,18 @@
 #include <vector>
 
 namespace Editor {
+
+void Window::AddViewMenu() {
+    QMenu* view = menuBar()->addMenu(tr("&View"));
+    QAction* snap = view->addAction(tr("&Snap while moving on stage"));
+    snap->setCheckable(true);
+    snap->setChecked(QSettings().value(kSnapKey, true).toBool());
+    viewport_->SetSnapping(snap->isChecked());
+    connect(snap, &QAction::toggled, this, [this](bool on) {
+        QSettings().setValue(kSnapKey, on);
+        viewport_->SetSnapping(on);
+    });
+}
 
 bool Window::OutlinesMatchView() const {
     return !clip_.sprite || symbol_shown_;

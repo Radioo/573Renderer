@@ -1,6 +1,7 @@
 #pragma once
 
 #include "document/stage_bounds.h"
+#include "document/stage_snap.h"
 
 #include <QImage>
 #include <QPointF>
@@ -31,6 +32,7 @@ public:
     void ShowOutlines(std::vector<Document::StageOutline> outlines,
                       std::optional<uint16_t> selected);
     [[nodiscard]] QSize FittedSize(QSize available) const;
+    void SetSnapping(bool on);
 
 signals:
     void Resized(int width, int height);
@@ -57,6 +59,8 @@ private:
                                     Document::Point stage) const;
     [[nodiscard]] Document::StageOutline Preview(const Document::StageOutline& outline) const;
     void EmitGesture(Gesture gesture, const Document::StageOutline& outline, bool finished);
+    [[nodiscard]] Document::Snapped Moved(const Document::StageOutline& outline) const;
+    void DrawGuides(QPainter& painter, const Document::StageOutline& outline) const;
     void DrawSelection(QPainter& painter, const Document::StageOutline& outline) const;
 
     QImage frame_;
@@ -69,6 +73,8 @@ private:
     Document::Point grab_{};
     Document::Point pointer_{};
     bool dragging_ = false;
+    bool snapping_ = false;
+    bool snap_suspended_ = false;
 };
 
 }

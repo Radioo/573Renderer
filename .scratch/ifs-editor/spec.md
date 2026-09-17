@@ -273,3 +273,4 @@ captured. This milestone is the editing itself.
 - `issues/65-first-animation-and-converter-exports.md` (milestone 8)
 - `issues/66-duplicate-spans.md` (milestone 8)
 - `issues/67-live-stage-preview.md` (milestone 8)
+- `issues/68-stage-snapping.md` (milestone 8)

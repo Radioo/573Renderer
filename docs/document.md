@@ -861,7 +861,16 @@ uses, with `S` the scale and `R` the turn (positive is clockwise on screen, as
 y points down). `ScaleToReach` works out the scale that takes a grabbed point
 to the pointer in the object's own coordinates, so a dragged corner follows the
 pointer exactly; `TurnToReach` takes the angle swept around the anchor.
-`ReshapedOutline` applies either to an outline for a live preview. An object
+`ReshapedOutline` applies either to an outline for a live preview.
+
+`SnapMove` (`document/stage_snap.h`) adjusts a move so the object lines up.
+On each axis it takes the moving outline's lowest, middle and highest
+coordinate after the offset, and the lines it may land on: the stage's edges
+and centre, and the lowest, middle and highest coordinate of every other
+outline (the moving depth's own is skipped). The closest pair within `reach`
+stage units wins, the first one found on a tie, and the offset moves by their
+difference; the result also names the line as a guide. The two axes snap
+independently. An object
 whose matrix is flat cannot be scaled from a drag.
 
 `ReshapeBakedDepth` writes the new 2x2 into the live placement (carrying the

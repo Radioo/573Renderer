@@ -32,6 +32,8 @@ constexpr double kTurnDistance = 28.0;
 constexpr double kAnchorSize = 6.0;
 constexpr int kOutlineWidth = 2;
 const QColor kSelectedColour(80, 200, 255);
+const QColor kGuideColour(255, 80, 200);
+constexpr double kSnapReach = 6.0;
 
 QPointF Middle(QPointF a, QPointF b) {
     return (a + b) / 2.0;
@@ -70,6 +72,36 @@ void Viewport::ShowOutlines(std::vector<Document::StageOutline> outlines,
 QSize Viewport::FittedSize(QSize available) const {
     if (stage_.isEmpty()) return available;
     return stage_.scaled(available, Qt::KeepAspectRatio);
+}
+
+void Viewport::SetSnapping(bool on) {
+    snapping_ = on;
+}
+
+Document::Snapped Viewport::Moved(const Document::StageOutline& outline) const {
+    const Document::Point raw{pointer_[0] - grab_[0], pointer_[1] - grab_[1]};
+    const QRectF target = Target();
+    if (!snapping_ || snap_suspended_ || stage_.isEmpty() || target.isEmpty())
+        return Document::Snapped{.offset = raw, .guides = {}};
+    const double reach = kSnapReach * stage_.width() / target.width();
+    return Document::SnapMove(
+        outline, outlines_,
+        {static_cast<double>(stage_.width()), static_cast<double>(stage_.height())}, raw, reach);
+}
+
+void Viewport::DrawGuides(QPainter& painter, const Document::StageOutline& outline) const {
+    if (!dragging_ || gesture_ != Gesture::Move) return;
+    painter.setPen(QPen(kGuideColour, 1));
+    const QRectF target = Target();
+    for (const Document::SnapGuide& guide : Moved(outline).guides) {
+        if (guide.vertical) {
+            const double x = ToWidget({guide.at, 0}).x();
+            painter.drawLine(QPointF(x, target.top()), QPointF(x, target.bottom()));
+        } else {
+            const double y = ToWidget({0, guide.at}).y();
+            painter.drawLine(QPointF(target.left(), y), QPointF(target.right(), y));
+        }
+    }
 }
 
 QRectF Viewport::Target() const {
@@ -125,8 +157,9 @@ Document::StageOutline Viewport::Preview(const Document::StageOutline& outline) 
     switch (gesture_) {
     case Gesture::Move: {
         Document::StageOutline moved = outline;
-        const double dx = pointer_[0] - grab_[0];
-        const double dy = pointer_[1] - grab_[1];
+        const Document::Point offset = Moved(outline).offset;
+        const double dx = offset[0];
+        const double dy = offset[1];
         for (Document::Point& corner : moved.corners)
             corner = {corner[0] + dx, corner[1] + dy};
         moved.anchor = {moved.anchor[0] + dx, moved.anchor[1] + dy};
@@ -172,6 +205,7 @@ void Viewport::paintEvent(QPaintEvent* event) {
     painter.drawImage(Target(), frame_);
     const Document::StageOutline* selected = SelectedOutline();
     if (selected == nullptr || stage_.isEmpty()) return;
+    DrawGuides(painter, *selected);
     painter.setRenderHint(QPainter::Antialiasing);
     painter.setPen(QPen(kSelectedColour, kOutlineWidth));
     DrawSelection(painter, Preview(*selected));
@@ -212,6 +246,7 @@ void Viewport::mouseMoveEvent(QMouseEvent* event) {
     const std::optional<QPointF> stage = ToStage(event->position());
     if (!stage) return;
     dragging_ = true;
+    snap_suspended_ = (event->modifiers() & Qt::AltModifier) != 0;
     pointer_ = {stage->x(), stage->y()};
     update();
     const Document::StageOutline* selected = SelectedOutline();
@@ -220,9 +255,11 @@ void Viewport::mouseMoveEvent(QMouseEvent* event) {
 
 void Viewport::EmitGesture(Gesture gesture, const Document::StageOutline& outline, bool finished) {
     switch (gesture) {
-    case Gesture::Move:
-        emit Dragged(outline.depth, pointer_[0] - grab_[0], pointer_[1] - grab_[1], finished);
+    case Gesture::Move: {
+        const Document::Point offset = Moved(outline).offset;
+        emit Dragged(outline.depth, offset[0], offset[1], finished);
         break;
+    }
     case Gesture::Scale: {
         const Document::Reshape reshape = Document::ScaleToReach(outline, grab_, pointer_);
         emit Reshaped(outline.depth, reshape.scale_x, reshape.scale_y, reshape.turn, finished);

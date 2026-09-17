@@ -242,6 +242,8 @@ void Window::BuildMenus() {
     background_action_->setChecked(QSettings().value(kBackgroundKey, false).toBool());
     connect(background_action_, &QAction::toggled, this, &Window::DrawBackground);
 
+    AddViewMenu();
+
     QMenu* edit = menuBar()->addMenu(tr("&Edit"));
     undo_action_ = edit->addAction(tr("&Undo"));
     undo_action_->setShortcut(QKeySequence::Undo);
