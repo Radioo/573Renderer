@@ -5,7 +5,9 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <iterator>
 #include <map>
+#include <optional>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -61,6 +63,38 @@ std::vector<DepthRow> DepthRows(const AfpAnimation::Container& clip) {
         out.push_back(std::move(row));
     }
     return out;
+}
+
+std::vector<uint32_t> DepthMarks(const AfpAnimation::Container& clip, uint16_t depth) {
+    std::vector<uint32_t> marks;
+    for (std::size_t index = 0; index < clip.frames.size(); index++) {
+        const AfpAnimation::Frame& frame = clip.frames[index];
+        for (uint32_t tag = 0; tag < frame.tag_count; tag++) {
+            const std::size_t position = frame.first_tag + tag;
+            if (position >= clip.tags.size()) break;
+            const auto& body = clip.tags[position].body;
+            const auto* placement = std::get_if<AfpAnimation::Placement>(&body);
+            const auto* remove = std::get_if<AfpAnimation::Remove>(&body);
+            const bool touches = (placement != nullptr && placement->depth == depth) ||
+                                 (remove != nullptr && remove->depth == depth);
+            if (!touches) continue;
+            marks.push_back(static_cast<uint32_t>(index));
+            break;
+        }
+    }
+    return marks;
+}
+
+std::optional<uint32_t> NextMark(const std::vector<uint32_t>& marks, uint32_t frame,
+                                 Direction direction) {
+    if (direction == Direction::Forward) {
+        const auto after = std::ranges::upper_bound(marks, frame);
+        if (after == marks.end()) return std::nullopt;
+        return *after;
+    }
+    const auto before = std::ranges::lower_bound(marks, frame);
+    if (before == marks.begin()) return std::nullopt;
+    return *std::prev(before);
 }
 
 }

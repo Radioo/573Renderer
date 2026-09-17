@@ -3,6 +3,7 @@
 #include "formats/afp_animation.h"
 
 #include <cstdint>
+#include <optional>
 #include <vector>
 
 namespace Document {
@@ -19,6 +20,13 @@ struct DepthRow {
     std::vector<Span> spans;
 };
 
+enum class Direction : uint8_t { Back, Forward };
+
 [[nodiscard]] std::vector<DepthRow> DepthRows(const AfpAnimation::Container& clip);
+
+[[nodiscard]] std::vector<uint32_t> DepthMarks(const AfpAnimation::Container& clip, uint16_t depth);
+
+[[nodiscard]] std::optional<uint32_t> NextMark(const std::vector<uint32_t>& marks, uint32_t frame,
+                                               Direction direction);
 
 }

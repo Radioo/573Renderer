@@ -12,6 +12,7 @@
 #include "document/stage_bounds.h"
 #include "document/frame_edit.h"
 #include "document/place_image.h"
+#include "document/tags.h"
 #include "formats/ifs_archive.h"
 
 #include <QAction>
@@ -48,6 +49,7 @@
 #include <QWidget>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -66,6 +68,7 @@ constexpr qint64 kLongestWaitMs = 10000;
 constexpr uint32_t kPreviewFrame = 400;
 constexpr uint32_t kNoDepth = 65535;
 constexpr uint32_t kFixedRate = 0x2;
+constexpr uint32_t kUpdateMatrix = 0x5;
 const QString kAnimationKind = "animation";
 
 class Script {
@@ -184,6 +187,14 @@ QString WritePackage(const QTemporaryDir& dir, bool with_image = false) {
         const Document::DepthSpan span{.clip = {}, .depth = 2, .first_frame = 0, .last_frame = 2};
         REQUIRE(file->AddImage("dot", 4, 3, std::vector<uint8_t>(48, 0x40)).has_value());
         REQUIRE(Document::PlaceImage(*file, path, "dot", span).has_value());
+        auto placed = file->ReadAnimation(path);
+        REQUIRE(placed.has_value());
+        AfpAnimation::Placement moved;
+        moved.flags = kUpdateMatrix;
+        moved.depth = 2;
+        moved.translation = std::array<int32_t, 2>{40, 0};
+        Document::InsertTag(placed->root, 2, AfpAnimation::Tag{moved});
+        REQUIRE(file->WriteAnimation(path, *placed).has_value());
     }
     const auto encoded = file->Encode();
     REQUIRE(encoded.has_value());
@@ -582,6 +593,42 @@ TEST_CASE("Solo hides every other depth, and a locked depth cannot be picked on 
     emit timeline->DepthChosen(2);
     run({Choose("Unlock depth 2 on stage")});
     CHECK(pick() == "2");
+}
+
+TEST_CASE("Frame keys step through the clip and jump between a depth's changes") {
+    Opened opened;
+    Open(opened, true);
+    auto* timeline = opened.window.findChild<Editor::Timeline*>();
+    REQUIRE(timeline != nullptr);
+    emit timeline->DepthChosen(2);
+    Script script({});
+
+    const auto at = [&](uint32_t frame) {
+        emit timeline->FrameChosen(frame);
+        QApplication::processEvents();
+        return timeline->grab().toImage();
+    };
+    const std::vector<QImage> frames{at(0), at(1), at(2)};
+    REQUIRE(frames[0] != frames[2]);
+    at(0);
+    const auto press = [&](Qt::Key key) {
+        QAction* action = ShortcutAction(opened.window, QKeySequence(key));
+        REQUIRE(action != nullptr);
+        action->trigger();
+        QApplication::processEvents();
+        return timeline->grab().toImage();
+    };
+    CHECK(press(Qt::Key_K) == frames[2]);
+    CHECK(press(Qt::Key_K) == frames[2]);
+    CHECK(press(Qt::Key_J) == frames[0]);
+    CHECK(press(Qt::Key_J) == frames[0]);
+    CHECK(press(Qt::Key_PageDown) == frames[1]);
+    CHECK(press(Qt::Key_End) == frames[2]);
+    CHECK(press(Qt::Key_PageDown) == frames[2]);
+    CHECK(press(Qt::Key_PageUp) == frames[1]);
+    CHECK(press(Qt::Key_Home) == frames[0]);
+    CHECK(press(Qt::Key_PageUp) == frames[0]);
+    CHECK(script.Problems().isEmpty());
 }
 
 TEST_CASE("A stage drag previews through the host before it is committed") {

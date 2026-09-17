@@ -236,6 +236,7 @@ void Window::BuildMenus() {
     background_action_->setCheckable(true);
     background_action_->setChecked(QSettings().value(kBackgroundKey, false).toBool());
     connect(background_action_, &QAction::toggled, this, &Window::DrawBackground);
+    AddStepActions(play);
 
     AddViewMenu();
 

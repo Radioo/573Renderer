@@ -282,3 +282,4 @@ captured. This milestone is the editing itself.
 - `issues/74-hide-depths-in-view.md` (milestone 8)
 - `issues/75-sprite-export-names.md` (milestone 8)
 - `issues/76-solo-and-lock.md` (milestone 8)
+- `issues/77-frame-keys.md` (milestone 8)

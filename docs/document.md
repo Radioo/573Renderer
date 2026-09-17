@@ -58,6 +58,11 @@ of bounds.
 
 Rows come back sorted by depth and each row's spans sorted by first frame.
 
+`DepthMarks(clip, depth)` lists the frames where a placement or remove touches
+a depth, once each, and `NextMark(marks, frame, direction)` finds the nearest
+one before or after a frame. They are what the editor's J and K keys step
+between.
+
 ## The open document (`document/document.h`)
 
 `Document::File` is the editor's open IFS. `Open(bytes)` reads the archive and

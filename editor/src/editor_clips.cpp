@@ -3,21 +3,27 @@
 #include "editor_timeline.h"
 #include "editor_viewport.h"
 
+#include "document/authored.h"
 #include "document/characters.h"
 #include "document/clip.h"
 #include "document/hidden_depths.h"
+#include "document/keyframes.h"
 #include "document/outline.h"
 #include "document/place_image.h"
 #include "support/expected.h"
 #include "document/sprite_exports.h"
 #include "document/sprite_preview.h"
+#include "document/timeline.h"
+#include "formats/afp_animation.h"
 
 #include <QAction>
 #include <QComboBox>
 #include <QHBoxLayout>
 #include <QInputDialog>
+#include <QKeySequence>
 #include <QLabel>
 #include <QLineEdit>
+#include <QMenu>
 #include <QScrollArea>
 #include <QSignalBlocker>
 #include <QStatusBar>
@@ -29,6 +35,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <functional>
 #include <optional>
 #include <string>
 #include <utility>
@@ -235,8 +242,7 @@ void Window::ShowClipTimeline() {
         ShowClipTimeline();
         return;
     }
-    const bool from_model = !host_.Running() || (clip_.sprite && !symbol_shown_);
-    const uint32_t count = from_model ? details->frame_count : frame_count_;
+    const uint32_t count = ClipFrameCount();
     timeline_->ShowAnimation(count, details->depths, details->labels);
     UpdateViewRows();
     frame_ = count == 0 ? 0 : std::min(frame_, count - 1);
@@ -285,6 +291,72 @@ void Window::SeekViewport(uint32_t frame) {
         return;
     }
     RenderFrame();
+}
+
+uint32_t Window::ClipFrameCount() const {
+    const bool from_model = !host_.Running() || (clip_.sprite && !symbol_shown_);
+    if (!from_model) return frame_count_;
+    if (!file_ || animation_path_.empty()) return 0;
+    const auto animation = file_->ReadAnimation(animation_path_);
+    if (!animation) return 0;
+    const auto details = Document::DescribeClip(*animation, clip_);
+    return details ? details->frame_count : 0;
+}
+
+void Window::JumpToFrame(int64_t frame) {
+    const uint32_t count = ClipFrameCount();
+    if (count == 0) return;
+    StopPlayback();
+    SeekTo(static_cast<uint32_t>(std::clamp<int64_t>(frame, 0, count - 1)));
+}
+
+void Window::StepToMark(Document::Direction direction) {
+    if (!file_ || animation_path_.empty() || !depth_) return;
+    const auto depth = static_cast<uint16_t>(*depth_);
+    std::vector<uint32_t> marks;
+    if (const Document::AuthoredDepth* owned = AuthoredAt(depth, frame_)) {
+        for (const Document::Track& track : owned->tracks) {
+            for (const Document::Keyframe& key : track.keys)
+                marks.push_back(key.frame);
+        }
+        std::ranges::sort(marks);
+        marks.erase(std::ranges::unique(marks).begin(), marks.end());
+    } else {
+        const auto animation = file_->ReadAnimation(animation_path_);
+        if (!animation) return;
+        const AfpAnimation::Container* clip = Document::FindClip(*animation, clip_);
+        if (clip == nullptr) return;
+        marks = Document::DepthMarks(*clip, depth);
+    }
+    const std::optional<uint32_t> next = Document::NextMark(marks, frame_, direction);
+    if (next) JumpToFrame(*next);
+}
+
+void Window::AddStepActions(QMenu* menu) {
+    struct StepAction {
+        QString text;
+        QKeySequence keys;
+        std::function<void()> run;
+    };
+    const std::vector<StepAction> actions{
+        {tr("&Previous frame"), QKeySequence(Qt::Key_PageUp),
+         [this] { JumpToFrame(static_cast<int64_t>(frame_) - 1); }},
+        {tr("&Next frame"), QKeySequence(Qt::Key_PageDown),
+         [this] { JumpToFrame(static_cast<int64_t>(frame_) + 1); }},
+        {tr("&First frame"), QKeySequence(Qt::Key_Home), [this] { JumpToFrame(0); }},
+        {tr("L&ast frame"), QKeySequence(Qt::Key_End),
+         [this] { JumpToFrame(static_cast<int64_t>(ClipFrameCount()) - 1); }},
+        {tr("Previous &change on the depth"), QKeySequence(Qt::Key_J),
+         [this] { StepToMark(Document::Direction::Back); }},
+        {tr("Next c&hange on the depth"), QKeySequence(Qt::Key_K),
+         [this] { StepToMark(Document::Direction::Forward); }},
+    };
+    menu->addSeparator();
+    for (const StepAction& step : actions) {
+        QAction* action = menu->addAction(step.text);
+        action->setShortcut(step.keys);
+        connect(action, &QAction::triggered, this, step.run);
+    }
 }
 
 void Window::SeekTo(uint32_t frame) {

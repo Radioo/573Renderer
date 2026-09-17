@@ -4,6 +4,7 @@
 #include "formats/afp_animation.h"
 
 #include <cstdint>
+#include <optional>
 #include <vector>
 
 namespace {
@@ -109,4 +110,27 @@ TEST_CASE("A frame pointing past the tag list stops the walk") {
     const std::vector<Document::DepthRow> rows = Document::DepthRows(clip);
     REQUIRE(rows.size() == 1);
     CHECK(rows[0].spans[0].last_frame == 1);
+}
+
+TEST_CASE("A depth's marks are the frames where a tag touches it") {
+    const AfpAnimation::Container clip = ClipOf({{Place(kCreate, 1), Place(kCreate, 2)},
+                                                 {},
+                                                 {Place(kUpdate, 1), Place(kUpdate, 1)},
+                                                 {Place(kUpdate, 2)},
+                                                 {Remove(1)}});
+    CHECK(Document::DepthMarks(clip, 1) == std::vector<uint32_t>{0, 2, 4});
+    CHECK(Document::DepthMarks(clip, 2) == std::vector<uint32_t>{0, 3});
+    CHECK(Document::DepthMarks(clip, 9).empty());
+}
+
+TEST_CASE("Stepping between marks skips to the nearest one either way") {
+    const std::vector<uint32_t> marks{2, 5, 9};
+    CHECK(Document::NextMark(marks, 0, Document::Direction::Forward) == uint32_t{2});
+    CHECK(Document::NextMark(marks, 2, Document::Direction::Forward) == uint32_t{5});
+    CHECK(Document::NextMark(marks, 6, Document::Direction::Forward) == uint32_t{9});
+    CHECK_FALSE(Document::NextMark(marks, 9, Document::Direction::Forward).has_value());
+    CHECK(Document::NextMark(marks, 9, Document::Direction::Back) == uint32_t{5});
+    CHECK(Document::NextMark(marks, 4, Document::Direction::Back) == uint32_t{2});
+    CHECK_FALSE(Document::NextMark(marks, 2, Document::Direction::Back).has_value());
+    CHECK_FALSE(Document::NextMark({}, 3, Document::Direction::Forward).has_value());
 }

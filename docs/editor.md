@@ -421,6 +421,16 @@ viewport, and is never recorded in the project when the write into the package
 failed. It also means the open document always shows what the project says
 rather than waiting for an export.
 
+The Playback menu also steps the playhead as After Effects does: Page Up and
+Page Down go one frame back and forward, Home and End go to the clip's first
+and last frame, and J and K go to the previous and next change on the selected
+depth. A change is a frame where a placement or remove touches it
+(`Document::DepthMarks`), or, for a depth the project owns, a frame that holds a
+keyframe, so an eased track is not stepped through frame by frame. Each step
+stops playback, stays inside the clip, and seeks the same way a click on the
+ruler does (`Window::JumpToFrame`); the clip's frame count comes from the host
+when it shows the clip and from the model otherwise (`Window::ClipFrameCount`).
+
 `Playback > Play` (the space bar) plays the animation and pauses it, and
 `Playback > Loop` decides whether it wraps at the end; the choice is remembered
 between runs. The timer's interval is `Document::FrameIntervalMs` of the

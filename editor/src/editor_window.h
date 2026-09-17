@@ -17,6 +17,7 @@
 #include "document/outline.h"
 #include "document/place_image.h"
 #include "document/stage_bounds.h"
+#include "document/timeline.h"
 #include "preview/shared_texture.h"
 
 #include <QMainWindow>
@@ -36,6 +37,7 @@ class CDockManager;
 
 class QAction;
 class QComboBox;
+class QMenu;
 class QScrollArea;
 class QWidget;
 class QPoint;
@@ -141,6 +143,10 @@ private:
     ReadOnlyRows(const std::vector<Document::Field>& fields);
     void RenderFrame();
     void SeekTo(uint32_t frame);
+    [[nodiscard]] uint32_t ClipFrameCount() const;
+    void JumpToFrame(int64_t frame);
+    void StepToMark(Document::Direction direction);
+    void AddStepActions(QMenu* menu);
     void SeekViewport(uint32_t frame);
     QWidget* BuildTimelinePanel(QScrollArea* timeline_area);
     void FillClips();
