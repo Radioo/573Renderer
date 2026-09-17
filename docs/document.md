@@ -826,6 +826,24 @@ to the frame. The all-or-nothing editable flag this replaced made the camera
 read-only whenever the selected depth happened to be owned, which was never
 intended.
 
+### Filter rows (`document/filter_fields.h`)
+
+A filter list shows as rows rather than as one line of numbers: `Filter N`
+names the filter (colour matrix, colour matrix with HSV, a lookup with its table
+length, or an unknown filter with its byte count), and a colour matrix adds
+`Filter N red`, `green`, `blue` and `alpha`, five raw values each (1.0 is 65536,
+the fifth is the offset), and `Filter N HSV` when it carries one. The matrix rows
+and the HSV row are editable; the kind rows are not, and a lookup or unknown
+filter has nothing editable, because its bytes' meaning is not known. An edit
+that does not fit the field changes nothing.
+
+A baked placement lists these rows among its fields and `SetPlacementField`
+takes them. For an owned depth, a selected Filters keyframe shows them in place
+of the raw keyframe value, marked `EditTarget::KeyFilter`, and
+`SetKeyFilterFieldAt` decodes the keyframe, applies the edit and stores it back.
+An edit never changes a filter's kind or how many numbers the list takes, so
+the track stays one shape.
+
 ## Editing keyframes (`document/keyframe_edit.h`)
 
 `keyframes.h` holds the track and its sampling; `keyframe_edit.h` is what an

@@ -2,6 +2,7 @@
 
 #include "document/animation_strings.h"
 #include "document/field_values.h"
+#include "document/filter_fields.h"
 #include "document/outline.h"
 #include "formats/afp_animation.h"
 #include "support/expected.h"
@@ -225,7 +226,6 @@ Support::Expected<void, std::string> SetField(AfpAnimation::Animation& animation
 std::string UnknownText(const AfpAnimation::Placement& placement) {
     std::vector<std::string> parts;
     if (placement.clip_actions) parts.emplace_back("clip actions");
-    if (placement.filters) parts.emplace_back("filters");
     if (placement.origin_z) parts.emplace_back("origin z");
     if (placement.discarded_words) parts.emplace_back("discarded words");
     if (placement.curves) parts.emplace_back("curves");
@@ -266,19 +266,28 @@ std::vector<Field> PlacementFields(const AfpAnimation::Animation& animation,
         fields.push_back(Field{.name = std::string(named.name),
                                .value = FieldText(animation, placement, named.id)});
     }
+    if (placement.filters) {
+        const std::vector<Field> filters = FilterFields(*placement.filters);
+        fields.insert(fields.end(), filters.begin(), filters.end());
+    }
     const std::string unknown = UnknownText(placement);
     if (!unknown.empty()) fields.push_back(Field{.name = "Unknown data", .value = unknown});
     return fields;
 }
 
 bool PlacementFieldIsEditable(std::string_view name) {
-    return FieldFor(name).has_value();
+    return FieldFor(name).has_value() || FilterFieldIsEditable(name);
 }
 
 Support::Expected<void, std::string> SetPlacementField(AfpAnimation::Animation& animation,
                                                        AfpAnimation::Placement& placement,
                                                        std::string_view name,
                                                        std::string_view value) {
+    if (FilterFieldIsEditable(name)) {
+        if (!placement.filters)
+            return Support::Unexpected(std::string("this placement carries no filters"));
+        return SetFilterField(*placement.filters, name, value);
+    }
     const std::optional<FieldId> id = FieldFor(name);
     if (!id) return Support::Unexpected(std::string(name) + " is not an editable placement field");
     return SetField(animation, placement, *id, value);

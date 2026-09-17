@@ -74,7 +74,8 @@ TEST_CASE("Placement fields show what the placement carries and nothing else") {
     CHECK(ValueOf(fields, "Name") == "logo");
     CHECK(ValueOf(fields, "HSV") == "90, -5, 3");
     CHECK(ValueOf(fields, "Scale").empty());
-    CHECK(ValueOf(fields, "Unknown data") == "filters");
+    CHECK(ValueOf(fields, "Filter 1") == "unknown, 3 bytes");
+    CHECK(ValueOf(fields, "Unknown data") == "<missing>");
     CHECK(Document::PlacementFieldIsEditable("Translation"));
     CHECK_FALSE(Document::PlacementFieldIsEditable("Unknown data"));
     CHECK_FALSE(Document::PlacementFieldIsEditable("Depth"));

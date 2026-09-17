@@ -447,6 +447,10 @@ void Window::ApplyFieldEdit(QTableWidgetItem* item) {
     const uint32_t frame = frame_;
     const Document::ClipId clip = clip_;
 
+    if (edits == Document::EditTarget::KeyFilter) {
+        if (!ApplyKeyFilterEdit(name->text(), item->text())) ShowFrame();
+        return;
+    }
     if (edits == Document::EditTarget::KeyValue) {
         if (!ApplyKeyEdit(item->text())) ShowFrame();
         return;

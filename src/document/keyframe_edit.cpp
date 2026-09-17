@@ -2,6 +2,8 @@
 
 #include "document/authored.h"
 #include "document/field_values.h"
+#include "document/filter_fields.h"
+#include "document/filter_values.h"
 #include "document/keyframes.h"
 #include "support/expected.h"
 
@@ -15,6 +17,8 @@
 namespace Document {
 
 namespace {
+
+constexpr std::string_view kFilters = "Filters";
 
 Support::Expected<Track*, std::string> TrackOf(AuthoredDepth& authored, std::string_view property) {
     const auto found = std::ranges::find(authored.tracks, property, &Track::property);
@@ -81,6 +85,20 @@ Support::Expected<void, std::string> SetKeyValueAt(AuthoredDepth& authored,
     auto numbers = Numbers(value, key->value.size());
     if (!numbers) return Support::Unexpected(numbers.error());
     return SetKeyframeValue(**track, frame, *numbers);
+}
+
+Support::Expected<void, std::string> SetKeyFilterFieldAt(AuthoredDepth& authored, uint32_t frame,
+                                                         std::string_view field,
+                                                         std::string_view value) {
+    auto track = TrackOf(authored, kFilters);
+    if (!track) return Support::Unexpected(track.error());
+    const std::optional<Keyframe> key = KeyAt(authored, kFilters, frame);
+    if (!key) return Support::Unexpected("frame " + std::to_string(frame) + " holds no keyframe");
+    auto filters = FiltersFrom(key->value);
+    if (!filters) return Support::Unexpected(filters.error());
+    auto set = SetFilterField(*filters, field, value);
+    if (!set) return Support::Unexpected(set.error());
+    return SetKeyframeValue(**track, frame, FilterNumbers(*filters));
 }
 
 std::optional<Keyframe> KeyAt(const AuthoredDepth& authored, std::string_view property,

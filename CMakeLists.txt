@@ -820,6 +820,7 @@ add_executable(document_tests
     tests/document/clip_edit_tests.cpp
     tests/document/clip_tests.cpp
     tests/document/document_tests.cpp
+    tests/document/filter_fields_tests.cpp
     tests/document/filter_values_tests.cpp
     tests/document/frame_edit_tests.cpp
     tests/document/history_tests.cpp

@@ -3,17 +3,21 @@
 #include "document/authored.h"
 #include "document/camera_edit.h"
 #include "document/clip.h"
+#include "document/filter_fields.h"
+#include "document/filter_values.h"
 #include "document/keyframe_edit.h"
 #include "document/keyframes.h"
 #include "document/library_call.h"
 #include "document/outline.h"
 #include "document/placement_edit.h"
 #include "formats/afp_animation.h"
+#include "support/expected.h"
 
 #include <cstddef>
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -21,6 +25,8 @@
 namespace Document {
 
 namespace {
+
+constexpr std::string_view kFilters = "Filters";
 
 InspectedRow Plain(std::string name, std::string value) {
     return InspectedRow{.field = Field{.name = std::move(name), .value = std::move(value)},
@@ -38,9 +44,22 @@ void AppendOwned(std::vector<InspectedRow>& rows, const Selection& selection) {
 
     rows.push_back(Plain("Keyframe", selection.key_property + " on frame " +
                                          std::to_string(*selection.key_frame)));
-    rows.push_back(
-        InspectedRow{.field = Field{.name = "Keyframe value", .value = KeyValueText(*key)},
-                     .edits = EditTarget::KeyValue});
+    const auto filters = selection.key_property == kFilters
+                             ? FiltersFrom(key->value)
+                             : Support::Expected<std::vector<AfpAnimation::Filter>, std::string>(
+                                   Support::Unexpected(std::string()));
+    if (filters) {
+        for (const Field& field : FilterFields(*filters)) {
+            rows.push_back(InspectedRow{.field = field,
+                                        .edits = FilterFieldIsEditable(field.name)
+                                                     ? EditTarget::KeyFilter
+                                                     : EditTarget::None});
+        }
+    } else {
+        rows.push_back(
+            InspectedRow{.field = Field{.name = "Keyframe value", .value = KeyValueText(*key)},
+                         .edits = EditTarget::KeyValue});
+    }
     rows.push_back(Plain("Keyframe leaves as", std::string(EaseName(key->ease))));
 }
 

@@ -268,7 +268,8 @@ step with the handles.
 
 With a keyframe selected the inspector carries three rows for it above the
 placement fields: which property and frame it is, its value, and the ease it
-leaves on. The value row is the one editable cell an owned depth has, because
+leaves on. A Filters keyframe shows its filters as rows instead of the value,
+and an edit to one of them goes through `Window::ApplyKeyFilterEdit`. The value row is the one editable cell an owned depth has, because
 the placement rows below it are produced from the keyframes rather than edited.
 
 What those rows are is `Document::InspectFrame`, not window code: `ShowFrame`

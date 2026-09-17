@@ -12,7 +12,7 @@
 
 namespace Document {
 
-enum class EditTarget : uint8_t { None, Placement, Camera, CallArgument, KeyValue };
+enum class EditTarget : uint8_t { None, Placement, Camera, CallArgument, KeyValue, KeyFilter };
 
 struct InspectedRow {
     Field field;

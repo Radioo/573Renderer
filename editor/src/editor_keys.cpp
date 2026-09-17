@@ -86,6 +86,17 @@ bool Window::ApplyKeyEdit(const QString& value) {
                         });
 }
 
+bool Window::ApplyKeyFilterEdit(const QString& field, const QString& value) {
+    if (!key_frame_) return false;
+    const std::string name = field.toStdString();
+    const std::string text = value.toStdString();
+    const uint32_t frame = *key_frame_;
+    return EditAuthored(tr("%1 on frame %2").arg(field).arg(frame),
+                        [&name, frame, &text](Document::AuthoredDepth& owned) {
+                            return Document::SetKeyFilterFieldAt(owned, frame, name, text);
+                        });
+}
+
 void Window::StartAnimating() {
     if (!file_ || !depth_ || animation_path_.empty()) return;
     const std::optional<std::size_t> at = AuthoredIndexAt(static_cast<uint16_t>(*depth_), frame_);

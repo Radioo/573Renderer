@@ -22,6 +22,11 @@ RemoveKeyAt(AuthoredDepth& authored, std::string_view property, uint32_t frame);
                                                                  uint32_t frame,
                                                                  std::string_view value);
 
+[[nodiscard]] Support::Expected<void, std::string> SetKeyFilterFieldAt(AuthoredDepth& authored,
+                                                                       uint32_t frame,
+                                                                       std::string_view field,
+                                                                       std::string_view value);
+
 [[nodiscard]] std::optional<Keyframe> KeyAt(const AuthoredDepth& authored,
                                             std::string_view property, uint32_t frame);
 
