@@ -168,6 +168,7 @@ private:
     void MoveSpanToDepth(uint16_t depth, uint32_t frame);
     void DuplicateSpanToDepth(uint16_t depth, uint32_t frame);
     void GroupDepthsIntoSprite(uint16_t depth, uint32_t frame);
+    void UngroupSpriteAt(uint16_t depth, uint32_t frame);
     [[nodiscard]] bool OwnsDepthIn(const Document::GroupRange& range) const;
     void TrimSpanOnTimeline(uint16_t depth, uint32_t frame, uint32_t first, uint32_t last);
     void ResizeViewport();

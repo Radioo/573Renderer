@@ -160,6 +160,25 @@ void Window::GroupDepthsIntoSprite(uint16_t depth, uint32_t frame) {
     ShowFrame();
 }
 
+void Window::UngroupSpriteAt(uint16_t depth, uint32_t frame) {
+    if (!file_ || animation_path_.empty()) return;
+    if (AuthoredIndexAt(depth, frame)) {
+        ReportProblem(
+            tr("The project owns depth %1 here. Detach it before ungrouping.").arg(depth));
+        return;
+    }
+    const Document::ClipId clip = clip_;
+    if (!EditAnimation(tr("Ungroup the sprite on depth %1").arg(depth),
+                       [clip, depth, frame](AfpAnimation::Animation& edited) {
+                           return Document::UngroupSprite(edited, clip, depth, frame);
+                       })) {
+        return;
+    }
+    depth_ = depth;
+    RefillClipsKeepingChoice();
+    ShowFrame();
+}
+
 void Window::DuplicateSpanToDepth(uint16_t depth, uint32_t frame) {
     if (!file_ || animation_path_.empty()) return;
     const auto animation = file_->ReadAnimation(animation_path_);

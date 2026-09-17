@@ -1016,6 +1016,32 @@ range to draw byte for byte as before, and that removing the sprite changes a
 frame inside it. Building the sprite's frames one frame late, or without the
 offset of the first frame, was seen to fail it.
 
+`UngroupSprite(animation, clip, depth, frame)` is the reverse. It takes the
+span of `depth` around `frame` and, when that span places a sprite, puts the
+sprite's placements and removes back into the clip at their own depths, each
+sprite frame k on clip frame F + k with its end frame moved back by F, and adds
+a remove on the frame after the span for every depth still showing on the
+sprite's last frame. The sprite's definition goes too when nothing else places
+it and it is not exported. Grouping and then ungrouping gives back the clip it
+started from, which `ungroup_sprite_tests` checks.
+
+It takes only what it can put back without changing the picture, which is what
+grouping makes:
+
+- the span places the sprite once and never updates it, and the placement
+  carries nothing but the character, so there is no transform, colour, name or
+  effect to fold into the children;
+- the sprite is exactly as long as the span, so it plays once through;
+- the sprite holds only placements and removes, has no labels, and places
+  nothing with a name, class name, script, 3D mark or clip depth;
+- no other depth of the clip shows anything on those frames at a number
+  between the sprite's depth and the depths it would put back, since those
+  would change places in the stacking order, and nothing in the clip sets a
+  clip depth on those frames.
+
+Shipped sprites are usually placed with a matrix, so for now this mostly undoes
+the editor's own groups.
+
 ### Removing a frame keeps the definitions in it
 
 `RemoveFrame` drops only the per-frame commands in the frame (place, remove,

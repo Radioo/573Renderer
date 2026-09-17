@@ -2,15 +2,19 @@
 
 #include "document/clip.h"
 #include "document/image_shape.h"
+#include "document/span_edit.h"
 #include "document/span_tags.h"
 #include "document/tags.h"
 #include "document/timeline.h"
 #include "formats/afp_animation.h"
 #include "support/expected.h"
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <limits>
+#include <optional>
+#include <ranges>
 #include <string>
 #include <utility>
 #include <variant>
@@ -119,6 +123,128 @@ std::vector<Moved> MovedTags(const AfpAnimation::Container& clip, const GroupRan
     return moved;
 }
 
+const AfpAnimation::Container* SpriteDefinition(const AfpAnimation::Container& root, uint16_t id) {
+    for (const AfpAnimation::Tag& tag : root.tags) {
+        const auto* sprite = std::get_if<AfpAnimation::Sprite>(&tag.body);
+        if (sprite != nullptr && sprite->id == id) return &sprite->container;
+    }
+    return nullptr;
+}
+
+std::size_t Uses(const AfpAnimation::Container& clip, uint16_t id) {
+    std::size_t uses = 0;
+    for (const AfpAnimation::Tag& tag : clip.tags) {
+        if (const auto* placement = std::get_if<AfpAnimation::Placement>(&tag.body)) {
+            if (placement->character == id) uses++;
+        } else if (const auto* sprite = std::get_if<AfpAnimation::Sprite>(&tag.body)) {
+            uses += Uses(sprite->container, id);
+        }
+    }
+    return uses;
+}
+
+bool Bare(const AfpAnimation::Placement& placement) {
+    AfpAnimation::Placement bare = placement;
+    bare.depth = 0;
+    bare.end_frame = 0;
+    bare.character.reset();
+    return bare == AfpAnimation::Placement{};
+}
+
+Support::Expected<void, std::string> CheckContents(const AfpAnimation::Container& inside) {
+    if (!inside.labels.empty() || (inside.script_labels && !inside.script_labels->empty())) {
+        return Support::Unexpected(
+            std::string("the sprite has labels, which would name nothing once it is gone"));
+    }
+    for (const AfpAnimation::Tag& tag : inside.tags) {
+        if (std::holds_alternative<AfpAnimation::Remove>(tag.body)) continue;
+        const auto* placement = std::get_if<AfpAnimation::Placement>(&tag.body);
+        if (placement == nullptr) {
+            return Support::Unexpected(
+                std::string("the sprite holds more than placements and removes"));
+        }
+        const std::string what =
+            placement->clip_depth ? std::string("a clip depth") : Unreachable(*placement);
+        if (!what.empty()) {
+            return Support::Unexpected("the sprite places " + DepthText(placement->depth) +
+                                       " with " + what +
+                                       ", which would not reach it the same way outside it");
+        }
+    }
+    return {};
+}
+
+Support::Expected<void, std::string> CheckStacking(const AfpAnimation::Container& clip,
+                                                   uint16_t depth, const Span& span,
+                                                   const std::vector<DepthRow>& children) {
+    uint16_t low = depth;
+    uint16_t high = depth;
+    for (const DepthRow& child : children) {
+        low = std::min(low, child.depth);
+        high = std::max(high, child.depth);
+    }
+    for (const DepthRow& row : DepthRows(clip)) {
+        if (row.depth == depth) continue;
+        for (const Span& other : row.spans) {
+            if (other.first_frame > span.last_frame || other.last_frame < span.first_frame)
+                continue;
+            for (const std::size_t index : SpanTags(clip, row.depth, other)) {
+                const auto* placement =
+                    std::get_if<AfpAnimation::Placement>(&clip.tags[index].body);
+                if (placement != nullptr && placement->clip_depth) {
+                    return Support::Unexpected(
+                        DepthText(row.depth) +
+                        " sets a clip depth on those frames, and how a clip depth reaches into a "
+                        "sprite is not known");
+                }
+            }
+            if (row.depth < low || row.depth > high) continue;
+            return Support::Unexpected(DepthText(row.depth) +
+                                       " shows something on those frames between the depths the "
+                                       "sprite would put back");
+        }
+    }
+    return {};
+}
+
+void PutBack(AfpAnimation::Container& clip, const AfpAnimation::Container& inside, const Span& span,
+             const std::vector<DepthRow>& children) {
+    const auto length = static_cast<uint32_t>(inside.frames.size());
+    for (uint32_t frame = 0; frame < length; frame++) {
+        const AfpAnimation::Frame& owner = inside.frames[frame];
+        for (uint32_t i = 0; i < owner.tag_count; i++) {
+            AfpAnimation::Tag tag = inside.tags[owner.first_tag + i];
+            auto* placement = std::get_if<AfpAnimation::Placement>(&tag.body);
+            if (placement != nullptr && placement->end_frame != 0) {
+                placement->end_frame =
+                    static_cast<uint16_t>(placement->end_frame + span.first_frame);
+            }
+            InsertTag(clip, span.first_frame + frame, std::move(tag));
+        }
+    }
+    const uint32_t closing = span.last_frame + 1;
+    if (closing >= clip.frames.size()) return;
+    for (const DepthRow& child : std::views::reverse(children)) {
+        if (child.spans.empty() || child.spans.back().last_frame + 1 != length) continue;
+        InsertTagFirst(
+            clip, closing,
+            AfpAnimation::Tag{AfpAnimation::Remove{.unread_word = 0, .depth = child.depth}});
+    }
+}
+
+void DropUnusedDefinition(AfpAnimation::Animation& animation, uint16_t id) {
+    if (Uses(animation.root, id) != 0) return;
+    const bool exported = std::ranges::any_of(
+        animation.exports, [id](const AfpAnimation::Export& one) { return one.tag == id; });
+    if (exported) return;
+    for (std::size_t index = 0; index < animation.root.tags.size(); index++) {
+        const auto* sprite = std::get_if<AfpAnimation::Sprite>(&animation.root.tags[index].body);
+        if (sprite == nullptr || sprite->id != id) continue;
+        EraseTag(animation.root, index);
+        return;
+    }
+}
+
 AfpAnimation::Container Nested(const AfpAnimation::Container& clip, const std::vector<Moved>& moved,
                                const GroupRange& range) {
     AfpAnimation::Container nested;
@@ -174,6 +300,57 @@ Support::Expected<uint16_t, std::string> GroupIntoSprite(AfpAnimation::Animation
     InsertTag(edited.root, 0, AfpAnimation::Tag{std::move(sprite)});
     animation = std::move(edited);
     return *id;
+}
+
+Support::Expected<void, std::string> UngroupSprite(AfpAnimation::Animation& animation,
+                                                   ClipId clip_id, uint16_t depth, uint32_t frame) {
+    AfpAnimation::Animation edited = animation;
+    auto found = RequireClip(edited, clip_id);
+    if (!found) return Support::Unexpected(found.error());
+    AfpAnimation::Container& clip = **found;
+    const std::optional<Span> span = SpanOfDepth(clip, depth, frame);
+    if (!span) {
+        return Support::Unexpected(DepthText(depth) + " holds nothing on frame " +
+                                   std::to_string(frame));
+    }
+    const std::vector<std::size_t> tags = SpanTags(clip, depth, *span);
+    const auto placed = std::ranges::count_if(
+        tags, [&clip, depth](std::size_t index) { return IsPlacementOf(clip.tags[index], depth); });
+    if (placed != 1) {
+        return Support::Unexpected(DepthText(depth) +
+                                   " changes after it is placed, which ungrouping would lose");
+    }
+    const auto& create = std::get<AfpAnimation::Placement>(clip.tags[tags.front()].body);
+    const uint16_t id = create.character.value_or(0);
+    const AfpAnimation::Container* defined =
+        create.character ? SpriteDefinition(edited.root, id) : nullptr;
+    if (defined == nullptr)
+        return Support::Unexpected(DepthText(depth) + " does not place a sprite there");
+    if (!Bare(create)) {
+        return Support::Unexpected(
+            DepthText(depth) +
+            " places its sprite with a transform, colour, name or effect, which ungrouping "
+            "would lose");
+    }
+    const AfpAnimation::Container inside = *defined;
+    const uint32_t length = span->last_frame - span->first_frame + 1;
+    if (inside.frames.size() != length) {
+        return Support::Unexpected("the sprite is " + std::to_string(inside.frames.size()) +
+                                   " frames long and " + DepthText(depth) + " shows it for " +
+                                   std::to_string(length) + ", so it does not play once through");
+    }
+    auto contents = CheckContents(inside);
+    if (!contents) return Support::Unexpected(contents.error());
+    const std::vector<DepthRow> children = DepthRows(inside);
+    auto stacking = CheckStacking(clip, depth, *span, children);
+    if (!stacking) return Support::Unexpected(stacking.error());
+
+    for (std::size_t i = tags.size(); i > 0; i--)
+        EraseTag(clip, tags[i - 1]);
+    PutBack(clip, inside, *span, children);
+    DropUnusedDefinition(edited, id);
+    animation = std::move(edited);
+    return {};
 }
 
 }

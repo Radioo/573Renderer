@@ -350,7 +350,7 @@ TEST_CASE("A span duplicated from the timeline menu lands on the next free depth
     CHECK(refused.Problems().front().contains("depth 2"));
 }
 
-TEST_CASE("Depths grouped from the timeline menu become a sprite that can be picked") {
+TEST_CASE("Depths grouped from the timeline menu become a sprite, and ungrouping undoes it") {
     Opened opened;
     Open(opened);
     auto* timeline = opened.window.findChild<Editor::Timeline*>();
@@ -359,14 +359,27 @@ TEST_CASE("Depths grouped from the timeline menu become a sprite that can be pic
     REQUIRE(clips != nullptr);
     const int before = clips->count();
     emit timeline->DepthChosen(1);
-    Script grouped({Choose("Group depth 1 and up here into a sprite..."), AcceptNumber(),
-                    AcceptNumber(), AcceptNumber()});
+    {
+        Script grouped({Choose("Group depth 1 and up here into a sprite..."), AcceptNumber(),
+                        AcceptNumber(), AcceptNumber()});
+        emit timeline->MenuRequested(QPoint(4, 4), 1, QString());
+        REQUIRE(Settle([&grouped] { return grouped.Finished(); }));
+        CHECK(grouped.Problems().isEmpty());
+        CHECK(clips->count() == before + 1);
+        CHECK(clips->currentIndex() == 0);
+        CHECK(RowValue(*opened.inspector, "Depth") == "1");
+    }
+    {
+        Script ungrouped({Choose("Ungroup the sprite on depth 1 here")});
+        emit timeline->MenuRequested(QPoint(4, 4), 1, QString());
+        REQUIRE(Settle([&ungrouped] { return ungrouped.Finished(); }));
+        CHECK(ungrouped.Problems().isEmpty());
+        CHECK(clips->count() == before);
+    }
+    Script refused({Choose("Ungroup the sprite on depth 1 here")});
     emit timeline->MenuRequested(QPoint(4, 4), 1, QString());
-    REQUIRE(Settle([&grouped] { return grouped.Finished(); }));
-    CHECK(grouped.Problems().isEmpty());
-    CHECK(clips->count() == before + 1);
-    CHECK(clips->currentIndex() == 0);
-    CHECK(RowValue(*opened.inspector, "Depth") == "1");
+    REQUIRE(Settle([&refused] { return !refused.Problems().isEmpty(); }));
+    CHECK(refused.Problems().front().contains("sprite"));
 }
 
 TEST_CASE("A stage drag only changes the document when it ends") {

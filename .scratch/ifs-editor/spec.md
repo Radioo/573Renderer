@@ -277,3 +277,4 @@ captured. This milestone is the editing itself.
 - `issues/69-trim-3d-spans.md` (milestone 8)
 - `issues/70-curve-tracks.md` (milestone 8)
 - `issues/71-group-into-sprite.md` (milestone 8)
+- `issues/72-ungroup-sprite.md` (milestone 8)

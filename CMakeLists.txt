@@ -871,6 +871,7 @@ add_executable(document_tests
     tests/document/stage_bounds_tests.cpp
     tests/document/stage_move_tests.cpp
     tests/document/timeline_tests.cpp
+    tests/document/ungroup_sprite_tests.cpp
 )
 target_include_directories(document_tests PRIVATE tests/document)
 target_link_libraries(document_tests PRIVATE Catch2::Catch2WithMain r573_document r573_support

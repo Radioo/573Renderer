@@ -195,7 +195,10 @@ into a sprite (`Window::GroupDepthsIntoSprite`): it asks for the last depth, the
 the first and last frame, which start as the widest span those depths have under
 the playhead, and applies `Document::GroupIntoSprite` as one undo step. It is
 refused while the project owns any depth in that range. The clip box is refilled
-so the new sprite can be picked, keeping the clip that was being edited.
+so the new sprite can be picked, keeping the clip that was being edited. The
+same menu offers to ungroup the sprite on the selected depth
+(`Window::UngroupSpriteAt`, through `Document::UngroupSprite`), which is refused
+while the project owns that depth and refills the clip box the same way.
 
 **Timeline.** `Editor::Timeline` draws a ruler carrying the animation's labels
 at their frames, then one row per depth from `Document::DepthRows`, with a bar
