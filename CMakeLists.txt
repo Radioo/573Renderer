@@ -764,6 +764,13 @@ target_link_libraries(shape_geometry_survey_tests PRIVATE Catch2::Catch2WithMain
                                                           r573_support r573::warnings)
 catch_discover_tests(shape_geometry_survey_tests DISCOVERY_MODE POST_BUILD PROPERTIES LABELS local)
 
+add_executable(filter_span_survey_tests
+    tests/local/filter_span_survey_tests.cpp
+)
+target_link_libraries(filter_span_survey_tests PRIVATE Catch2::Catch2WithMain r573_document
+                                                       r573_formats r573_support r573::warnings)
+catch_discover_tests(filter_span_survey_tests DISCOVERY_MODE POST_BUILD PROPERTIES LABELS local)
+
 add_executable(afp_script_survey_tests
     tests/local/afp_script_survey_tests.cpp
 )
@@ -803,6 +810,7 @@ add_executable(document_tests
     tests/document/atlas_tests.cpp
     tests/document/authored_character_tests.cpp
     tests/document/authored_control_bits_tests.cpp
+    tests/document/authored_filter_tests.cpp
     tests/document/authored_group_tests.cpp
     tests/document/authored_new_track_tests.cpp
     tests/document/authored_sprite_tests.cpp
@@ -812,6 +820,7 @@ add_executable(document_tests
     tests/document/clip_edit_tests.cpp
     tests/document/clip_tests.cpp
     tests/document/document_tests.cpp
+    tests/document/filter_values_tests.cpp
     tests/document/frame_edit_tests.cpp
     tests/document/history_tests.cpp
     tests/document/key_selection_tests.cpp

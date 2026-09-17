@@ -108,6 +108,8 @@ void CountSpan(const AfpAnimation::Container& clip, uint16_t depth, uint32_t fir
 std::string Reason(const std::string& error) {
     if (error.find("which is not something a keyframe can hold") != std::string::npos)
         return error.substr(error.find("changes "));
+    if (error.find("changes the shape of its") != std::string::npos)
+        return error.substr(error.find("changes the shape"));
     if (error.find("again instead of updating") != std::string::npos)
         return "placed again inside its span";
     if (error.find("somewhere else than its first frame") != std::string::npos)

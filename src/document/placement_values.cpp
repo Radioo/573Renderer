@@ -1,5 +1,6 @@
 #include "document/placement_values.h"
 
+#include "document/filter_values.h"
 #include "formats/afp_animation.h"
 #include "support/expected.h"
 
@@ -12,6 +13,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace Document {
@@ -37,6 +39,7 @@ enum class PropertyId : uint8_t {
     TranslationZ,
     Matrix3d,
     Hsv,
+    Filters,
 };
 
 struct NamedProperty {
@@ -44,7 +47,7 @@ struct NamedProperty {
     PropertyId id;
 };
 
-constexpr std::array<NamedProperty, 18> kProperties{{
+constexpr std::array<NamedProperty, 19> kProperties{{
     {.name = "Character", .id = PropertyId::Character},
     {.name = "Ratio", .id = PropertyId::Ratio},
     {.name = "Clip depth", .id = PropertyId::ClipDepth},
@@ -63,10 +66,11 @@ constexpr std::array<NamedProperty, 18> kProperties{{
     {.name = "Translation z", .id = PropertyId::TranslationZ},
     {.name = "3D matrix", .id = PropertyId::Matrix3d},
     {.name = "HSV", .id = PropertyId::Hsv},
+    {.name = "Filters", .id = PropertyId::Filters},
 }};
 
-constexpr std::array<PropertyId, 3> kStepped{PropertyId::Character, PropertyId::ClipDepth,
-                                             PropertyId::Blend};
+constexpr std::array<PropertyId, 4> kStepped{PropertyId::Character, PropertyId::ClipDepth,
+                                             PropertyId::Blend, PropertyId::Filters};
 
 constexpr auto kPropertyNames = [] {
     std::array<std::string_view, kProperties.size()> out{};
@@ -201,6 +205,9 @@ std::optional<std::vector<int64_t>> ReadProperty(const AfpAnimation::Placement& 
         return Read(placement.matrix_3d);
     case PropertyId::Hsv:
         return Read(placement.hsv);
+    case PropertyId::Filters:
+        if (!placement.filters) return std::nullopt;
+        return FilterNumbers(*placement.filters);
     }
     return std::nullopt;
 }
@@ -247,6 +254,12 @@ Support::Expected<void, std::string> WriteProperty(AfpAnimation::Placement& plac
         return Write(placement.matrix_3d, value);
     case PropertyId::Hsv:
         return Write(placement.hsv, value);
+    case PropertyId::Filters: {
+        auto filters = FiltersFrom(value);
+        if (!filters) return Support::Unexpected(filters.error());
+        placement.filters = std::move(*filters);
+        return {};
+    }
     }
     return Support::Unexpected(std::string(name) + " is not an animatable property");
 }
@@ -270,6 +283,7 @@ void ClearAnimatableProperties(AfpAnimation::Placement& placement) {
     placement.translation_z.reset();
     placement.matrix_3d.reset();
     placement.hsv.reset();
+    placement.filters.reset();
 }
 
 std::vector<std::string> UnanimatableParts(const AfpAnimation::Placement& placement) {
@@ -278,7 +292,6 @@ std::vector<std::string> UnanimatableParts(const AfpAnimation::Placement& placem
     if (placement.class_name) parts.emplace_back("a class name");
     if (placement.geometry) parts.emplace_back("a geometry");
     if (placement.clip_actions) parts.emplace_back("clip actions");
-    if (placement.filters) parts.emplace_back("filters");
     if (placement.discarded_words) parts.emplace_back("discarded words");
     if (placement.curves) parts.emplace_back("curves");
     if (placement.colour_controller) parts.emplace_back("a colour controller");

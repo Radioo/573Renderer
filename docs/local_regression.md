@@ -207,16 +207,17 @@ per-frame placement actually carries over a span, which is what the shape of
 detaches it again and requires the clip to come back identical.
 
 It owns spans in the root and in every sprite, and reports the two separately.
-On IIDX 33 it owns 209251 root spans and 612605 sprite spans, 99.4% of the
+On IIDX 33 it owns 210822 root spans and 615119 sprite spans, 99.9% of the
 826810 in the install, and gets every one of them back identical. The rest are
-refused for a stated reason: filters (4737) and deformation curves (217). Before
-tickets 44 and 45 it refused another 69174 spans whose updates used different
-control bits, and before ticket 55 another 1640 that swap their character
-mid-span.
+refused for a stated reason: deformation curves (269) and filter lists whose
+shape changes inside the span (600). Before tickets 44 and 45 it refused another
+69174 spans whose updates used different control bits, before ticket 55 another
+1640 that swap their character mid-span, and before ticket 56 every span whose
+updates change its filters (4737, which hid 52 of the curve spans).
 
 For every span it owns it also replays the shipped placements with the game's
 rule (`Document::ReplayDepth`) and compares each frame with what the keyframes
-say (`Document::KeyedState`): 35291707 root frames and 93304176 sprite frames,
+say (`Document::KeyedState`): 35525481 root frames and 93719755 sprite frames,
 with no disagreement. A full run reads every IFS under `data` (about 36 GB)
 and takes around half an hour, printing only at the end. That comparison is what shows own records what the game
 draws, including the 135000 or so updates that reset a matrix part and the
@@ -229,6 +230,21 @@ as a count of differing spans, and the test reports which member of the
 placement differed so the next fix does not have to be guessed. It is a `local`
 test because it needs the install and takes minutes; `document_tests` covers the
 same operations on clips built in code.
+
+## How updates use filters (`local` label)
+
+`filter_span_survey_tests` (tests/local/filter_span_survey_tests.cpp) looks at
+every span whose later placements carry a filter list, which is what own used to
+refuse. Over IIDX 33 there are 4755 of them, and every one has filters on its
+first placement too. 3285 carry filters on every update and keep the same kinds
+of filter as the first placement while their numbers change, 264 do the same on
+only some updates, and 1206 change the list itself (in this count a lookup table
+whose contents change also counts as a change). Across updates the colour matrix
+entries that move are 0, 1, 2, 5, 6, 7, 10, 11 and 12, the RGB rows, in about
+354000 updates each, entries 4, 9 and 14 (the offsets) in 8220, and the HSV
+values in 100552. Update lists are one colour matrix (246960), one with HSV
+(109421), or one to three lookups (109466). That is why filters became a stepped
+track rather than something own refuses.
 
 ## Where an animation's content lives (`local` label)
 

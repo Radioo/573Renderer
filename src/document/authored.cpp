@@ -31,7 +31,7 @@ constexpr uint32_t kUseMatrix = 0x4;
 constexpr uint32_t kUseColour = 0x8;
 constexpr uint32_t kControlBits = kUseMatrix | kUseColour;
 constexpr uint32_t kThreeD = 0x04000000;
-constexpr std::string_view kCharacter = "Character";
+constexpr std::array<std::string_view, 2> kHeldUntilUpdated{"Character", "Filters"};
 
 struct StartableProperty {
     std::string_view property;
@@ -131,15 +131,38 @@ bool IsExplicit(const BakedDepth& baked, uint32_t frame, std::string_view proper
     });
 }
 
-bool SwapsCharacter(const AfpAnimation::Container& clip, const std::vector<Placed>& placements) {
+bool UpdatesCarry(const AfpAnimation::Container& clip, const std::vector<Placed>& placements,
+                  std::string_view property) {
     return std::any_of(placements.begin() + 1, placements.end(), [&](const Placed& placed) {
-        return PlacementAt(clip, placed).character.has_value();
+        return ReadProperty(PlacementAt(clip, placed), property).has_value();
     });
+}
+
+bool HeldUntilUpdated(std::string_view property) {
+    return std::ranges::find(kHeldUntilUpdated, property) != kHeldUntilUpdated.end();
+}
+
+Support::Expected<void, std::string> CheckSteadyShape(const AfpAnimation::Container& clip,
+                                                      const std::vector<Placed>& placements) {
+    for (const std::string_view property : kHeldUntilUpdated) {
+        std::optional<std::size_t> size;
+        for (const Placed& placed : placements) {
+            const auto value = ReadProperty(PlacementAt(clip, placed), property);
+            if (!value) continue;
+            if (size && *size != value->size()) {
+                return Support::Unexpected("frame " + std::to_string(placed.frame) +
+                                           " changes the shape of its " + std::string(property) +
+                                           ", which a keyframe track cannot hold");
+            }
+            size = value->size();
+        }
+    }
+    return {};
 }
 
 bool Tracked(const AfpAnimation::Container& clip, const std::vector<Placed>& placements,
              std::string_view property) {
-    if (property == kCharacter && !SwapsCharacter(clip, placements)) return false;
+    if (HeldUntilUpdated(property) && !UpdatesCarry(clip, placements, property)) return false;
     return std::ranges::any_of(placements, [&](const Placed& placed) {
         return ReadProperty(PlacementAt(clip, placed), property).has_value();
     });
@@ -228,6 +251,8 @@ Support::Expected<std::vector<Placed>, std::string> SpanOf(const AfpAnimation::C
     }
     auto shaped = CheckSpan(clip, depth, placements);
     if (!shaped) return Support::Unexpected(shaped.error());
+    auto steady = CheckSteadyShape(clip, placements);
+    if (!steady) return Support::Unexpected(steady.error());
     return placements;
 }
 
@@ -235,8 +260,9 @@ BakedDepth BakedOf(const AfpAnimation::Container& clip, const std::vector<Placed
     BakedDepth baked;
     baked.create = PlacementAt(clip, placements.front());
     ClearAnimatableProperties(baked.create);
-    if (!SwapsCharacter(clip, placements))
-        baked.create.character = PlacementAt(clip, placements.front()).character;
+    const AfpAnimation::Placement& created = PlacementAt(clip, placements.front());
+    if (!UpdatesCarry(clip, placements, "Character")) baked.create.character = created.character;
+    if (!UpdatesCarry(clip, placements, "Filters")) baked.create.filters = created.filters;
     if (placements.size() > 1) {
         const AfpAnimation::Placement& update = PlacementAt(clip, placements[1]);
         baked.update_flags = update.flags & ~kControlBits;

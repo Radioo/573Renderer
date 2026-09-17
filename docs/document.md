@@ -476,13 +476,25 @@ current numbers over the install are in `docs/local_regression.md`.
 
 ### Stepped properties
 
-Character, Clip depth and Blend are properties whose values do not blend: an
-object is one character or another. They are keyed like any other property but
-only hold, so `SetKeysEase` and `AuthoredPlacements` refuse any other ease on
-them (`PropertyIsStepped`). A character becomes a track only when an update in
-the span swaps it; otherwise it stays on the baked create placement, so an
-ordinary depth does not grow a Character lane. A swap is then a key on the frame
-the update carried it, and moving that key moves the swap.
+Character, Clip depth, Blend and Filters are properties whose values do not
+blend: an object is one character or another. They are keyed like any other
+property but only hold, so `SetKeysEase` and `AuthoredPlacements` refuse any
+other ease on them (`PropertyIsStepped`). Character and Filters become tracks
+only when an update in the span carries them; otherwise they stay on the baked
+create placement, so an ordinary depth does not grow a lane for them. A swap is
+then a key on the frame the update carried it, and moving that key moves the
+swap.
+
+A filter list is kept in a track as numbers (`document/filter_values.h`):
+its count, then per filter a kind (0 colour matrix, 1 lookup, 2 anything else)
+followed by its fields: the 4 head bytes, 20 matrix values and an HSV presence
+flag with its three values for a colour matrix; the 6 head bytes, the 4 unread
+bytes and the length-prefixed table for a lookup; the length-prefixed bytes
+otherwise. `FiltersFrom` reads that back to the same filters and refuses numbers
+that do not follow the layout. Two lists with the same kinds of filter and the
+same table lengths take the same count of numbers, which is what a track needs;
+a span whose updates change that count is refused (`changes the shape of its
+Filters`).
 
 ## Atlases (`document/atlas.h`, `document/atlas_write.h`)
 

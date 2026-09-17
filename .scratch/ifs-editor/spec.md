@@ -261,3 +261,4 @@ captured. This milestone is the editing itself.
 - `issues/53-keyframe-selection.md` (milestone 8)
 - `issues/54-ease-curve-editor.md` (milestone 8)
 - `issues/55-character-swaps.md` (milestone 8)
+- `issues/56-filter-tracks.md` (milestone 8)
