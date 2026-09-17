@@ -168,6 +168,7 @@ void Window::BuildPanels() {
     connect(timeline_, &Timeline::KeyChosen, this, &Window::FocusKey);
     connect(timeline_, &Timeline::KeysShifted, this, &Window::ShiftSelectedKeys);
     connect(timeline_, &Timeline::SpanMoved, this, &Window::MoveSpanInTime);
+    connect(timeline_, &Timeline::SpanTrimmed, this, &Window::TrimSpanOnTimeline);
     AddKeyActions();
     connect(timeline_, &Timeline::KeyMenuRequested, this, &Window::ShowKeyMenu);
     auto* timeline_area = new QScrollArea;

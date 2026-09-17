@@ -150,6 +150,7 @@ private:
     void ReshapeOnStage(uint16_t depth, double scale_x, double scale_y, double turn);
     void MoveSpanInTime(uint16_t depth, uint32_t frame, int64_t by);
     void MoveSpanToDepth(uint16_t depth, uint32_t frame);
+    void TrimSpanOnTimeline(uint16_t depth, uint32_t frame, uint32_t first, uint32_t last);
     void ResizeViewport();
     void Reload();
     bool Save();

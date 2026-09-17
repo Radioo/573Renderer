@@ -48,6 +48,7 @@ signals:
     void KeyChosen(const QString& property, uint32_t frame);
     void KeysShifted(int64_t by);
     void SpanMoved(uint16_t depth, uint32_t frame, int64_t by);
+    void SpanTrimmed(uint16_t depth, uint32_t frame, uint32_t first, uint32_t last);
     void MenuRequested(const QPoint& where, uint32_t frame, const QString& label);
     void KeyMenuRequested(const QPoint& where, const QString& property, uint32_t frame,
                           bool on_key);
@@ -61,6 +62,8 @@ protected:
     void wheelEvent(QWheelEvent* event) override;
 
 private:
+    enum class SpanDrag : uint8_t { Move, TrimStart, TrimEnd };
+
     struct Lane {
         bool is_property = false;
         uint16_t depth = 0;
@@ -80,6 +83,9 @@ private:
     void PressKeys(const Lane& lane, QPoint at, bool toggle);
     void PressSpan(const Lane& lane, QPoint at);
     [[nodiscard]] std::optional<Document::Span> SpanAt(uint16_t depth, int x) const;
+    [[nodiscard]] SpanDrag DragAt(const Document::Span& span, int x) const;
+    [[nodiscard]] Document::Span Dragged(const Document::Span& span, uint32_t to) const;
+    void ShowHoverCursor(QPoint at);
     [[nodiscard]] bool IsSelected(const Document::KeyRef& key) const;
     void SelectBand(bool adding);
     void DrawKeys(QPainter& painter, const Document::Track& track, int y) const;
@@ -104,6 +110,7 @@ private:
     uint32_t span_from_ = 0;
     uint32_t span_to_ = 0;
     bool span_dragging_ = false;
+    SpanDrag span_drag_ = SpanDrag::Move;
     QPoint band_to_;
     std::vector<Document::KeyRef> band_kept_;
     std::optional<double> zoom_;

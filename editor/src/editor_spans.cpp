@@ -1,6 +1,9 @@
 #include "editor_window.h"
 
+#include "document/authored.h"
 #include "document/span_edit.h"
+#include "document/span_trim.h"
+#include "document/timeline.h"
 #include "formats/afp_animation.h"
 #include "support/expected.h"
 
@@ -12,6 +15,7 @@
 #include <limits>
 #include <optional>
 #include <string>
+#include <utility>
 
 namespace Editor {
 
@@ -40,6 +44,28 @@ void Window::MoveSpanInTime(uint16_t depth, uint32_t frame, int64_t by) {
     if (!owned) return;
     auto shifted = Document::ShiftAuthored(authored_[*owned], by);
     if (!shifted) ReportProblem(QString::fromStdString(shifted.error()));
+    SaveProject();
+    ShowFrame();
+}
+
+void Window::TrimSpanOnTimeline(uint16_t depth, uint32_t frame, uint32_t first, uint32_t last) {
+    if (!file_ || animation_path_.empty()) return;
+    const Document::ClipId clip = clip_;
+    const Document::Span wanted{.first_frame = first, .last_frame = last};
+    const std::optional<std::size_t> owned = AuthoredIndexAt(depth, frame);
+    std::optional<Document::AuthoredDepth> trimmed;
+    if (owned) trimmed = authored_[*owned];
+    depth_ = depth;
+    const QString name = tr("Trim depth %1 to frames %2 to %3").arg(depth).arg(first).arg(last);
+    if (!EditAnimation(name,
+                       [clip, depth, frame, wanted, &trimmed](AfpAnimation::Animation& edited) {
+                           if (trimmed) return Document::TrimOwnedSpan(edited, *trimmed, wanted);
+                           return Document::TrimSpan(edited, clip, depth, frame, wanted);
+                       })) {
+        return;
+    }
+    if (!owned || !trimmed) return;
+    authored_[*owned] = std::move(*trimmed);
     SaveProject();
     ShowFrame();
 }

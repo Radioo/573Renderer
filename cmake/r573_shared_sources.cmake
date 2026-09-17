@@ -54,6 +54,8 @@ set(R573_EDITOR_DOCUMENT_SOURCES
     src/document/label_edit.cpp
     src/document/script_source.cpp
     src/document/span_edit.cpp
+    src/document/span_tags.cpp
+    src/document/span_trim.cpp
     src/document/sprite_preview.cpp
     src/document/stage_bounds.cpp
     src/document/stage_move.cpp

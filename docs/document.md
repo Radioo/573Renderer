@@ -275,6 +275,35 @@ followed.
 `ShiftAuthored` moves a project-owned depth's range and every keyframe by the
 same frames, so the project keeps describing the span after `MoveSpan`.
 
+### Trimming a span (`document/span_trim.h`)
+
+`TrimSpan` gives a span new first and last frames. The end is the simple side:
+a shorter span loses its placements after the new last frame and is closed by a
+remove on the frame after it (put first in that frame), a longer one has its
+remove moved later into frames the depth leaves free, and in both cases every
+non-zero end frame becomes the new last frame plus one. A start moved earlier
+takes the first placement to the new frame, into free frames only.
+
+A start moved later has to keep what the updates in between had set, so they
+are folded into the first placement, which then goes first on the new frame.
+The fold follows the placement parser: an update with the matrix bit replaces
+all the matrix fields, absent ones included, and adds the bit; one with the
+colour bit does the same for the colour fields; a character, ratio, blend or
+origin it carries replaces the first placement's; filters and HSV replace the
+pair together, since the game keeps them in one list; a name only fills a gap,
+as the game only names an object that has none; clip actions on an update are
+ignored, as the game only takes them on a create. 3D placements, and updates
+that carry a class name, geometry, curves, controllers or discarded words, are
+refused rather than guessed. The result is checked against `ReplayDepth`: the
+depth must show the same state on every frame the trim keeps, or the trim is
+refused.
+
+`TrimAuthored` cuts a project-owned depth's keyframes to the new range: a track
+that had keys before the new first frame gets a key there holding the value it
+sampled, with the ease that reached it, and one with keys after the new last
+frame gets a held key there. `TrimOwnedSpan` does both and writes the owned span
+back from the trimmed keyframes, all or nothing.
+
 ## The camera (`document/camera_edit.h`)
 
 `CameraTag(clip, frame)` finds the camera tag placed on a frame, and

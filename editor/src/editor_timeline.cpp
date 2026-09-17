@@ -39,6 +39,7 @@ constexpr int kKeyReach = 6;
 constexpr int kKeyRadius = 4;
 constexpr int kPropertyIndent = 8;
 constexpr int kSpanDragThreshold = 4;
+constexpr int kEdgeReach = 3;
 constexpr double kZoomStep = 1.25;
 constexpr double kMostPixelsPerFrame = 48.0;
 constexpr int kTickSpacing = 60;
@@ -61,6 +62,7 @@ const QColor kPlayhead(230, 90, 90);
 Timeline::Timeline(QWidget* parent) : QWidget(parent) {
     setMinimumHeight(kEmptyHeight);
     setFocusPolicy(Qt::ClickFocus);
+    setMouseTracking(true);
 }
 
 void Timeline::ShowAnimation(uint32_t frame_count, std::vector<Document::DepthRow> rows,
@@ -333,9 +335,45 @@ std::optional<Document::Span> Timeline::SpanAt(uint16_t depth, int x) const {
     return std::nullopt;
 }
 
+Timeline::SpanDrag Timeline::DragAt(const Document::Span& span, int x) const {
+    const int to = std::max(FrameToX(span.first_frame) + 2, FrameToX(span.last_frame));
+    if (std::abs(x - to) <= kEdgeReach) return SpanDrag::TrimEnd;
+    if (std::abs(x - FrameToX(span.first_frame)) <= kEdgeReach) return SpanDrag::TrimStart;
+    return SpanDrag::Move;
+}
+
+Document::Span Timeline::Dragged(const Document::Span& span, uint32_t to) const {
+    const int64_t last = frame_count_ > 0 ? static_cast<int64_t>(frame_count_ - 1) : 0;
+    switch (span_drag_) {
+    case SpanDrag::TrimStart:
+        return {.first_frame = std::min(to, span.last_frame), .last_frame = span.last_frame};
+    case SpanDrag::TrimEnd:
+        return {.first_frame = span.first_frame, .last_frame = std::max(to, span.first_frame)};
+    case SpanDrag::Move:
+        break;
+    }
+    const int64_t by = static_cast<int64_t>(to) - static_cast<int64_t>(span_from_);
+    return {.first_frame = static_cast<uint32_t>(
+                std::clamp<int64_t>(static_cast<int64_t>(span.first_frame) + by, 0, last)),
+            .last_frame = static_cast<uint32_t>(
+                std::clamp<int64_t>(static_cast<int64_t>(span.last_frame) + by, 0, last))};
+}
+
+void Timeline::ShowHoverCursor(QPoint at) {
+    const std::optional<std::size_t> lane = LaneAt(at.y());
+    std::optional<Document::Span> span;
+    if (lane) {
+        const Lane found = Lanes()[*lane];
+        if (!found.is_property) span = SpanAt(found.depth, at.x());
+    }
+    const bool edge = span && DragAt(*span, at.x()) != SpanDrag::Move;
+    setCursor(edge ? Qt::SizeHorCursor : Qt::ArrowCursor);
+}
+
 void Timeline::PressSpan(const Lane& lane, QPoint at) {
     span_grabbed_ = SpanAt(lane.depth, at.x());
     if (!span_grabbed_) return;
+    span_drag_ = DragAt(*span_grabbed_, at.x());
     span_depth_ = lane.depth;
     span_press_x_ = at.x();
     span_from_ = XToFrame(at.x());
@@ -381,7 +419,10 @@ void Timeline::mousePressEvent(QMouseEvent* event) {
 }
 
 void Timeline::mouseMoveEvent(QMouseEvent* event) {
-    if ((event->buttons() & Qt::LeftButton) == 0) return;
+    if ((event->buttons() & Qt::LeftButton) == 0) {
+        ShowHoverCursor(event->pos());
+        return;
+    }
     if (drag_from_) {
         drag_to_ = XToFrame(event->pos().x());
         update();
@@ -413,10 +454,18 @@ void Timeline::mouseReleaseEvent(QMouseEvent* event) {
     span_depth_.reset();
     span_dragging_ = false;
     update();
-    if (span_depth) {
-        const int64_t moved =
-            static_cast<int64_t>(XToFrame(event->pos().x())) - static_cast<int64_t>(span_from_);
-        if (moved != 0) emit SpanMoved(*span_depth, span_from_, moved);
+    if (span_depth && span_grabbed_) {
+        const uint32_t to = XToFrame(event->pos().x());
+        if (span_drag_ == SpanDrag::Move) {
+            const int64_t moved = static_cast<int64_t>(to) - static_cast<int64_t>(span_from_);
+            if (moved != 0) emit SpanMoved(*span_depth, span_from_, moved);
+            return;
+        }
+        const Document::Span wanted = Dragged(*span_grabbed_, to);
+        if (wanted != *span_grabbed_) {
+            emit SpanTrimmed(*span_depth, span_grabbed_->first_frame, wanted.first_frame,
+                             wanted.last_frame);
+        }
         return;
     }
     if (!from) return;
@@ -426,14 +475,9 @@ void Timeline::mouseReleaseEvent(QMouseEvent* event) {
 }
 
 void Timeline::DrawSpanGhost(QPainter& painter, const Document::Span& span, int y) const {
-    const int64_t by = static_cast<int64_t>(span_to_) - static_cast<int64_t>(span_from_);
-    const int64_t last = frame_count_ > 0 ? static_cast<int64_t>(frame_count_ - 1) : 0;
-    const auto first = static_cast<uint32_t>(
-        std::clamp<int64_t>(static_cast<int64_t>(span.first_frame) + by, 0, last));
-    const auto end = static_cast<uint32_t>(
-        std::clamp<int64_t>(static_cast<int64_t>(span.last_frame) + by, 0, last));
-    const int from = FrameToX(first);
-    const int to = FrameToX(end);
+    const Document::Span ghost = Dragged(span, span_to_);
+    const int from = FrameToX(ghost.first_frame);
+    const int to = FrameToX(ghost.last_frame);
     painter.setPen(kKeySelected);
     painter.setBrush(Qt::NoBrush);
     painter.drawRect(

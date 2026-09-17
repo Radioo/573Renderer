@@ -134,7 +134,10 @@ read once per animation and read again after every edit.
 Dragging a depth's bar by at least four pixels moves that span along the
 timeline, with an outline showing where it will land, and letting go applies
 `Document::MoveSpan` as one undo step; an owned span's keyframes and range move
-with it (`Document::ShiftAuthored`) and the project is saved. The timeline menu
+with it (`Document::ShiftAuthored`) and the project is saved. Pressing within three
+pixels of a bar's start or end, where the pointer turns into a sizing arrow,
+trims the span instead (`Document::TrimSpan`, or `Document::TrimOwnedSpan` for
+an owned depth, whose trimmed keyframes are then kept). The timeline menu
 offers to move the span under the playhead to another depth number
 (`Document::ChangeSpanDepth`), which moves an owned depth's record with it.
 

@@ -199,6 +199,33 @@ TEST_CASE("Dragging a depth's bar asks to move that span by whole frames") {
     CHECK(moves.size() == 1);
 }
 
+TEST_CASE("Dragging a bar's edge asks to trim that span") {
+    Editor::Timeline timeline;
+    timeline.resize(kTimelineWidth, 200);
+    timeline.ShowAnimation(
+        11,
+        {Document::DepthRow{.depth = 3,
+                            .spans = {Document::Span{.first_frame = 1, .last_frame = 4},
+                                      Document::Span{.first_frame = 7, .last_frame = 9}}}},
+        {});
+    std::vector<std::vector<uint32_t>> trims;
+    int moves = 0;
+    QObject::connect(&timeline, &Editor::Timeline::SpanTrimmed,
+                     [&trims](uint16_t depth, uint32_t frame, uint32_t first, uint32_t last) {
+                         trims.push_back({depth, frame, first, last});
+                     });
+    QObject::connect(&timeline, &Editor::Timeline::SpanMoved,
+                     [&moves](uint16_t, uint32_t, int64_t) { moves++; });
+    Drag(timeline, {FrameX(4), kDepthRowY}, {FrameX(6), kDepthRowY});
+    Drag(timeline, {FrameX(7) + 1, kDepthRowY}, {FrameX(5), kDepthRowY});
+    Drag(timeline, {FrameX(9), kDepthRowY}, {FrameX(2), kDepthRowY});
+    REQUIRE(trims.size() == 3);
+    CHECK(trims[0] == std::vector<uint32_t>{3, 1, 1, 6});
+    CHECK(trims[1] == std::vector<uint32_t>{3, 7, 5, 9});
+    CHECK(trims[2] == std::vector<uint32_t>{3, 7, 7, 7});
+    CHECK(moves == 0);
+}
+
 TEST_CASE("A selection loses keyframes that are gone and all of it when the depth changes") {
     Editor::Timeline timeline;
     ShowScene(timeline);
