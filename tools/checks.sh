@@ -20,6 +20,16 @@ run_build() {
 run_build build.bat
 run_build build32.bat
 
+EDITOR_LOG="$(mktemp)"
+MSYS_NO_PATHCONV=1 cmd.exe /c "$(cygpath -w "$ROOT/editor/build.bat")" 2>&1 | tee "$EDITOR_LOG"
+if ! grep -q "Editor build succeeded" "$EDITOR_LOG"; then
+    echo "checks: editor/build.bat never reported success"
+    rm -f "$EDITOR_LOG"
+    exit 1
+fi
+rm -f "$EDITOR_LOG"
+"$ROOT/build-editor/editor_widget_tests.exe"
+
 CTEST_EXE="ctest"
 if [ -f build/CMakeCache.txt ]; then
     CMAKE_EXE="$(grep -m1 '^CMAKE_COMMAND:INTERNAL=' build/CMakeCache.txt | cut -d= -f2-)"

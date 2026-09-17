@@ -20,6 +20,7 @@ find_package(tl-expected CONFIG REQUIRED)
 find_package(unofficial-hash-library CONFIG REQUIRED)
 find_package(flatbuffers CONFIG REQUIRED)
 find_package(nlohmann_json CONFIG REQUIRED)
+find_package(Catch2 3 CONFIG REQUIRED)
 find_program(R573_FLATC flatc REQUIRED)
 
 set(R573_PREVIEW_SCHEMA "${R573_ROOT}/src/preview/preview_host.fbs")
@@ -83,3 +84,13 @@ endfunction()
 
 r573_deploy_qt_plugin(ifs_editor Qt6::QWindowsIntegrationPlugin)
 r573_deploy_qt_plugin(ifs_editor Qt6::QModernWindowsStylePlugin)
+
+add_executable(editor_widget_tests
+    tests/editor_widget_tests.cpp
+    src/editor_timeline.cpp
+    src/editor_viewport.cpp
+    src/editor_ease_dialog.cpp
+)
+target_include_directories(editor_widget_tests PRIVATE src)
+target_link_libraries(editor_widget_tests PRIVATE editor_shared Qt6::Widgets Catch2::Catch2)
+r573_deploy_qt_plugin(editor_widget_tests Qt6::QMinimalIntegrationPlugin)

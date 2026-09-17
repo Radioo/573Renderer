@@ -33,6 +33,19 @@ shell with no Visual Studio environment fails at the compiler check with
 `LNK1104: cannot open file 'kernel32.lib'`, which is what the batch file
 exists to prevent.
 
+## Widget tests
+
+`build-editor/editor_widget_tests.exe` drives the timeline, the viewport and
+the ease curve with synthetic mouse events, with no window shown and no host:
+its `main` sets `QT_QPA_PLATFORM=minimal` before creating the `QApplication`,
+and the minimal platform plugin is deployed next to it. The cases cover
+clicking, Ctrl-clicking and box-selecting keyframes, dragging a selection by
+whole frames, a selection losing keyframes that are gone, stage clicks in stage
+pixels, moving, scaling and turning a selection with its handles, and dragging
+an ease handle past the segment's time. `tools/checks.sh` builds the editor and
+runs them. Two mutations (moving the turn handle, clearing the selection on a
+Ctrl press) were each seen to fail a case before the tests were trusted.
+
 ## Qt plugin deployment
 
 vcpkg's applocal step copies the Qt DLLs next to the executable, but not the
