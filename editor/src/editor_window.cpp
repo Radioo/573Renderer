@@ -311,6 +311,7 @@ void Window::OpenDocument(const QString& path) {
     QSettings().setValue(kDocumentDirKey, QFileInfo(path).absolutePath());
     file_ = std::move(*file);
     history_.Clear();
+    hidden_.clear();
     document_path_ = path;
     package_name_ = QFileInfo(path).completeBaseName().toStdString();
     CloseAnimation();
@@ -639,6 +640,11 @@ void Window::ShowTimelineMenu(const QPoint& where, uint32_t frame, const QString
                : nullptr;
     QAction* ungroup =
         depth_ ? menu.addAction(tr("Ungroup the sprite on depth %1 here").arg(*depth_)) : nullptr;
+    const bool hidden = depth_ && IsHidden(static_cast<uint16_t>(*depth_));
+    QAction* hide = depth_ ? menu.addAction(hidden ? tr("Show depth %1 in the view").arg(*depth_)
+                                                   : tr("Hide depth %1 in the view").arg(*depth_))
+                           : nullptr;
+    QAction* show_all = hidden_.empty() ? nullptr : menu.addAction(tr("Show every hidden depth"));
     menu.addSeparator();
     const bool authored =
         depth_ != std::nullopt && AuthoredAt(static_cast<uint16_t>(*depth_), frame) != nullptr;
@@ -737,6 +743,14 @@ void Window::ShowTimelineMenu(const QPoint& where, uint32_t frame, const QString
                       [clip, depth, placed, frame, until](AfpAnimation::Animation& edited) {
                           return Document::AddDepth(edited, clip, depth, placed, frame, until);
                       });
+        return;
+    }
+    if (chosen == show_all) {
+        ShowEveryDepth();
+        return;
+    }
+    if (chosen == hide) {
+        ToggleHidden(static_cast<uint16_t>(*depth_));
         return;
     }
     if (chosen == restack || chosen == duplicate || chosen == group || chosen == ungroup) {

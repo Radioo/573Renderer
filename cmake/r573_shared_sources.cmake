@@ -48,6 +48,7 @@ set(R573_EDITOR_DOCUMENT_SOURCES
     src/document/frame_edit.cpp
     src/document/history.cpp
     src/document/group_sprite.cpp
+    src/document/hidden_depths.cpp
     src/document/image_shape.cpp
     src/document/inspector.cpp
     src/document/keyframe_edit.cpp

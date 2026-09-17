@@ -3,6 +3,7 @@
 #include "document/stage_bounds.h"
 
 #include <QColor>
+#include <QKeyEvent>
 #include <QLineF>
 #include <QMouseEvent>
 #include <QPainter>
@@ -34,6 +35,8 @@ constexpr int kOutlineWidth = 2;
 const QColor kSelectedColour(80, 200, 255);
 const QColor kGuideColour(255, 80, 200);
 constexpr double kSnapReach = 6.0;
+constexpr double kNudge = 1.0;
+constexpr double kShiftNudge = 10.0;
 
 QPointF Middle(QPointF a, QPointF b) {
     return (a + b) / 2.0;
@@ -44,7 +47,37 @@ QPointF Middle(QPointF a, QPointF b) {
 Viewport::Viewport(QWidget* parent) : QWidget(parent) {
     setMinimumSize(kMinimumWidth, kMinimumHeight);
     setAutoFillBackground(false);
+    setFocusPolicy(Qt::StrongFocus);
     message_ = tr("No animation selected");
+}
+
+void Viewport::keyPressEvent(QKeyEvent* event) {
+    const Document::StageOutline* selected = SelectedOutline();
+    const double step = (event->modifiers() & Qt::ShiftModifier) != 0 ? kShiftNudge : kNudge;
+    QPointF by;
+    switch (event->key()) {
+    case Qt::Key_Left:
+        by = QPointF(-step, 0);
+        break;
+    case Qt::Key_Right:
+        by = QPointF(step, 0);
+        break;
+    case Qt::Key_Up:
+        by = QPointF(0, -step);
+        break;
+    case Qt::Key_Down:
+        by = QPointF(0, step);
+        break;
+    default:
+        QWidget::keyPressEvent(event);
+        return;
+    }
+    if (selected == nullptr || gesture_ != Gesture::None) {
+        QWidget::keyPressEvent(event);
+        return;
+    }
+    emit Dragged(selected->depth, by.x(), by.y(), true);
+    event->accept();
 }
 
 void Viewport::ShowFrame(const QImage& frame, QSize stage) {

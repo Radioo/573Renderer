@@ -162,6 +162,13 @@ snapped to in pink while the drag lasts. Holding Alt during the drag moves
 freely. `View > Snap while moving on stage` turns snapping off and is
 remembered; it is on by default. Scaling and turning do not snap.
 
+With the viewport focused (it takes focus on a click or Tab), the arrow keys
+nudge the selected depth by one stage pixel, or ten with Shift, as After
+Effects does. A nudge is a finished `Dragged` with the offset, so it goes
+through the same `MoveOnStage` commit as a drag, is one undo step, and does not
+snap. With nothing selected, or while a drag is under way, the key is left to
+the rest of the window.
+
 While a drag is under way the viewport also emits `Dragged` and `Reshaped` with
 `finished` false on every pointer move, and once more with `finished` true on
 release. An unfinished one is a preview (`Window::PreviewOnStage`): the change
@@ -199,6 +206,21 @@ so the new sprite can be picked, keeping the clip that was being edited. The
 same menu offers to ungroup the sprite on the selected depth
 (`Window::UngroupSpriteAt`, through `Document::UngroupSprite`), which is refused
 while the project owns that depth and refills the clip box the same way.
+
+The menu also hides the selected depth in the view, or shows it again, and
+offers to show every hidden depth when any is hidden, which is After Effects'
+eye toggle. The window keeps the hidden depths per animation and clip
+(`Window::hidden_`), and `LoadViewportClip` sends the host a copy of the
+document without them (`Document::ViewWithout`), so every reload, stage preview
+and sprite view leaves them out while the document, the undo history and the
+saved file keep them. Only when something is hidden is the copy made, so the
+usual preview pays nothing. A hidden depth cannot be picked on stage and has no
+outline (`Window::VisibleOutlines`), and its bars are grey on the timeline
+(`Timeline::SetHiddenDepths`). Opening another document shows everything again.
+A live window test hides the widest depth of `graphic/1/title.ifs` and requires
+the rendered frame to change and then come back exactly; comparing with the
+selection outline in the picture was seen to pass even with the filter
+switched off, so both pictures are taken with no depth selected.
 
 **Timeline.** `Editor::Timeline` draws a ruler carrying the animation's labels
 at their frames, then one row per depth from `Document::DepthRows`, with a bar

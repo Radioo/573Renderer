@@ -5,6 +5,7 @@
 
 #include "document/characters.h"
 #include "document/clip.h"
+#include "document/hidden_depths.h"
 #include "document/outline.h"
 #include "document/place_image.h"
 #include "support/expected.h"
@@ -149,9 +150,19 @@ void Window::ChooseClip(int index) {
                                  .arg(root_frame_));
 }
 
-bool Window::LoadViewportClip(const Document::File& file) {
+bool Window::LoadViewportClip(const Document::File& document) {
     symbol_shown_ = false;
     if (!host_.Running() || animation_path_.empty()) return false;
+    std::optional<Document::File> view;
+    if (!hidden_.empty()) {
+        auto filtered = Document::ViewWithout(document, hidden_);
+        if (!filtered) {
+            ReportOnce(QString::fromStdString(filtered.error()));
+            return false;
+        }
+        view = std::move(*filtered);
+    }
+    const Document::File& file = view ? *view : document;
     std::vector<uint8_t> bytes;
     std::string symbol;
     if (clip_.sprite) {
@@ -204,6 +215,7 @@ void Window::ShowClipTimeline() {
     const bool from_model = !host_.Running() || (clip_.sprite && !symbol_shown_);
     const uint32_t count = from_model ? details->frame_count : frame_count_;
     timeline_->ShowAnimation(count, details->depths, details->labels);
+    UpdateHiddenRows();
     frame_ = count == 0 ? 0 : std::min(frame_, count - 1);
     timeline_->SetFrame(frame_);
 }

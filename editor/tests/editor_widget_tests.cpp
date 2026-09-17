@@ -15,8 +15,10 @@
 #include <QColor>
 #include <QEvent>
 #include <QImage>
+#include <QKeyEvent>
 #include <QMouseEvent>
 #include <QObject>
+#include <QPoint>
 #include <QPointF>
 #include <QSize>
 #include <QtGlobal>
@@ -213,6 +215,22 @@ TEST_CASE("Dragging a depth's bar asks to move that span by whole frames") {
     CHECK(moves.size() == 1);
 }
 
+TEST_CASE("A hidden depth's bars are drawn grey") {
+    Editor::Timeline timeline;
+    timeline.resize(kTimelineWidth, 200);
+    timeline.ShowAnimation(
+        11,
+        {Document::DepthRow{.depth = 3,
+                            .spans = {Document::Span{.first_frame = 1, .last_frame = 9}}}},
+        {});
+    const QPoint inside(static_cast<int>(FrameX(4)), kDepthRowY);
+    CHECK(timeline.grab().toImage().pixelColor(inside) == QColor(70, 128, 196));
+    timeline.SetHiddenDepths({3});
+    CHECK(timeline.grab().toImage().pixelColor(inside) == QColor(92, 92, 98));
+    timeline.SetHiddenDepths({});
+    CHECK(timeline.grab().toImage().pixelColor(inside) == QColor(70, 128, 196));
+}
+
 TEST_CASE("Dragging a bar's edge asks to trim that span") {
     Editor::Timeline timeline;
     timeline.resize(kTimelineWidth, 200);
@@ -290,6 +308,36 @@ TEST_CASE("Dragging inside the selection moves it by the stage offset") {
     CHECK(moves.size() == 3);
     Click(viewport, {150, 100});
     CHECK(moves.size() == 3);
+}
+
+TEST_CASE("Arrow keys nudge the selection by one stage pixel, or ten with Shift") {
+    Editor::Viewport viewport;
+    ShowStage(viewport);
+    viewport.SetSnapping(true);
+    std::vector<Move> moves;
+    QObject::connect(&viewport, &Editor::Viewport::Dragged,
+                     [&moves](uint16_t depth, double dx, double dy, bool finished) {
+                         CHECK(depth == 5);
+                         moves.push_back({.by = QPointF(dx, dy), .finished = finished});
+                     });
+    const auto press = [&viewport](int key, Qt::KeyboardModifiers modifiers) {
+        QKeyEvent event(QEvent::KeyPress, key, modifiers);
+        QApplication::sendEvent(&viewport, &event);
+        return event.isAccepted();
+    };
+    CHECK(press(Qt::Key_Left, Qt::NoModifier));
+    CHECK(press(Qt::Key_Down, Qt::ShiftModifier));
+    CHECK_FALSE(press(Qt::Key_A, Qt::NoModifier));
+    REQUIRE(moves.size() == 2);
+    CHECK(moves[0].finished);
+    CHECK(moves[0].by == QPointF(-1, 0));
+    CHECK(moves[1].finished);
+    CHECK(moves[1].by == QPointF(0, 10));
+    CHECK(viewport.focusPolicy() == Qt::StrongFocus);
+
+    viewport.ShowOutlines({}, std::nullopt);
+    CHECK_FALSE(press(Qt::Key_Right, Qt::NoModifier));
+    CHECK(moves.size() == 2);
 }
 
 TEST_CASE("A snapping drag lands on the stage edge and shows its guide unless Alt is held") {

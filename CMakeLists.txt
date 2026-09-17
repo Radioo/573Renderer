@@ -846,6 +846,7 @@ add_executable(document_tests
     tests/document/history_tests.cpp
     tests/document/key_selection_tests.cpp
     tests/document/group_sprite_tests.cpp
+    tests/document/hidden_depths_tests.cpp
     tests/document/image_shape_tests.cpp
     tests/document/inspector_tests.cpp
     tests/document/keyframe_edit_tests.cpp

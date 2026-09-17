@@ -51,6 +51,7 @@ const QColor kRow(40, 40, 44);
 const QColor kPropertyRow(34, 34, 38);
 const QColor kSelectedRow(44, 66, 88);
 const QColor kBar(70, 128, 196);
+const QColor kHiddenBar(92, 92, 98);
 const QColor kKey(210, 210, 216);
 const QColor kKeySelected(240, 190, 80);
 const QColor kKeyLine(96, 96, 104);
@@ -508,6 +509,11 @@ void Timeline::DrawKeys(QPainter& painter, const Document::Track& track, int y) 
     painter.setBrush(Qt::NoBrush);
 }
 
+void Timeline::SetHiddenDepths(std::vector<uint16_t> depths) {
+    hidden_depths_ = std::move(depths);
+    update();
+}
+
 void Timeline::paintEvent(QPaintEvent* event) {
     QPainter painter(this);
     painter.fillRect(event->rect(), palette().color(QPalette::Base));
@@ -554,13 +560,14 @@ void Timeline::paintEvent(QPaintEvent* event) {
         painter.setPen(palette().color(QPalette::Text));
         painter.drawText(QRect(0, y, kGutterWidth - 6, kRowHeight),
                          Qt::AlignRight | Qt::AlignVCenter, QString::number(lane.depth));
+        const bool hidden = std::ranges::find(hidden_depths_, lane.depth) != hidden_depths_.end();
         if (row != rows_.end()) {
             for (const Document::Span& span : row->spans) {
                 const int from = FrameToX(span.first_frame);
                 const int to = FrameToX(span.last_frame);
                 painter.fillRect(QRect(from, y + kBarInset, std::max(2, to - from),
                                        kRowHeight - 1 - 2 * kBarInset),
-                                 kBar);
+                                 hidden ? kHiddenBar : kBar);
                 if (span_dragging_ && span_depth_ == lane.depth && span_grabbed_ == span)
                     DrawSpanGhost(painter, span, y);
             }

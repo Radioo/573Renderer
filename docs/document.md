@@ -1042,6 +1042,16 @@ grouping makes:
 Shipped sprites are usually placed with a matrix, so for now this mostly undoes
 the editor's own groups.
 
+### Hiding depths in the view (`document/hidden_depths.h`)
+
+`HideDepths(animation, clip, depths)` drops every placement and remove of those
+depths from one clip in a single pass, rebuilding the frame ranges, and leaves
+everything else, including the same depth numbers in other clips, alone.
+`ViewWithout(file, hidden)` applies a list of `HiddenDepth` entries (animation,
+clip, depth) to a copy of the file. It is for the view only: the editor hands
+the copy to the preview host and never records it, so hiding is not an edit and
+not an undo step. `hidden_depths_tests` covers both.
+
 ### Removing a frame keeps the definitions in it
 
 `RemoveFrame` drops only the per-frame commands in the frame (place, remove,

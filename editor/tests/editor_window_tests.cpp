@@ -11,6 +11,7 @@
 #include "document/outline.h"
 #include "document/stage_bounds.h"
 #include "document/frame_edit.h"
+#include "document/place_image.h"
 #include "formats/ifs_archive.h"
 
 #include <QAction>
@@ -53,6 +54,7 @@
 #include <deque>
 #include <span>
 #include <functional>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -62,6 +64,7 @@ namespace {
 constexpr int kStepMs = 5;
 constexpr qint64 kLongestWaitMs = 10000;
 constexpr uint32_t kPreviewFrame = 400;
+constexpr uint32_t kNoDepth = 65535;
 constexpr uint32_t kFixedRate = 0x2;
 const QString kAnimationKind = "animation";
 
@@ -153,7 +156,7 @@ Script::Step AcceptNumber() {
     };
 }
 
-QString WritePackage(const QTemporaryDir& dir) {
+QString WritePackage(const QTemporaryDir& dir, bool with_image = false) {
     const auto bytes = Ifs::Write(SamplePackage::SampleArchive());
     REQUIRE(bytes.has_value());
     auto file = Document::File::Open(*bytes);
@@ -165,6 +168,11 @@ QString WritePackage(const QTemporaryDir& dir) {
     animation->flags |= kFixedRate;
     REQUIRE(Document::AddDepth(*animation, {}, 1, 7, 0, 2).has_value());
     REQUIRE(file->WriteAnimation(path, *animation).has_value());
+    if (with_image) {
+        const Document::DepthSpan span{.clip = {}, .depth = 2, .first_frame = 0, .last_frame = 2};
+        REQUIRE(file->AddImage("dot", 4, 3, std::vector<uint8_t>(48, 0x40)).has_value());
+        REQUIRE(Document::PlaceImage(*file, path, "dot", span).has_value());
+    }
     const auto encoded = file->Encode();
     REQUIRE(encoded.has_value());
     const QString out = dir.filePath("sample.ifs");
@@ -239,9 +247,9 @@ struct Opened {
     QTableWidget* inspector = nullptr;
 };
 
-void Open(Opened& opened) {
+void Open(Opened& opened, bool with_image = false) {
     REQUIRE(opened.dir.isValid());
-    opened.window.OpenDocument(WritePackage(opened.dir));
+    opened.window.OpenDocument(WritePackage(opened.dir, with_image));
     opened.tree = opened.window.findChild<QTreeWidget*>();
     opened.inspector = opened.window.findChild<QTableWidget*>();
     REQUIRE(opened.tree != nullptr);
@@ -259,6 +267,33 @@ bool Settle(const std::function<bool()>& done) {
 void RunMenu(Script& script, QTreeWidget& tree) {
     emit tree.customContextMenuRequested(QPoint(4, 4));
     REQUIRE(Settle([&script] { return script.Finished(); }));
+}
+
+std::optional<uint16_t> WidestTitleDepth(const QString& title) {
+    QFile read(title);
+    REQUIRE(read.open(QIODevice::ReadOnly));
+    const QByteArray bytes = read.readAll();
+    const auto file = Document::File::Open(
+        std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(bytes.constData()),
+                                 static_cast<std::size_t>(bytes.size())));
+    REQUIRE(file.has_value());
+    if (!file) return std::nullopt;
+    std::string path;
+    for (const Document::Node& node : file->Nodes()) {
+        for (const Document::Node& child : node.children) {
+            if (child.role == Document::Role::Animation && child.name == "title") path = child.path;
+        }
+    }
+    const auto animation = file->ReadAnimation(path);
+    REQUIRE(animation.has_value());
+    if (!animation) return std::nullopt;
+    const auto outlines =
+        Document::StageOutlines(*animation, {}, kPreviewFrame, file->ShapeBounds(path));
+    REQUIRE(!outlines.empty());
+    const auto widest = std::ranges::max_element(outlines, {}, [](const auto& outline) {
+        return std::abs(outline.corners[1][0] - outline.corners[0][0]);
+    });
+    return widest->depth;
 }
 
 }
@@ -411,6 +446,62 @@ TEST_CASE("A stage drag only changes the document when it ends") {
     CHECK(RowValue(*opened.inspector, "Translation") == before);
 }
 
+TEST_CASE("An arrow key on the stage nudges the selected depth as one undo step") {
+    Opened opened;
+    Open(opened, true);
+    auto* timeline = opened.window.findChild<Editor::Timeline*>();
+    auto* viewport = opened.window.findChild<Editor::Viewport*>();
+    REQUIRE(timeline != nullptr);
+    REQUIRE(viewport != nullptr);
+    QAction* undo = ShortcutAction(opened.window, QKeySequence(QKeySequence::Undo));
+    REQUIRE(undo != nullptr);
+    emit timeline->DepthChosen(2);
+    const std::string before = RowValue(*opened.inspector, "Translation");
+
+    Script script({});
+    QKeyEvent right(QEvent::KeyPress, Qt::Key_Right, Qt::ShiftModifier);
+    QApplication::sendEvent(viewport, &right);
+    QApplication::processEvents();
+    CHECK(script.Problems().isEmpty());
+    CHECK(RowValue(*opened.inspector, "Translation") == "200, 0");
+    undo->trigger();
+    CHECK(RowValue(*opened.inspector, "Translation") == before);
+}
+
+TEST_CASE("A depth hidden in the view cannot be picked and leaves the document alone") {
+    Opened opened;
+    Open(opened, true);
+    auto* timeline = opened.window.findChild<Editor::Timeline*>();
+    auto* viewport = opened.window.findChild<Editor::Viewport*>();
+    REQUIRE(timeline != nullptr);
+    REQUIRE(viewport != nullptr);
+    QAction* undo = ShortcutAction(opened.window, QKeySequence(QKeySequence::Undo));
+    REQUIRE(undo != nullptr);
+    const auto pick = [&] {
+        emit timeline->DepthChosen(1);
+        emit viewport->Picked(1, 1);
+        return RowValue(*opened.inspector, "Depth");
+    };
+    CHECK(pick() == "2");
+    {
+        Script hidden({Choose("Hide depth 2 in the view")});
+        emit timeline->MenuRequested(QPoint(4, 4), 0, QString());
+        REQUIRE(Settle([&hidden] { return hidden.Finished(); }));
+        CHECK(hidden.Problems().isEmpty());
+    }
+    CHECK_FALSE(undo->isEnabled());
+    CHECK(pick() != "2");
+    emit timeline->DepthChosen(2);
+    {
+        Script shown({Choose("Show depth 2 in the view")});
+        emit timeline->MenuRequested(QPoint(4, 4), 0, QString());
+        REQUIRE(Settle([&shown] { return shown.Finished(); }));
+        CHECK(shown.Problems().isEmpty());
+    }
+    CHECK(pick() == "2");
+    CHECK_FALSE(undo->isEnabled());
+}
+
 TEST_CASE("A stage drag previews through the host before it is committed") {
     const QString game = qEnvironmentVariable("R573_IIDX_DIR");
     if (game.isEmpty()) SKIP("R573_IIDX_DIR not set");
@@ -424,29 +515,9 @@ TEST_CASE("A stage drag previews through the host before it is committed") {
     window.OpenDocument(title);
     REQUIRE(opening.Problems().isEmpty());
 
-    QFile read(title);
-    REQUIRE(read.open(QIODevice::ReadOnly));
-    const QByteArray bytes = read.readAll();
-    const auto file = Document::File::Open(
-        std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(bytes.constData()),
-                                 static_cast<std::size_t>(bytes.size())));
-    REQUIRE(file.has_value());
-    if (!file) return;
-    std::string path;
-    for (const Document::Node& node : file->Nodes()) {
-        for (const Document::Node& child : node.children) {
-            if (child.role == Document::Role::Animation && child.name == "title") path = child.path;
-        }
-    }
-    const auto animation = file->ReadAnimation(path);
-    REQUIRE(animation.has_value());
-    if (!animation) return;
-    const auto outlines =
-        Document::StageOutlines(*animation, {}, kPreviewFrame, file->ShapeBounds(path));
-    REQUIRE(!outlines.empty());
-    const auto widest = std::ranges::max_element(outlines, {}, [](const auto& outline) {
-        return std::abs(outline.corners[1][0] - outline.corners[0][0]);
-    });
+    const std::optional<uint16_t> widest = WidestTitleDepth(title);
+    REQUIRE(widest.has_value());
+    if (!widest) return;
 
     auto* timeline = window.findChild<Editor::Timeline*>();
     auto* viewport = window.findChild<Editor::Viewport*>();
@@ -455,21 +526,67 @@ TEST_CASE("A stage drag previews through the host before it is committed") {
     QAction* undo = ShortcutAction(window, QKeySequence(QKeySequence::Undo));
     REQUIRE(undo != nullptr);
     emit timeline->FrameChosen(kPreviewFrame);
-    emit timeline->DepthChosen(widest->depth);
+    emit timeline->DepthChosen(*widest);
     QApplication::processEvents();
     const QImage before = viewport->grab().toImage();
 
-    emit viewport->Dragged(widest->depth, 300, 150, false);
+    emit viewport->Dragged(*widest, 300, 150, false);
     QApplication::processEvents();
     QApplication::processEvents();
     const QImage during = viewport->grab().toImage();
     CHECK(during != before);
     CHECK_FALSE(undo->isEnabled());
 
-    emit viewport->Dragged(widest->depth, 0, 0, false);
+    emit viewport->Dragged(*widest, 0, 0, false);
     QApplication::processEvents();
     QApplication::processEvents();
     CHECK(viewport->grab().toImage() == before);
+    CHECK(opening.Problems().isEmpty());
+}
+
+TEST_CASE("Hiding a depth in the view takes it out of the rendered frame until it is shown") {
+    const QString game = qEnvironmentVariable("R573_IIDX_DIR");
+    if (game.isEmpty()) SKIP("R573_IIDX_DIR not set");
+    const QString title = game + "/data/graphic/1/title.ifs";
+    const std::optional<uint16_t> widest = WidestTitleDepth(title);
+    REQUIRE(widest.has_value());
+    if (!widest) return;
+    QSettings().setValue("game/directory", game);
+    Editor::Window window;
+    QSettings().remove("game/directory");
+    window.resize(1600, 900);
+    window.show();
+    Script opening({});
+    window.OpenDocument(title);
+    REQUIRE(opening.Problems().isEmpty());
+    auto* timeline = window.findChild<Editor::Timeline*>();
+    auto* viewport = window.findChild<Editor::Viewport*>();
+    REQUIRE(timeline != nullptr);
+    REQUIRE(viewport != nullptr);
+    const auto grab = [&] {
+        emit timeline->DepthChosen(kNoDepth);
+        QApplication::processEvents();
+        return viewport->grab().toImage();
+    };
+    emit timeline->FrameChosen(kPreviewFrame);
+    const QImage before = grab();
+    emit timeline->DepthChosen(*widest);
+    const QString depth = QString::number(*widest);
+    {
+        Script hidden({Choose("Hide depth " + depth + " in the view")});
+        emit timeline->MenuRequested(QPoint(4, 4), kPreviewFrame, QString());
+        REQUIRE(Settle([&hidden] { return hidden.Finished(); }));
+        CHECK(hidden.Problems().isEmpty());
+    }
+    CHECK(grab() != before);
+    emit timeline->DepthChosen(*widest);
+    {
+        Script shown({Choose("Show every hidden depth")});
+        emit timeline->MenuRequested(QPoint(4, 4), kPreviewFrame, QString());
+        REQUIRE(Settle([&shown] { return shown.Finished(); }));
+        CHECK(shown.Problems().isEmpty());
+    }
+    CHECK(grab() == before);
     CHECK(opening.Problems().isEmpty());
 }
 

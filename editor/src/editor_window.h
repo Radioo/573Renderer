@@ -6,6 +6,7 @@
 #include "document/authored.h"
 #include "document/clip.h"
 #include "document/group_sprite.h"
+#include "document/hidden_depths.h"
 #include "document/history.h"
 #include "document/inspector.h"
 #include "document/key_selection.h"
@@ -169,6 +170,13 @@ private:
     void DuplicateSpanToDepth(uint16_t depth, uint32_t frame);
     void GroupDepthsIntoSprite(uint16_t depth, uint32_t frame);
     void UngroupSpriteAt(uint16_t depth, uint32_t frame);
+    [[nodiscard]] std::vector<uint16_t> HiddenHere() const;
+    [[nodiscard]] bool IsHidden(uint16_t depth) const;
+    void ToggleHidden(uint16_t depth);
+    void ShowEveryDepth();
+    void UpdateHiddenRows();
+    [[nodiscard]] std::vector<Document::StageOutline>
+    VisibleOutlines(const AfpAnimation::Animation& animation) const;
     [[nodiscard]] bool OwnsDepthIn(const Document::GroupRange& range) const;
     void TrimSpanOnTimeline(uint16_t depth, uint32_t frame, uint32_t first, uint32_t last);
     void ResizeViewport();
@@ -203,6 +211,7 @@ private:
     std::optional<Document::Project> project_;
     QString project_folder_;
     std::vector<Document::AuthoredDepth> authored_;
+    std::vector<Document::HiddenDepth> hidden_;
     QString key_property_;
     std::optional<uint32_t> key_frame_;
     std::optional<Document::KeyClip> copied_keys_;

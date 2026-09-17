@@ -51,7 +51,7 @@ void Window::UpdateOutlines(const AfpAnimation::Animation& animation) {
         shape_bounds_ = file_->ShapeBounds(animation_path_);
         shape_bounds_path_ = animation_path_;
     }
-    viewport_->ShowOutlines(Document::StageOutlines(animation, clip_, frame_, shape_bounds_),
+    viewport_->ShowOutlines(VisibleOutlines(animation),
                             depth_ ? std::optional<uint16_t>(static_cast<uint16_t>(*depth_))
                                    : std::nullopt);
 }
@@ -63,8 +63,7 @@ void Window::PickOnStage(double x, double y) {
         ReportOnce(QString::fromStdString(animation.error()));
         return;
     }
-    const std::optional<uint16_t> picked = Document::DepthAt(
-        Document::StageOutlines(*animation, clip_, frame_, shape_bounds_), {x, y});
+    const std::optional<uint16_t> picked = Document::DepthAt(VisibleOutlines(*animation), {x, y});
     if (picked) {
         ChooseDepth(*picked);
         return;

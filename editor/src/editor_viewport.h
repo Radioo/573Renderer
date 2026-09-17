@@ -14,6 +14,7 @@
 #include <optional>
 #include <vector>
 
+class QKeyEvent;
 class QMouseEvent;
 class QPainter;
 class QPaintEvent;
@@ -46,6 +47,7 @@ protected:
     void mousePressEvent(QMouseEvent* event) override;
     void mouseMoveEvent(QMouseEvent* event) override;
     void mouseReleaseEvent(QMouseEvent* event) override;
+    void keyPressEvent(QKeyEvent* event) override;
 
 private:
     enum class Gesture : uint8_t { None, Move, Scale, Turn };
