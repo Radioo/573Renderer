@@ -31,6 +31,7 @@ namespace {
 using Catch::Matchers::WithinAbs;
 
 constexpr int kTimelineWidth = 657;
+constexpr int kDepthRowY = 34;
 constexpr int kFirstPropertyY = 50;
 constexpr int kSecondPropertyY = 66;
 
@@ -165,6 +166,36 @@ TEST_CASE("Dragging a selected keyframe asks to move the selection by whole fram
     CHECK(moves == std::vector<int64_t>{2});
     CHECK(timeline.SelectedKeys().size() == 2);
     Click(timeline, {FrameX(4), kFirstPropertyY});
+    CHECK(moves.size() == 1);
+}
+
+TEST_CASE("Dragging a depth's bar asks to move that span by whole frames") {
+    Editor::Timeline timeline;
+    timeline.resize(kTimelineWidth, 200);
+    timeline.ShowAnimation(
+        11,
+        {Document::DepthRow{.depth = 3,
+                            .spans = {Document::Span{.first_frame = 1, .last_frame = 4},
+                                      Document::Span{.first_frame = 7, .last_frame = 9}}}},
+        {});
+    struct Moved {
+        uint16_t depth = 0;
+        uint32_t frame = 0;
+        int64_t by = 0;
+    };
+    std::vector<Moved> moves;
+    QObject::connect(&timeline, &Editor::Timeline::SpanMoved,
+                     [&moves](uint16_t depth, uint32_t frame, int64_t by) {
+                         moves.push_back({.depth = depth, .frame = frame, .by = by});
+                     });
+    Drag(timeline, {FrameX(8), kDepthRowY}, {FrameX(6), kDepthRowY});
+    REQUIRE(moves.size() == 1);
+    CHECK(moves[0].depth == 3);
+    CHECK(moves[0].frame == 8);
+    CHECK(moves[0].by == -2);
+
+    Drag(timeline, {FrameX(2), kDepthRowY}, {FrameX(2) + 2, kDepthRowY});
+    Drag(timeline, {FrameX(5) + 20, kDepthRowY}, {FrameX(9), kDepthRowY});
     CHECK(moves.size() == 1);
 }
 

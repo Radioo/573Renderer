@@ -10,6 +10,8 @@ namespace Document {
 struct Span {
     uint32_t first_frame = 0;
     uint32_t last_frame = 0;
+
+    friend bool operator==(const Span&, const Span&) = default;
 };
 
 struct DepthRow {

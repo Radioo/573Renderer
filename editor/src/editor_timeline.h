@@ -47,6 +47,7 @@ signals:
     void DepthChosen(uint32_t depth);
     void KeyChosen(const QString& property, uint32_t frame);
     void KeysShifted(int64_t by);
+    void SpanMoved(uint16_t depth, uint32_t frame, int64_t by);
     void MenuRequested(const QPoint& where, uint32_t frame, const QString& label);
     void KeyMenuRequested(const QPoint& where, const QString& property, uint32_t frame,
                           bool on_key);
@@ -77,9 +78,12 @@ private:
     [[nodiscard]] std::optional<uint32_t> KeyNear(std::size_t track, int x) const;
     void ChooseAt(int x, int y);
     void PressKeys(const Lane& lane, QPoint at, bool toggle);
+    void PressSpan(const Lane& lane, QPoint at);
+    [[nodiscard]] std::optional<Document::Span> SpanAt(uint16_t depth, int x) const;
     [[nodiscard]] bool IsSelected(const Document::KeyRef& key) const;
     void SelectBand(bool adding);
     void DrawKeys(QPainter& painter, const Document::Track& track, int y) const;
+    void DrawSpanGhost(QPainter& painter, const Document::Span& span, int y) const;
     void Resize();
     [[nodiscard]] QString LabelNear(int x) const;
 
@@ -94,6 +98,12 @@ private:
     std::optional<uint32_t> drag_from_;
     uint32_t drag_to_ = 0;
     std::optional<QPoint> band_from_;
+    std::optional<uint16_t> span_depth_;
+    std::optional<Document::Span> span_grabbed_;
+    int span_press_x_ = 0;
+    uint32_t span_from_ = 0;
+    uint32_t span_to_ = 0;
+    bool span_dragging_ = false;
     QPoint band_to_;
     std::vector<Document::KeyRef> band_kept_;
     std::optional<double> zoom_;

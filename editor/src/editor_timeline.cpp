@@ -38,6 +38,7 @@ constexpr int kLabelReach = 30;
 constexpr int kKeyReach = 6;
 constexpr int kKeyRadius = 4;
 constexpr int kPropertyIndent = 8;
+constexpr int kSpanDragThreshold = 4;
 constexpr double kZoomStep = 1.25;
 constexpr double kMostPixelsPerFrame = 48.0;
 constexpr int kTickSpacing = 60;
@@ -321,6 +322,26 @@ void Timeline::PressKeys(const Lane& lane, QPoint at, bool toggle) {
     emit KeyChosen(QString::fromStdString(pressed.property), pressed.frame);
 }
 
+std::optional<Document::Span> Timeline::SpanAt(uint16_t depth, int x) const {
+    const auto row = std::ranges::find(rows_, depth, &Document::DepthRow::depth);
+    if (row == rows_.end()) return std::nullopt;
+    for (const Document::Span& span : row->spans) {
+        const int from = FrameToX(span.first_frame);
+        const int to = std::max(from + 2, FrameToX(span.last_frame));
+        if (x >= from && x <= to) return span;
+    }
+    return std::nullopt;
+}
+
+void Timeline::PressSpan(const Lane& lane, QPoint at) {
+    span_grabbed_ = SpanAt(lane.depth, at.x());
+    if (!span_grabbed_) return;
+    span_depth_ = lane.depth;
+    span_press_x_ = at.x();
+    span_from_ = XToFrame(at.x());
+    span_to_ = span_from_;
+}
+
 void Timeline::SelectBand(bool adding) {
     std::vector<Document::KeyRef> chosen = adding ? band_kept_ : std::vector<Document::KeyRef>{};
     const QRect band = QRect(*band_from_, band_to_).normalized();
@@ -343,12 +364,18 @@ void Timeline::SelectBand(bool adding) {
 void Timeline::mousePressEvent(QMouseEvent* event) {
     drag_from_.reset();
     band_from_.reset();
+    span_depth_.reset();
+    span_dragging_ = false;
     if (event->button() != Qt::LeftButton) return;
     const bool toggle = (event->modifiers() & Qt::ControlModifier) != 0;
     const std::optional<std::size_t> lane = LaneAt(event->pos().y());
     if (lane) {
         const std::vector<Lane> lanes = Lanes();
-        if (lanes[*lane].is_property) PressKeys(lanes[*lane], event->pos(), toggle);
+        if (lanes[*lane].is_property) {
+            PressKeys(lanes[*lane], event->pos(), toggle);
+        } else {
+            PressSpan(lanes[*lane], event->pos());
+        }
     }
     if (!(band_from_ && toggle)) ChooseAt(event->pos().x(), event->pos().y());
 }
@@ -366,19 +393,51 @@ void Timeline::mouseMoveEvent(QMouseEvent* event) {
         update();
         return;
     }
+    if (span_depth_) {
+        if (!span_dragging_ && std::abs(event->pos().x() - span_press_x_) < kSpanDragThreshold)
+            return;
+        span_dragging_ = true;
+        span_to_ = XToFrame(event->pos().x());
+        update();
+        return;
+    }
     ChooseAt(event->pos().x(), event->pos().y());
 }
 
 void Timeline::mouseReleaseEvent(QMouseEvent* event) {
     if (event->button() != Qt::LeftButton) return;
     const std::optional<uint32_t> from = drag_from_;
+    const std::optional<uint16_t> span_depth = span_dragging_ ? span_depth_ : std::nullopt;
     drag_from_.reset();
     band_from_.reset();
+    span_depth_.reset();
+    span_dragging_ = false;
     update();
+    if (span_depth) {
+        const int64_t moved =
+            static_cast<int64_t>(XToFrame(event->pos().x())) - static_cast<int64_t>(span_from_);
+        if (moved != 0) emit SpanMoved(*span_depth, span_from_, moved);
+        return;
+    }
     if (!from) return;
     const int64_t by =
         static_cast<int64_t>(XToFrame(event->pos().x())) - static_cast<int64_t>(*from);
     if (by != 0) emit KeysShifted(by);
+}
+
+void Timeline::DrawSpanGhost(QPainter& painter, const Document::Span& span, int y) const {
+    const int64_t by = static_cast<int64_t>(span_to_) - static_cast<int64_t>(span_from_);
+    const int64_t last = frame_count_ > 0 ? static_cast<int64_t>(frame_count_ - 1) : 0;
+    const auto first = static_cast<uint32_t>(
+        std::clamp<int64_t>(static_cast<int64_t>(span.first_frame) + by, 0, last));
+    const auto end = static_cast<uint32_t>(
+        std::clamp<int64_t>(static_cast<int64_t>(span.last_frame) + by, 0, last));
+    const int from = FrameToX(first);
+    const int to = FrameToX(end);
+    painter.setPen(kKeySelected);
+    painter.setBrush(Qt::NoBrush);
+    painter.drawRect(
+        QRect(from, y + kBarInset, std::max(2, to - from), kRowHeight - 2 - 2 * kBarInset));
 }
 
 void Timeline::DrawKeys(QPainter& painter, const Document::Track& track, int y) const {
@@ -458,6 +517,8 @@ void Timeline::paintEvent(QPaintEvent* event) {
                 painter.fillRect(QRect(from, y + kBarInset, std::max(2, to - from),
                                        kRowHeight - 1 - 2 * kBarInset),
                                  kBar);
+                if (span_dragging_ && span_depth_ == lane.depth && span_grabbed_ == span)
+                    DrawSpanGhost(painter, span, y);
             }
         }
         y += kRowHeight;

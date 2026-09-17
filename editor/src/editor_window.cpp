@@ -167,6 +167,7 @@ void Window::BuildPanels() {
     connect(timeline_, &Timeline::MenuRequested, this, &Window::ShowTimelineMenu);
     connect(timeline_, &Timeline::KeyChosen, this, &Window::FocusKey);
     connect(timeline_, &Timeline::KeysShifted, this, &Window::ShiftSelectedKeys);
+    connect(timeline_, &Timeline::SpanMoved, this, &Window::MoveSpanInTime);
     AddKeyActions();
     connect(timeline_, &Timeline::KeyMenuRequested, this, &Window::ShowKeyMenu);
     auto* timeline_area = new QScrollArea;
@@ -591,6 +592,9 @@ void Window::ShowTimelineMenu(const QPoint& where, uint32_t frame, const QString
                : nullptr;
     QAction* remove_depth =
         depth_ ? menu.addAction(tr("Remove depth %1 here").arg(*depth_)) : nullptr;
+    QAction* restack =
+        depth_ ? menu.addAction(tr("Move depth %1 here to another depth...").arg(*depth_))
+               : nullptr;
     menu.addSeparator();
     const bool authored =
         depth_ != std::nullopt && AuthoredAt(static_cast<uint16_t>(*depth_), frame) != nullptr;
@@ -689,6 +693,10 @@ void Window::ShowTimelineMenu(const QPoint& where, uint32_t frame, const QString
                       [clip, depth, placed, frame, until](AfpAnimation::Animation& edited) {
                           return Document::AddDepth(edited, clip, depth, placed, frame, until);
                       });
+        return;
+    }
+    if (chosen == restack) {
+        MoveSpanToDepth(static_cast<uint16_t>(*depth_), frame);
         return;
     }
     if (chosen == remove_depth) {

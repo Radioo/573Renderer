@@ -264,3 +264,4 @@ captured. This milestone is the editing itself.
 - `issues/56-filter-tracks.md` (milestone 8)
 - `issues/57-filter-rows.md` (milestone 8)
 - `issues/58-editor-widget-tests.md` (milestone 8)
+- `issues/59-move-spans.md` (milestone 8)

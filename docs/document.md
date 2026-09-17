@@ -245,6 +245,36 @@ it. A label on a removed frame stays in the clip on the frame that took its
 index, clamped to the last one, because a label is a jump target and silently
 dropping it would break a script that names it.
 
+## Moving and restacking a span (`document/span_edit.h`)
+
+A span is what the timeline draws as one bar: from a placement that creates the
+depth to the frame before the next create or remove of that depth
+(`SpanOfDepth`, built on `DepthRows`). Its tags are the placements of that depth
+inside the span plus the remove on the frame after it. A remove on the span's
+first frame belongs to the span before it, even though it sits in the same
+frame, and is left alone.
+
+`MoveSpan` shifts those tags by a whole number of frames, and every non-zero
+end frame with them. A span moved onto the clip's last frame drops its remove;
+a span that ran to the end and moves earlier gains one. A remove is put first in
+its frame, so a span that now ends right before another span of the same depth
+is removed before the other is created; the other way round the game would
+remove the new object. The move is refused when it would leave the clip, run
+into another span of the depth, or leave the span looking different from what
+was moved (a span that is closed by the next span's create rather than by a
+remove cannot move later, because nothing would close the span before it). It
+works on a copy and returns the new frames.
+
+`ChangeSpanDepth` gives a span another depth number, which is its place in the
+drawing order. The new depth must hold nothing and be neither placed nor removed
+from the span's first frame to the frame after it, and depth `0x3000` is refused
+because afp-core stops on it (`AFP_UNUSED_DEPTH used` in the placement parser).
+A script that addresses the depth by number (`swapDepths`, a target path) is not
+followed.
+
+`ShiftAuthored` moves a project-owned depth's range and every keyframe by the
+same frames, so the project keeps describing the span after `MoveSpan`.
+
 ## The camera (`document/camera_edit.h`)
 
 `CameraTag(clip, frame)` finds the camera tag placed on a frame, and

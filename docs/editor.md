@@ -131,6 +131,13 @@ row. Outlines are shown only when the viewport shows the clip
 being edited, that is the root or a sprite shown on its own. Shape boxes are
 read once per animation and read again after every edit.
 
+Dragging a depth's bar by at least four pixels moves that span along the
+timeline, with an outline showing where it will land, and letting go applies
+`Document::MoveSpan` as one undo step; an owned span's keyframes and range move
+with it (`Document::ShiftAuthored`) and the project is saved. The timeline menu
+offers to move the span under the playhead to another depth number
+(`Document::ChangeSpanDepth`), which moves an owned depth's record with it.
+
 **Timeline.** `Editor::Timeline` draws a ruler carrying the animation's labels
 at their frames, then one row per depth from `Document::DepthRows`, with a bar
 over each frame span and the depth number in the gutter. Clicking or dragging

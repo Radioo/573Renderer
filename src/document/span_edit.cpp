@@ -1,0 +1,237 @@
+#include "document/span_edit.h"
+
+#include "document/authored.h"
+#include "document/clip.h"
+#include "document/keyframes.h"
+#include "document/placement_edit.h"
+#include "document/tags.h"
+#include "document/timeline.h"
+#include "formats/afp_animation.h"
+#include "support/expected.h"
+
+#include <cstddef>
+#include <cstdint>
+#include <limits>
+#include <optional>
+#include <string>
+#include <utility>
+#include <variant>
+#include <vector>
+
+namespace Document {
+
+namespace {
+
+constexpr uint32_t kMaxFrame = 0xFFFF;
+constexpr uint16_t kUnusedDepth = 0x3000;
+
+struct Taken {
+    uint32_t frame = 0;
+    AfpAnimation::Tag tag;
+};
+
+bool IsRemoveOf(const AfpAnimation::Tag& tag, uint16_t depth) {
+    const auto* remove = std::get_if<AfpAnimation::Remove>(&tag.body);
+    return remove != nullptr && remove->depth == depth;
+}
+
+bool IsPlacementOf(const AfpAnimation::Tag& tag, uint16_t depth) {
+    const auto* placement = std::get_if<AfpAnimation::Placement>(&tag.body);
+    return placement != nullptr && placement->depth == depth;
+}
+
+std::vector<std::size_t> SpanTags(const AfpAnimation::Container& clip, uint16_t depth,
+                                  const Span& span) {
+    std::vector<std::size_t> found;
+    const uint32_t closing = span.last_frame + 1;
+    for (uint32_t frame = span.first_frame; frame <= closing && frame < clip.frames.size();
+         frame++) {
+        const AfpAnimation::Frame& owner = clip.frames[frame];
+        for (uint32_t i = 0; i < owner.tag_count; i++) {
+            const std::size_t index = owner.first_tag + i;
+            if (index >= clip.tags.size()) break;
+            const AfpAnimation::Tag& tag = clip.tags[index];
+            const bool ours = frame == closing ? IsRemoveOf(tag, depth) : IsPlacementOf(tag, depth);
+            if (ours) found.push_back(index);
+        }
+    }
+    return found;
+}
+
+uint32_t FrameOf(const AfpAnimation::Container& clip, std::size_t index) {
+    for (uint32_t frame = 0; frame < clip.frames.size(); frame++) {
+        const AfpAnimation::Frame& owner = clip.frames[frame];
+        if (index >= owner.first_tag && index < owner.first_tag + owner.tag_count) return frame;
+    }
+    return 0;
+}
+
+void InsertTagFirst(AfpAnimation::Container& clip, uint32_t frame, AfpAnimation::Tag tag) {
+    AfpAnimation::Frame& owner = clip.frames[frame];
+    clip.tags.insert(clip.tags.begin() + static_cast<std::ptrdiff_t>(owner.first_tag),
+                     std::move(tag));
+    owner.tag_count++;
+    for (std::size_t i = frame + 1; i < clip.frames.size(); i++)
+        clip.frames[i].first_tag++;
+}
+
+std::vector<Taken> TakeSpan(AfpAnimation::Container& clip, uint16_t depth, const Span& span) {
+    const std::vector<std::size_t> indices = SpanTags(clip, depth, span);
+    std::vector<Taken> taken;
+    taken.reserve(indices.size());
+    for (const std::size_t index : indices)
+        taken.push_back(Taken{.frame = FrameOf(clip, index), .tag = clip.tags[index]});
+    for (std::size_t i = indices.size(); i > 0; i--)
+        EraseTag(clip, indices[i - 1]);
+    return taken;
+}
+
+bool TouchedBetween(const AfpAnimation::Container& clip, uint16_t depth, uint32_t first,
+                    uint32_t last) {
+    for (uint32_t frame = first; frame <= last && frame < clip.frames.size(); frame++) {
+        const AfpAnimation::Frame& owner = clip.frames[frame];
+        for (uint32_t i = 0; i < owner.tag_count; i++) {
+            const std::size_t index = owner.first_tag + i;
+            if (index >= clip.tags.size()) break;
+            if (IsPlacementOf(clip.tags[index], depth) || IsRemoveOf(clip.tags[index], depth))
+                return true;
+        }
+    }
+    return false;
+}
+
+Support::Expected<void, std::string> CheckFree(const AfpAnimation::Container& clip, uint16_t depth,
+                                               uint32_t first, uint32_t last) {
+    for (uint32_t frame = first; frame <= last; frame++) {
+        if (LivePlacementTag(clip, depth, frame)) {
+            return Support::Unexpected("depth " + std::to_string(depth) +
+                                       " already shows something on frame " +
+                                       std::to_string(frame));
+        }
+    }
+    return {};
+}
+
+Support::Expected<void, std::string> PlaceShifted(AfpAnimation::Container& clip, uint16_t depth,
+                                                  const std::vector<Taken>& taken,
+                                                  const Span& moved, int64_t by) {
+    bool closed = false;
+    for (const Taken& one : taken) {
+        const auto frame = static_cast<uint32_t>(static_cast<int64_t>(one.frame) + by);
+        AfpAnimation::Tag tag = one.tag;
+        if (IsRemoveOf(tag, depth)) {
+            if (frame >= clip.frames.size()) continue;
+            InsertTagFirst(clip, frame, std::move(tag));
+            closed = true;
+            continue;
+        }
+        auto& placement = std::get<AfpAnimation::Placement>(tag.body);
+        if (placement.end_frame != 0) {
+            const int64_t end = static_cast<int64_t>(placement.end_frame) + by;
+            if (end < 0 || std::cmp_greater(end, std::numeric_limits<uint16_t>::max()))
+                return Support::Unexpected(std::string("a placement end frame is a u16"));
+            placement.end_frame = static_cast<uint16_t>(end);
+        }
+        InsertTag(clip, frame, std::move(tag));
+    }
+    const uint32_t closing = moved.last_frame + 1;
+    if (!closed && closing < clip.frames.size()) {
+        InsertTagFirst(clip, closing,
+                       AfpAnimation::Tag{AfpAnimation::Remove{.unread_word = 0, .depth = depth}});
+    }
+    return {};
+}
+
+}
+
+std::optional<Span> SpanOfDepth(const AfpAnimation::Container& clip, uint16_t depth,
+                                uint32_t frame) {
+    for (const DepthRow& row : DepthRows(clip)) {
+        if (row.depth != depth) continue;
+        for (const Span& span : row.spans) {
+            if (frame >= span.first_frame && frame <= span.last_frame) return span;
+        }
+    }
+    return std::nullopt;
+}
+
+Support::Expected<Span, std::string> MoveSpan(AfpAnimation::Animation& animation, ClipId clip,
+                                              uint16_t depth, uint32_t frame, int64_t by) {
+    auto found = RequireClip(animation, clip);
+    if (!found) return Support::Unexpected(found.error());
+    AfpAnimation::Container& target = **found;
+    const std::optional<Span> span = SpanOfDepth(target, depth, frame);
+    if (!span) {
+        return Support::Unexpected("depth " + std::to_string(depth) + " holds nothing on frame " +
+                                   std::to_string(frame));
+    }
+    const int64_t first = static_cast<int64_t>(span->first_frame) + by;
+    const int64_t last = static_cast<int64_t>(span->last_frame) + by;
+    if (first < 0 || std::cmp_greater_equal(last, target.frames.size()) ||
+        std::cmp_greater_equal(last, kMaxFrame)) {
+        return Support::Unexpected(std::string("the depth would leave the clip's frames"));
+    }
+    const Span moved{.first_frame = static_cast<uint32_t>(first),
+                     .last_frame = static_cast<uint32_t>(last)};
+    if (by == 0) return moved;
+
+    AfpAnimation::Container edited = target;
+    const std::vector<Taken> taken = TakeSpan(edited, depth, *span);
+    auto free = CheckFree(edited, depth, moved.first_frame, moved.last_frame);
+    if (!free) return Support::Unexpected(free.error());
+    auto placed = PlaceShifted(edited, depth, taken, moved, by);
+    if (!placed) return Support::Unexpected(placed.error());
+    const std::optional<Span> check = SpanOfDepth(edited, depth, moved.first_frame);
+    if (!check || *check != moved) {
+        return Support::Unexpected("depth " + std::to_string(depth) +
+                                   " would run into its next span there");
+    }
+    target = std::move(edited);
+    return moved;
+}
+
+Support::Expected<void, std::string> ChangeSpanDepth(AfpAnimation::Animation& animation,
+                                                     ClipId clip, uint16_t depth, uint32_t frame,
+                                                     uint16_t to) {
+    auto found = RequireClip(animation, clip);
+    if (!found) return Support::Unexpected(found.error());
+    AfpAnimation::Container& target = **found;
+    if (to == kUnusedDepth)
+        return Support::Unexpected("depth " + std::to_string(to) + " is reserved by the game");
+    const std::optional<Span> span = SpanOfDepth(target, depth, frame);
+    if (!span) {
+        return Support::Unexpected("depth " + std::to_string(depth) + " holds nothing on frame " +
+                                   std::to_string(frame));
+    }
+    if (to == depth) return {};
+    auto free = CheckFree(target, to, span->first_frame, span->last_frame);
+    if (!free) return Support::Unexpected(free.error());
+    if (TouchedBetween(target, to, span->first_frame, span->last_frame + 1)) {
+        return Support::Unexpected("depth " + std::to_string(to) +
+                                   " is placed or removed while this span is on the stage");
+    }
+    for (const std::size_t index : SpanTags(target, depth, *span)) {
+        auto& body = target.tags[index].body;
+        if (auto* placement = std::get_if<AfpAnimation::Placement>(&body)) placement->depth = to;
+        if (auto* remove = std::get_if<AfpAnimation::Remove>(&body)) remove->depth = to;
+    }
+    return {};
+}
+
+Support::Expected<void, std::string> ShiftAuthored(AuthoredDepth& authored, int64_t by) {
+    const int64_t first = static_cast<int64_t>(authored.first_frame) + by;
+    const int64_t last = static_cast<int64_t>(authored.last_frame) + by;
+    if (first < 0 || std::cmp_greater(last, std::numeric_limits<uint32_t>::max()))
+        return Support::Unexpected(std::string("the owned range would leave the clip"));
+    AuthoredDepth moved = authored;
+    moved.first_frame = static_cast<uint32_t>(first);
+    moved.last_frame = static_cast<uint32_t>(last);
+    for (Track& track : moved.tracks) {
+        for (Keyframe& key : track.keys)
+            key.frame = static_cast<uint32_t>(static_cast<int64_t>(key.frame) + by);
+    }
+    authored = std::move(moved);
+    return {};
+}
+
+}
