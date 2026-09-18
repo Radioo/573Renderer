@@ -842,6 +842,23 @@ name, since removing it would leave that import unresolved. Removing only the
 animation file, which the entry removal used to do, left a list entry pointing at
 a file afp-utils could no longer read.
 
+`RenameAnimation(archive, path, name)` moves everything that is keyed by the
+animation's name: the data and byte order entries (stored under the name's
+hash), its `afplist.xml` listing (keeping whether the name was NUL
+terminated), the shape files `geo/<name>_shape<id>` its listing names, the
+animation's own name string, and the export under the animation's own name,
+which is put back in lookup order. It refuses what `AddAnimation` refuses for a
+name, a name another listed animation already has ignoring case, an animation
+that is not listed, and one another animation in the package imports, since
+that import names the movie. Other packages and the game's own code can also
+load an animation by name, which a package cannot show, so renaming a shipped
+one is the user's call. `animation_entries_tests` covers the move and each
+refusal, and moving the shapes was seen to matter by leaving them out. A live
+test (`animation_rename_live_tests`, `local_dll`) renames `title` in IIDX 33's
+`title.ifs`, has the host load the result under the new name and requires frame
+400 to draw exactly as the original; asking for the old name fails to load,
+which shows the host really looked it up by the new one.
+
 ### Placing a package image (`document/image_shape.h`, `document/place_image.h`)
 
 A placement cannot show a texture directly. An `AP2_IMAGE` tag placed on a

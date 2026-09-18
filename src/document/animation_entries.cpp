@@ -166,6 +166,91 @@ Support::Expected<void, std::string> CopyShapes(Ifs::Archive& archive,
     return {};
 }
 
+Support::Expected<std::string, std::string> ListedNameAt(const BinaryXml::Document& list,
+                                                         std::string_view path) {
+    for (const BinaryXml::Node& listing : list.root.children) {
+        if (!IsListing(listing)) continue;
+        std::string name = ListedName(listing);
+        const auto listed_path = PathOf(kAnimationDirectory, name);
+        if (listed_path && *listed_path == path) return name;
+    }
+    return Support::Unexpected(std::string(path) + " is not a listed animation");
+}
+
+Support::Expected<void, std::string> CheckFree(const BinaryXml::Document& list,
+                                               std::string_view name) {
+    const std::string folded = FoldedName(name);
+    const bool taken = std::ranges::any_of(list.root.children, [&](const BinaryXml::Node& node) {
+        return IsListing(node) && FoldedName(ListedName(node)) == folded;
+    });
+    if (taken) {
+        return Support::Unexpected(std::string(name) +
+                                   " is already an animation here, ignoring case");
+    }
+    return {};
+}
+
+Support::Expected<std::vector<uint8_t>, std::string>
+Relisted(const BinaryXml::Document& list, std::string_view old_name, std::string_view name) {
+    BinaryXml::Document edited = list;
+    for (BinaryXml::Node& listing : edited.root.children) {
+        if (!IsListing(listing) || ListedName(listing) != old_name) continue;
+        for (BinaryXml::Node& attribute : listing.attributes) {
+            if (attribute.name != kNameAttribute) continue;
+            const bool terminated = !attribute.value.empty() && attribute.value.back() == 0;
+            attribute.value.assign(name.begin(), name.end());
+            if (terminated) attribute.value.push_back(0);
+        }
+    }
+    return BinaryXml::Write(edited);
+}
+
+std::vector<uint16_t> ListedShapes(const BinaryXml::Document& list, std::string_view name) {
+    std::vector<uint16_t> shapes;
+    for (const BinaryXml::Node& listing : list.root.children) {
+        if (!IsListing(listing) || ListedName(listing) != name) continue;
+        for (const BinaryXml::Node& child : listing.children) {
+            if (child.name != kShapeList) continue;
+            for (std::size_t at = 0; at + kShapeIdBytes <= child.value.size(); at += kShapeIdBytes)
+                shapes.push_back(BigEndian::ReadU16(child.value, at));
+        }
+    }
+    return shapes;
+}
+
+void RenameOwnExport(AfpAnimation::Animation& animation, std::string_view old_name,
+                     std::string_view name) {
+    const std::string folded = FoldedName(old_name);
+    const auto own = std::ranges::find_if(animation.exports, [&](const AfpAnimation::Export& one) {
+        return FoldedName(StringText(animation, one.name)) == folded;
+    });
+    animation.name = InternString(animation, name);
+    if (own != animation.exports.end()) {
+        const uint16_t tag = own->tag;
+        animation.exports.erase(own);
+        InsertExport(animation, tag, name);
+    }
+    CompactStrings(animation);
+}
+
+Support::Expected<void, std::string> MoveShapes(Ifs::Archive& archive,
+                                                const std::vector<uint16_t>& shapes,
+                                                std::string_view old_name, std::string_view name) {
+    for (const uint16_t id : shapes) {
+        const auto from = PathOf(kShapeDirectory, std::format("{}_shape{}", old_name, id));
+        if (!from) return Support::Unexpected(from.error());
+        const Ifs::Entry* shape = FindEntry(archive, *from);
+        if (shape == nullptr) continue;
+        std::vector<uint8_t> bytes = shape->bytes;
+        auto gone = RemoveEntry(archive, *from);
+        if (!gone) return Support::Unexpected(gone.error());
+        auto added = AddEntry(archive, kShapeDirectory, std::format("{}_shape{}", name, id),
+                              std::move(bytes));
+        if (!added) return Support::Unexpected(added.error());
+    }
+    return {};
+}
+
 struct Unlisted {
     std::string name;
     std::vector<uint16_t> shapes;
@@ -206,7 +291,8 @@ Support::Expected<Unlisted, std::string> Unlist(const BinaryXml::Document& list,
 
 Support::Expected<void, std::string> CheckNotImported(const Ifs::Archive& archive,
                                                       const BinaryXml::Document& list,
-                                                      std::string_view removed) {
+                                                      std::string_view removed,
+                                                      std::string_view edit) {
     for (const BinaryXml::Node& listing : list.root.children) {
         if (!IsListing(listing) || ListedName(listing) == removed) continue;
         const std::string name = ListedName(listing);
@@ -220,7 +306,7 @@ Support::Expected<void, std::string> CheckNotImported(const Ifs::Archive& archiv
             });
         if (imports) {
             return Support::Unexpected(name + " imports " + std::string(removed) +
-                                       ", so it cannot be removed");
+                                       ", so it cannot be " + std::string(edit));
         }
     }
     return {};
@@ -274,7 +360,7 @@ Support::Expected<void, std::string> RemoveAnimation(Ifs::Archive& archive, std:
     if (!list) return Support::Unexpected(list.error());
     auto unlisted = Unlist(*list, path);
     if (!unlisted) return Support::Unexpected(unlisted.error());
-    auto free = CheckNotImported(archive, *list, unlisted->name);
+    auto free = CheckNotImported(archive, *list, unlisted->name, "removed");
     if (!free) return Support::Unexpected(free.error());
 
     Ifs::Archive edited = archive;
@@ -293,6 +379,48 @@ Support::Expected<void, std::string> RemoveAnimation(Ifs::Archive& archive, std:
     }
     archive = std::move(edited);
     return {};
+}
+
+Support::Expected<std::string, std::string>
+RenameAnimation(Ifs::Archive& archive, std::string_view path, std::string_view name) {
+    auto named = CheckName(name);
+    if (!named) return Support::Unexpected(named.error());
+    const auto list = ReadList(archive);
+    if (!list) return Support::Unexpected(list.error());
+    const auto old_name = ListedNameAt(*list, path);
+    if (!old_name) return Support::Unexpected(old_name.error());
+    if (*old_name == name) return std::string(path);
+    if (FoldedName(*old_name) != FoldedName(name)) {
+        auto free = CheckFree(*list, name);
+        if (!free) return Support::Unexpected(free.error());
+    }
+    auto imported = CheckNotImported(archive, *list, *old_name, "renamed");
+    if (!imported) return Support::Unexpected(imported.error());
+    auto animation = ReadAt(archive, path);
+    if (!animation) return Support::Unexpected(animation.error());
+    RenameOwnExport(*animation, *old_name, name);
+    auto written = AfpAnimation::WriteStored(*animation);
+    if (!written) return Support::Unexpected(written.error());
+    auto listed = Relisted(*list, *old_name, name);
+    if (!listed) return Support::Unexpected(listed.error());
+    auto new_path = PathOf(kAnimationDirectory, name);
+    if (!new_path) return Support::Unexpected(new_path.error());
+
+    Ifs::Archive edited = archive;
+    auto data = RemoveEntry(edited, path);
+    if (!data) return Support::Unexpected(data.error());
+    auto order = RemoveEntry(edited, ScriptPath(path));
+    if (!order) return Support::Unexpected(order.error());
+    auto added = AddEntry(edited, kAnimationDirectory, name, std::move(written->data));
+    if (!added) return Support::Unexpected(added.error());
+    auto script = AddEntry(edited, kScriptDirectory, name, std::move(written->script));
+    if (!script) return Support::Unexpected(script.error());
+    auto shapes = MoveShapes(edited, ListedShapes(*list, *old_name), *old_name, name);
+    if (!shapes) return Support::Unexpected(shapes.error());
+    auto relisted = ReplaceEntry(edited, kAnimationList, std::move(*listed));
+    if (!relisted) return Support::Unexpected(relisted.error());
+    archive = std::move(edited);
+    return *new_path;
 }
 
 }

@@ -124,6 +124,44 @@ void Window::DrawBackground(bool drawn) {
     RenderFrame();
 }
 
+void Window::RenameAnimationEntry(const std::string& path, const QString& name) {
+    if (!file_) return;
+    const bool owned =
+        std::ranges::any_of(authored_, [&path](const Document::AuthoredDepth& depth) {
+            return depth.animation == path;
+        });
+    if (owned) {
+        ReportProblem(
+            tr("The project owns depths in %1; detach them before renaming it").arg(name));
+        return;
+    }
+    bool answered = false;
+    const QString wanted = QInputDialog::getText(this, tr("Rename %1").arg(name), tr("Name"),
+                                                 QLineEdit::Normal, name, &answered);
+    if (!answered || wanted == name) return;
+    const std::string text = wanted.toStdString();
+    std::string renamed;
+    const bool open = path == animation_path_;
+    if (open) CloseAnimation();
+    if (!EditDocument(tr("Rename %1 to %2").arg(name, wanted),
+                      [&path, &text, &renamed](Document::File& document) {
+                          using Renamed = Support::Expected<void, std::string>;
+                          auto moved = document.RenameAnimation(path, text);
+                          if (!moved) return Renamed(Support::Unexpected(moved.error()));
+                          renamed = std::move(*moved);
+                          return Renamed();
+                      })) {
+        if (open) ShowSelectedEntry();
+        return;
+    }
+    for (std::vector<Document::DepthInClip>* view : {&hidden_, &locked_}) {
+        for (Document::DepthInClip& entry : *view) {
+            if (entry.animation == path) entry.animation = renamed;
+        }
+    }
+    SelectEntry(QString::fromStdString(renamed));
+}
+
 void Window::RemoveAnimation(const std::string& path, const QString& name) {
     if (!file_) return;
     const bool owned =

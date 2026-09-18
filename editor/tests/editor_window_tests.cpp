@@ -142,6 +142,30 @@ TEST_CASE("PNG and JPEG images can be added from the package menu") {
     CHECK(listed("stone"));
 }
 
+TEST_CASE("An animation renamed from the package menu stays open under its new name") {
+    Opened opened;
+    Open(opened);
+    REQUIRE(AnimationNamed(*opened.tree, "intro") != nullptr);
+    opened.tree->setCurrentItem(AnimationNamed(*opened.tree, "intro"));
+    {
+        Script renamed({Choose("Rename intro..."), Answer("opening")});
+        RunMenu(renamed, *opened.tree);
+        INFO(renamed.Problems().join("|").toStdString());
+        CHECK(renamed.Problems().isEmpty());
+    }
+    CHECK(AnimationNamed(*opened.tree, "intro") == nullptr);
+    QTreeWidgetItem* opening = AnimationNamed(*opened.tree, "opening");
+    REQUIRE(opening != nullptr);
+    CHECK(opened.tree->currentItem() == opening);
+    CHECK(RowValue(*opened.inspector, "Frame rate") == "60");
+
+    Script refused({Choose("Rename opening..."), Answer("a/b")});
+    RunMenu(refused, *opened.tree);
+    REQUIRE_FALSE(refused.Problems().isEmpty());
+    CHECK(refused.Problems().front().contains("slashes"));
+    CHECK(AnimationNamed(*opened.tree, "opening") != nullptr);
+}
+
 TEST_CASE("A package with no animation takes its first from another IFS") {
     QTemporaryDir dir;
     REQUIRE(dir.isValid());

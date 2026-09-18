@@ -443,3 +443,72 @@ TEST_CASE("A new animation's export goes where afp-core's case-folded search fin
     REQUIRE(after.has_value());
     CHECK(*after == *before);
 }
+
+TEST_CASE("Renaming an animation moves its entries, listing, shapes and own export") {
+    Ifs::Archive archive = HelperPackage();
+    const std::string intro = "afp/" + HashPath("intro");
+    const auto fresh = Document::AddAnimation(archive, "fresh", archive, intro, 4);
+    INFO(Error(fresh));
+    REQUIRE(fresh.has_value());
+    if (!fresh) return;
+
+    const auto renamed = Document::RenameAnimation(archive, *fresh, "renamed");
+    INFO(Error(renamed));
+    REQUIRE(renamed.has_value());
+    if (!renamed) return;
+    CHECK(*renamed == "afp/" + HashPath("renamed"));
+    CHECK(ListedNames(archive) ==
+          std::vector<std::vector<uint8_t>>{Bytes("intro"), Bytes("renamed")});
+    std::vector<std::string> expected{"afplist_Exml", Ifs::HashedName("intro"),
+                                      "bsi/" + Ifs::HashedName("intro"), Ifs::HashedName("renamed"),
+                                      "bsi/" + Ifs::HashedName("renamed")};
+    std::vector<std::string> stored = StoredNames(archive, "afp");
+    std::ranges::sort(expected);
+    std::ranges::sort(stored);
+    CHECK(stored == expected);
+    std::vector<std::string> shapes = StoredNames(archive, "geo");
+    std::ranges::sort(shapes);
+    CHECK(shapes == std::vector<std::string>{Ifs::HashedName("intro_shape5"),
+                                             Ifs::HashedName("renamed_shape5")});
+
+    const AfpAnimation::Animation read = ReadBack(archive, *renamed);
+    CHECK(Document::StringText(read, read.name) == "renamed");
+    const std::vector<std::string> exports = Exports(read);
+    CHECK(std::ranges::any_of(exports,
+                              [](const std::string& one) { return one.starts_with("renamed "); }));
+    CHECK_FALSE(std::ranges::any_of(
+        exports, [](const std::string& one) { return one.starts_with("fresh "); }));
+}
+
+TEST_CASE("A rename to a taken or unloadable name, or of an imported animation, is refused") {
+    Ifs::Archive archive = HelperPackage();
+    const std::string intro = "afp/" + HashPath("intro");
+    const auto fresh = Document::AddAnimation(archive, "fresh", archive, intro, 4);
+    REQUIRE(fresh.has_value());
+    if (!fresh) return;
+    const auto before = Ifs::Write(archive);
+    REQUIRE(before.has_value());
+    CHECK_FALSE(Document::RenameAnimation(archive, *fresh, "intro").has_value());
+    CHECK_FALSE(Document::RenameAnimation(archive, *fresh, "Intro").has_value());
+    CHECK_FALSE(Document::RenameAnimation(archive, *fresh, "a/b").has_value());
+    CHECK_FALSE(Document::RenameAnimation(archive, *fresh, "").has_value());
+    CHECK_FALSE(Document::RenameAnimation(archive, "afp/" + HashPath("nothing"), "x").has_value());
+    const auto after = Ifs::Write(archive);
+    REQUIRE(after.has_value());
+    CHECK(*after == *before);
+
+    AfpAnimation::Animation importer = ReadBack(archive, intro);
+    importer.imports.push_back(
+        AfpAnimation::Import{.movie = Document::InternString(importer, "fresh"),
+                             .assets = {AfpAnimation::ImportedAsset{
+                                 .tag = 40, .name = Document::InternString(importer, "part")}}});
+    const auto stored = AfpAnimation::WriteStored(importer);
+    REQUIRE(stored.has_value());
+    if (!stored) return;
+    REQUIRE(Document::ReplaceEntry(archive, intro, stored->data).has_value());
+    REQUIRE(Document::ReplaceEntry(archive, "afp/bsi/" + HashPath("intro"), stored->script)
+                .has_value());
+    const auto imported = Document::RenameAnimation(archive, *fresh, "renamed");
+    REQUIRE_FALSE(imported.has_value());
+    CHECK(imported.error().find("intro") != std::string::npos);
+}

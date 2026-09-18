@@ -547,6 +547,7 @@ void Window::ShowPackageMenu(const QPoint& where) {
     QAction* own_image =
         project_ ? menu.addAction(tr("Add an image the project owns...")) : nullptr;
     QAction* replace = path.isEmpty() ? nullptr : menu.addAction(tr("Replace %1...").arg(name));
+    QAction* rename = is_animation ? menu.addAction(tr("Rename %1...").arg(name)) : nullptr;
     QAction* remove = path.isEmpty() ? nullptr : menu.addAction(tr("Remove %1").arg(name));
     const QAction* chosen = menu.exec(where);
     if (chosen == nullptr) return;
@@ -596,6 +597,10 @@ void Window::ShowPackageMenu(const QPoint& where) {
         EditDocument(tr("Replace %1").arg(name), [target, bytes](Document::File& document) {
             return document.ReplaceEntry(target, bytes);
         });
+        return;
+    }
+    if (chosen == rename) {
+        RenameAnimationEntry(path.toStdString(), name);
         return;
     }
     if (chosen == remove && is_animation) {

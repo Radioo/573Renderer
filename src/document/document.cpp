@@ -164,6 +164,14 @@ Support::Expected<void, std::string> File::RemoveAnimation(std::string_view path
     return {};
 }
 
+Support::Expected<std::string, std::string> File::RenameAnimation(std::string_view path,
+                                                                  std::string_view name) {
+    auto renamed = Document::RenameAnimation(archive_, path, name);
+    if (!renamed) return Support::Unexpected(renamed.error());
+    outline_ = Outline::Build(archive_);
+    return *renamed;
+}
+
 Support::Expected<std::string, std::string> File::AddAnimation(std::string_view name,
                                                                const File& like,
                                                                std::string_view like_path,

@@ -313,7 +313,11 @@ open animation, or the package's first one (`Window::AddNewAnimation`), then
 opens it. In a package with no animation it first asks for another IFS and which
 of its animations to copy (`Window::ChooseAnimationSource`). Removing an animation goes through `Document::RemoveAnimation`, is
 refused while the project owns depths in it, and closes it first when it is the
-one on screen. The image path goes
+one on screen. `Rename <name>...` on an animation asks for the new name
+(`Window::RenameAnimationEntry`, `Document::RenameAnimation`), is refused the
+same way while the project owns depths in it, closes it first when it is on
+screen so nothing reads the old path mid-edit, and opens it again under the new
+name; hidden and locked depths follow it. The image path goes
 through `QImage`, so the editor reads image formats through Qt rather than
 carrying a decoder of its own, and converts to the BGRA the package stores.
 That means the qtbase features decide what can be added: the editor asks for

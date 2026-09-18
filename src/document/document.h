@@ -63,6 +63,9 @@ public:
 
     [[nodiscard]] Support::Expected<void, std::string> RemoveAnimation(std::string_view path);
 
+    [[nodiscard]] Support::Expected<std::string, std::string>
+    RenameAnimation(std::string_view path, std::string_view name);
+
     [[nodiscard]] std::optional<std::string> EntryDigest(std::string_view path) const;
 
     [[nodiscard]] Support::Expected<void, std::string>
