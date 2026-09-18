@@ -182,7 +182,7 @@ inline Script::Step AnswerNumber(int number) {
     };
 }
 
-inline Script::Step AcceptNumber() {
+inline Script::Step AcceptInput() {
     return [] {
         auto* dialog = qobject_cast<QInputDialog*>(QApplication::activeModalWidget());
         if (dialog == nullptr) return false;

@@ -206,6 +206,14 @@ Support::Expected<std::string, std::string> File::RenameAnimation(std::string_vi
     return *renamed;
 }
 
+Support::Expected<std::string, std::string> File::DuplicateAnimation(std::string_view path,
+                                                                     std::string_view name) {
+    auto copied = Document::DuplicateAnimation(archive_, path, name);
+    if (!copied) return Support::Unexpected(copied.error());
+    outline_ = Outline::Build(archive_);
+    return *copied;
+}
+
 Support::Expected<std::string, std::string> File::AddAnimation(std::string_view name,
                                                                const File& like,
                                                                std::string_view like_path,

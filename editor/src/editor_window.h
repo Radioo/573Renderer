@@ -137,6 +137,7 @@ private:
     void AddNewAnimation();
     void RemoveAnimation(const std::string& path, const QString& name);
     void RenameAnimationEntry(const std::string& path, const QString& name);
+    void DuplicateAnimationEntry(const std::string& path, const QString& name);
     void RemoveUnusedDefinitionsFrom(const std::string& path, const QString& name);
     [[nodiscard]] bool ProjectOwnsDepthsIn(const std::string& path) const;
     void CloseAnimation();

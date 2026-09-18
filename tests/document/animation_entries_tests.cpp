@@ -107,28 +107,6 @@ AfpAnimation::Sprite OneFrameSprite(uint16_t id, AfpAnimation::Tag placed) {
     return sprite;
 }
 
-std::vector<uint8_t> ListWithGeo(const std::string& name, uint16_t shape) {
-    BinaryXml::Node geo{.type = BinaryXml::Type::kU16 | BinaryXml::kArrayFlag,
-                        .name = "geo",
-                        .value = {static_cast<uint8_t>(shape >> 8), static_cast<uint8_t>(shape)},
-                        .attributes = {},
-                        .children = {}};
-    BinaryXml::Node named = SamplePackage::Attribute("name", name);
-    named.value.push_back(0);
-    BinaryXml::Node listed{.type = BinaryXml::Type::kVoid,
-                           .name = "afp",
-                           .value = {},
-                           .attributes = {named},
-                           .children = {geo}};
-    BinaryXml::Document doc;
-    doc.root = BinaryXml::Node{.type = BinaryXml::Type::kVoid,
-                               .name = "afplist",
-                               .value = {},
-                               .attributes = {},
-                               .children = {listed}};
-    return *BinaryXml::Write(doc);
-}
-
 Ifs::Archive HelperPackage() {
     AfpAnimation::Animation like = SamplePackage::SampleAnimation();
     like.flags = 0xC3;
@@ -156,7 +134,7 @@ Ifs::Archive HelperPackage() {
     for (Ifs::Entry& directory : archive.entries) {
         if (directory.name != "afp") continue;
         directory.children = {
-            SamplePackage::File("afplist_Exml", ListWithGeo("intro", 5)),
+            SamplePackage::File("afplist_Exml", SamplePackage::ListWithGeo("intro", {5})),
             SamplePackage::File(Ifs::HashedName("intro"), stored->data),
             SamplePackage::Directory(
                 "bsi", {SamplePackage::File(Ifs::HashedName("intro"), stored->script)})};
@@ -511,4 +489,59 @@ TEST_CASE("A rename to a taken or unloadable name, or of an imported animation, 
     const auto imported = Document::RenameAnimation(archive, *fresh, "renamed");
     REQUIRE_FALSE(imported.has_value());
     CHECK(imported.error().find("intro") != std::string::npos);
+}
+
+TEST_CASE("Duplicating an animation copies its entries, listing, shapes and own export") {
+    Ifs::Archive archive = HelperPackage();
+    const std::string intro = "afp/" + HashPath("intro");
+    const auto fresh = Document::AddAnimation(archive, "fresh", archive, intro, 4);
+    REQUIRE(fresh.has_value());
+    if (!fresh) return;
+    const AfpAnimation::Animation original = ReadBack(archive, *fresh);
+
+    const auto copied = Document::DuplicateAnimation(archive, *fresh, "copied");
+    INFO(Error(copied));
+    REQUIRE(copied.has_value());
+    if (!copied) return;
+    CHECK(*copied == "afp/" + HashPath("copied"));
+    CHECK(ListedNames(archive) ==
+          std::vector<std::vector<uint8_t>>{Bytes("intro"), Bytes("fresh"), Bytes("copied")});
+    const std::vector<BinaryXml::Node> listings = Listings(archive);
+    REQUIRE(listings.size() == 3);
+    const auto geo = [](const BinaryXml::Node& listing) {
+        const auto found =
+            std::ranges::find(listing.children, std::string("geo"), &BinaryXml::Node::name);
+        return found == listing.children.end() ? std::vector<uint8_t>() : found->value;
+    };
+    CHECK_FALSE(geo(listings[1]).empty());
+    CHECK(geo(listings[2]) == geo(listings[1]));
+    const Ifs::Entry* shape = Stored(archive, "geo", "copied_shape5");
+    REQUIRE(shape != nullptr);
+    CHECK(shape->bytes == std::vector<uint8_t>{1, 2, 3, 4});
+    CHECK(Stored(archive, "geo", "fresh_shape5") != nullptr);
+
+    const AfpAnimation::Animation copy = ReadBack(archive, *copied);
+    CHECK(Document::StringText(copy, copy.name) == "copied");
+    CHECK(copy.root == original.root);
+    const std::vector<std::string> exports = Exports(copy);
+    CHECK(std::ranges::any_of(exports,
+                              [](const std::string& one) { return one.starts_with("copied "); }));
+    CHECK_FALSE(std::ranges::any_of(
+        exports, [](const std::string& one) { return one.starts_with("fresh "); }));
+    CHECK(ReadBack(archive, *fresh) == original);
+}
+
+TEST_CASE("A duplicate needs a free, loadable name and a listed animation") {
+    Ifs::Archive archive = HelperPackage();
+    const std::string intro = "afp/" + HashPath("intro");
+    const auto before = Ifs::Write(archive);
+    REQUIRE(before.has_value());
+    CHECK_FALSE(Document::DuplicateAnimation(archive, intro, "INTRO").has_value());
+    CHECK_FALSE(Document::DuplicateAnimation(archive, intro, "a/b").has_value());
+    CHECK_FALSE(Document::DuplicateAnimation(archive, intro, "").has_value());
+    CHECK_FALSE(
+        Document::DuplicateAnimation(archive, "afp/" + HashPath("nothing"), "x").has_value());
+    const auto after = Ifs::Write(archive);
+    REQUIRE(after.has_value());
+    CHECK(*after == *before);
 }

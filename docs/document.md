@@ -909,6 +909,24 @@ test (`animation_rename_live_tests`, `local_dll`) renames `title` in IIDX 33's
 400 to draw exactly as the original; asking for the old name fails to load,
 which shows the host really looked it up by the new one.
 
+`DuplicateAnimation(archive, path, name)` is a rename that keeps the
+original: it writes the whole animation again under the new name (data and byte
+order entries), with the animation's name string and its own export renamed in
+the copy, appends a copy of the original's `afplist.xml` listing under the new
+name (the same `geo` array and attribute types), and copies each listed shape
+file to `geo/<name>_shape<id>`. It shares the listing rename
+(`NameListing`) and the shape copy (`CopyListedShapes`, which a rename follows
+by removing the old files) with `RenameAnimation`, and refuses the same names.
+Unlike a rename it does not refuse an animation other animations import,
+because the original stays where the import finds it. `animation_entries_tests`
+covers the copy and the refusals, and dropping the shape copy, the export
+rename or the name check each fails them. A live test
+(`animation_duplicate_live_tests`, `local_dll`) duplicates `title` in IIDX
+33's `title.ifs` and requires frame 400 of both the original and the copy, each
+loaded by the host from the edited package, to draw exactly as the untouched
+package does; without the shape copy the copy draws differently and the test
+fails.
+
 ### Placing a package image (`document/image_shape.h`, `document/place_image.h`)
 
 A placement cannot show a texture directly. An `AP2_IMAGE` tag placed on a

@@ -553,6 +553,7 @@ void Window::ShowPackageMenu(const QPoint& where) {
         is_image ? tr("Replace %1 with a picture...") : tr("Replace %1...");
     QAction* replace = path.isEmpty() ? nullptr : menu.addAction(replace_text.arg(name));
     QAction* rename = is_animation ? menu.addAction(tr("Rename %1...").arg(name)) : nullptr;
+    QAction* duplicate = is_animation ? menu.addAction(tr("Duplicate %1...").arg(name)) : nullptr;
     QAction* tidy =
         is_animation ? menu.addAction(tr("Remove unused definitions from %1").arg(name)) : nullptr;
     QAction* remove = path.isEmpty() ? nullptr : menu.addAction(tr("Remove %1").arg(name));
@@ -595,6 +596,10 @@ void Window::ShowPackageMenu(const QPoint& where) {
     }
     if (chosen == rename) {
         RenameAnimationEntry(path.toStdString(), name);
+        return;
+    }
+    if (chosen == duplicate) {
+        DuplicateAnimationEntry(path.toStdString(), name);
         return;
     }
     if (chosen == tidy) {

@@ -166,6 +166,28 @@ void Window::RenameAnimationEntry(const std::string& path, const QString& name) 
     SelectEntry(QString::fromStdString(renamed));
 }
 
+void Window::DuplicateAnimationEntry(const std::string& path, const QString& name) {
+    if (!file_) return;
+    bool answered = false;
+    const QString wanted =
+        QInputDialog::getText(this, tr("Duplicate %1").arg(name), tr("Name of the copy"),
+                              QLineEdit::Normal, name + "_copy", &answered);
+    if (!answered) return;
+    const std::string text = wanted.toStdString();
+    std::string copied;
+    if (!EditDocument(tr("Duplicate %1 as %2").arg(name, wanted),
+                      [&path, &text, &copied](Document::File& document) {
+                          using Duplicated = Support::Expected<void, std::string>;
+                          auto made = document.DuplicateAnimation(path, text);
+                          if (!made) return Duplicated(Support::Unexpected(made.error()));
+                          copied = std::move(*made);
+                          return Duplicated();
+                      })) {
+        return;
+    }
+    SelectEntry(QString::fromStdString(copied));
+}
+
 void Window::RemoveAnimation(const std::string& path, const QString& name) {
     if (!file_) return;
     if (ProjectOwnsDepthsIn(path)) {

@@ -257,6 +257,29 @@ TEST_CASE("Definitions nothing uses are removed from the package menu") {
     CHECK(tidy() == "Nothing in intro is unused");
 }
 
+TEST_CASE("An animation duplicated from the package menu opens as the copy") {
+    Opened opened;
+    Open(opened);
+    opened.tree->setCurrentItem(AnimationNamed(*opened.tree, "intro"));
+    {
+        Script duplicated({Choose("Duplicate intro..."), AcceptInput()});
+        RunMenu(duplicated, *opened.tree);
+        INFO(duplicated.Problems().join("|").toStdString());
+        CHECK(duplicated.Problems().isEmpty());
+    }
+    QTreeWidgetItem* copy = AnimationNamed(*opened.tree, "intro_copy");
+    REQUIRE(copy != nullptr);
+    CHECK(opened.tree->currentItem() == copy);
+    CHECK(AnimationNamed(*opened.tree, "intro") != nullptr);
+    CHECK(RowValue(*opened.inspector, "Frame rate") == "60");
+
+    opened.tree->setCurrentItem(AnimationNamed(*opened.tree, "intro"));
+    Script refused({Choose("Duplicate intro..."), Answer("INTRO_COPY")});
+    RunMenu(refused, *opened.tree);
+    REQUIRE_FALSE(refused.Problems().isEmpty());
+    CHECK(refused.Problems().front().contains("already"));
+}
+
 TEST_CASE("A package with no animation takes its first from another IFS") {
     QTemporaryDir dir;
     REQUIRE(dir.isValid());
@@ -286,7 +309,7 @@ TEST_CASE("A span duplicated from the timeline menu lands on the next free depth
     emit timeline->DepthChosen(1);
     CHECK(RowValue(*opened.inspector, "Depth") == "1");
     {
-        Script duplicated({Choose("Duplicate depth 1 here onto another depth..."), AcceptNumber()});
+        Script duplicated({Choose("Duplicate depth 1 here onto another depth..."), AcceptInput()});
         emit timeline->MenuRequested(QPoint(4, 4), 1, QString());
         REQUIRE(Settle([&duplicated] { return duplicated.Finished(); }));
         CHECK(duplicated.Problems().isEmpty());
@@ -310,8 +333,8 @@ TEST_CASE("Depths grouped from the timeline menu become a sprite, and ungrouping
     const int before = clips->count();
     emit timeline->DepthChosen(1);
     {
-        Script grouped({Choose("Group depth 1 and up here into a sprite..."), AcceptNumber(),
-                        AcceptNumber(), AcceptNumber()});
+        Script grouped({Choose("Group depth 1 and up here into a sprite..."), AcceptInput(),
+                        AcceptInput(), AcceptInput()});
         emit timeline->MenuRequested(QPoint(4, 4), 1, QString());
         REQUIRE(Settle([&grouped] { return grouped.Finished(); }));
         CHECK(grouped.Problems().isEmpty());
@@ -327,8 +350,8 @@ TEST_CASE("Depths grouped from the timeline menu become a sprite, and ungrouping
         CHECK(clips->count() == before);
     }
     {
-        Script regrouped({Choose("Group depth 1 and up here into a sprite..."), AcceptNumber(),
-                          AcceptNumber(), AcceptNumber()});
+        Script regrouped({Choose("Group depth 1 and up here into a sprite..."), AcceptInput(),
+                          AcceptInput(), AcceptInput()});
         emit timeline->MenuRequested(QPoint(4, 4), 1, QString());
         REQUIRE(Settle([&regrouped] { return regrouped.Finished(); }));
         CHECK(regrouped.Problems().isEmpty());
@@ -375,7 +398,7 @@ TEST_CASE("A depth copied from the timeline pastes onto a free depth at the play
         CHECK(copied.Problems().isEmpty());
     }
     {
-        Script pasted({Choose("Paste the copied depth here..."), AcceptNumber()});
+        Script pasted({Choose("Paste the copied depth here..."), AcceptInput()});
         emit timeline->MenuRequested(QPoint(4, 4), 0, QString());
         REQUIRE(Settle([&pasted] { return pasted.Finished(); }));
         CHECK(pasted.Problems().isEmpty());
@@ -407,7 +430,7 @@ TEST_CASE("A depth copied from one animation pastes into another with its shape"
         CHECK(added.Problems().isEmpty());
     }
     {
-        Script refused({Choose("Paste the copied depth here..."), AcceptNumber()});
+        Script refused({Choose("Paste the copied depth here..."), AcceptInput()});
         emit timeline->MenuRequested(QPoint(4, 4), 0, QString());
         REQUIRE(Settle([&refused] { return !refused.Problems().isEmpty(); }));
         CHECK(refused.Problems().front().contains("not defined"));
@@ -416,7 +439,7 @@ TEST_CASE("A depth copied from one animation pastes into another with its shape"
     copy(2);
     opened.tree->setCurrentItem(AnimationNamed(*opened.tree, "fresh"));
     {
-        Script pasted({Choose("Paste the copied depth here..."), AcceptNumber()});
+        Script pasted({Choose("Paste the copied depth here..."), AcceptInput()});
         emit timeline->MenuRequested(QPoint(4, 4), 0, QString());
         REQUIRE(Settle([&pasted] { return pasted.Finished(); }));
         INFO(pasted.Problems().join("|").toStdString());

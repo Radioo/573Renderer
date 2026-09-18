@@ -190,18 +190,36 @@ Support::Expected<void, std::string> CheckFree(const BinaryXml::Document& list,
     return {};
 }
 
+void NameListing(BinaryXml::Node& listing, std::string_view name) {
+    for (BinaryXml::Node& attribute : listing.attributes) {
+        if (attribute.name != kNameAttribute) continue;
+        const bool terminated = !attribute.value.empty() && attribute.value.back() == 0;
+        attribute.value.assign(name.begin(), name.end());
+        if (terminated) attribute.value.push_back(0);
+    }
+}
+
 Support::Expected<std::vector<uint8_t>, std::string>
 Relisted(const BinaryXml::Document& list, std::string_view old_name, std::string_view name) {
     BinaryXml::Document edited = list;
     for (BinaryXml::Node& listing : edited.root.children) {
-        if (!IsListing(listing) || ListedName(listing) != old_name) continue;
-        for (BinaryXml::Node& attribute : listing.attributes) {
-            if (attribute.name != kNameAttribute) continue;
-            const bool terminated = !attribute.value.empty() && attribute.value.back() == 0;
-            attribute.value.assign(name.begin(), name.end());
-            if (terminated) attribute.value.push_back(0);
-        }
+        if (IsListing(listing) && ListedName(listing) == old_name) NameListing(listing, name);
     }
+    return BinaryXml::Write(edited);
+}
+
+Support::Expected<std::vector<uint8_t>, std::string>
+ListedAgain(const BinaryXml::Document& list, std::string_view old_name, std::string_view name) {
+    BinaryXml::Document edited = list;
+    const auto listing =
+        std::ranges::find_if(edited.root.children, [&](const BinaryXml::Node& node) {
+            return IsListing(node) && ListedName(node) == old_name;
+        });
+    if (listing == edited.root.children.end())
+        return Support::Unexpected(std::string(old_name) + " is not listed");
+    BinaryXml::Node copy = *listing;
+    NameListing(copy, name);
+    edited.root.children.push_back(std::move(copy));
     return BinaryXml::Write(edited);
 }
 
@@ -233,20 +251,32 @@ void RenameOwnExport(AfpAnimation::Animation& animation, std::string_view old_na
     CompactStrings(animation);
 }
 
-Support::Expected<void, std::string> MoveShapes(Ifs::Archive& archive,
-                                                const std::vector<uint16_t>& shapes,
-                                                std::string_view old_name, std::string_view name) {
+Support::Expected<std::vector<std::string>, std::string>
+CopyListedShapes(Ifs::Archive& archive, const std::vector<uint16_t>& shapes,
+                 std::string_view old_name, std::string_view name) {
+    std::vector<std::string> copied;
     for (const uint16_t id : shapes) {
-        const auto from = PathOf(kShapeDirectory, std::format("{}_shape{}", old_name, id));
+        auto from = PathOf(kShapeDirectory, std::format("{}_shape{}", old_name, id));
         if (!from) return Support::Unexpected(from.error());
         const Ifs::Entry* shape = FindEntry(archive, *from);
         if (shape == nullptr) continue;
         std::vector<uint8_t> bytes = shape->bytes;
-        auto gone = RemoveEntry(archive, *from);
-        if (!gone) return Support::Unexpected(gone.error());
         auto added = AddEntry(archive, kShapeDirectory, std::format("{}_shape{}", name, id),
                               std::move(bytes));
         if (!added) return Support::Unexpected(added.error());
+        copied.push_back(std::move(*from));
+    }
+    return copied;
+}
+
+Support::Expected<void, std::string> MoveShapes(Ifs::Archive& archive,
+                                                const std::vector<uint16_t>& shapes,
+                                                std::string_view old_name, std::string_view name) {
+    auto copied = CopyListedShapes(archive, shapes, old_name, name);
+    if (!copied) return Support::Unexpected(copied.error());
+    for (const std::string& from : *copied) {
+        auto gone = RemoveEntry(archive, from);
+        if (!gone) return Support::Unexpected(gone.error());
     }
     return {};
 }
@@ -416,6 +446,39 @@ RenameAnimation(Ifs::Archive& archive, std::string_view path, std::string_view n
     auto script = AddEntry(edited, kScriptDirectory, name, std::move(written->script));
     if (!script) return Support::Unexpected(script.error());
     auto shapes = MoveShapes(edited, ListedShapes(*list, *old_name), *old_name, name);
+    if (!shapes) return Support::Unexpected(shapes.error());
+    auto relisted = ReplaceEntry(edited, kAnimationList, std::move(*listed));
+    if (!relisted) return Support::Unexpected(relisted.error());
+    archive = std::move(edited);
+    return *new_path;
+}
+
+Support::Expected<std::string, std::string>
+DuplicateAnimation(Ifs::Archive& archive, std::string_view path, std::string_view name) {
+    auto named = CheckName(name);
+    if (!named) return Support::Unexpected(named.error());
+    const auto list = ReadList(archive);
+    if (!list) return Support::Unexpected(list.error());
+    const auto old_name = ListedNameAt(*list, path);
+    if (!old_name) return Support::Unexpected(old_name.error());
+    auto free = CheckFree(*list, name);
+    if (!free) return Support::Unexpected(free.error());
+    auto animation = ReadAt(archive, path);
+    if (!animation) return Support::Unexpected(animation.error());
+    RenameOwnExport(*animation, *old_name, name);
+    auto written = AfpAnimation::WriteStored(*animation);
+    if (!written) return Support::Unexpected(written.error());
+    auto listed = ListedAgain(*list, *old_name, name);
+    if (!listed) return Support::Unexpected(listed.error());
+    auto new_path = PathOf(kAnimationDirectory, name);
+    if (!new_path) return Support::Unexpected(new_path.error());
+
+    Ifs::Archive edited = archive;
+    auto added = AddEntry(edited, kAnimationDirectory, name, std::move(written->data));
+    if (!added) return Support::Unexpected(added.error());
+    auto script = AddEntry(edited, kScriptDirectory, name, std::move(written->script));
+    if (!script) return Support::Unexpected(script.error());
+    auto shapes = CopyListedShapes(edited, ListedShapes(*list, *old_name), *old_name, name);
     if (!shapes) return Support::Unexpected(shapes.error());
     auto relisted = ReplaceEntry(edited, kAnimationList, std::move(*listed));
     if (!relisted) return Support::Unexpected(relisted.error());

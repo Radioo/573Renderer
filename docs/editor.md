@@ -352,7 +352,11 @@ one on screen. `Rename <name>...` on an animation asks for the new name
 (`Window::RenameAnimationEntry`, `Document::RenameAnimation`), is refused the
 same way while the project owns depths in it, closes it first when it is on
 screen so nothing reads the old path mid-edit, and opens it again under the new
-name; hidden and locked depths follow it. `Remove unused definitions from
+name; hidden and locked depths follow it. `Duplicate <name>...` asks for the
+copy's name, suggesting `<name>_copy`, makes it through
+`Document::DuplicateAnimation` as one undo step and opens the copy; it is
+allowed while the project owns depths in the original, since the original is
+left as it was. `Remove unused definitions from
 <name>` (`Window::RemoveUnusedDefinitionsFrom`) runs
 `Document::RemoveUnusedDefinitions` on a copy first, so a package with nothing
 to remove says so in the status bar without adding an undo step; otherwise it
