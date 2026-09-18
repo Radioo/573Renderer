@@ -134,6 +134,27 @@ Support::Expected<void, std::string> ListShape(Ifs::Archive& archive, std::strin
     return ReplaceEntry(archive, kAnimationList, std::move(*written));
 }
 
+Support::Expected<void, std::string> UnlistShape(Ifs::Archive& archive, std::string_view animation,
+                                                 uint16_t id) {
+    auto list = ReadList(archive, kAnimationList);
+    if (!list) return Support::Unexpected(list.error());
+    for (BinaryXml::Node& listed : list->root.children) {
+        if (listed.name != "afp" || AttributeText(listed, "name") != animation) continue;
+        for (BinaryXml::Node& geo : listed.children) {
+            if (geo.name != "geo") continue;
+            std::vector<uint8_t> kept;
+            for (std::size_t at = 0; at + 2 <= geo.value.size(); at += 2) {
+                if (BigEndian::ReadU16(geo.value, at) != id)
+                    BigEndian::AppendU16(kept, BigEndian::ReadU16(geo.value, at));
+            }
+            geo.value = std::move(kept);
+        }
+    }
+    auto written = BinaryXml::Write(*list);
+    if (!written) return Support::Unexpected(written.error());
+    return ReplaceEntry(archive, kAnimationList, std::move(*written));
+}
+
 Support::Expected<AfpAnimation::Animation, std::string>
 ReadAnimationAt(const Ifs::Archive& archive, std::string_view animation_path) {
     const std::string script_path = ScriptPath(animation_path);
@@ -336,6 +357,25 @@ Support::Expected<void, std::string> AddShapeFile(Ifs::Archive& archive,
     if (!added) return Support::Unexpected(added.error());
     auto listed = ListShape(edited, name, id);
     if (!listed) return Support::Unexpected(listed.error());
+    archive = std::move(edited);
+    return {};
+}
+
+Support::Expected<void, std::string> RemoveShapeFile(Ifs::Archive& archive,
+                                                     std::string_view animation_path, uint16_t id) {
+    const auto animation = ReadAnimationAt(archive, animation_path);
+    if (!animation) return Support::Unexpected(animation.error());
+    const std::string name = StringText(*animation, animation->name);
+    const auto stored = Ifs::UnescapeName(Ifs::HashedName(std::format("{}_shape{}", name, id)));
+    if (!stored) return Support::Unexpected(stored.error());
+    Ifs::Archive edited = archive;
+    const std::string path = JoinPath(kShapeDirectory, *stored);
+    if (FindEntry(edited, path) != nullptr) {
+        auto removed = RemoveEntry(edited, path);
+        if (!removed) return Support::Unexpected(removed.error());
+    }
+    auto unlisted = UnlistShape(edited, name, id);
+    if (!unlisted) return Support::Unexpected(unlisted.error());
     archive = std::move(edited);
     return {};
 }

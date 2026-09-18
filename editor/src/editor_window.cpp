@@ -550,6 +550,8 @@ void Window::ShowPackageMenu(const QPoint& where) {
     QAction* save_image = is_image ? menu.addAction(tr("Save %1 as PNG...").arg(name)) : nullptr;
     QAction* replace = path.isEmpty() ? nullptr : menu.addAction(tr("Replace %1...").arg(name));
     QAction* rename = is_animation ? menu.addAction(tr("Rename %1...").arg(name)) : nullptr;
+    QAction* tidy =
+        is_animation ? menu.addAction(tr("Remove unused definitions from %1").arg(name)) : nullptr;
     QAction* remove = path.isEmpty() ? nullptr : menu.addAction(tr("Remove %1").arg(name));
     const QAction* chosen = menu.exec(where);
     if (chosen == nullptr) return;
@@ -607,6 +609,10 @@ void Window::ShowPackageMenu(const QPoint& where) {
     }
     if (chosen == rename) {
         RenameAnimationEntry(path.toStdString(), name);
+        return;
+    }
+    if (chosen == tidy) {
+        RemoveUnusedDefinitionsFrom(path.toStdString(), name);
         return;
     }
     if (chosen == remove && is_animation) {

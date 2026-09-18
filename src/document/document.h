@@ -68,6 +68,9 @@ public:
     [[nodiscard]] Support::Expected<void, std::string>
     AddShapeFile(std::string_view animation_path, uint16_t id, std::vector<uint8_t> bytes);
 
+    [[nodiscard]] Support::Expected<void, std::string>
+    RemoveShapeFile(std::string_view animation_path, uint16_t id);
+
     [[nodiscard]] Support::Expected<std::string, std::string>
     AddAnimation(std::string_view name, const File& like, std::string_view like_path,
                  uint32_t frames);

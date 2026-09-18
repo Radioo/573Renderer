@@ -5,12 +5,14 @@
 #include "document/authored.h"
 #include "document/document.h"
 #include "document/outline.h"
+#include "document/unused_definitions.h"
 #include "support/expected.h"
 
 #include <QFileDialog>
 #include <QInputDialog>
 #include <QLineEdit>
 #include <QSettings>
+#include <QStatusBar>
 #include <QString>
 #include <QStringList>
 
@@ -124,13 +126,15 @@ void Window::DrawBackground(bool drawn) {
     RenderFrame();
 }
 
+bool Window::ProjectOwnsDepthsIn(const std::string& path) const {
+    return std::ranges::any_of(authored_, [&path](const Document::AuthoredDepth& depth) {
+        return depth.animation == path;
+    });
+}
+
 void Window::RenameAnimationEntry(const std::string& path, const QString& name) {
     if (!file_) return;
-    const bool owned =
-        std::ranges::any_of(authored_, [&path](const Document::AuthoredDepth& depth) {
-            return depth.animation == path;
-        });
-    if (owned) {
+    if (ProjectOwnsDepthsIn(path)) {
         ReportProblem(
             tr("The project owns depths in %1; detach them before renaming it").arg(name));
         return;
@@ -164,11 +168,7 @@ void Window::RenameAnimationEntry(const std::string& path, const QString& name) 
 
 void Window::RemoveAnimation(const std::string& path, const QString& name) {
     if (!file_) return;
-    const bool owned =
-        std::ranges::any_of(authored_, [&path](const Document::AuthoredDepth& depth) {
-            return depth.animation == path;
-        });
-    if (owned) {
+    if (ProjectOwnsDepthsIn(path)) {
         ReportProblem(
             tr("The project owns depths in %1; detach them before removing it").arg(name));
         return;
@@ -179,6 +179,40 @@ void Window::RemoveAnimation(const std::string& path, const QString& name) {
         EditDocument(tr("Remove animation %1").arg(name),
                      [&path](Document::File& document) { return document.RemoveAnimation(path); });
     if (!removed && open) ShowSelectedEntry();
+}
+
+void Window::RemoveUnusedDefinitionsFrom(const std::string& path, const QString& name) {
+    if (!file_) return;
+    if (ProjectOwnsDepthsIn(path)) {
+        ReportProblem(tr("The project owns depths in %1; detach them before removing definitions "
+                         "from it")
+                          .arg(name));
+        return;
+    }
+    Document::File tidied = *file_;
+    const auto removed = Document::RemoveUnusedDefinitions(tidied, path);
+    if (!removed) {
+        ReportProblem(QString::fromStdString(removed.error()));
+        return;
+    }
+    if (removed->empty()) {
+        statusBar()->showMessage(tr("Nothing in %1 is unused").arg(name));
+        return;
+    }
+    if (!EditDocument(tr("Remove unused definitions from %1").arg(name),
+                      [&tidied](Document::File& document) {
+                          document = std::move(tidied);
+                          return Support::Expected<void, std::string>();
+                      })) {
+        return;
+    }
+    if (path == animation_path_) {
+        RefillClipsKeepingChoice();
+        ShowFrame();
+    }
+    statusBar()->showMessage(
+        tr("Removed %n unused definition(s) from %1", nullptr, static_cast<int>(removed->size()))
+            .arg(name));
 }
 
 }

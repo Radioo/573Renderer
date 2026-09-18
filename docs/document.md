@@ -330,6 +330,30 @@ shape file, the import refusal and the same-animation paste. Leaving out the
 string carry, the renumbering inside sprites or of the pasted placements, the
 shape files, the import check or the same-animation path each fails them.
 
+### Removing unused definitions (`document/unused_definitions.h`)
+
+`RemoveUnusedDefinitions(file, path)` deletes the sprite and shape definitions
+of an animation's root that nothing can reach, and returns their ids. A
+definition is reached when a placement in the root names it as its character or
+as its grid controller's tag, when it is exported, or when a reached sprite
+places it. Image definitions are never removed: bitmaps are also named by morph
+fills and other tags the editor does not read. A removed shape also loses its
+`geo/<name>_shape<id>` file and its id in the animation's `geo` listing
+(`RemoveShapeFile`). The rule comes from tracing every afp-core lookup of a
+definition by id (the notes repo's `Core/afp_format.md`, section 9.7): no
+script or IIDX 33 host code supplies an id, and the tags that do name other
+definitions (buttons, sounds, texts, fonts, morph shapes, scaling grids) are
+tags the editor cannot write, so an animation that holds one is refused by the
+write and the package is left as it was. A sprite that defines another sprite
+is refused before anything is removed, since what the inner one places could
+not be followed.
+
+`unused_definitions_tests` covers a chain of unused sprites and shapes, an
+export, a sprite placed only by a used sprite, a shape named only by a grid
+controller, the shape files and listing, and the nested sprite refusal.
+Dropping the export, the recursion, the grid controller, the file removal, the
+listing filter or the nested check each fails them.
+
 ### Trimming a span (`document/span_trim.h`)
 
 `TrimSpan` gives a span new first and last frames. The end is the simple side:

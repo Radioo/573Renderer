@@ -8,7 +8,6 @@
 #include "document/image_shape.h"
 #include "document/span_transplant.h"
 #include "formats/afp_animation.h"
-#include "formats/binary_xml.h"
 #include "formats/ifs_archive.h"
 #include "formats/ifs_names.h"
 
@@ -47,28 +46,6 @@ AfpAnimation::Sprite OneFrameSprite(uint16_t id, AfpAnimation::Tag placed) {
     return sprite;
 }
 
-std::vector<uint8_t> ListWithGeo(const std::string& name, uint16_t shape) {
-    BinaryXml::Node geo{.type = BinaryXml::Type::kU16 | BinaryXml::kArrayFlag,
-                        .name = "geo",
-                        .value = {static_cast<uint8_t>(shape >> 8), static_cast<uint8_t>(shape)},
-                        .attributes = {},
-                        .children = {}};
-    BinaryXml::Node named = SamplePackage::Attribute("name", name);
-    named.value.push_back(0);
-    BinaryXml::Node listed{.type = BinaryXml::Type::kVoid,
-                           .name = "afp",
-                           .value = {},
-                           .attributes = {named},
-                           .children = {geo}};
-    BinaryXml::Document doc;
-    doc.root = BinaryXml::Node{.type = BinaryXml::Type::kVoid,
-                               .name = "afplist",
-                               .value = {},
-                               .attributes = {},
-                               .children = {listed}};
-    return *BinaryXml::Write(doc);
-}
-
 std::optional<Document::File> Package() {
     AfpAnimation::Animation intro = SamplePackage::SampleAnimation();
     intro.flags = 0xC3;
@@ -100,7 +77,7 @@ std::optional<Document::File> Package() {
     for (Ifs::Entry& directory : archive.entries) {
         if (directory.name != "afp") continue;
         directory.children = {
-            SamplePackage::File("afplist_Exml", ListWithGeo("intro", kShape)),
+            SamplePackage::File("afplist_Exml", SamplePackage::ListWithGeo("intro", {kShape})),
             SamplePackage::File(Ifs::HashedName("intro"), stored->data),
             SamplePackage::Directory(
                 "bsi", {SamplePackage::File(Ifs::HashedName("intro"), stored->script)})};

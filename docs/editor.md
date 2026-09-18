@@ -325,7 +325,14 @@ one on screen. `Rename <name>...` on an animation asks for the new name
 (`Window::RenameAnimationEntry`, `Document::RenameAnimation`), is refused the
 same way while the project owns depths in it, closes it first when it is on
 screen so nothing reads the old path mid-edit, and opens it again under the new
-name; hidden and locked depths follow it. The image path goes
+name; hidden and locked depths follow it. `Remove unused definitions from
+<name>` (`Window::RemoveUnusedDefinitionsFrom`) runs
+`Document::RemoveUnusedDefinitions` on a copy first, so a package with nothing
+to remove says so in the status bar without adding an undo step; otherwise it
+applies the result as one undo step, refills the clip box when that animation
+is on screen (falling back to the root when the shown sprite was removed) and
+says how many definitions went. It is refused while the project owns depths in
+the animation, like rename and remove. The image path goes
 through `QImage`, so the editor reads image formats through Qt rather than
 carrying a decoder of its own, and converts to the BGRA the package stores.
 That means the qtbase features decide what can be added: the editor asks for

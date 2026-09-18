@@ -60,6 +60,7 @@ set(R573_EDITOR_DOCUMENT_SOURCES
     src/document/span_edit.cpp
     src/document/span_clipboard.cpp
     src/document/span_transplant.cpp
+    src/document/unused_definitions.cpp
     src/document/span_tags.cpp
     src/document/span_trim.cpp
     src/document/animation_entries.cpp

@@ -174,6 +174,14 @@ Support::Expected<void, std::string> File::AddShapeFile(std::string_view animati
     return {};
 }
 
+Support::Expected<void, std::string> File::RemoveShapeFile(std::string_view animation_path,
+                                                           uint16_t id) {
+    auto removed = Document::RemoveShapeFile(archive_, animation_path, id);
+    if (!removed) return Support::Unexpected(removed.error());
+    outline_ = Outline::Build(archive_);
+    return {};
+}
+
 Support::Expected<void, std::string> File::RemoveAnimation(std::string_view path) {
     auto removed = Document::RemoveAnimation(archive_, path);
     if (!removed) return Support::Unexpected(removed.error());

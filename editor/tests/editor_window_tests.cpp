@@ -40,6 +40,7 @@
 #include <QMessageBox>
 #include <QPoint>
 #include <QSettings>
+#include <QStatusBar>
 #include <QString>
 #include <QStringList>
 #include <QTableWidget>
@@ -200,6 +201,30 @@ TEST_CASE("An animation renamed from the package menu stays open under its new n
     REQUIRE_FALSE(refused.Problems().isEmpty());
     CHECK(refused.Problems().front().contains("slashes"));
     CHECK(AnimationNamed(*opened.tree, "opening") != nullptr);
+}
+
+TEST_CASE("Definitions nothing uses are removed from the package menu") {
+    Opened opened;
+    Open(opened, true);
+    auto* timeline = opened.window.findChild<Editor::Timeline*>();
+    REQUIRE(timeline != nullptr);
+    const auto tidy = [&] {
+        opened.tree->setCurrentItem(AnimationNamed(*opened.tree, "intro"));
+        Script tidied({Choose("Remove unused definitions from intro")});
+        RunMenu(tidied, *opened.tree);
+        CHECK(tidied.Problems().isEmpty());
+        return opened.window.statusBar()->currentMessage();
+    };
+    CHECK(tidy() == "Nothing in intro is unused");
+    emit timeline->DepthChosen(2);
+    {
+        Script removed({Choose("Remove depth 2 here")});
+        emit timeline->MenuRequested(QPoint(4, 4), 2, QString());
+        REQUIRE(Settle([&removed] { return removed.Finished(); }));
+        CHECK(removed.Problems().isEmpty());
+    }
+    CHECK(tidy() == "Removed 1 unused definition(s) from intro");
+    CHECK(tidy() == "Nothing in intro is unused");
 }
 
 TEST_CASE("A package with no animation takes its first from another IFS") {

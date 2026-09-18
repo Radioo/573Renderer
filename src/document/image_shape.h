@@ -45,4 +45,7 @@ ShapeFileBytes(const Ifs::Archive& archive, std::string_view animation_path, uin
                                                                 uint16_t id,
                                                                 std::vector<uint8_t> bytes);
 
+[[nodiscard]] Support::Expected<void, std::string>
+RemoveShapeFile(Ifs::Archive& archive, std::string_view animation_path, uint16_t id);
+
 }

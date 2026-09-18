@@ -47,6 +47,33 @@ inline std::vector<uint8_t> TextureListBytes() {
     return *BinaryXml::Write(doc);
 }
 
+inline std::vector<uint8_t> ListWithGeo(const std::string& name,
+                                        const std::vector<uint16_t>& shapes) {
+    BinaryXml::Node geo{.type = BinaryXml::Type::kU16 | BinaryXml::kArrayFlag,
+                        .name = "geo",
+                        .value = {},
+                        .attributes = {},
+                        .children = {}};
+    for (const uint16_t shape : shapes) {
+        geo.value.push_back(static_cast<uint8_t>(shape >> 8));
+        geo.value.push_back(static_cast<uint8_t>(shape));
+    }
+    BinaryXml::Node named = Attribute("name", name);
+    named.value.push_back(0);
+    BinaryXml::Node listed{.type = BinaryXml::Type::kVoid,
+                           .name = "afp",
+                           .value = {},
+                           .attributes = {named},
+                           .children = {geo}};
+    BinaryXml::Document doc;
+    doc.root = BinaryXml::Node{.type = BinaryXml::Type::kVoid,
+                               .name = "afplist",
+                               .value = {},
+                               .attributes = {},
+                               .children = {listed}};
+    return *BinaryXml::Write(doc);
+}
+
 inline std::vector<uint8_t> AnimationListBytes() {
     BinaryXml::Node listed{.type = BinaryXml::Type::kVoid,
                            .name = "afp",
