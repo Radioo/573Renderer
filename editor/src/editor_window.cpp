@@ -548,7 +548,9 @@ void Window::ShowPackageMenu(const QPoint& where) {
     QAction* own_image =
         project_ ? menu.addAction(tr("Add an image the project owns...")) : nullptr;
     QAction* save_image = is_image ? menu.addAction(tr("Save %1 as PNG...").arg(name)) : nullptr;
-    QAction* replace = path.isEmpty() ? nullptr : menu.addAction(tr("Replace %1...").arg(name));
+    const QString replace_text =
+        is_image ? tr("Replace %1 with a picture...") : tr("Replace %1...");
+    QAction* replace = path.isEmpty() ? nullptr : menu.addAction(replace_text.arg(name));
     QAction* rename = is_animation ? menu.addAction(tr("Rename %1...").arg(name)) : nullptr;
     QAction* tidy =
         is_animation ? menu.addAction(tr("Remove unused definitions from %1").arg(name)) : nullptr;
@@ -569,28 +571,11 @@ void Window::ShowPackageMenu(const QPoint& where) {
         return;
     }
     if (chosen == add_image) {
-        const QString file = QFileDialog::getOpenFileName(
-            this, tr("Add an image"), QString(), tr("Images (*.png *.bmp *.jpg);;All files (*)"));
-        if (file.isEmpty()) return;
-        QImage picture(file);
-        if (picture.isNull()) {
-            ReportProblem(tr("%1 is not an image Qt can read").arg(file));
-            return;
-        }
-        picture = picture.convertToFormat(QImage::Format_ARGB32);
-        std::vector<uint8_t> bgra;
-        bgra.reserve(static_cast<std::size_t>(picture.width()) * picture.height() * 4);
-        for (int y = 0; y < picture.height(); y++) {
-            const auto* row = picture.constScanLine(y);
-            bgra.insert(bgra.end(), row, row + static_cast<std::ptrdiff_t>(picture.width()) * 4);
-        }
-        const std::string logical = QFileInfo(file).completeBaseName().toStdString();
-        const auto width = static_cast<uint32_t>(picture.width());
-        const auto height = static_cast<uint32_t>(picture.height());
-        EditDocument(tr("Add image %1").arg(QString::fromStdString(logical)),
-                     [logical, width, height, bgra](Document::File& document) {
-                         return document.AddImage(logical, width, height, bgra);
-                     });
+        AddImageFromFile();
+        return;
+    }
+    if (chosen == replace && is_image) {
+        ReplaceImageWithPicture(name);
         return;
     }
     if (chosen == replace) {

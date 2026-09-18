@@ -138,6 +138,15 @@ Support::Expected<ImagePixels, std::string> File::ReadImage(std::string_view nam
     return Document::ReadImage(archive_, name);
 }
 
+Support::Expected<void, std::string> File::ReplaceImage(std::string_view name, uint32_t width,
+                                                        uint32_t height,
+                                                        std::span<const uint8_t> bgra) {
+    auto replaced = Document::ReplaceImage(archive_, name, width, height, bgra);
+    if (!replaced) return Support::Unexpected(replaced.error());
+    outline_ = Outline::Build(archive_);
+    return {};
+}
+
 Support::Expected<void, std::string> File::RemoveImage(std::string_view name) {
     auto removed = Document::RemoveImage(archive_, name);
     if (!removed) return Support::Unexpected(removed.error());

@@ -8,7 +8,6 @@
 #include "support/expected.h"
 
 #include <QColor>
-#include <QDir>
 #include <QFileDialog>
 #include <QImage>
 #include <QPainter>
@@ -69,27 +68,6 @@ void Window::SaveFrameAs() {
         return;
     }
     statusBar()->showMessage(tr("Saved frame %1 to %2").arg(shown->frame.frame).arg(path));
-}
-
-void Window::SaveImageAs(const QString& name) {
-    if (!file_) return;
-    const auto read = file_->ReadImage(name.toStdString());
-    if (!read) {
-        ReportProblem(QString::fromStdString(read.error()));
-        return;
-    }
-    const QSettings settings;
-    const QString start = QDir(settings.value(kDocumentDirKey).toString()).filePath(name + ".png");
-    const QString path = QFileDialog::getSaveFileName(this, tr("Save %1").arg(name), start,
-                                                      tr("PNG images (*.png)"));
-    if (path.isEmpty()) return;
-    const QImage image(read->bgra.data(), static_cast<int>(read->width),
-                       static_cast<int>(read->height), QImage::Format_ARGB32);
-    if (!image.save(path, "PNG")) {
-        ReportProblem(tr("%1 could not be written").arg(path));
-        return;
-    }
-    statusBar()->showMessage(tr("Saved %1 to %2").arg(name, path));
 }
 
 }

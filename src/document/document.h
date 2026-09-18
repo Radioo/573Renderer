@@ -54,6 +54,10 @@ public:
     [[nodiscard]] Support::Expected<ImagePixels, std::string>
     ReadImage(std::string_view name) const;
 
+    [[nodiscard]] Support::Expected<void, std::string> ReplaceImage(std::string_view name,
+                                                                    uint32_t width, uint32_t height,
+                                                                    std::span<const uint8_t> bgra);
+
     [[nodiscard]] std::map<uint16_t, std::string>
     ShapeImages(std::string_view animation_path) const;
 

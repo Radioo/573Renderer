@@ -221,6 +221,32 @@ TEST_CASE("A removed image leaves the list and the entry") {
     CHECK_FALSE(file->RemoveImage("bg03").has_value());
 }
 
+TEST_CASE("An image replaced with new pixels of its size reads back as them") {
+    auto file = Document::File::Open(SampleBytes());
+    REQUIRE(file.has_value());
+    REQUIRE(file->AddImage("added", 4, 3, std::vector<uint8_t>(48, 0x40)).has_value());
+    std::vector<uint8_t> bgra(48);
+    for (std::size_t i = 0; i < bgra.size(); i++)
+        bgra[i] = static_cast<uint8_t>(255 - i);
+    const auto replaced = file->ReplaceImage("added", 4, 3, bgra);
+    INFO((replaced.has_value() ? std::string() : replaced.error()));
+    REQUIRE(replaced.has_value());
+    const auto encoded = file->Encode();
+    REQUIRE(encoded.has_value());
+    const auto reopened = Document::File::Open(*encoded);
+    REQUIRE(reopened.has_value());
+    CHECK(reopened->Problems().empty());
+    const auto read = reopened->ReadImage("added");
+    REQUIRE(read.has_value());
+    CHECK(read->bgra == bgra);
+
+    const auto resized = file->ReplaceImage("added", 3, 4, bgra);
+    REQUIRE_FALSE(resized.has_value());
+    CHECK(resized.error().find("4x3") != std::string::npos);
+    CHECK_FALSE(file->ReplaceImage("absent", 4, 3, bgra).has_value());
+    CHECK_FALSE(file->ReplaceImage("added", 4, 3, std::vector<uint8_t>(8, 0)).has_value());
+}
+
 TEST_CASE("An image whose stored name starts with a digit is read and removed") {
     auto file = Document::File::Open(SampleBytes());
     REQUIRE(file.has_value());

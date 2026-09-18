@@ -161,12 +161,15 @@ TEST_CASE("An image saved from the package menu has the pixels it was added with
         RunMenu(added, *opened.tree);
         CHECK(added.Problems().isEmpty());
     }
-    QTreeWidgetItem* tint = nullptr;
-    for (QTreeWidgetItemIterator it(opened.tree); *it != nullptr; ++it) {
-        if ((*it)->text(0) == "tint") tint = *it;
-    }
-    REQUIRE(tint != nullptr);
-    opened.tree->setCurrentItem(tint);
+    const auto select_tint = [&] {
+        QTreeWidgetItem* tint = nullptr;
+        for (QTreeWidgetItemIterator it(opened.tree); *it != nullptr; ++it) {
+            if ((*it)->text(0) == "tint") tint = *it;
+        }
+        REQUIRE(tint != nullptr);
+        opened.tree->setCurrentItem(tint);
+    };
+    select_tint();
     const QString saved = opened.dir.filePath("saved.png");
     {
         Script saving({Choose("Save tint as PNG..."), PickFile(saved)});
@@ -177,6 +180,33 @@ TEST_CASE("An image saved from the package menu has the pixels it was added with
     const QImage read(saved);
     REQUIRE_FALSE(read.isNull());
     CHECK(read.convertToFormat(QImage::Format_ARGB32) == picture);
+
+    QImage repainted = picture.mirrored(true, false);
+    const QString replacement = opened.dir.filePath("repainted.png");
+    REQUIRE(repainted.save(replacement, "PNG"));
+    select_tint();
+    {
+        Script replaced({Choose("Replace tint with a picture..."), PickFile(replacement)});
+        RunMenu(replaced, *opened.tree);
+        INFO(replaced.Problems().join("|").toStdString());
+        CHECK(replaced.Problems().isEmpty());
+    }
+    select_tint();
+    const QString resaved = opened.dir.filePath("resaved.png");
+    {
+        Script saving({Choose("Save tint as PNG..."), PickFile(resaved)});
+        RunMenu(saving, *opened.tree);
+        CHECK(saving.Problems().isEmpty());
+    }
+    CHECK(QImage(resaved).convertToFormat(QImage::Format_ARGB32) == repainted);
+
+    const QString wider = opened.dir.filePath("wider.png");
+    REQUIRE(QImage(4, 2, QImage::Format_ARGB32).save(wider, "PNG"));
+    select_tint();
+    Script refused({Choose("Replace tint with a picture..."), PickFile(wider)});
+    RunMenu(refused, *opened.tree);
+    REQUIRE_FALSE(refused.Problems().isEmpty());
+    CHECK(refused.Problems().front().contains("3x2"));
 }
 
 TEST_CASE("An animation renamed from the package menu stays open under its new name") {

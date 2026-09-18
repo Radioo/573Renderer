@@ -157,6 +157,8 @@ private:
     [[nodiscard]] Support::Expected<ShownFrame, std::string> ReadFrame();
     void SaveFrameAs();
     void SaveImageAs(const QString& name);
+    void AddImageFromFile();
+    void ReplaceImageWithPicture(const QString& name);
     void SeekTo(uint32_t frame);
     [[nodiscard]] uint32_t ClipFrameCount() const;
     void JumpToFrame(int64_t frame);

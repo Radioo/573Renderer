@@ -13,6 +13,7 @@
 #include <cstddef>
 #include <span>
 #include <cstdint>
+#include <format>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -214,6 +215,38 @@ Support::Expected<std::string, std::string> ImagePath(std::string_view name) {
     return JoinPath(kTextureDirectory, *unescaped);
 }
 
+std::size_t PixelBytes(uint32_t width, uint32_t height) {
+    return static_cast<std::size_t>(width) * height * kBgraBytes;
+}
+
+struct LocatedImage {
+    TextureImages::Image image;
+    std::string path;
+    TextureImages::Blob blob;
+};
+
+Support::Expected<LocatedImage, std::string> LocateImage(const Ifs::Archive& archive,
+                                                         std::string_view name) {
+    const Ifs::Entry* list = FindEntry(archive, JoinPath(kTextureDirectory, kTextureList));
+    if (list == nullptr)
+        return Support::Unexpected(std::string(kTextureList) + " is not in the package");
+    const auto document = BinaryXml::Read(list->bytes);
+    if (!document) return Support::Unexpected(document.error());
+    const auto listed = TextureImages::ReadList(*document);
+    if (!listed) return Support::Unexpected(listed.error());
+    const auto image =
+        std::ranges::find(listed->images, std::string(name), &TextureImages::Image::name);
+    if (image == listed->images.end())
+        return Support::Unexpected(std::string(name) + " is not in the texture list");
+    auto path = ImagePath(name);
+    if (!path) return Support::Unexpected(path.error());
+    const Ifs::Entry* entry = FindEntry(archive, *path);
+    if (entry == nullptr) return Support::Unexpected(std::string(name) + " has no tex entry");
+    auto blob = TextureImages::DecodeBlob(entry->bytes, listed->compressed);
+    if (!blob) return Support::Unexpected(std::string(name) + ": " + blob.error());
+    return LocatedImage{.image = *image, .path = std::move(*path), .blob = std::move(*blob)};
+}
+
 Ifs::Entry* TextureListEntry(Ifs::Archive& archive) {
     Ifs::Entry* textures = FindEntry(archive, kTextureDirectory);
     if (textures == nullptr) return nullptr;
@@ -314,31 +347,34 @@ Support::Expected<void, std::string> RemoveImage(Ifs::Archive& archive, std::str
 
 Support::Expected<ImagePixels, std::string> ReadImage(const Ifs::Archive& archive,
                                                       std::string_view name) {
-    const Ifs::Entry* list = FindEntry(archive, JoinPath(kTextureDirectory, kTextureList));
-    if (list == nullptr)
-        return Support::Unexpected(std::string(kTextureList) + " is not in the package");
-    const auto document = BinaryXml::Read(list->bytes);
-    if (!document) return Support::Unexpected(document.error());
-    const auto listed = TextureImages::ReadList(*document);
-    if (!listed) return Support::Unexpected(listed.error());
-    const auto image =
-        std::ranges::find(listed->images, std::string(name), &TextureImages::Image::name);
-    if (image == listed->images.end())
-        return Support::Unexpected(std::string(name) + " is not in the texture list");
-
-    const auto path = ImagePath(name);
-    if (!path) return Support::Unexpected(path.error());
-    const Ifs::Entry* entry = FindEntry(archive, *path);
-    if (entry == nullptr) return Support::Unexpected(std::string(name) + " has no tex entry");
-    auto blob = TextureImages::DecodeBlob(entry->bytes, listed->compressed);
-    if (!blob) return Support::Unexpected(std::string(name) + ": " + blob.error());
-    auto bgra = TextureImages::PixelsToBgra(image->format, blob->pixels);
+    auto located = LocateImage(archive, name);
+    if (!located) return Support::Unexpected(located.error());
+    auto bgra = TextureImages::PixelsToBgra(located->image.format, located->blob.pixels);
     if (!bgra) return Support::Unexpected(std::string(name) + ": " + bgra.error());
-    if (bgra->size() != static_cast<std::size_t>(image->width) * image->height * kBgraBytes) {
+    if (bgra->size() != PixelBytes(located->image.width, located->image.height)) {
         return Support::Unexpected(std::string(name) +
                                    " holds a different number of pixels than its imgrect says");
     }
-    return ImagePixels{.width = image->width, .height = image->height, .bgra = std::move(*bgra)};
+    return ImagePixels{
+        .width = located->image.width, .height = located->image.height, .bgra = std::move(*bgra)};
+}
+
+Support::Expected<void, std::string> ReplaceImage(Ifs::Archive& archive, std::string_view name,
+                                                  uint32_t width, uint32_t height,
+                                                  std::span<const uint8_t> bgra) {
+    auto located = LocateImage(archive, name);
+    if (!located) return Support::Unexpected(located.error());
+    const TextureImages::Image& image = located->image;
+    if (width != image.width || height != image.height) {
+        return Support::Unexpected(std::format("{} is {}x{}, and the new picture is {}x{}", name,
+                                               image.width, image.height, width, height));
+    }
+    if (bgra.size() != PixelBytes(width, height))
+        return Support::Unexpected(std::string("the pixels do not match the size given"));
+    auto pixels = TextureImages::BgraToPixels(image.format, bgra);
+    if (!pixels) return Support::Unexpected(pixels.error());
+    const TextureImages::Blob blob{.storage = located->blob.storage, .pixels = std::move(*pixels)};
+    return ReplaceEntry(archive, located->path, TextureImages::EncodeBlob(blob));
 }
 
 }

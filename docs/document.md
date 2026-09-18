@@ -1395,7 +1395,18 @@ so a missing entry leaves the package as it was.
 `imgrect` gives: it finds the name in the texture list, decodes the entry's blob
 with the list's `compress` setting and converts the pixels from the texture's
 format. Only `argb8888rev` converts today, and any other format is refused by
-name rather than guessed at.
+name rather than guessed at; every texture in the IIDX 33 install is
+`argb8888rev` (the notes repo's `IIDX/iidx33_ifs_data_survey.md`).
+
+`ReplaceImage(archive, name, width, height, bgra)` swaps an image's pixels for
+new ones of the same size: it converts them to the texture's format and writes
+the entry back with the storage it already had (plain, LZ77, or raw after a
+header), so the texture list and every shape that draws the image stay as they
+were. A picture of another size is refused with both sizes in the message,
+because the list's `imgrect` and `uvrect` and the shapes' quads were all laid
+out for the old one. `document_tests` replaces an image, reads it back after an
+encode and a reopen, and checks the refusals; writing plain storage into a
+compressed list, or skipping the size check, fails it.
 
 An image's entry is found by the path the outline uses, the unescaped form of
 the hashed name. `HashedName` escapes a hash that starts with a digit with a

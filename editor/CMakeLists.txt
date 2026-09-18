@@ -75,6 +75,7 @@ add_executable(ifs_editor WIN32
     src/editor_hidden.cpp
     src/editor_timeline_menu.cpp
     src/editor_snapshot.cpp
+    src/editor_images.cpp
     src/editor_animations.cpp
     src/editor_key_selection.cpp
     src/editor_ease_dialog.cpp
@@ -134,6 +135,7 @@ add_executable(editor_window_tests
     src/editor_hidden.cpp
     src/editor_timeline_menu.cpp
     src/editor_snapshot.cpp
+    src/editor_images.cpp
     src/editor_animations.cpp
     src/editor_key_selection.cpp
     src/editor_ease_dialog.cpp

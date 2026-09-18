@@ -292,3 +292,4 @@ captured. This milestone is the editing itself.
 - `issues/84-paste-across-animations.md` (milestone 8)
 - `issues/85-save-images.md` (milestone 8)
 - `issues/86-remove-unused-definitions.md` (milestone 8)
+- `issues/87-replace-images-with-pictures.md` (milestone 8)

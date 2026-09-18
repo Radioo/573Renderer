@@ -315,7 +315,13 @@ an image it also offers `Save <name> as PNG...` (`Window::SaveImageAs`), which
 reads the pixels through `Document::ReadImage` before asking for a path, so an
 image in a format the editor cannot convert is reported without a dialog, and
 writes them through `QImage`. Saving an added image gives back exactly the
-pixels it was added with, alpha included.
+pixels it was added with, alpha included. On an image, replace reads a picture
+the same way adding one does (`Window::ReplaceImageWithPicture`,
+`Document::ReplaceImage`) rather than taking the file's bytes as they are, which
+would have put PNG bytes where the texture blob belongs; every other entry is
+still replaced with a file's raw bytes. So an image can be saved, edited in
+another program and put back, and a picture of a different size is refused.
+Adding, replacing and saving images live in `editor_images.cpp`.
 A new animation asks for a name and a frame count and copies its header from the
 open animation, or the package's first one (`Window::AddNewAnimation`), then
 opens it. In a package with no animation it first asks for another IFS and which

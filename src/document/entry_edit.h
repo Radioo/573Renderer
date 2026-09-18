@@ -45,4 +45,9 @@ ReplaceEntry(Ifs::Archive& archive, std::string_view path, std::vector<uint8_t> 
 [[nodiscard]] Support::Expected<ImagePixels, std::string> ReadImage(const Ifs::Archive& archive,
                                                                     std::string_view name);
 
+[[nodiscard]] Support::Expected<void, std::string> ReplaceImage(Ifs::Archive& archive,
+                                                                std::string_view name,
+                                                                uint32_t width, uint32_t height,
+                                                                std::span<const uint8_t> bgra);
+
 }
