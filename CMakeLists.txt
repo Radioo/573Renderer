@@ -839,6 +839,7 @@ add_executable(document_tests
     tests/document/authored_character_tests.cpp
     tests/document/authored_control_bits_tests.cpp
     tests/document/authored_curve_tests.cpp
+    tests/document/colour_pick_tests.cpp
     tests/document/authored_filter_tests.cpp
     tests/document/authored_group_tests.cpp
     tests/document/authored_new_track_tests.cpp

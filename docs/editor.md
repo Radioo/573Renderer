@@ -67,7 +67,12 @@ runs them. Two mutations (moving the turn handle, clearing the selection on a
 Ctrl press) were each seen to fail a case before the tests were trusted.
 
 `build-editor/editor_window_tests.exe` builds the whole `Editor::Window` from the
-same sources, with no host, and drives it the way a user would. Its `main` points
+same sources, with no host, and drives it the way a user would. Its cases live
+in two files: `editor/tests/editor_window_tests.cpp` for the ones that need no
+game install and `editor/tests/editor_live_window_tests.cpp` for the ones that
+start the preview host (they skip without `R573_IIDX_DIR`), with the `Script`,
+its steps and the package helpers shared from
+`editor/tests/window_test_support.h`. Its `main` points
 `QSettings` at a temporary INI directory under its own organisation name, so it
 never reads the user's game install or layout. Each case writes a small package
 to a temporary directory and opens it. Context menus are raised by emitting the
@@ -435,7 +440,17 @@ leaves on. A Filters keyframe shows its filters as rows instead of the value,
 and an edit to one of them goes through `Window::ApplyKeyFilterEdit`. Right-clicking
 the inspector with a Filters keyframe selected offers to add a colour matrix or
 an HSV filter, and, on a filter's rows, to remove that filter
-(`Window::ShowInspectorMenu`). The value row is the one editable cell an owned depth has, because
+(`Window::ShowInspectorMenu`).
+
+Right-clicking an editable colour row (a placement's `Multiply colour` or
+`Add colour`, or the value of a keyframe on either) offers `Pick a colour...`,
+which opens Qt's colour dialog on the current value, alpha included, and
+writes the choice into the cell (`Window::PickColour`). Writing the cell is the
+same as typing into it, so the edit is checked and recorded the usual way. The
+dialog is opened after the menu closes, not from inside it: opened from the
+menu's own event loop it never received its input in the window tests.
+
+The value row is the one editable cell an owned depth has, because
 the placement rows below it are produced from the keyframes rather than edited.
 
 With no depth selected on the root timeline the inspector shows the

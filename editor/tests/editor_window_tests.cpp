@@ -21,6 +21,7 @@
 #include <QtGlobal>
 #include <QApplication>
 #include <QByteArray>
+#include <QColorDialog>
 #include <QColor>
 #include <QComboBox>
 #include <QDialog>
@@ -62,272 +63,9 @@
 #include <utility>
 #include <vector>
 
-namespace {
+#include "window_test_support.h"
 
-constexpr int kStepMs = 5;
-constexpr qint64 kLongestWaitMs = 10000;
-constexpr uint32_t kPreviewFrame = 400;
-constexpr qint64 kPlayForMs = 700;
-constexpr std::array<uint8_t, 74> kTinyPng{
-    0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44,
-    0x52, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x03, 0x08, 0x06, 0x00, 0x00, 0x00, 0xb9,
-    0xea, 0xde, 0x81, 0x00, 0x00, 0x00, 0x11, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9c, 0x63, 0xf8,
-    0xcf, 0xc0, 0xf0, 0x1f, 0x84, 0x19, 0x30, 0x18, 0x00, 0xa1, 0x79, 0x0b, 0xf5, 0x4d, 0xc4,
-    0x9a, 0x07, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82};
-constexpr uint32_t kNoDepth = 65535;
-constexpr uint32_t kFixedRate = 0x2;
-constexpr uint32_t kUpdateMatrix = 0x5;
-const QString kAnimationKind = "animation";
-
-class Script {
-public:
-    using Step = std::function<bool()>;
-
-    explicit Script(std::vector<Step> steps) : steps_(steps.begin(), steps.end()) {
-        running_.start();
-        timer_.setInterval(kStepMs);
-        QObject::connect(&timer_, &QTimer::timeout, [this] { Run(); });
-        timer_.start();
-    }
-
-    [[nodiscard]] bool Finished() const { return steps_.empty(); }
-    [[nodiscard]] const QStringList& Problems() const { return problems_; }
-
-private:
-    void Run() {
-        if (running_.elapsed() > kLongestWaitMs && GiveUp()) return;
-        if (auto* box = qobject_cast<QMessageBox*>(QApplication::activeModalWidget())) {
-            problems_.append(box->text());
-            box->reject();
-            return;
-        }
-        if (steps_.empty()) return;
-        if (steps_.front()()) steps_.pop_front();
-    }
-
-    bool GiveUp() {
-        QWidget* open = QApplication::activeModalWidget();
-        if (open == nullptr) open = QApplication::activePopupWidget();
-        if (open == nullptr) return false;
-        problems_.append(QString("timed out with %1 open").arg(open->metaObject()->className()));
-        steps_.clear();
-        open->close();
-        return true;
-    }
-
-    std::deque<Step> steps_;
-    QStringList problems_;
-    QElapsedTimer running_;
-    QTimer timer_;
-};
-
-Script::Step Choose(const QString& text) {
-    return [text] {
-        auto* menu = qobject_cast<QMenu*>(QApplication::activePopupWidget());
-        if (menu == nullptr) return false;
-        const QList<QAction*> actions = menu->actions();
-        for (QAction* action : actions) {
-            if (action->text() != text) continue;
-            menu->setActiveAction(action);
-            QKeyEvent press(QEvent::KeyPress, Qt::Key_Return, Qt::NoModifier);
-            QApplication::sendEvent(menu, &press);
-            return true;
-        }
-        menu->close();
-        return true;
-    };
-}
-
-Script::Step Look(const QString& text, bool& found) {
-    return [text, &found] {
-        auto* menu = qobject_cast<QMenu*>(QApplication::activePopupWidget());
-        if (menu == nullptr) return false;
-        const QList<QAction*> actions = menu->actions();
-        found = std::ranges::any_of(
-            actions, [&text](const QAction* action) { return action->text() == text; });
-        menu->close();
-        return true;
-    };
-}
-
-Script::Step Answer(const QString& text) {
-    return [text] {
-        auto* dialog = qobject_cast<QInputDialog*>(QApplication::activeModalWidget());
-        if (dialog == nullptr) return false;
-        dialog->setTextValue(text);
-        dialog->accept();
-        return true;
-    };
-}
-
-Script::Step AnswerNumber(int number) {
-    return [number] {
-        auto* dialog = qobject_cast<QInputDialog*>(QApplication::activeModalWidget());
-        if (dialog == nullptr) return false;
-        dialog->setIntValue(number);
-        dialog->accept();
-        return true;
-    };
-}
-
-Script::Step AcceptNumber() {
-    return [] {
-        auto* dialog = qobject_cast<QInputDialog*>(QApplication::activeModalWidget());
-        if (dialog == nullptr) return false;
-        dialog->accept();
-        return true;
-    };
-}
-
-QString WritePackage(const QTemporaryDir& dir, bool with_image = false) {
-    const auto bytes = Ifs::Write(SamplePackage::SampleArchive());
-    REQUIRE(bytes.has_value());
-    auto file = Document::File::Open(*bytes);
-    REQUIRE(file.has_value());
-    const std::string path = "afp/" + SamplePackage::HashPath("intro");
-    auto animation = file->ReadAnimation(path);
-    REQUIRE(animation.has_value());
-    animation->name = Document::InternString(*animation, "intro");
-    animation->flags |= kFixedRate;
-    REQUIRE(Document::AddDepth(*animation, {}, 1, 7, 0, 2).has_value());
-    REQUIRE(file->WriteAnimation(path, *animation).has_value());
-    if (with_image) {
-        const Document::DepthSpan span{.clip = {}, .depth = 2, .first_frame = 0, .last_frame = 2};
-        REQUIRE(file->AddImage("dot", 4, 3, std::vector<uint8_t>(48, 0x40)).has_value());
-        REQUIRE(Document::PlaceImage(*file, path, "dot", span).has_value());
-        auto placed = file->ReadAnimation(path);
-        REQUIRE(placed.has_value());
-        AfpAnimation::Placement moved;
-        moved.flags = kUpdateMatrix;
-        moved.depth = 2;
-        moved.translation = std::array<int32_t, 2>{40, 0};
-        Document::InsertTag(placed->root, 2, AfpAnimation::Tag{moved});
-        REQUIRE(file->WriteAnimation(path, *placed).has_value());
-    }
-    const auto encoded = file->Encode();
-    REQUIRE(encoded.has_value());
-    const QString out = dir.filePath("sample.ifs");
-    QFile written(out);
-    REQUIRE(written.open(QIODevice::WriteOnly));
-    written.write(QByteArray(reinterpret_cast<const char*>(encoded->data()),
-                             static_cast<qsizetype>(encoded->size())));
-    return out;
-}
-
-Script::Step PickFile(const QString& path) {
-    return [path] {
-        auto* dialog = qobject_cast<QFileDialog*>(QApplication::activeModalWidget());
-        if (dialog == nullptr) return false;
-        auto* name = dialog->findChild<QLineEdit*>("fileNameEdit");
-        if (name == nullptr) return false;
-        name->setText(QDir::toNativeSeparators(path));
-        static_cast<QDialog*>(dialog)->accept();
-        return true;
-    };
-}
-
-QString WriteImagesOnly(const QTemporaryDir& dir) {
-    Ifs::Archive archive = SamplePackage::SampleArchive();
-    std::erase_if(archive.entries, [](const Ifs::Entry& entry) { return entry.name == "afp"; });
-    const auto encoded = Ifs::Write(archive);
-    REQUIRE(encoded.has_value());
-    const QString out = dir.filePath("images.ifs");
-    QFile written(out);
-    REQUIRE(written.open(QIODevice::WriteOnly));
-    written.write(QByteArray(reinterpret_cast<const char*>(encoded->data()),
-                             static_cast<qsizetype>(encoded->size())));
-    return out;
-}
-
-QTreeWidgetItem* AnimationNamed(QTreeWidget& tree, const QString& name) {
-    for (QTreeWidgetItemIterator it(&tree); *it != nullptr; ++it) {
-        if ((*it)->text(0) == name && (*it)->text(1) == kAnimationKind) return *it;
-    }
-    return nullptr;
-}
-
-std::string RowValue(QTableWidget& inspector, const QString& name) {
-    for (int row = 0; row < inspector.rowCount(); row++) {
-        const QTableWidgetItem* field = inspector.item(row, 0);
-        if (field != nullptr && field->text() == name)
-            return inspector.item(row, 1)->text().toStdString();
-    }
-    return "no " + name.toStdString() + " row";
-}
-
-QTableWidgetItem* ValueCell(QTableWidget& inspector, const QString& name) {
-    for (int row = 0; row < inspector.rowCount(); row++) {
-        const QTableWidgetItem* field = inspector.item(row, 0);
-        if (field != nullptr && field->text() == name) return inspector.item(row, 1);
-    }
-    return nullptr;
-}
-
-QAction* ShortcutAction(QWidget& window, const QKeySequence& keys) {
-    const QList<QAction*> actions = window.findChildren<QAction*>();
-    for (QAction* action : actions) {
-        if (action->shortcut() == keys) return action;
-    }
-    return nullptr;
-}
-
-struct Opened {
-    QTemporaryDir dir;
-    Editor::Window window;
-    QTreeWidget* tree = nullptr;
-    QTableWidget* inspector = nullptr;
-};
-
-void Open(Opened& opened, bool with_image = false) {
-    REQUIRE(opened.dir.isValid());
-    opened.window.OpenDocument(WritePackage(opened.dir, with_image));
-    opened.tree = opened.window.findChild<QTreeWidget*>();
-    opened.inspector = opened.window.findChild<QTableWidget*>();
-    REQUIRE(opened.tree != nullptr);
-    REQUIRE(opened.inspector != nullptr);
-}
-
-bool Settle(const std::function<bool()>& done) {
-    QElapsedTimer waited;
-    waited.start();
-    while (!done() && waited.elapsed() < kLongestWaitMs)
-        QApplication::processEvents();
-    return done();
-}
-
-void RunMenu(Script& script, QTreeWidget& tree) {
-    emit tree.customContextMenuRequested(QPoint(4, 4));
-    REQUIRE(Settle([&script] { return script.Finished(); }));
-}
-
-std::optional<uint16_t> WidestTitleDepth(const QString& title) {
-    QFile read(title);
-    REQUIRE(read.open(QIODevice::ReadOnly));
-    const QByteArray bytes = read.readAll();
-    const auto file = Document::File::Open(
-        std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(bytes.constData()),
-                                 static_cast<std::size_t>(bytes.size())));
-    REQUIRE(file.has_value());
-    if (!file) return std::nullopt;
-    std::string path;
-    for (const Document::Node& node : file->Nodes()) {
-        for (const Document::Node& child : node.children) {
-            if (child.role == Document::Role::Animation && child.name == "title") path = child.path;
-        }
-    }
-    const auto animation = file->ReadAnimation(path);
-    REQUIRE(animation.has_value());
-    if (!animation) return std::nullopt;
-    const auto outlines =
-        Document::StageOutlines(*animation, {}, kPreviewFrame, file->ShapeBounds(path));
-    REQUIRE(!outlines.empty());
-    const auto widest = std::ranges::max_element(outlines, {}, [](const auto& outline) {
-        return std::abs(outline.corners[1][0] - outline.corners[0][0]);
-    });
-    return widest->depth;
-}
-
-}
+using namespace WindowTest;
 
 TEST_CASE("An animation opens for editing without a game install") {
     Opened opened;
@@ -535,6 +273,32 @@ TEST_CASE("A depth copied from the timeline pastes onto a free depth at the play
     CHECK(refused.Problems().front().contains("depth 1"));
 }
 
+TEST_CASE("A colour row takes its value from the colour picker") {
+    Opened opened;
+    Open(opened);
+    auto* timeline = opened.window.findChild<Editor::Timeline*>();
+    REQUIRE(timeline != nullptr);
+    emit timeline->DepthChosen(1);
+    QTableWidgetItem* cell = ValueCell(*opened.inspector, "Multiply colour");
+    REQUIRE(cell != nullptr);
+    const QPoint at = opened.inspector->visualItemRect(cell).center();
+    Script picked({Choose("Pick a colour..."), PickColourStep(QColor(10, 20, 30, 200))});
+    emit opened.inspector->customContextMenuRequested(at);
+    REQUIRE(Settle([&picked] { return picked.Finished(); }));
+    CHECK(picked.Problems().isEmpty());
+    CHECK(RowValue(*opened.inspector, "Multiply colour") == "10, 20, 30, 200");
+
+    QTableWidgetItem* moved = ValueCell(*opened.inspector, "Translation");
+    REQUIRE(moved != nullptr);
+    REQUIRE((moved->flags() & Qt::ItemIsEditable) != 0);
+    bool offered = false;
+    Script looked({Look("Pick a colour...", offered)});
+    emit opened.inspector->customContextMenuRequested(
+        opened.inspector->visualItemRect(moved).center());
+    QApplication::processEvents();
+    CHECK_FALSE(offered);
+}
+
 TEST_CASE("A stage drag only changes the document when it ends") {
     Opened opened;
     Open(opened);
@@ -733,180 +497,6 @@ TEST_CASE("Saving a frame without the preview says why") {
     save->trigger();
     REQUIRE(Settle([&script] { return !script.Problems().isEmpty(); }));
     CHECK(script.Problems().front().contains("preview"));
-}
-
-TEST_CASE("A stage drag previews through the host before it is committed") {
-    const QString game = qEnvironmentVariable("R573_IIDX_DIR");
-    if (game.isEmpty()) SKIP("R573_IIDX_DIR not set");
-    const QString title = game + "/data/graphic/1/title.ifs";
-    QSettings().setValue("game/directory", game);
-    Editor::Window window;
-    QSettings().remove("game/directory");
-    window.resize(1600, 900);
-    window.show();
-    Script opening({});
-    window.OpenDocument(title);
-    REQUIRE(opening.Problems().isEmpty());
-
-    const std::optional<uint16_t> widest = WidestTitleDepth(title);
-    REQUIRE(widest.has_value());
-    if (!widest) return;
-
-    auto* timeline = window.findChild<Editor::Timeline*>();
-    auto* viewport = window.findChild<Editor::Viewport*>();
-    REQUIRE(timeline != nullptr);
-    REQUIRE(viewport != nullptr);
-    QAction* undo = ShortcutAction(window, QKeySequence(QKeySequence::Undo));
-    REQUIRE(undo != nullptr);
-    emit timeline->FrameChosen(kPreviewFrame);
-    emit timeline->DepthChosen(*widest);
-    QApplication::processEvents();
-    const QImage before = viewport->grab().toImage();
-
-    emit viewport->Dragged(*widest, 300, 150, false);
-    QApplication::processEvents();
-    QApplication::processEvents();
-    const QImage during = viewport->grab().toImage();
-    CHECK(during != before);
-    CHECK_FALSE(undo->isEnabled());
-
-    emit viewport->Dragged(*widest, 0, 0, false);
-    QApplication::processEvents();
-    QApplication::processEvents();
-    CHECK(viewport->grab().toImage() == before);
-    CHECK(opening.Problems().isEmpty());
-}
-
-TEST_CASE("Hiding a depth in the view takes it out of the rendered frame until it is shown") {
-    const QString game = qEnvironmentVariable("R573_IIDX_DIR");
-    if (game.isEmpty()) SKIP("R573_IIDX_DIR not set");
-    const QString title = game + "/data/graphic/1/title.ifs";
-    const std::optional<uint16_t> widest = WidestTitleDepth(title);
-    REQUIRE(widest.has_value());
-    if (!widest) return;
-    QSettings().setValue("game/directory", game);
-    Editor::Window window;
-    QSettings().remove("game/directory");
-    window.resize(1600, 900);
-    window.show();
-    Script opening({});
-    window.OpenDocument(title);
-    REQUIRE(opening.Problems().isEmpty());
-    auto* timeline = window.findChild<Editor::Timeline*>();
-    auto* viewport = window.findChild<Editor::Viewport*>();
-    REQUIRE(timeline != nullptr);
-    REQUIRE(viewport != nullptr);
-    const auto grab = [&] {
-        emit timeline->DepthChosen(kNoDepth);
-        QApplication::processEvents();
-        return viewport->grab().toImage();
-    };
-    emit timeline->FrameChosen(kPreviewFrame);
-    const QImage before = grab();
-    emit timeline->DepthChosen(*widest);
-    const QString depth = QString::number(*widest);
-    {
-        Script hidden({Choose("Hide depth " + depth + " in the view")});
-        emit timeline->MenuRequested(QPoint(4, 4), kPreviewFrame, QString());
-        REQUIRE(Settle([&hidden] { return hidden.Finished(); }));
-        CHECK(hidden.Problems().isEmpty());
-    }
-    CHECK(grab() != before);
-    emit timeline->DepthChosen(*widest);
-    {
-        Script shown({Choose("Show every hidden depth")});
-        emit timeline->MenuRequested(QPoint(4, 4), kPreviewFrame, QString());
-        REQUIRE(Settle([&shown] { return shown.Finished(); }));
-        CHECK(shown.Problems().isEmpty());
-    }
-    CHECK(grab() == before);
-    CHECK(opening.Problems().isEmpty());
-}
-
-TEST_CASE("Playback stays inside the work area") {
-    const QString game = qEnvironmentVariable("R573_IIDX_DIR");
-    if (game.isEmpty()) SKIP("R573_IIDX_DIR not set");
-    QSettings().setValue("game/directory", game);
-    Editor::Window window;
-    QSettings().remove("game/directory");
-    window.resize(1600, 900);
-    window.show();
-    Script opening({});
-    window.OpenDocument(game + "/data/graphic/1/title.ifs");
-    REQUIRE(opening.Problems().isEmpty());
-    auto* timeline = window.findChild<Editor::Timeline*>();
-    REQUIRE(timeline != nullptr);
-    const auto at = [&](uint32_t frame) {
-        emit timeline->FrameChosen(frame);
-        QApplication::processEvents();
-        return timeline->grab().toImage();
-    };
-    QAction* start = ShortcutAction(window, QKeySequence(Qt::Key_B));
-    QAction* end = ShortcutAction(window, QKeySequence(Qt::Key_N));
-    QAction* play = ShortcutAction(window, QKeySequence(Qt::Key_Space));
-    REQUIRE(start != nullptr);
-    REQUIRE(end != nullptr);
-    REQUIRE(play != nullptr);
-    at(kPreviewFrame + 2);
-    end->trigger();
-    at(kPreviewFrame);
-    start->trigger();
-    const std::vector<QImage> inside{at(kPreviewFrame), at(kPreviewFrame + 1),
-                                     at(kPreviewFrame + 2)};
-    play->trigger();
-    QElapsedTimer played;
-    played.start();
-    while (played.elapsed() < kPlayForMs)
-        QApplication::processEvents();
-    play->trigger();
-    const QImage stopped = timeline->grab().toImage();
-    CHECK(std::ranges::find(inside, stopped) != inside.end());
-    CHECK(opening.Problems().isEmpty());
-}
-
-TEST_CASE("A saved frame is the stage size, opaque, and leaves the viewport as it was") {
-    const QString game = qEnvironmentVariable("R573_IIDX_DIR");
-    if (game.isEmpty()) SKIP("R573_IIDX_DIR not set");
-    QSettings().setValue("game/directory", game);
-    Editor::Window window;
-    QSettings().remove("game/directory");
-    window.resize(1600, 900);
-    window.show();
-    Script opening({});
-    window.OpenDocument(game + "/data/graphic/1/title.ifs");
-    REQUIRE(opening.Problems().isEmpty());
-    auto* timeline = window.findChild<Editor::Timeline*>();
-    auto* viewport = window.findChild<Editor::Viewport*>();
-    REQUIRE(timeline != nullptr);
-    REQUIRE(viewport != nullptr);
-    emit timeline->FrameChosen(kPreviewFrame);
-    QApplication::processEvents();
-    const QImage before = viewport->grab().toImage();
-
-    QTemporaryDir dir;
-    REQUIRE(dir.isValid());
-    const QString path = dir.filePath("frame.png");
-    QAction* save = ShortcutAction(window, QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_S));
-    REQUIRE(save != nullptr);
-    {
-        Script saving({PickFile(path)});
-        save->trigger();
-        REQUIRE(Settle([&saving] { return saving.Finished(); }));
-        CHECK(saving.Problems().isEmpty());
-    }
-    QApplication::processEvents();
-    const QImage saved(path);
-    REQUIRE_FALSE(saved.isNull());
-    CHECK(saved.size() == QSize(1920, 1080));
-    CHECK_FALSE(saved.hasAlphaChannel());
-    bool drawn = false;
-    for (int y = 0; y < saved.height() && !drawn; y += 7) {
-        for (int x = 0; x < saved.width() && !drawn; x += 7)
-            drawn = saved.pixelColor(x, y) != QColor(0, 0, 0);
-    }
-    CHECK(drawn);
-    CHECK(viewport->grab().toImage() == before);
-    CHECK(opening.Problems().isEmpty());
 }
 
 TEST_CASE("A taken name is refused with a message and adds nothing") {

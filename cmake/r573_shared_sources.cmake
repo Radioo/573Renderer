@@ -43,6 +43,7 @@ set(R573_EDITOR_DOCUMENT_SOURCES
     src/document/entry_edit.cpp
     src/document/field_values.cpp
     src/document/filter_fields.cpp
+    src/document/colour_pick.cpp
     src/document/curve_values.cpp
     src/document/filter_values.cpp
     src/document/frame_edit.cpp

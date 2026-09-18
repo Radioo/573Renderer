@@ -3,6 +3,7 @@
 #include "editor_ease_dialog.h"
 #include "editor_timeline.h"
 
+#include "document/colour_pick.h"
 #include "document/authored.h"
 #include "document/filter_fields.h"
 #include "document/key_selection.h"
@@ -14,6 +15,8 @@
 #include <QAction>
 #include <QDialog>
 #include <QInputDialog>
+#include <QColor>
+#include <QColorDialog>
 #include <QMenu>
 #include <QPoint>
 #include <QString>
@@ -100,10 +103,39 @@ bool Window::ApplyKeyFilterEdit(const QString& field, const QString& value) {
                         });
 }
 
+void Window::PickColour(QTableWidgetItem* cell) {
+    const Document::Rgba current =
+        Document::ColourOfField(cell->text().toStdString())
+            .value_or(Document::Rgba{.red = 255, .green = 255, .blue = 255, .alpha = 255});
+    const QColor chosen =
+        QColorDialog::getColor(QColor(current.red, current.green, current.blue, current.alpha),
+                               this, tr("Pick a colour"), QColorDialog::ShowAlphaChannel);
+    if (!chosen.isValid()) return;
+    cell->setText(
+        QString::fromStdString(Document::ColourFieldText(Document::Rgba{.red = chosen.red(),
+                                                                        .green = chosen.green(),
+                                                                        .blue = chosen.blue(),
+                                                                        .alpha = chosen.alpha()})));
+}
+
 void Window::ShowInspectorMenu(const QPoint& where) {
-    if (!key_frame_ || key_property_ != QStringLiteral("Filters")) return;
-    const uint32_t frame = *key_frame_;
     QMenu menu(this);
+    const QTableWidgetItem* row = inspector_->itemAt(where);
+    const QTableWidgetItem* name = row == nullptr ? nullptr : inspector_->item(row->row(), 0);
+    QTableWidgetItem* value = row == nullptr ? nullptr : inspector_->item(row->row(), 1);
+    const std::string field = name == nullptr ? std::string() : name->text().toStdString();
+    const QAction* pick = nullptr;
+    if (value != nullptr && (value->flags() & Qt::ItemIsEditable) != 0 &&
+        Document::PicksColour(field, key_property_.toStdString())) {
+        pick = menu.addAction(tr("Pick a colour..."));
+    }
+    if (!key_frame_ || key_property_ != QStringLiteral("Filters")) {
+        if (menu.isEmpty()) return;
+        if (menu.exec(inspector_->viewport()->mapToGlobal(where)) == pick && pick != nullptr)
+            PickColour(value);
+        return;
+    }
+    const uint32_t frame = *key_frame_;
     const auto add = [this, frame](Document::NewFilter kind) {
         EditAuthored(tr("Add a filter on frame %1").arg(frame),
                      [frame, kind](Document::AuthoredDepth& owned) {
@@ -113,9 +145,6 @@ void Window::ShowInspectorMenu(const QPoint& where) {
     menu.addAction(tr("Add colour matrix filter"), this,
                    [add] { add(Document::NewFilter::ColourMatrix); });
     menu.addAction(tr("Add HSV filter"), this, [add] { add(Document::NewFilter::Hsv); });
-    const QTableWidgetItem* row = inspector_->itemAt(where);
-    const QTableWidgetItem* name = row == nullptr ? nullptr : inspector_->item(row->row(), 0);
-    const std::string field = name == nullptr ? std::string() : name->text().toStdString();
     const std::optional<std::size_t> number = Document::FilterNumberOf(field);
     if (number) {
         menu.addAction(tr("Remove filter %1").arg(*number), this, [this, frame, field, number] {
@@ -125,7 +154,8 @@ void Window::ShowInspectorMenu(const QPoint& where) {
                          });
         });
     }
-    menu.exec(inspector_->viewport()->mapToGlobal(where));
+    if (menu.exec(inspector_->viewport()->mapToGlobal(where)) == pick && pick != nullptr)
+        PickColour(value);
 }
 
 void Window::StartAnimating() {

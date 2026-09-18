@@ -1,0 +1,241 @@
+#include <catch2/catch_test_macros.hpp>
+
+#include "editor_timeline.h"
+#include "editor_viewport.h"
+#include "editor_window.h"
+#include "sample_package.h"
+
+#include "document/animation_strings.h"
+#include "document/document.h"
+#include "document/outline.h"
+#include "document/stage_bounds.h"
+#include "document/frame_edit.h"
+#include "document/place_image.h"
+#include "document/tags.h"
+#include "formats/ifs_archive.h"
+
+#include <QAction>
+#include <QImage>
+#include <QPixmap>
+#include <QtGlobal>
+#include <QApplication>
+#include <QByteArray>
+#include <QColorDialog>
+#include <QColor>
+#include <QComboBox>
+#include <QDialog>
+#include <QElapsedTimer>
+#include <QDir>
+#include <QFile>
+#include <QFileDialog>
+#include <QEvent>
+#include <QInputDialog>
+#include <QKeyEvent>
+#include <QKeySequence>
+#include <QLineEdit>
+#include <QList>
+#include <QMenu>
+#include <QMessageBox>
+#include <QPoint>
+#include <QSettings>
+#include <QString>
+#include <QStringList>
+#include <QTableWidget>
+#include <QTableWidgetItem>
+#include <QTemporaryDir>
+#include <QTimer>
+#include <QTreeWidget>
+#include <QTreeWidgetItem>
+#include <QTreeWidgetItemIterator>
+#include <QWidget>
+
+#include <algorithm>
+#include <array>
+#include <cmath>
+#include <cstddef>
+#include <cstdint>
+#include <deque>
+#include <span>
+#include <functional>
+#include <optional>
+#include <string>
+#include <utility>
+#include <vector>
+
+#include "window_test_support.h"
+
+using namespace WindowTest;
+
+TEST_CASE("A stage drag previews through the host before it is committed") {
+    const QString game = qEnvironmentVariable("R573_IIDX_DIR");
+    if (game.isEmpty()) SKIP("R573_IIDX_DIR not set");
+    const QString title = game + "/data/graphic/1/title.ifs";
+    QSettings().setValue("game/directory", game);
+    Editor::Window window;
+    QSettings().remove("game/directory");
+    window.resize(1600, 900);
+    window.show();
+    Script opening({});
+    window.OpenDocument(title);
+    REQUIRE(opening.Problems().isEmpty());
+
+    const std::optional<uint16_t> widest = WidestTitleDepth(title);
+    REQUIRE(widest.has_value());
+    if (!widest) return;
+
+    auto* timeline = window.findChild<Editor::Timeline*>();
+    auto* viewport = window.findChild<Editor::Viewport*>();
+    REQUIRE(timeline != nullptr);
+    REQUIRE(viewport != nullptr);
+    QAction* undo = ShortcutAction(window, QKeySequence(QKeySequence::Undo));
+    REQUIRE(undo != nullptr);
+    emit timeline->FrameChosen(kPreviewFrame);
+    emit timeline->DepthChosen(*widest);
+    QApplication::processEvents();
+    const QImage before = viewport->grab().toImage();
+
+    emit viewport->Dragged(*widest, 300, 150, false);
+    QApplication::processEvents();
+    QApplication::processEvents();
+    const QImage during = viewport->grab().toImage();
+    CHECK(during != before);
+    CHECK_FALSE(undo->isEnabled());
+
+    emit viewport->Dragged(*widest, 0, 0, false);
+    QApplication::processEvents();
+    QApplication::processEvents();
+    CHECK(viewport->grab().toImage() == before);
+    CHECK(opening.Problems().isEmpty());
+}
+
+TEST_CASE("Hiding a depth in the view takes it out of the rendered frame until it is shown") {
+    const QString game = qEnvironmentVariable("R573_IIDX_DIR");
+    if (game.isEmpty()) SKIP("R573_IIDX_DIR not set");
+    const QString title = game + "/data/graphic/1/title.ifs";
+    const std::optional<uint16_t> widest = WidestTitleDepth(title);
+    REQUIRE(widest.has_value());
+    if (!widest) return;
+    QSettings().setValue("game/directory", game);
+    Editor::Window window;
+    QSettings().remove("game/directory");
+    window.resize(1600, 900);
+    window.show();
+    Script opening({});
+    window.OpenDocument(title);
+    REQUIRE(opening.Problems().isEmpty());
+    auto* timeline = window.findChild<Editor::Timeline*>();
+    auto* viewport = window.findChild<Editor::Viewport*>();
+    REQUIRE(timeline != nullptr);
+    REQUIRE(viewport != nullptr);
+    const auto grab = [&] {
+        emit timeline->DepthChosen(kNoDepth);
+        QApplication::processEvents();
+        return viewport->grab().toImage();
+    };
+    emit timeline->FrameChosen(kPreviewFrame);
+    const QImage before = grab();
+    emit timeline->DepthChosen(*widest);
+    const QString depth = QString::number(*widest);
+    {
+        Script hidden({Choose("Hide depth " + depth + " in the view")});
+        emit timeline->MenuRequested(QPoint(4, 4), kPreviewFrame, QString());
+        REQUIRE(Settle([&hidden] { return hidden.Finished(); }));
+        CHECK(hidden.Problems().isEmpty());
+    }
+    CHECK(grab() != before);
+    emit timeline->DepthChosen(*widest);
+    {
+        Script shown({Choose("Show every hidden depth")});
+        emit timeline->MenuRequested(QPoint(4, 4), kPreviewFrame, QString());
+        REQUIRE(Settle([&shown] { return shown.Finished(); }));
+        CHECK(shown.Problems().isEmpty());
+    }
+    CHECK(grab() == before);
+    CHECK(opening.Problems().isEmpty());
+}
+
+TEST_CASE("Playback stays inside the work area") {
+    const QString game = qEnvironmentVariable("R573_IIDX_DIR");
+    if (game.isEmpty()) SKIP("R573_IIDX_DIR not set");
+    QSettings().setValue("game/directory", game);
+    Editor::Window window;
+    QSettings().remove("game/directory");
+    window.resize(1600, 900);
+    window.show();
+    Script opening({});
+    window.OpenDocument(game + "/data/graphic/1/title.ifs");
+    REQUIRE(opening.Problems().isEmpty());
+    auto* timeline = window.findChild<Editor::Timeline*>();
+    REQUIRE(timeline != nullptr);
+    const auto at = [&](uint32_t frame) {
+        emit timeline->FrameChosen(frame);
+        QApplication::processEvents();
+        return timeline->grab().toImage();
+    };
+    QAction* start = ShortcutAction(window, QKeySequence(Qt::Key_B));
+    QAction* end = ShortcutAction(window, QKeySequence(Qt::Key_N));
+    QAction* play = ShortcutAction(window, QKeySequence(Qt::Key_Space));
+    REQUIRE(start != nullptr);
+    REQUIRE(end != nullptr);
+    REQUIRE(play != nullptr);
+    at(kPreviewFrame + 2);
+    end->trigger();
+    at(kPreviewFrame);
+    start->trigger();
+    const std::vector<QImage> inside{at(kPreviewFrame), at(kPreviewFrame + 1),
+                                     at(kPreviewFrame + 2)};
+    play->trigger();
+    QElapsedTimer played;
+    played.start();
+    while (played.elapsed() < kPlayForMs)
+        QApplication::processEvents();
+    play->trigger();
+    const QImage stopped = timeline->grab().toImage();
+    CHECK(std::ranges::find(inside, stopped) != inside.end());
+    CHECK(opening.Problems().isEmpty());
+}
+
+TEST_CASE("A saved frame is the stage size, opaque, and leaves the viewport as it was") {
+    const QString game = qEnvironmentVariable("R573_IIDX_DIR");
+    if (game.isEmpty()) SKIP("R573_IIDX_DIR not set");
+    QSettings().setValue("game/directory", game);
+    Editor::Window window;
+    QSettings().remove("game/directory");
+    window.resize(1600, 900);
+    window.show();
+    Script opening({});
+    window.OpenDocument(game + "/data/graphic/1/title.ifs");
+    REQUIRE(opening.Problems().isEmpty());
+    auto* timeline = window.findChild<Editor::Timeline*>();
+    auto* viewport = window.findChild<Editor::Viewport*>();
+    REQUIRE(timeline != nullptr);
+    REQUIRE(viewport != nullptr);
+    emit timeline->FrameChosen(kPreviewFrame);
+    QApplication::processEvents();
+    const QImage before = viewport->grab().toImage();
+
+    QTemporaryDir dir;
+    REQUIRE(dir.isValid());
+    const QString path = dir.filePath("frame.png");
+    QAction* save = ShortcutAction(window, QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_S));
+    REQUIRE(save != nullptr);
+    {
+        Script saving({PickFile(path)});
+        save->trigger();
+        REQUIRE(Settle([&saving] { return saving.Finished(); }));
+        CHECK(saving.Problems().isEmpty());
+    }
+    QApplication::processEvents();
+    const QImage saved(path);
+    REQUIRE_FALSE(saved.isNull());
+    CHECK(saved.size() == QSize(1920, 1080));
+    CHECK_FALSE(saved.hasAlphaChannel());
+    bool drawn = false;
+    for (int y = 0; y < saved.height() && !drawn; y += 7) {
+        for (int x = 0; x < saved.width() && !drawn; x += 7)
+            drawn = saved.pixelColor(x, y) != QColor(0, 0, 0);
+    }
+    CHECK(drawn);
+    CHECK(viewport->grab().toImage() == before);
+    CHECK(opening.Problems().isEmpty());
+}

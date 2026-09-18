@@ -122,6 +122,7 @@ r573_deploy_qt_plugin(editor_widget_tests Qt6::QJpegPlugin)
 
 add_executable(editor_window_tests
     tests/editor_window_tests.cpp
+    tests/editor_live_window_tests.cpp
     src/editor_window.cpp
     src/editor_files.cpp
     src/editor_host.cpp

@@ -116,6 +116,7 @@ private:
     bool ApplyKeyEdit(const QString& value);
     bool ApplyKeyFilterEdit(const QString& field, const QString& value);
     void ShowInspectorMenu(const QPoint& where);
+    void PickColour(QTableWidgetItem* cell);
     void StartAnimating();
     void OpenProject(const QString& folder);
     [[nodiscard]] std::string TargetBuild() const;

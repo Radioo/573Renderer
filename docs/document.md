@@ -1146,6 +1146,15 @@ there is no work area yet.
 
 ## Inspector rows (`document/inspector.h`)
 
+`document/colour_pick.h` is what the colour picker needs to know about a row.
+`PicksColour(field, key_property)` is true for the unpacked `Multiply colour`
+and `Add colour` fields and for the value of a keyframe on one of those
+properties; the packed forms are one number and stay typed. `ColourOfField`
+reads the four channels of a cell (r, g, b, a, the order afp-core reads them in,
+notes repo `Core/afp_format.md` section 4) held to 0 to 255, since a picker
+cannot show the brighter or negative values the field allows, and
+`ColourFieldText` writes a colour back in the cell's own format.
+
 `InspectFrame` is the whole of what the inspector shows for a frame: the rows
 and, per row, whether the user may type into it and what an edit to it changes.
 It takes a `Selection` (the depth, the frame, the authored depth when the
