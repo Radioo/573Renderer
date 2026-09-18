@@ -13,6 +13,7 @@
 #include "document/frame_edit.h"
 #include "document/place_image.h"
 #include "document/tags.h"
+#include "formats/afp_animation.h"
 #include "formats/ifs_archive.h"
 
 #include <QAction>
@@ -61,6 +62,7 @@
 #include <optional>
 #include <string>
 #include <utility>
+#include <variant>
 #include <vector>
 
 #include "window_test_support.h"
@@ -140,6 +142,40 @@ TEST_CASE("PNG and JPEG images can be added from the package menu") {
     };
     CHECK(listed("leaf"));
     CHECK(listed("stone"));
+}
+
+TEST_CASE("An image saved from the package menu has the pixels it was added with") {
+    Opened opened;
+    Open(opened);
+    QImage picture(3, 2, QImage::Format_ARGB32);
+    const std::array<QColor, 6> colours{QColor(255, 0, 0),       QColor(0, 255, 0),
+                                        QColor(0, 0, 255, 128),  QColor(10, 20, 30, 40),
+                                        QColor(200, 100, 50, 0), QColor(255, 255, 255)};
+    for (int at = 0; at < 6; at++)
+        picture.setPixelColor(at % 3, at / 3, colours.at(static_cast<std::size_t>(at)));
+    const QString source = opened.dir.filePath("tint.png");
+    REQUIRE(picture.save(source, "PNG"));
+    {
+        Script added({Choose("Add an image from a file..."), PickFile(source)});
+        RunMenu(added, *opened.tree);
+        CHECK(added.Problems().isEmpty());
+    }
+    QTreeWidgetItem* tint = nullptr;
+    for (QTreeWidgetItemIterator it(opened.tree); *it != nullptr; ++it) {
+        if ((*it)->text(0) == "tint") tint = *it;
+    }
+    REQUIRE(tint != nullptr);
+    opened.tree->setCurrentItem(tint);
+    const QString saved = opened.dir.filePath("saved.png");
+    {
+        Script saving({Choose("Save tint as PNG..."), PickFile(saved)});
+        RunMenu(saving, *opened.tree);
+        INFO(saving.Problems().join("|").toStdString());
+        CHECK(saving.Problems().isEmpty());
+    }
+    const QImage read(saved);
+    REQUIRE_FALSE(read.isNull());
+    CHECK(read.convertToFormat(QImage::Format_ARGB32) == picture);
 }
 
 TEST_CASE("An animation renamed from the package menu stays open under its new name") {
@@ -295,6 +331,86 @@ TEST_CASE("A depth copied from the timeline pastes onto a free depth at the play
     emit timeline->MenuRequested(QPoint(4, 4), 0, QString());
     REQUIRE(Settle([&refused] { return !refused.Problems().isEmpty(); }));
     CHECK(refused.Problems().front().contains("depth 1"));
+}
+
+TEST_CASE("A depth copied from one animation pastes into another with its shape") {
+    Opened opened;
+    Open(opened, true);
+    auto* timeline = opened.window.findChild<Editor::Timeline*>();
+    REQUIRE(timeline != nullptr);
+    const auto copy = [&](uint16_t depth) {
+        emit timeline->DepthChosen(depth);
+        Script copied({Choose(QString("Copy depth %1 here").arg(depth))});
+        emit timeline->MenuRequested(QPoint(4, 4), depth, QString());
+        REQUIRE(Settle([&copied] { return copied.Finished(); }));
+        CHECK(copied.Problems().isEmpty());
+    };
+    copy(1);
+    {
+        Script added({Choose("New animation..."), Answer("fresh"), AnswerNumber(12)});
+        RunMenu(added, *opened.tree);
+        CHECK(added.Problems().isEmpty());
+    }
+    {
+        Script refused({Choose("Paste the copied depth here..."), AcceptNumber()});
+        emit timeline->MenuRequested(QPoint(4, 4), 0, QString());
+        REQUIRE(Settle([&refused] { return !refused.Problems().isEmpty(); }));
+        CHECK(refused.Problems().front().contains("not defined"));
+    }
+    opened.tree->setCurrentItem(AnimationNamed(*opened.tree, "intro"));
+    copy(2);
+    opened.tree->setCurrentItem(AnimationNamed(*opened.tree, "fresh"));
+    {
+        Script pasted({Choose("Paste the copied depth here..."), AcceptNumber()});
+        emit timeline->MenuRequested(QPoint(4, 4), 0, QString());
+        REQUIRE(Settle([&pasted] { return pasted.Finished(); }));
+        INFO(pasted.Problems().join("|").toStdString());
+        CHECK(pasted.Problems().isEmpty());
+    }
+    QAction* save = ShortcutAction(opened.window, QKeySequence(QKeySequence::Save));
+    REQUIRE(save != nullptr);
+    save->trigger();
+
+    QFile read(opened.dir.filePath("sample.ifs"));
+    REQUIRE(read.open(QIODevice::ReadOnly));
+    const QByteArray bytes = read.readAll();
+    const auto file = Document::File::Open(
+        std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(bytes.constData()),
+                                 static_cast<std::size_t>(bytes.size())));
+    REQUIRE(file.has_value());
+    std::string fresh;
+    for (const Document::Node& node : file->Nodes()) {
+        for (const Document::Node& child : node.children) {
+            if (child.role == Document::Role::Animation && child.name == "fresh")
+                fresh = child.path;
+        }
+    }
+    const auto animation = file->ReadAnimation(fresh);
+    REQUIRE(animation.has_value());
+    std::optional<uint16_t> placed;
+    for (const AfpAnimation::Tag& tag : animation->root.tags) {
+        const auto* placement = std::get_if<AfpAnimation::Placement>(&tag.body);
+        if (placement != nullptr && placement->character) placed = placement->character;
+    }
+    REQUIRE(placed.has_value());
+    const bool shaped =
+        std::ranges::any_of(animation->root.tags, [&](const AfpAnimation::Tag& tag) {
+            const auto* shape = std::get_if<AfpAnimation::Shape>(&tag.body);
+            return shape != nullptr && shape->id == *placed;
+        });
+    CHECK(shaped);
+    CHECK(file->ShapeFile(fresh, *placed).has_value());
+
+    const auto offers_paste = [&] {
+        bool found = false;
+        Script looked({Look("Paste the copied depth here...", found)});
+        emit timeline->MenuRequested(QPoint(4, 4), 0, QString());
+        REQUIRE(Settle([&looked] { return looked.Finished(); }));
+        return found;
+    };
+    CHECK(offers_paste());
+    opened.window.OpenDocument(opened.dir.filePath("sample.ifs"));
+    CHECK_FALSE(offers_paste());
 }
 
 TEST_CASE("A colour row takes its value from the colour picker") {

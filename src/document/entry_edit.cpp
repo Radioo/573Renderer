@@ -208,6 +208,12 @@ BinaryXml::Node ImageNode(std::string_view name, uint32_t width, uint32_t height
     return image;
 }
 
+Support::Expected<std::string, std::string> ImagePath(std::string_view name) {
+    auto unescaped = Ifs::UnescapeName(Ifs::HashedName(name));
+    if (!unescaped) return Support::Unexpected(unescaped.error());
+    return JoinPath(kTextureDirectory, *unescaped);
+}
+
 Ifs::Entry* TextureListEntry(Ifs::Archive& archive) {
     Ifs::Entry* textures = FindEntry(archive, kTextureDirectory);
     if (textures == nullptr) return nullptr;
@@ -267,6 +273,10 @@ Support::Expected<void, std::string> AddImage(Ifs::Archive& archive, std::string
 }
 
 Support::Expected<void, std::string> RemoveImage(Ifs::Archive& archive, std::string_view name) {
+    const auto path = ImagePath(name);
+    if (!path) return Support::Unexpected(path.error());
+    if (FindEntry(archive, *path) == nullptr)
+        return Support::Unexpected(std::string(name) + " has no tex entry");
     Ifs::Entry* list = TextureListEntry(archive);
     if (list == nullptr)
         return Support::Unexpected(std::string(kTextureList) + " is not in the package");
@@ -299,7 +309,36 @@ Support::Expected<void, std::string> RemoveImage(Ifs::Archive& archive, std::str
     auto replaced =
         ReplaceEntry(archive, JoinPath(kTextureDirectory, kTextureList), std::move(*written));
     if (!replaced) return Support::Unexpected(replaced.error());
-    return RemoveEntry(archive, JoinPath(kTextureDirectory, Ifs::HashedName(name)));
+    return RemoveEntry(archive, *path);
+}
+
+Support::Expected<ImagePixels, std::string> ReadImage(const Ifs::Archive& archive,
+                                                      std::string_view name) {
+    const Ifs::Entry* list = FindEntry(archive, JoinPath(kTextureDirectory, kTextureList));
+    if (list == nullptr)
+        return Support::Unexpected(std::string(kTextureList) + " is not in the package");
+    const auto document = BinaryXml::Read(list->bytes);
+    if (!document) return Support::Unexpected(document.error());
+    const auto listed = TextureImages::ReadList(*document);
+    if (!listed) return Support::Unexpected(listed.error());
+    const auto image =
+        std::ranges::find(listed->images, std::string(name), &TextureImages::Image::name);
+    if (image == listed->images.end())
+        return Support::Unexpected(std::string(name) + " is not in the texture list");
+
+    const auto path = ImagePath(name);
+    if (!path) return Support::Unexpected(path.error());
+    const Ifs::Entry* entry = FindEntry(archive, *path);
+    if (entry == nullptr) return Support::Unexpected(std::string(name) + " has no tex entry");
+    auto blob = TextureImages::DecodeBlob(entry->bytes, listed->compressed);
+    if (!blob) return Support::Unexpected(std::string(name) + ": " + blob.error());
+    auto bgra = TextureImages::PixelsToBgra(image->format, blob->pixels);
+    if (!bgra) return Support::Unexpected(std::string(name) + ": " + bgra.error());
+    if (bgra->size() != static_cast<std::size_t>(image->width) * image->height * kBgraBytes) {
+        return Support::Unexpected(std::string(name) +
+                                   " holds a different number of pixels than its imgrect says");
+    }
+    return ImagePixels{.width = image->width, .height = image->height, .bgra = std::move(*bgra)};
 }
 
 }

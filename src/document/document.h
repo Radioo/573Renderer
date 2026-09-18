@@ -1,6 +1,7 @@
 #pragma once
 
 #include "document/atlas_write.h"
+#include "document/entry_edit.h"
 #include "document/outline.h"
 #include "document/stage_bounds.h"
 #include "formats/afp_animation.h"
@@ -9,6 +10,7 @@
 
 #include <cstdint>
 #include <map>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -49,6 +51,9 @@ public:
 
     [[nodiscard]] Support::Expected<void, std::string> RemoveImage(std::string_view name);
 
+    [[nodiscard]] Support::Expected<ImagePixels, std::string>
+    ReadImage(std::string_view name) const;
+
     [[nodiscard]] std::map<uint16_t, std::string>
     ShapeImages(std::string_view animation_path) const;
 
@@ -56,6 +61,12 @@ public:
 
     [[nodiscard]] Support::Expected<uint16_t, std::string>
     AddImageShape(std::string_view animation_path, std::string_view image);
+
+    [[nodiscard]] std::optional<std::vector<uint8_t>> ShapeFile(std::string_view animation_path,
+                                                                uint16_t id) const;
+
+    [[nodiscard]] Support::Expected<void, std::string>
+    AddShapeFile(std::string_view animation_path, uint16_t id, std::vector<uint8_t> bytes);
 
     [[nodiscard]] Support::Expected<std::string, std::string>
     AddAnimation(std::string_view name, const File& like, std::string_view like_path,

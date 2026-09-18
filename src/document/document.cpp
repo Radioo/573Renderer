@@ -134,6 +134,10 @@ std::optional<std::string> File::EntryDigest(std::string_view path) const {
     return out;
 }
 
+Support::Expected<ImagePixels, std::string> File::ReadImage(std::string_view name) const {
+    return Document::ReadImage(archive_, name);
+}
+
 Support::Expected<void, std::string> File::RemoveImage(std::string_view name) {
     auto removed = Document::RemoveImage(archive_, name);
     if (!removed) return Support::Unexpected(removed.error());
@@ -155,6 +159,19 @@ Support::Expected<uint16_t, std::string> File::AddImageShape(std::string_view an
     if (!added) return Support::Unexpected(added.error());
     outline_ = Outline::Build(archive_);
     return *added;
+}
+
+std::optional<std::vector<uint8_t>> File::ShapeFile(std::string_view animation_path,
+                                                    uint16_t id) const {
+    return ShapeFileBytes(archive_, animation_path, id);
+}
+
+Support::Expected<void, std::string> File::AddShapeFile(std::string_view animation_path,
+                                                        uint16_t id, std::vector<uint8_t> bytes) {
+    auto added = Document::AddShapeFile(archive_, animation_path, id, std::move(bytes));
+    if (!added) return Support::Unexpected(added.error());
+    outline_ = Outline::Build(archive_);
+    return {};
 }
 
 Support::Expected<void, std::string> File::RemoveAnimation(std::string_view path) {

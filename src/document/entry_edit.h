@@ -11,6 +11,12 @@
 
 namespace Document {
 
+struct ImagePixels {
+    uint32_t width = 0;
+    uint32_t height = 0;
+    std::vector<uint8_t> bgra;
+};
+
 [[nodiscard]] Support::Expected<std::string, std::string> StoredName(std::string_view directory,
                                                                      std::string_view logical_name);
 
@@ -35,5 +41,8 @@ ReplaceEntry(Ifs::Archive& archive, std::string_view path, std::vector<uint8_t> 
 
 [[nodiscard]] Support::Expected<void, std::string> RemoveImage(Ifs::Archive& archive,
                                                                std::string_view name);
+
+[[nodiscard]] Support::Expected<ImagePixels, std::string> ReadImage(const Ifs::Archive& archive,
+                                                                    std::string_view name);
 
 }

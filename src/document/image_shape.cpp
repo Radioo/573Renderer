@@ -310,4 +310,34 @@ AddImageShape(Ifs::Archive& archive, std::string_view animation_path, std::strin
     return *id;
 }
 
+std::optional<std::vector<uint8_t>> ShapeFileBytes(const Ifs::Archive& archive,
+                                                   std::string_view animation_path, uint16_t id) {
+    const auto animation = ReadAnimationAt(archive, animation_path);
+    if (!animation) return std::nullopt;
+    const std::string name = StringText(*animation, animation->name);
+    const auto stored = Ifs::UnescapeName(Ifs::HashedName(std::format("{}_shape{}", name, id)));
+    if (!stored) return std::nullopt;
+    const Ifs::Entry* entry = FindEntry(archive, JoinPath(kShapeDirectory, *stored));
+    if (entry == nullptr) return std::nullopt;
+    return entry->bytes;
+}
+
+Support::Expected<void, std::string> AddShapeFile(Ifs::Archive& archive,
+                                                  std::string_view animation_path, uint16_t id,
+                                                  std::vector<uint8_t> bytes) {
+    const auto animation = ReadAnimationAt(archive, animation_path);
+    if (!animation) return Support::Unexpected(animation.error());
+    const std::string name = StringText(*animation, animation->name);
+    Ifs::Archive edited = archive;
+    auto directory = EnsureDirectory(edited, kShapeDirectory);
+    if (!directory) return Support::Unexpected(directory.error());
+    auto added =
+        AddEntry(edited, kShapeDirectory, std::format("{}_shape{}", name, id), std::move(bytes));
+    if (!added) return Support::Unexpected(added.error());
+    auto listed = ListShape(edited, name, id);
+    if (!listed) return Support::Unexpected(listed.error());
+    archive = std::move(edited);
+    return {};
+}
+
 }

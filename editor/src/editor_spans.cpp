@@ -6,6 +6,7 @@
 #include "document/outline.h"
 #include "document/span_clipboard.h"
 #include "document/span_edit.h"
+#include "document/span_transplant.h"
 #include "document/span_trim.h"
 #include "document/timeline.h"
 #include "formats/afp_animation.h"
@@ -203,12 +204,7 @@ std::optional<uint16_t> Window::AskForFreeDepth(const QString& title, uint16_t f
 
 void Window::CopySpanAt(uint16_t depth, uint32_t frame) {
     if (!file_ || animation_path_.empty()) return;
-    const auto animation = file_->ReadAnimation(animation_path_);
-    if (!animation) {
-        ReportProblem(QString::fromStdString(animation.error()));
-        return;
-    }
-    auto copied = Document::CopySpan(*animation, animation_path_, clip_, depth, frame);
+    auto copied = Document::CopySpanFrom(*file_, animation_path_, clip_, depth, frame);
     if (!copied) {
         ReportProblem(QString::fromStdString(copied.error()));
         return;
@@ -222,17 +218,16 @@ void Window::PasteSpanAt(uint32_t frame) {
     const std::optional<uint16_t> to = AskForFreeDepth(tr("Paste onto a depth"), 0);
     if (!to) return;
     const Document::ClipId clip = clip_;
-    const Document::CopiedSpan copied = *copied_span_;
+    const Document::CopiedSpan& copied = *copied_span_;
     const std::string path = animation_path_;
     const uint16_t depth = *to;
-    if (!EditAnimation(tr("Paste onto depth %1").arg(depth),
-                       [path, clip, copied, depth, frame](AfpAnimation::Animation& edited) {
-                           using Pasted = Support::Expected<void, std::string>;
-                           auto placed =
-                               Document::PasteSpan(edited, path, clip, copied, depth, frame);
-                           if (!placed) return Pasted(Support::Unexpected(placed.error()));
-                           return Pasted();
-                       })) {
+    if (!EditDocument(tr("Paste onto depth %1").arg(depth), [&path, clip, &copied, depth,
+                                                             frame](Document::File& document) {
+            using Pasted = Support::Expected<void, std::string>;
+            auto placed = Document::PasteSpanInto(document, path, clip, copied, depth, frame);
+            if (!placed) return Pasted(Support::Unexpected(placed.error()));
+            return Pasted();
+        })) {
         return;
     }
     depth_ = depth;

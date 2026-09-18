@@ -304,6 +304,32 @@ directly or through other sprites, since the sprite would then place itself.
 `span_clipboard_tests` covers each case, and the self-placement check was seen
 to fail it when switched off.
 
+### Pasting a span into another animation (`document/span_transplant.h`)
+
+`CopySpanFrom(file, path, clip, depth, frame)` is `CopySpan` plus what a paste
+into another animation needs: the whole source animation and the bytes of each
+of its shape files (`geo/<name>_shape<id>`). `PasteSpanInto(file, path, clip,
+copied, depth, frame)` pastes straight through `PasteSpan` when the target is
+the animation the span came from. Otherwise it collects every character the
+copied placements reach, following the placements inside copied sprites, and
+defines each one again in the target under a new id counted up from
+`NextCharacterId`, children before the sprites that place them. Sprite
+placements are renumbered to the new ids, and every string a definition or a
+placement names (labels, instance names, call text) is interned again in the
+target, since string ids are per animation. Each copied shape file is added
+under its new id and listed in `afplist.xml`, and only then is the span pasted
+with `PasteSpan` and its checks. Bitmap images are package entries shared by
+every animation, so an `Image` definition carries over as it is.
+
+It refuses a character imported from another movie (the target would need that
+import too), one the source animation never defines, a copied sprite holding a
+tag the editor does not read (it cannot tell what that tag refers to) and one
+defining a sprite inside itself. The package is only changed when every step
+succeeds. `span_transplant_tests` covers the carried sprite, shape, label and
+shape file, the import refusal and the same-animation paste. Leaving out the
+string carry, the renumbering inside sprites or of the pasted placements, the
+shape files, the import check or the same-animation path each fails them.
+
 ### Trimming a span (`document/span_trim.h`)
 
 `TrimSpan` gives a span new first and last frames. The end is the simple side:
@@ -1338,4 +1364,18 @@ not a guess, it is what 106322 of the install's 106372 images do (docs are in
 the repo notes), and it is why an image must be at least two pixels on a side.
 
 Removing an image takes its node out of the list, drops a `texture` that has no
-images left, and removes the entry.
+images left, and removes the entry. It finds the entry before touching the list,
+so a missing entry leaves the package as it was.
+
+`ReadImage(archive, name)` gives an image back as BGRA with the size its
+`imgrect` gives: it finds the name in the texture list, decodes the entry's blob
+with the list's `compress` setting and converts the pixels from the texture's
+format. Only `argb8888rev` converts today, and any other format is refused by
+name rather than guessed at.
+
+An image's entry is found by the path the outline uses, the unescaped form of
+the hashed name. `HashedName` escapes a hash that starts with a digit with a
+leading `_`, so a path built from `HashedName` alone misses every such image.
+`RemoveImage` did exactly that and could not remove one; `document_tests` adds
+`tint`, whose hash starts with `1`, and failed to read or remove it before the
+path went through `UnescapeName`.

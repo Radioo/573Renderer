@@ -6,6 +6,7 @@
 #include "support/expected.h"
 
 #include <cstdint>
+#include <map>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -17,6 +18,8 @@ struct CopiedSpan {
     std::string animation;
     uint32_t length = 0;
     std::vector<std::pair<uint32_t, AfpAnimation::Placement>> placements;
+    AfpAnimation::Animation source;
+    std::map<uint16_t, std::vector<uint8_t>> shape_files;
 };
 
 [[nodiscard]] Support::Expected<CopiedSpan, std::string>

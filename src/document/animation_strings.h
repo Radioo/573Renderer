@@ -17,6 +17,9 @@ void CompactStrings(AfpAnimation::Animation& animation);
 
 void InsertExport(AfpAnimation::Animation& animation, uint16_t tag, std::string_view name);
 
+void CarryStrings(AfpAnimation::Tag& tag, const AfpAnimation::Animation& from,
+                  AfpAnimation::Animation& to);
+
 [[nodiscard]] std::string StringText(const AfpAnimation::Animation& animation,
                                      AfpAnimation::StringId id);
 

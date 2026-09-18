@@ -119,4 +119,9 @@ std::string StringText(const AfpAnimation::Animation& animation, AfpAnimation::S
     return animation.strings[id];
 }
 
+void CarryStrings(AfpAnimation::Tag& tag, const AfpAnimation::Animation& from,
+                  AfpAnimation::Animation& to) {
+    VisitTag(tag, [&](AfpAnimation::StringId& id) { id = InternString(to, StringText(from, id)); });
+}
+
 }

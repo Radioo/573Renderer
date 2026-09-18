@@ -289,3 +289,5 @@ captured. This milestone is the editing itself.
 - `issues/81-copy-and-paste-depths.md` (milestone 8)
 - `issues/82-colour-picker.md` (milestone 8)
 - `issues/83-rename-animations.md` (milestone 8)
+- `issues/84-paste-across-animations.md` (milestone 8)
+- `issues/85-save-images.md` (milestone 8)

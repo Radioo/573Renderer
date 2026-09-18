@@ -181,6 +181,29 @@ TEST_CASE("An image is added with its own texture and its pixels") {
     CHECK(details->name == "added");
 }
 
+TEST_CASE("An image reads back as the pixels it was added with") {
+    auto file = Document::File::Open(SampleBytes());
+    REQUIRE(file.has_value());
+    std::vector<uint8_t> bgra(static_cast<std::size_t>(4) * 3 * 4);
+    for (std::size_t i = 0; i < bgra.size(); i++)
+        bgra[i] = static_cast<uint8_t>(i * 7);
+    REQUIRE(file->AddImage("added", 4, 3, bgra).has_value());
+    const auto encoded = file->Encode();
+    REQUIRE(encoded.has_value());
+    const auto reopened = Document::File::Open(*encoded);
+    REQUIRE(reopened.has_value());
+
+    const auto read = reopened->ReadImage("added");
+    INFO((read.has_value() ? std::string() : read.error()));
+    REQUIRE(read.has_value());
+    CHECK(read->width == 4);
+    CHECK(read->height == 3);
+    CHECK(read->bgra == bgra);
+    const auto missing = reopened->ReadImage("absent");
+    REQUIRE_FALSE(missing.has_value());
+    CHECK(missing.error().find("absent") != std::string::npos);
+}
+
 TEST_CASE("An image the package cannot take is refused") {
     auto file = Document::File::Open(SampleBytes());
     REQUIRE(file.has_value());
@@ -196,6 +219,21 @@ TEST_CASE("A removed image leaves the list and the entry") {
     CHECK(file->Problems().empty());
     CHECK_FALSE(file->Describe("tex/" + HashPath("bg03")).has_value());
     CHECK_FALSE(file->RemoveImage("bg03").has_value());
+}
+
+TEST_CASE("An image whose stored name starts with a digit is read and removed") {
+    auto file = Document::File::Open(SampleBytes());
+    REQUIRE(file.has_value());
+    REQUIRE(Ifs::HashedName("tint").starts_with("_1"));
+    REQUIRE(file->AddImage("tint", 2, 2, std::vector<uint8_t>(16, 0x40)).has_value());
+    const auto read = file->ReadImage("tint");
+    INFO((read.has_value() ? std::string() : read.error()));
+    CHECK(read.has_value());
+    const auto removed = file->RemoveImage("tint");
+    INFO((removed.has_value() ? std::string() : removed.error()));
+    REQUIRE(removed.has_value());
+    CHECK(file->Problems().empty());
+    CHECK_FALSE(file->Describe("tex/" + HashPath("tint")).has_value());
 }
 
 TEST_CASE("An added image survives an encode and a reopen") {

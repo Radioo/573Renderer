@@ -9,8 +9,10 @@
 #include <array>
 #include <cstdint>
 #include <map>
+#include <optional>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace Document {
 
@@ -34,5 +36,13 @@ NextCharacterId(const AfpAnimation::Animation& animation);
 
 [[nodiscard]] Support::Expected<uint16_t, std::string>
 AddImageShape(Ifs::Archive& archive, std::string_view animation_path, std::string_view image);
+
+[[nodiscard]] std::optional<std::vector<uint8_t>>
+ShapeFileBytes(const Ifs::Archive& archive, std::string_view animation_path, uint16_t id);
+
+[[nodiscard]] Support::Expected<void, std::string> AddShapeFile(Ifs::Archive& archive,
+                                                                std::string_view animation_path,
+                                                                uint16_t id,
+                                                                std::vector<uint8_t> bytes);
 
 }

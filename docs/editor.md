@@ -237,8 +237,11 @@ selected depth. `Copy depth N here` keeps that span in the window
 (`Window::CopySpanAt`), and `Paste the copied depth here...` asks for a depth,
 suggesting the same free one duplicate does, and pastes it at the frame under
 the cursor into whichever clip is picked (`Window::PasteSpanAt`,
-`Document::PasteSpan`), which is how a depth moves from the root into a sprite
-or between sprites. It also offers to group the selected depth and the ones above it
+`Document::PasteSpanInto`), which is how a depth moves from the root into a sprite
+or between sprites. The copy remembers the animation it came from, so pasting
+after opening another animation of the package brings the sprites and shapes
+the depth uses along under new ids, as one undo step. Opening a package drops
+the copy, because its shapes and images belong to the package it came from. It also offers to group the selected depth and the ones above it
 into a sprite (`Window::GroupDepthsIntoSprite`): it asks for the last depth, then
 the first and last frame, which start as the widest span those depths have under
 the playhead, and applies `Document::GroupIntoSprite` as one undo step. It is
@@ -307,7 +310,12 @@ inspector from the model, so the cell can never show a value the document does
 not hold.
 
 Right-clicking the package tree offers the entry edits: a new animation, add
-an image from a file, replace the selected entry from a file, and remove it.
+an image from a file, replace the selected entry from a file, and remove it. On
+an image it also offers `Save <name> as PNG...` (`Window::SaveImageAs`), which
+reads the pixels through `Document::ReadImage` before asking for a path, so an
+image in a format the editor cannot convert is reported without a dialog, and
+writes them through `QImage`. Saving an added image gives back exactly the
+pixels it was added with, alpha included.
 A new animation asks for a name and a frame count and copies its header from the
 open animation, or the package's first one (`Window::AddNewAnimation`), then
 opens it. In a package with no animation it first asks for another IFS and which

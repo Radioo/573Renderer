@@ -94,7 +94,9 @@ Support::Expected<CopiedSpan, std::string> CopySpan(const AfpAnimation::Animatio
     }
     CopiedSpan copied{.animation = std::string(animation_path),
                       .length = span->last_frame - span->first_frame + 1,
-                      .placements = {}};
+                      .placements = {},
+                      .source = {},
+                      .shape_files = {}};
     for (const std::size_t index : SpanTags(*found, depth, *span)) {
         const auto* placement = std::get_if<AfpAnimation::Placement>(&found->tags[index].body);
         if (placement == nullptr) continue;

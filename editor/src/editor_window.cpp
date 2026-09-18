@@ -310,6 +310,7 @@ void Window::OpenDocument(const QString& path) {
     QSettings().setValue(kDocumentDirKey, QFileInfo(path).absolutePath());
     file_ = std::move(*file);
     history_.Clear();
+    copied_span_.reset();
     hidden_.clear();
     locked_.clear();
     document_path_ = path;
@@ -546,6 +547,7 @@ void Window::ShowPackageMenu(const QPoint& where) {
     QAction* add_image = menu.addAction(tr("Add an image from a file..."));
     QAction* own_image =
         project_ ? menu.addAction(tr("Add an image the project owns...")) : nullptr;
+    QAction* save_image = is_image ? menu.addAction(tr("Save %1 as PNG...").arg(name)) : nullptr;
     QAction* replace = path.isEmpty() ? nullptr : menu.addAction(tr("Replace %1...").arg(name));
     QAction* rename = is_animation ? menu.addAction(tr("Rename %1...").arg(name)) : nullptr;
     QAction* remove = path.isEmpty() ? nullptr : menu.addAction(tr("Remove %1").arg(name));
@@ -558,6 +560,10 @@ void Window::ShowPackageMenu(const QPoint& where) {
     }
     if (chosen == own_image) {
         AddProjectImage();
+        return;
+    }
+    if (chosen == save_image) {
+        SaveImageAs(name);
         return;
     }
     if (chosen == add_image) {
