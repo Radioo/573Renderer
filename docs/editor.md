@@ -228,7 +228,12 @@ offers to move the span under the playhead to another depth number
 (`Document::ChangeSpanDepth`), which moves an owned depth's record with it, and
 to duplicate it onto another depth (`Window::DuplicateSpanToDepth`, suggesting
 the first depth above every depth the clip uses), after which the copy is the
-selected depth. It also offers to group the selected depth and the ones above it
+selected depth. `Copy depth N here` keeps that span in the window
+(`Window::CopySpanAt`), and `Paste the copied depth here...` asks for a depth,
+suggesting the same free one duplicate does, and pastes it at the frame under
+the cursor into whichever clip is picked (`Window::PasteSpanAt`,
+`Document::PasteSpan`), which is how a depth moves from the root into a sprite
+or between sprites. It also offers to group the selected depth and the ones above it
 into a sprite (`Window::GroupDepthsIntoSprite`): it asks for the last depth, then
 the first and last frame, which start as the widest span those depths have under
 the playhead, and applies `Document::GroupIntoSprite` as one undo step. It is

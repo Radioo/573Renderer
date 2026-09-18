@@ -4,6 +4,7 @@
 #include "document/clip.h"
 #include "document/group_sprite.h"
 #include "document/outline.h"
+#include "document/span_clipboard.h"
 #include "document/span_edit.h"
 #include "document/span_trim.h"
 #include "document/timeline.h"
@@ -11,6 +12,7 @@
 #include "support/expected.h"
 
 #include <QInputDialog>
+#include <QStatusBar>
 #include <QString>
 
 #include <algorithm>
@@ -179,14 +181,13 @@ void Window::UngroupSpriteAt(uint16_t depth, uint32_t frame) {
     ShowFrame();
 }
 
-void Window::DuplicateSpanToDepth(uint16_t depth, uint32_t frame) {
-    if (!file_ || animation_path_.empty()) return;
+std::optional<uint16_t> Window::AskForFreeDepth(const QString& title, uint16_t fallback) {
     const auto animation = file_->ReadAnimation(animation_path_);
     if (!animation) {
         ReportProblem(QString::fromStdString(animation.error()));
-        return;
+        return std::nullopt;
     }
-    uint16_t highest = depth;
+    uint16_t highest = fallback;
     const auto details = Document::DescribeClip(*animation, clip_);
     if (details) {
         for (const Document::DepthRow& row : details->depths)
@@ -194,11 +195,56 @@ void Window::DuplicateSpanToDepth(uint16_t depth, uint32_t frame) {
     }
     const int suggested = std::min<int>(highest + 1, std::numeric_limits<uint16_t>::max());
     bool answered = false;
-    const int chosen =
-        QInputDialog::getInt(this, tr("Duplicate onto another depth"), tr("Depth"), suggested, 0,
-                             std::numeric_limits<uint16_t>::max(), 1, &answered);
-    if (!answered) return;
-    const auto to = static_cast<uint16_t>(chosen);
+    const int chosen = QInputDialog::getInt(this, title, tr("Depth"), suggested, 0,
+                                            std::numeric_limits<uint16_t>::max(), 1, &answered);
+    if (!answered) return std::nullopt;
+    return static_cast<uint16_t>(chosen);
+}
+
+void Window::CopySpanAt(uint16_t depth, uint32_t frame) {
+    if (!file_ || animation_path_.empty()) return;
+    const auto animation = file_->ReadAnimation(animation_path_);
+    if (!animation) {
+        ReportProblem(QString::fromStdString(animation.error()));
+        return;
+    }
+    auto copied = Document::CopySpan(*animation, animation_path_, clip_, depth, frame);
+    if (!copied) {
+        ReportProblem(QString::fromStdString(copied.error()));
+        return;
+    }
+    copied_span_ = std::move(*copied);
+    statusBar()->showMessage(tr("Copied depth %1, %2 frames").arg(depth).arg(copied_span_->length));
+}
+
+void Window::PasteSpanAt(uint32_t frame) {
+    if (!file_ || animation_path_.empty() || !copied_span_) return;
+    const std::optional<uint16_t> to = AskForFreeDepth(tr("Paste onto a depth"), 0);
+    if (!to) return;
+    const Document::ClipId clip = clip_;
+    const Document::CopiedSpan copied = *copied_span_;
+    const std::string path = animation_path_;
+    const uint16_t depth = *to;
+    if (!EditAnimation(tr("Paste onto depth %1").arg(depth),
+                       [path, clip, copied, depth, frame](AfpAnimation::Animation& edited) {
+                           using Pasted = Support::Expected<void, std::string>;
+                           auto placed =
+                               Document::PasteSpan(edited, path, clip, copied, depth, frame);
+                           if (!placed) return Pasted(Support::Unexpected(placed.error()));
+                           return Pasted();
+                       })) {
+        return;
+    }
+    depth_ = depth;
+    ShowFrame();
+}
+
+void Window::DuplicateSpanToDepth(uint16_t depth, uint32_t frame) {
+    if (!file_ || animation_path_.empty()) return;
+    const std::optional<uint16_t> chosen =
+        AskForFreeDepth(tr("Duplicate onto another depth"), depth);
+    if (!chosen) return;
+    const auto to = *chosen;
     const Document::ClipId clip = clip_;
     if (!EditAnimation(tr("Duplicate depth %1 onto depth %2").arg(depth).arg(to),
                        [clip, depth, frame, to](AfpAnimation::Animation& edited) {

@@ -509,6 +509,32 @@ TEST_CASE("Depths grouped from the timeline menu become a sprite, and ungrouping
     CHECK(refused.Problems().front().contains("sprite"));
 }
 
+TEST_CASE("A depth copied from the timeline pastes onto a free depth at the playhead") {
+    Opened opened;
+    Open(opened);
+    auto* timeline = opened.window.findChild<Editor::Timeline*>();
+    REQUIRE(timeline != nullptr);
+    emit timeline->DepthChosen(1);
+    {
+        Script copied({Choose("Copy depth 1 here")});
+        emit timeline->MenuRequested(QPoint(4, 4), 1, QString());
+        REQUIRE(Settle([&copied] { return copied.Finished(); }));
+        CHECK(copied.Problems().isEmpty());
+    }
+    {
+        Script pasted({Choose("Paste the copied depth here..."), AcceptNumber()});
+        emit timeline->MenuRequested(QPoint(4, 4), 0, QString());
+        REQUIRE(Settle([&pasted] { return pasted.Finished(); }));
+        CHECK(pasted.Problems().isEmpty());
+        CHECK(RowValue(*opened.inspector, "Depth") == "2");
+        CHECK(RowValue(*opened.inspector, "Character") == "7");
+    }
+    Script refused({Choose("Paste the copied depth here..."), AnswerNumber(1)});
+    emit timeline->MenuRequested(QPoint(4, 4), 0, QString());
+    REQUIRE(Settle([&refused] { return !refused.Problems().isEmpty(); }));
+    CHECK(refused.Problems().front().contains("depth 1"));
+}
+
 TEST_CASE("A stage drag only changes the document when it ends") {
     Opened opened;
     Open(opened);

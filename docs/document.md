@@ -288,6 +288,22 @@ owning only the original.
 `ShiftAuthored` moves a project-owned depth's range and every keyframe by the
 same frames, so the project keeps describing the span after `MoveSpan`.
 
+### Copying a span between clips (`document/span_clipboard.h`)
+
+`CopySpan(animation, path, clip, depth, frame)` records the span of a depth
+around a frame as a `CopiedSpan`: its length and each placement with its frame
+and end frame made relative to the span's first frame. `PasteSpan` writes that
+onto a depth of any clip of the same animation from a given frame, puts the end
+frames back relative to that frame, and closes the span with a remove on the
+frame after it when the clip goes on. It refuses a depth the game reserves, a
+span that would run past the clip, a depth that shows something or is placed or
+removed on those frames, and a clip in another animation, because a placement
+names its character by an id that only means something inside its own
+animation. It also refuses to paste a sprite into a clip that sprite contains,
+directly or through other sprites, since the sprite would then place itself.
+`span_clipboard_tests` covers each case, and the self-placement check was seen
+to fail it when switched off.
+
 ### Trimming a span (`document/span_trim.h`)
 
 `TrimSpan` gives a span new first and last frames. The end is the simple side:

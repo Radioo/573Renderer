@@ -7,6 +7,7 @@
 #include "document/clip.h"
 #include "document/group_sprite.h"
 #include "document/hidden_depths.h"
+#include "document/span_clipboard.h"
 #include "document/history.h"
 #include "document/inspector.h"
 #include "document/key_selection.h"
@@ -185,6 +186,9 @@ private:
     void MoveSpanInTime(uint16_t depth, uint32_t frame, int64_t by);
     void MoveSpanToDepth(uint16_t depth, uint32_t frame);
     void DuplicateSpanToDepth(uint16_t depth, uint32_t frame);
+    [[nodiscard]] std::optional<uint16_t> AskForFreeDepth(const QString& title, uint16_t fallback);
+    void CopySpanAt(uint16_t depth, uint32_t frame);
+    void PasteSpanAt(uint32_t frame);
     void GroupDepthsIntoSprite(uint16_t depth, uint32_t frame);
     void UngroupSpriteAt(uint16_t depth, uint32_t frame);
     [[nodiscard]] std::vector<uint16_t> HiddenHere() const;
@@ -233,6 +237,7 @@ private:
     std::vector<Document::AuthoredDepth> authored_;
     std::vector<Document::DepthInClip> hidden_;
     std::vector<Document::DepthInClip> locked_;
+    std::optional<Document::CopiedSpan> copied_span_;
     QString key_property_;
     std::optional<uint32_t> key_frame_;
     std::optional<Document::KeyClip> copied_keys_;

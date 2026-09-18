@@ -42,6 +42,8 @@ void Window::ShowTimelineMenu(const QPoint& where, uint32_t frame, const QString
     QAction* restack =
         depth_ ? menu.addAction(tr("Move depth %1 here to another depth...").arg(*depth_))
                : nullptr;
+    QAction* copy = depth_ ? menu.addAction(tr("Copy depth %1 here").arg(*depth_)) : nullptr;
+    QAction* paste = copied_span_ ? menu.addAction(tr("Paste the copied depth here...")) : nullptr;
     QAction* duplicate =
         depth_ ? menu.addAction(tr("Duplicate depth %1 here onto another depth...").arg(*depth_))
                : nullptr;
@@ -180,6 +182,14 @@ void Window::ShowTimelineMenu(const QPoint& where, uint32_t frame, const QString
     }
     if (chosen == hide) {
         ToggleHidden(static_cast<uint16_t>(*depth_));
+        return;
+    }
+    if (chosen == copy) {
+        CopySpanAt(static_cast<uint16_t>(*depth_), frame);
+        return;
+    }
+    if (chosen == paste) {
+        PasteSpanAt(frame);
         return;
     }
     if (chosen == restack || chosen == duplicate || chosen == group || chosen == ungroup) {

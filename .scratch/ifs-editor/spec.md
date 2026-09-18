@@ -286,3 +286,4 @@ captured. This milestone is the editing itself.
 - `issues/78-work-area.md` (milestone 8)
 - `issues/79-save-the-frame.md` (milestone 8)
 - `issues/80-qt-image-formats.md` (milestone 8)
+- `issues/81-copy-and-paste-depths.md` (milestone 8)
