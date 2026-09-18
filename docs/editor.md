@@ -109,10 +109,18 @@ A plugin's own dependencies need the same care: `qjpeg.dll` needs
 dependencies, not a plugin's. Windows also looks for a plugin's dependencies
 next to the executable rather than next to the plugin, which was checked by
 hand: with `jpeg62.dll` in `imageformats/` Qt still listed no JPEG support,
-and with it beside the executable it did. So the copy puts the plugin beside
-the executable first, runs vcpkg's `z-applocal` on it there, and then moves it
-into its subdirectory, which leaves the plugin where Qt looks and its
-dependencies where Windows looks.
+and with it beside the executable it did. So the step copies the plugin into
+its subdirectory, copies it once more beside the executable, runs vcpkg's
+`z-applocal` on that second copy and deletes it, which leaves the plugin where
+Qt looks and its dependencies where Windows looks.
+
+The copy beside the executable is named after the target
+(`ifs_editor_qjpeg.dll`, `editor_window_tests_qjpeg.dll`). `ifs_editor` and both
+test executables deploy `qjpeg` into the same directory, and ninja links them in
+parallel; with one shared name, one target's delete removed the copy while
+another's `z-applocal` was reading it (`qjpeg.dll: warning: no such file or
+directory`), which failed about one relink in three. Eight relinks in a row
+passed once each target had its own name.
 
 ## Window layout
 
@@ -177,8 +185,21 @@ last good image on screen: the error goes to the status bar every time and to a
 dialog only when it is not the error already showing, so a host that dies while
 the viewport is being dragged does not produce one dialog per frame.
 
-Clicking the viewport maps the point to stage pixels through the fitted
-image and selects the highest depth whose `Document::StageOutlines` outline
+Ctrl and the mouse wheel zoom the stage around the point under the cursor,
+which stays put, by the timeline's step of 1.25 a notch between a quarter and
+32 times the fitted size; dragging with the middle button pans it, and `View >
+Fit the stage in the view` (Ctrl+0) puts both back. Every mapping between the
+widget and the stage goes through one rectangle (`Viewport::Target`), the
+fitted stage scaled by the zoom and moved by the pan, so picking, dragging,
+the handles, the snap reach and the guides follow the zoom without code of
+their own. A zoom also asks the host for a larger render
+(`Viewport::FittedSize`, reached through `ZoomChanged` and the same debounce a
+resize uses), up to the stage's own size or the fitted size when that is
+larger. Past that the game's pixels are shown enlarged, which is what the game
+would draw, rather than a render the game never makes.
+
+Clicking the viewport maps the point to stage pixels through that rectangle
+and selects the highest depth whose `Document::StageOutlines` outline
 holds it, or clears the selection; the selected depth is outlined. Dragging
 inside that outline moves the outline with the pointer, and letting go moves
 the depth by the offset: `Document::MoveOwnedDepth` through `EditAuthored` for

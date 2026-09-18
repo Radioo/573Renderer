@@ -183,6 +183,7 @@ void Window::BuildPanels() {
     resize_timer_->setInterval(kResizeDelayMs);
     connect(resize_timer_, &QTimer::timeout, this, &Window::ResizeViewport);
     connect(viewport_, &Viewport::Resized, this, [this](int, int) { resize_timer_->start(); });
+    connect(viewport_, &Viewport::ZoomChanged, this, [this] { resize_timer_->start(); });
     connect(viewport_, &Viewport::Picked, this, &Window::PickOnStage);
     connect(viewport_, &Viewport::Dragged, this, &Window::MoveOnStage);
     connect(viewport_, &Viewport::Reshaped, this, &Window::ReshapeOnStage);

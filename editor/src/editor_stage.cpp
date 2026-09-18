@@ -11,6 +11,7 @@
 #include "support/expected.h"
 
 #include <QAction>
+#include <QKeySequence>
 #include <QMenu>
 #include <QMenuBar>
 #include <QSettings>
@@ -36,6 +37,9 @@ void Window::AddViewMenu() {
         QSettings().setValue(kSnapKey, on);
         viewport_->SetSnapping(on);
     });
+    QAction* fit = view->addAction(tr("&Fit the stage in the view"));
+    fit->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_0));
+    connect(fit, &QAction::triggered, viewport_, &Viewport::FitStage);
 }
 
 bool Window::OutlinesMatchView() const {

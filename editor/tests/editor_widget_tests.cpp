@@ -17,6 +17,7 @@
 #include <QImage>
 #include <QKeyEvent>
 #include <QMouseEvent>
+#include <QWheelEvent>
 #include <QObject>
 #include <QPoint>
 #include <QPointF>
@@ -81,6 +82,35 @@ void ShowScene(Editor::Timeline& timeline) {
 
 Document::KeyRef Ref(const char* property, uint32_t frame) {
     return Document::KeyRef{.property = property, .frame = frame};
+}
+
+void Wheel(QWidget& widget, QPointF at, int notches, Qt::KeyboardModifiers modifiers) {
+    QWheelEvent event(at, widget.mapToGlobal(at), QPoint(), QPoint(0, 120 * notches), Qt::NoButton,
+                      modifiers, Qt::NoScrollPhase, false);
+    QApplication::sendEvent(&widget, &event);
+}
+
+void MiddleDrag(QWidget& widget, QPointF from, QPointF to) {
+    QMouseEvent press(QEvent::MouseButtonPress, from, widget.mapToGlobal(from), Qt::MiddleButton,
+                      Qt::MiddleButton, Qt::NoModifier);
+    QApplication::sendEvent(&widget, &press);
+    QMouseEvent move(QEvent::MouseMove, to, widget.mapToGlobal(to), Qt::NoButton, Qt::MiddleButton,
+                     Qt::NoModifier);
+    QApplication::sendEvent(&widget, &move);
+    QMouseEvent release(QEvent::MouseButtonRelease, to, widget.mapToGlobal(to), Qt::MiddleButton,
+                        Qt::NoButton, Qt::NoModifier);
+    QApplication::sendEvent(&widget, &release);
+}
+
+std::vector<QPointF> PickedAt(Editor::Viewport& viewport, const std::vector<QPointF>& points) {
+    std::vector<QPointF> picked;
+    const QMetaObject::Connection connection =
+        QObject::connect(&viewport, &Editor::Viewport::Picked,
+                         [&picked](double x, double y) { picked.emplace_back(x, y); });
+    for (const QPointF& point : points)
+        Click(viewport, point);
+    QObject::disconnect(connection);
+    return picked;
 }
 
 void ShowStage(Editor::Viewport& viewport) {
@@ -313,6 +343,49 @@ TEST_CASE("Clicking the stage reports where in stage pixels") {
     CHECK_THAT(picked[0].y(), WithinAbs(800, 1e-9));
     CHECK(viewport.FittedSize(QSize(1000, 1000)) == QSize(1000, 562));
     CHECK_FALSE(viewport.grab().isNull());
+}
+
+TEST_CASE("Ctrl and the wheel zoom the stage around the cursor, and fitting undoes it") {
+    Editor::Viewport viewport;
+    ShowStage(viewport);
+    int zoomed = 0;
+    QObject::connect(&viewport, &Editor::Viewport::ZoomChanged, [&zoomed] { zoomed++; });
+    Wheel(viewport, {600, 400}, 1, Qt::NoModifier);
+    CHECK(zoomed == 0);
+    CHECK(PickedAt(viewport, {{0, 0}}) == std::vector<QPointF>{{0, 0}});
+
+    Wheel(viewport, {600, 400}, 2, Qt::ControlModifier);
+    CHECK(zoomed == 1);
+    const std::vector<QPointF> picked = PickedAt(viewport, {{600, 400}, {0, 0}});
+    REQUIRE(picked.size() == 2);
+    CHECK_THAT(picked[0].x(), WithinAbs(1200, 1e-6));
+    CHECK_THAT(picked[0].y(), WithinAbs(800, 1e-6));
+    CHECK_THAT(picked[1].x(), WithinAbs(1200 - (1200 / 1.5625), 1e-6));
+    CHECK_THAT(picked[1].y(), WithinAbs(800 - (800 / 1.5625), 1e-6));
+    CHECK(viewport.FittedSize(QSize(960, 540)) == QSize(1500, 844));
+
+    Wheel(viewport, {600, 400}, 8, Qt::ControlModifier);
+    CHECK(viewport.FittedSize(QSize(960, 540)) == QSize(1920, 1080));
+
+    viewport.FitStage();
+    CHECK(zoomed == 3);
+    CHECK(PickedAt(viewport, {{600, 400}}) == std::vector<QPointF>{{1200, 800}});
+    CHECK(viewport.FittedSize(QSize(960, 540)) == QSize(960, 540));
+}
+
+TEST_CASE("Dragging with the middle button pans the stage") {
+    Editor::Viewport viewport;
+    ShowStage(viewport);
+    std::vector<Move> moves;
+    QObject::connect(&viewport, &Editor::Viewport::Dragged,
+                     [&moves](uint16_t, double dx, double dy, bool finished) {
+                         moves.push_back({.by = QPointF(dx, dy), .finished = finished});
+                     });
+    MiddleDrag(viewport, {150, 100}, {250, 150});
+    CHECK(moves.empty());
+    CHECK(PickedAt(viewport, {{250, 150}}) == std::vector<QPointF>{{300, 200}});
+    viewport.FitStage();
+    CHECK(PickedAt(viewport, {{300, 250}}) == std::vector<QPointF>{{600, 500}});
 }
 
 TEST_CASE("Dragging inside the selection moves it by the stage offset") {

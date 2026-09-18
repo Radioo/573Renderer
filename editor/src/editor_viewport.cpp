@@ -14,7 +14,11 @@
 #include <QRectF>
 #include <QResizeEvent>
 #include <QSize>
+#include <QSizeF>
+#include <QWheelEvent>
 
+#include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <optional>
 #include <utility>
@@ -37,6 +41,10 @@ const QColor kGuideColour(255, 80, 200);
 constexpr double kSnapReach = 6.0;
 constexpr double kNudge = 1.0;
 constexpr double kShiftNudge = 10.0;
+constexpr double kZoomStep = 1.25;
+constexpr double kLeastZoom = 0.25;
+constexpr double kMostZoom = 32.0;
+constexpr int kWheelNotch = 120;
 
 QPointF Middle(QPointF a, QPointF b) {
     return (a + b) / 2.0;
@@ -104,7 +112,40 @@ void Viewport::ShowOutlines(std::vector<Document::StageOutline> outlines,
 
 QSize Viewport::FittedSize(QSize available) const {
     if (stage_.isEmpty()) return available;
-    return stage_.scaled(available, Qt::KeepAspectRatio);
+    const QSize fitted = stage_.scaled(available, Qt::KeepAspectRatio);
+    if (zoom_ <= 1.0) return fitted;
+    const QSize largest = fitted.width() > stage_.width() ? fitted : stage_;
+    const QSize zoomed = (QSizeF(fitted) * zoom_).toSize();
+    return zoomed.width() > largest.width() ? largest : zoomed;
+}
+
+void Viewport::FitStage() {
+    zoom_ = 1.0;
+    pan_ = QPointF();
+    update();
+    emit ZoomChanged();
+}
+
+void Viewport::wheelEvent(QWheelEvent* event) {
+    if ((event->modifiers() & Qt::ControlModifier) == 0 || event->angleDelta().y() == 0) {
+        QWidget::wheelEvent(event);
+        return;
+    }
+    event->accept();
+    const QRectF before = Target();
+    if (before.isEmpty()) return;
+    const double notches = static_cast<double>(event->angleDelta().y()) / kWheelNotch;
+    zoom_ = std::clamp(zoom_ * std::pow(kZoomStep, notches), kLeastZoom, kMostZoom);
+    const QPointF cursor = event->position();
+    const QPointF fraction((cursor.x() - before.x()) / before.width(),
+                           (cursor.y() - before.y()) / before.height());
+    const QSizeF after = Target().size();
+    const QPointF top_left(cursor.x() - (fraction.x() * after.width()),
+                           cursor.y() - (fraction.y() * after.height()));
+    pan_ = top_left + QPointF(after.width() / 2, after.height() / 2) -
+           QPointF(width() / 2.0, height() / 2.0);
+    update();
+    emit ZoomChanged();
 }
 
 void Viewport::SetSnapping(bool on) {
@@ -138,9 +179,10 @@ void Viewport::DrawGuides(QPainter& painter, const Document::StageOutline& outli
 }
 
 QRectF Viewport::Target() const {
-    const QSize fitted = frame_.size().scaled(size(), Qt::KeepAspectRatio);
-    return {QPointF((width() - fitted.width()) / 2.0, (height() - fitted.height()) / 2.0),
-            QSizeF(fitted)};
+    const QSize shape = stage_.isEmpty() ? frame_.size() : stage_;
+    const QSizeF shown = QSizeF(shape.scaled(size(), Qt::KeepAspectRatio)) * zoom_;
+    const QPointF centre = QPointF(width() / 2.0, height() / 2.0) + pan_;
+    return {centre - QPointF(shown.width() / 2, shown.height() / 2), shown};
 }
 
 std::optional<QPointF> Viewport::ToStage(QPointF widget) const {
@@ -250,6 +292,10 @@ void Viewport::resizeEvent(QResizeEvent* event) {
 }
 
 void Viewport::mousePressEvent(QMouseEvent* event) {
+    if (event->button() == Qt::MiddleButton) {
+        panning_from_ = event->position();
+        return;
+    }
     gesture_ = Gesture::None;
     dragging_ = false;
     if (event->button() != Qt::LeftButton) return;
@@ -274,6 +320,12 @@ void Viewport::mousePressEvent(QMouseEvent* event) {
 }
 
 void Viewport::mouseMoveEvent(QMouseEvent* event) {
+    if (panning_from_ && (event->buttons() & Qt::MiddleButton) != 0) {
+        pan_ += event->position() - *panning_from_;
+        panning_from_ = event->position();
+        update();
+        return;
+    }
     if (gesture_ == Gesture::None || (event->buttons() & Qt::LeftButton) == 0) return;
     if (!dragging_ && QLineF(press_, event->position()).length() < kDragThreshold) return;
     const std::optional<QPointF> stage = ToStage(event->position());
@@ -309,6 +361,10 @@ void Viewport::EmitGesture(Gesture gesture, const Document::StageOutline& outlin
 }
 
 void Viewport::mouseReleaseEvent(QMouseEvent* event) {
+    if (event->button() == Qt::MiddleButton) {
+        panning_from_.reset();
+        return;
+    }
     if (event->button() != Qt::LeftButton) return;
     const Gesture gesture = dragging_ ? gesture_ : Gesture::None;
     const Document::StageOutline* selected = SelectedOutline();

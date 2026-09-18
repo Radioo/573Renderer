@@ -94,7 +94,7 @@ set(R573_VCPKG_BIN "${CMAKE_BINARY_DIR}/vcpkg_installed/${VCPKG_TARGET_TRIPLET}/
 function(r573_deploy_qt_plugin target plugin)
     get_target_property(plugin_type ${plugin} QT_PLUGIN_TYPE)
     set(plugin_dir "$<TARGET_FILE_DIR:${target}>/${plugin_type}")
-    set(beside "$<TARGET_FILE_DIR:${target}>/$<TARGET_FILE_NAME:${plugin}>")
+    set(beside "$<TARGET_FILE_DIR:${target}>/${target}_$<TARGET_FILE_NAME:${plugin}>")
     add_custom_command(TARGET ${target} POST_BUILD
         COMMAND "${CMAKE_COMMAND}" -E make_directory "${plugin_dir}"
         COMMAND "${CMAKE_COMMAND}" -E copy_if_different "$<TARGET_FILE:${plugin}>" "${plugin_dir}"

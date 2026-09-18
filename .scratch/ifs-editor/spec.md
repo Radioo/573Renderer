@@ -293,3 +293,4 @@ captured. This milestone is the editing itself.
 - `issues/85-save-images.md` (milestone 8)
 - `issues/86-remove-unused-definitions.md` (milestone 8)
 - `issues/87-replace-images-with-pictures.md` (milestone 8)
+- `issues/88-zoom-and-pan-the-stage.md` (milestone 8)

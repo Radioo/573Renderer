@@ -19,6 +19,7 @@ class QMouseEvent;
 class QPainter;
 class QPaintEvent;
 class QResizeEvent;
+class QWheelEvent;
 
 namespace Editor {
 
@@ -34,12 +35,14 @@ public:
                       std::optional<uint16_t> selected);
     [[nodiscard]] QSize FittedSize(QSize available) const;
     void SetSnapping(bool on);
+    void FitStage();
 
 signals:
     void Resized(int width, int height);
     void Picked(double x, double y);
     void Dragged(uint16_t depth, double dx, double dy, bool finished);
     void Reshaped(uint16_t depth, double scale_x, double scale_y, double turn, bool finished);
+    void ZoomChanged();
 
 protected:
     void paintEvent(QPaintEvent* event) override;
@@ -48,6 +51,7 @@ protected:
     void mouseMoveEvent(QMouseEvent* event) override;
     void mouseReleaseEvent(QMouseEvent* event) override;
     void keyPressEvent(QKeyEvent* event) override;
+    void wheelEvent(QWheelEvent* event) override;
 
 private:
     enum class Gesture : uint8_t { None, Move, Scale, Turn };
@@ -77,6 +81,9 @@ private:
     bool dragging_ = false;
     bool snapping_ = false;
     bool snap_suspended_ = false;
+    double zoom_ = 1.0;
+    QPointF pan_;
+    std::optional<QPointF> panning_from_;
 };
 
 }
