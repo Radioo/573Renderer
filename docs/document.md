@@ -813,6 +813,16 @@ draws, which `File::ShapeImages` reads from `geo/`, unless an export names it.
 The editor's add depth offers exactly this list, so a new depth is always
 pointed at something the animation can actually place.
 
+`CharacterUses` counts, for each character id, the placements that name it in
+the root and in every sprite the root defines: once for a placement's character
+and once for its grid controller's tag, the two fields afp-core resolves to a
+definition (the notes repo's `Core/afp_format.md`, section 9.7). Updates that
+name no character do not count. It counts every sprite, used or not, so it
+answers "what refers to this" rather than "what the game reaches", which is
+`RemoveUnusedDefinitions`' question. `characters_tests` covers placements in
+the root and in two sprites, a grid controller and an update, and dropping the
+sprites or the grid controllers fails it.
+
 ### Animation settings (`document/animation_settings.h`)
 
 With no depth chosen on the root timeline, the inspector shows the animation's

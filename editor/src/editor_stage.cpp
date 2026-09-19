@@ -10,6 +10,9 @@
 #include "formats/afp_animation.h"
 #include "support/expected.h"
 
+#include <DockManager.h>
+#include <DockWidget.h>
+
 #include <QAction>
 #include <QKeySequence>
 #include <QMenu>
@@ -37,6 +40,9 @@ void Window::AddViewMenu() {
         QSettings().setValue(kSnapKey, on);
         viewport_->SetSnapping(on);
     });
+    QMenu* panels = view->addMenu(tr("&Panels"));
+    for (ads::CDockWidget* dock : docks_->dockWidgetsMap())
+        panels->addAction(dock->toggleViewAction());
     QAction* fit = view->addAction(tr("&Fit the stage in the view"));
     fit->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_0));
     connect(fit, &QAction::triggered, viewport_, &Viewport::FitStage);

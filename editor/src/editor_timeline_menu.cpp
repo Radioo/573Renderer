@@ -81,7 +81,6 @@ void Window::ShowTimelineMenu(const QPoint& where, uint32_t frame, const QString
     const AfpAnimation::Container* shown =
         animation ? Document::FindClip(*animation, clip) : nullptr;
     const bool has_camera = shown != nullptr && Document::CameraTag(*shown, frame).has_value();
-    const auto clip_frames = static_cast<int>(shown != nullptr ? shown->frames.size() : 0);
     QAction* add_camera =
         has_camera ? nullptr : menu.addAction(tr("Add a camera on frame %1...").arg(frame));
     QAction* remove_camera =
@@ -140,28 +139,19 @@ void Window::ShowTimelineMenu(const QPoint& where, uint32_t frame, const QString
         return;
     }
     if (chosen == add_depth) {
-        bool answered = false;
-        const int last =
-            QInputDialog::getInt(this, tr("Add a depth"), tr("Last frame"), static_cast<int>(frame),
-                                 static_cast<int>(frame),
-                                 std::max(clip_frames - 1, static_cast<int>(frame)), 1, &answered);
-        if (!answered || !animation) return;
+        const std::optional<uint32_t> until = AskForLastFrame(frame);
+        if (!until || !animation) return;
         const std::optional<Placeable> choice = ChoosePlaceable(*animation);
         if (!choice) return;
         const auto depth = static_cast<uint16_t>(*depth_);
-        const auto until = static_cast<uint32_t>(last);
         if (!choice->character) {
             PlaceImage(choice->image, Document::DepthSpan{.clip = clip,
                                                           .depth = depth,
                                                           .first_frame = frame,
-                                                          .last_frame = until});
+                                                          .last_frame = *until});
             return;
         }
-        const uint16_t placed = *choice->character;
-        EditAnimation(tr("Add depth %1").arg(*depth_),
-                      [clip, depth, placed, frame, until](AfpAnimation::Animation& edited) {
-                          return Document::AddDepth(edited, clip, depth, placed, frame, until);
-                      });
+        AddCharacterDepth(depth, *choice->character, frame, *until);
         return;
     }
     if (chosen == export_name) {

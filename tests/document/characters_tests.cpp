@@ -5,6 +5,7 @@
 #include "formats/afp_animation.h"
 
 #include <algorithm>
+#include <cstddef>
 #include <cstdint>
 #include <map>
 #include <vector>
@@ -76,4 +77,35 @@ TEST_CASE("A shape reads as the image it draws") {
         Document::Characters(Scene(), {{uint16_t{8}, "bg_star"}});
     REQUIRE(WithId(list, 8) != nullptr);
     CHECK(WithId(list, 8)->label == "Shape 8: bg_star");
+}
+
+TEST_CASE("Uses count every placement that names a character, inside sprites too") {
+    AfpAnimation::Animation animation = Scene();
+    const auto placed = [](uint16_t depth, uint16_t character) {
+        AfpAnimation::Placement placement;
+        placement.depth = depth;
+        placement.character = character;
+        return AfpAnimation::Tag{placement};
+    };
+    const auto updated = [](uint16_t depth) {
+        AfpAnimation::Placement placement;
+        placement.depth = depth;
+        return AfpAnimation::Tag{placement};
+    };
+    AfpAnimation::Tag gridded = placed(1, 8);
+    auto& grid = std::get<AfpAnimation::Placement>(gridded.body);
+    grid.extended_flags = 0;
+    grid.grid_controller = AfpAnimation::GridController{.tag = 3, .first = 0, .second = 0};
+    std::get<AfpAnimation::Sprite>(animation.root.tags[1].body).container.tags = {gridded,
+                                                                                  updated(1)};
+    std::get<AfpAnimation::Sprite>(animation.root.tags[2].body).container.tags = {placed(2, 8)};
+    animation.root.tags.push_back(placed(4, 5));
+    animation.root.tags.push_back(updated(4));
+    animation.root.tags.push_back(placed(6, 5));
+    animation.root.tags.push_back(placed(7, 20));
+
+    const std::map<uint16_t, std::size_t> expected{
+        {uint16_t{3}, 1U}, {uint16_t{5}, 2U}, {uint16_t{8}, 2U}, {uint16_t{20}, 1U}};
+    CHECK(Document::CharacterUses(animation) == expected);
+    CHECK(Document::CharacterUses(AfpAnimation::Animation{}).empty());
 }

@@ -293,7 +293,7 @@ struct Opened {
 inline void Open(Opened& opened, bool with_image = false) {
     REQUIRE(opened.dir.isValid());
     opened.window.OpenDocument(WritePackage(opened.dir, with_image));
-    opened.tree = opened.window.findChild<QTreeWidget*>();
+    opened.tree = opened.window.findChild<QTreeWidget*>("package");
     opened.inspector = opened.window.findChild<QTableWidget*>();
     REQUIRE(opened.tree != nullptr);
     REQUIRE(opened.inspector != nullptr);

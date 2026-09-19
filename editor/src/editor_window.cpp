@@ -144,6 +144,7 @@ void Window::BuildPanels() {
 
     viewport_ = new Viewport;
     package_tree_ = new QTreeWidget;
+    package_tree_->setObjectName("package");
     package_tree_->setHeaderLabels({tr("Entry"), tr("Kind"), tr("Size")});
     connect(package_tree_, &QTreeWidget::itemSelectionChanged, this, &Window::ShowSelectedEntry);
     package_tree_->setContextMenuPolicy(Qt::CustomContextMenu);
@@ -189,7 +190,10 @@ void Window::BuildPanels() {
     connect(viewport_, &Viewport::Reshaped, this, &Window::ReshapeOnStage);
 
     ads::CDockAreaWidget* centre = docks_->setCentralWidget(MakePanel(tr("Viewport"), viewport_));
-    docks_->addDockWidget(ads::LeftDockWidgetArea, MakePanel(tr("Package"), package_tree_), centre);
+    ads::CDockAreaWidget* package_area = docks_->addDockWidget(
+        ads::LeftDockWidgetArea, MakePanel(tr("Package"), package_tree_), centre);
+    docks_->addDockWidget(ads::BottomDockWidgetArea, MakePanel(tr("Library"), BuildLibrary()),
+                          package_area);
     docks_->addDockWidget(ads::RightDockWidgetArea, MakePanel(tr("Inspector"), inspector_), centre);
     docks_->addDockWidget(ads::BottomDockWidgetArea, MakePanel(tr("Timeline"), timeline_panel),
                           centre);
@@ -523,6 +527,7 @@ void Window::CloseAnimation() {
     RefreshState();
     viewport_->ShowMessage(tr("No animation selected"));
     timeline_->Clear();
+    library_->clear();
 }
 
 void Window::SelectEntry(const QString& path) {

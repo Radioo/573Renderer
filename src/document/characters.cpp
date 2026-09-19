@@ -4,6 +4,7 @@
 #include "formats/afp_animation.h"
 
 #include <algorithm>
+#include <cstddef>
 #include <cstdint>
 #include <map>
 #include <string>
@@ -69,6 +70,24 @@ std::vector<CharacterSummary> Characters(const AfpAnimation::Animation& animatio
     }
     std::ranges::stable_sort(out, {}, &CharacterSummary::id);
     return out;
+}
+
+std::map<uint16_t, std::size_t> CharacterUses(const AfpAnimation::Animation& animation) {
+    std::map<uint16_t, std::size_t> uses;
+    const auto count = [&uses](const AfpAnimation::Container& clip) {
+        for (const AfpAnimation::Tag& tag : clip.tags) {
+            const auto* placement = std::get_if<AfpAnimation::Placement>(&tag.body);
+            if (placement == nullptr) continue;
+            if (placement->character) uses[*placement->character]++;
+            if (placement->grid_controller) uses[placement->grid_controller->tag]++;
+        }
+    };
+    count(animation.root);
+    for (const AfpAnimation::Tag& tag : animation.root.tags) {
+        if (const auto* sprite = std::get_if<AfpAnimation::Sprite>(&tag.body))
+            count(sprite->container);
+    }
+    return uses;
 }
 
 }

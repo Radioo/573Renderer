@@ -133,13 +133,20 @@ passed once each target had its own name.
 
 `Editor::Window` is a `QMainWindow` hosting a Qt Advanced Docking System
 `CDockManager`. The viewport is the dock manager's central widget, with the
-package tree docked left, the inspector right and the timeline bottom. Qt 6
+package tree docked left, the library below it, the inspector right
+and the timeline bottom. `View > Panels` has a toggle for each panel (the dock's
+own toggle action), so a panel closed with its title bar button can be opened
+again. Qt 6
 Widgets is ADR 0003; the panel arrangement is the one the editor design
 settled on before implementation started.
 
 Window geometry, `QMainWindow` state and the dock manager's own state are
 saved to `QSettings` on close and restored in the constructor
-(`editor/src/editor_layout.cpp`). The organisation and application names
+(`editor/src/editor_layout.cpp`). The dock state is saved and restored with a
+layout version (`kDocksVersion`), and the dock manager ignores a saved state of
+another version, so a layout saved before a panel existed falls back to the
+default arrangement instead of restoring without the new panel. Raise the
+version whenever the set of panels changes; it went to 1 with the library. The organisation and application names
 `QSettings` keys off are set in `main` before the window exists.
 
 ## The host
@@ -177,6 +184,20 @@ super image N`, or the role name) and the stored size; the item carries the
 node's path in `Qt::UserRole`, which is the only handle the rest of the window
 uses. Problems the outline reported show in the status bar rather than a
 dialog, because a package with a bad texture list still opens.
+
+**Library.** The characters of the open animation, as `Document::Characters`
+labels them, each with how many placements use it (`Document::CharacterUses`),
+greyed when nothing does (`editor_library.cpp`). It is filled again whenever the
+clip timeline is (`ShowClipTimeline`), which every edit, reload and clip change
+goes through, and emptied when the animation closes. Double-clicking a sprite
+shows it on its own, as picking it in the clip box does; the switch is posted to
+the event loop because it refills the library, which would otherwise delete the
+item while its own double-click signal is still being delivered. Its menu places
+the character on a new depth from the playhead, asking for the depth (the first
+free one is suggested) and the last frame the way the timeline's add depth does
+(`Window::AskForLastFrame`, `Window::AddCharacterDepth`, both shared with it).
+The package tree and the library are named (`package`, `library`) so a test can
+tell the two trees apart.
 
 **Inspector.** Selecting an item calls `Outline::Describe` and prints
 `Document::Fields` as one line per field. When the selection is an animation

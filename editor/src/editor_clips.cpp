@@ -244,6 +244,7 @@ void Window::ShowClipTimeline() {
         ShowClipTimeline();
         return;
     }
+    FillLibrary(*animation);
     const uint32_t count = ClipFrameCount();
     timeline_->ShowAnimation(count, details->depths, details->labels);
     UpdateViewRows();

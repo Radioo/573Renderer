@@ -1,6 +1,8 @@
 #include <catch2/catch_session.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include <DockWidget.h>
+
 #include "editor_timeline.h"
 #include "editor_viewport.h"
 #include "editor_window.h"
@@ -280,13 +282,87 @@ TEST_CASE("An animation duplicated from the package menu opens as the copy") {
     CHECK(refused.Problems().front().contains("already"));
 }
 
+TEST_CASE("The library counts uses, places a character and shows a sprite on its own") {
+    Opened opened;
+    Open(opened, true);
+    auto* library = opened.window.findChild<QTreeWidget*>("library");
+    auto* timeline = opened.window.findChild<Editor::Timeline*>();
+    auto* clips = opened.window.findChild<QComboBox*>();
+    REQUIRE(library != nullptr);
+    REQUIRE(timeline != nullptr);
+    REQUIRE(clips != nullptr);
+    const auto row = [&](const QString& part) -> QTreeWidgetItem* {
+        for (QTreeWidgetItemIterator it(library); *it != nullptr; ++it) {
+            if ((*it)->text(0).contains(part)) return *it;
+        }
+        return nullptr;
+    };
+    REQUIRE(row("dot") != nullptr);
+    CHECK(row("dot")->text(1) == "1");
+
+    library->setCurrentItem(row("dot"));
+    {
+        Script placed(
+            {Choose("Place on a new depth from frame 0..."), AcceptInput(), AcceptInput()});
+        emit library->customContextMenuRequested(QPoint(4, 4));
+        REQUIRE(Settle([&placed] { return placed.Finished(); }));
+        INFO(placed.Problems().join("|").toStdString());
+        CHECK(placed.Problems().isEmpty());
+    }
+    REQUIRE(row("dot") != nullptr);
+    CHECK(row("dot")->text(1) == "2");
+    CHECK(RowValue(*opened.inspector, "Depth") == "3");
+
+    emit timeline->DepthChosen(3);
+    {
+        Script grouped({Choose("Group depth 3 and up here into a sprite..."), AcceptInput(),
+                        AcceptInput(), AcceptInput()});
+        emit timeline->MenuRequested(QPoint(4, 4), 0, QString());
+        REQUIRE(Settle([&grouped] { return grouped.Finished(); }));
+        INFO(grouped.Problems().join("|").toStdString());
+        CHECK(grouped.Problems().isEmpty());
+    }
+    QTreeWidgetItem* sprite = row("Sprite");
+    REQUIRE(sprite != nullptr);
+    CHECK(sprite->text(1) == "1");
+    CHECK(clips->currentIndex() == 0);
+    const QVariant id = sprite->data(0, Qt::UserRole);
+    emit library->itemDoubleClicked(sprite, 0);
+    REQUIRE(Settle([&] { return clips->currentIndex() != 0; }));
+    CHECK(clips->currentData().toInt() == id.toInt());
+}
+
+TEST_CASE("A closed panel comes back from the View menu") {
+    Opened opened;
+    Open(opened);
+    ads::CDockWidget* library = nullptr;
+    for (ads::CDockWidget* dock : opened.window.findChildren<ads::CDockWidget*>()) {
+        if (dock->windowTitle() == "Library") library = dock;
+    }
+    REQUIRE(library != nullptr);
+    QAction* toggle = nullptr;
+    for (const QMenu* menu : opened.window.findChildren<QMenu*>()) {
+        if (menu->title() != "&Panels") continue;
+        for (QAction* action : menu->actions()) {
+            if (action->text() == "Library") toggle = action;
+        }
+    }
+    REQUIRE(toggle != nullptr);
+    CHECK_FALSE(library->isClosed());
+    library->closeDockWidget();
+    CHECK(library->isClosed());
+    CHECK_FALSE(toggle->isChecked());
+    toggle->trigger();
+    CHECK_FALSE(library->isClosed());
+}
+
 TEST_CASE("A package with no animation takes its first from another IFS") {
     QTemporaryDir dir;
     REQUIRE(dir.isValid());
     const QString like = WritePackage(dir);
     Editor::Window window;
     window.OpenDocument(WriteImagesOnly(dir));
-    auto* tree = window.findChild<QTreeWidget*>();
+    auto* tree = window.findChild<QTreeWidget*>("package");
     auto* inspector = window.findChild<QTableWidget*>();
     REQUIRE(tree != nullptr);
     REQUIRE(inspector != nullptr);

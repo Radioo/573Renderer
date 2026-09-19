@@ -14,6 +14,7 @@ namespace {
 constexpr const char* kGeometryKey = "window/geometry";
 constexpr const char* kStateKey = "window/state";
 constexpr const char* kDocksKey = "window/docks";
+constexpr int kDocksVersion = 1;
 
 }
 
@@ -21,7 +22,7 @@ void SaveLayout(const QMainWindow& window, const ads::CDockManager& docks) {
     QSettings settings;
     settings.setValue(kGeometryKey, window.saveGeometry());
     settings.setValue(kStateKey, window.saveState());
-    settings.setValue(kDocksKey, docks.saveState());
+    settings.setValue(kDocksKey, docks.saveState(kDocksVersion));
 }
 
 void RestoreLayout(QMainWindow& window, ads::CDockManager& docks) {
@@ -31,7 +32,7 @@ void RestoreLayout(QMainWindow& window, ads::CDockManager& docks) {
     const QByteArray state = settings.value(kStateKey).toByteArray();
     if (!state.isEmpty()) window.restoreState(state);
     const QByteArray docked = settings.value(kDocksKey).toByteArray();
-    if (!docked.isEmpty()) docks.restoreState(docked);
+    if (!docked.isEmpty()) docks.restoreState(docked, kDocksVersion);
 }
 
 }

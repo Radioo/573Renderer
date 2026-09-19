@@ -195,6 +195,12 @@ private:
     void MoveSpanToDepth(uint16_t depth, uint32_t frame);
     void DuplicateSpanToDepth(uint16_t depth, uint32_t frame);
     [[nodiscard]] std::optional<uint16_t> AskForFreeDepth(const QString& title, uint16_t fallback);
+    [[nodiscard]] std::optional<uint32_t> AskForLastFrame(uint32_t first);
+    void AddCharacterDepth(uint16_t depth, uint16_t character, uint32_t first, uint32_t last);
+    [[nodiscard]] QTreeWidget* BuildLibrary();
+    void FillLibrary(const AfpAnimation::Animation& animation);
+    void ShowLibrarySprite(uint16_t sprite);
+    void ShowLibraryMenu(const QPoint& where);
     void CopySpanAt(uint16_t depth, uint32_t frame);
     void PasteSpanAt(uint32_t frame);
     void GroupDepthsIntoSprite(uint16_t depth, uint32_t frame);
@@ -222,6 +228,7 @@ private:
 
     ads::CDockManager* docks_ = nullptr;
     QTreeWidget* package_tree_ = nullptr;
+    QTreeWidget* library_ = nullptr;
     QTableWidget* inspector_ = nullptr;
     QAction* background_action_ = nullptr;
     Viewport* viewport_ = nullptr;
