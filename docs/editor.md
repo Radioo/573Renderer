@@ -345,9 +345,19 @@ Solo (`Window::SoloDepth`) hides every other depth of the picked clip in the
 same way, replacing whatever was hidden in that clip, and `Show every hidden
 depth` undoes it. Lock (`Window::ToggleLocked`) is view state too: a locked
 depth has no outline and cannot be picked or dragged on stage, while the
-timeline and the inspector still reach it, and its number carries an `L` in the
-timeline gutter (`Timeline::SetLockedDepths`). Both are forgotten when another
-document opens.
+timeline and the inspector still reach it (`Timeline::SetLockedDepths`). Both
+are forgotten when another document opens.
+
+Each depth's gutter carries the two switches After Effects puts beside a layer:
+an eye, open while the depth is shown and hollow while it is hidden, and a
+padlock, filled while the depth is locked. Clicking one toggles that depth
+through the same `ToggleHidden` and `ToggleLocked` the menu uses
+(`Timeline::VisibilityToggled`, `Timeline::LockToggled`), without choosing the
+depth or moving the playhead; clicking the depth number still chooses it. The
+widget tests click each switch and the number, and see the gutter drawn
+differently for a hidden and a locked depth; the window test hides, locks and
+shows a depth again through the switches. Leaving out the switch press, either
+connection or the drawing fails them.
 With a sprite picked in the clip box, the menu also names that sprite's export
 (`Window::NameShownSpriteExport`, through `Document::NameSpriteExport`): the box
 starts on the current name and an empty answer removes it. It is an undoable

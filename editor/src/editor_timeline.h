@@ -59,6 +59,8 @@ signals:
     void KeysShifted(int64_t by);
     void SpanMoved(uint16_t depth, uint32_t frame, int64_t by);
     void SpanTrimmed(uint16_t depth, uint32_t frame, uint32_t first, uint32_t last);
+    void VisibilityToggled(uint16_t depth);
+    void LockToggled(uint16_t depth);
     void MenuRequested(const QPoint& where, uint32_t frame, const QString& label);
     void KeyMenuRequested(const QPoint& where, const QString& property, uint32_t frame,
                           bool on_key);
@@ -103,6 +105,8 @@ private:
     void DrawSpanGhost(QPainter& painter, const Document::Span& span, int y) const;
     void Resize();
     [[nodiscard]] QString LabelNear(int x) const;
+    [[nodiscard]] bool PressSwitch(const Lane& lane, QPoint at);
+    void DrawSwitches(QPainter& painter, uint16_t depth, int y) const;
     [[nodiscard]] QString SpanName(const Document::DepthRow& row, const Document::Span& span) const;
     void DrawSpanName(QPainter& painter, const QString& name, const QRect& bar) const;
 

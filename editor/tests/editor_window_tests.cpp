@@ -37,8 +37,10 @@
 #include <QLineEdit>
 #include <QList>
 #include <QMenu>
+#include <QMouseEvent>
 #include <QMessageBox>
 #include <QPoint>
+#include <QPointF>
 #include <QSettings>
 #include <QStatusBar>
 #include <QString>
@@ -704,6 +706,39 @@ TEST_CASE("B and N set the work area on the ruler and it can be cleared") {
     REQUIRE(clear != actions.end());
     (*clear)->trigger();
     CHECK(picture() == plain);
+}
+
+TEST_CASE("The timeline gutter hides and locks a depth") {
+    Opened opened;
+    Open(opened);
+    auto* timeline = opened.window.findChild<Editor::Timeline*>();
+    REQUIRE(timeline != nullptr);
+    const auto offers = [&](const QString& text) {
+        emit timeline->DepthChosen(1);
+        bool found = false;
+        Script looked({Look(text, found)});
+        emit timeline->MenuRequested(QPoint(4, 4), 0, QString());
+        REQUIRE(Settle([&looked] { return looked.Finished(); }));
+        return found;
+    };
+    CHECK(offers("Hide depth 1 in the view"));
+    CHECK(offers("Lock depth 1 on stage"));
+    const auto click = [&](int x) {
+        QMouseEvent press(QEvent::MouseButtonPress, QPointF(x, 34),
+                          timeline->mapToGlobal(QPointF(x, 34)), Qt::LeftButton, Qt::LeftButton,
+                          Qt::NoModifier);
+        QApplication::sendEvent(timeline, &press);
+        QMouseEvent release(QEvent::MouseButtonRelease, QPointF(x, 34),
+                            timeline->mapToGlobal(QPointF(x, 34)), Qt::LeftButton, Qt::NoButton,
+                            Qt::NoModifier);
+        QApplication::sendEvent(timeline, &release);
+    };
+    click(9);
+    CHECK(offers("Show depth 1 in the view"));
+    click(23);
+    CHECK(offers("Unlock depth 1 on stage"));
+    click(9);
+    CHECK(offers("Hide depth 1 in the view"));
 }
 
 TEST_CASE("Saving frames without the preview says why") {

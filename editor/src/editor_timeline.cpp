@@ -12,6 +12,9 @@
 #include <QHelpEvent>
 #include <QMouseEvent>
 #include <QPainter>
+#include <QRectF>
+#include <QPen>
+#include <QBrush>
 #include <QPaintEvent>
 #include <QPolygon>
 #include <QRect>
@@ -40,6 +43,10 @@ constexpr int kRulerHeight = 26;
 constexpr int kRowHeight = 16;
 constexpr int kBarInset = 2;
 constexpr int kShortestNamedBar = 24;
+constexpr int kEyeLeft = 3;
+constexpr int kLockLeft = 17;
+constexpr int kSwitchWidth = 12;
+constexpr int kNumberLeft = 30;
 constexpr int kNamePadding = 3;
 constexpr int kNamePixels = 10;
 constexpr int kEmptyHeight = 80;
@@ -58,6 +65,8 @@ constexpr std::array<uint32_t, 10> kTickSteps{1, 2, 5, 10, 20, 50, 100, 200, 500
 const QColor kRuler(58, 58, 62);
 const QColor kRow(40, 40, 44);
 const QColor kSpanName(240, 240, 244);
+const QColor kSwitchOn(222, 222, 228);
+const QColor kSwitchOff(96, 96, 104);
 const QColor kPropertyRow(34, 34, 38);
 const QColor kSelectedRow(44, 66, 88);
 const QColor kBar(70, 128, 196);
@@ -336,6 +345,42 @@ void Timeline::PressKeys(const Lane& lane, QPoint at, bool toggle) {
     emit KeyChosen(QString::fromStdString(pressed.property), pressed.frame);
 }
 
+bool Timeline::PressSwitch(const Lane& lane, QPoint at) {
+    if (lane.is_property || at.x() >= kNumberLeft) return false;
+    if (at.x() >= kEyeLeft && at.x() < kEyeLeft + kSwitchWidth) {
+        emit VisibilityToggled(lane.depth);
+        return true;
+    }
+    if (at.x() >= kLockLeft && at.x() < kLockLeft + kSwitchWidth) {
+        emit LockToggled(lane.depth);
+        return true;
+    }
+    return false;
+}
+
+void Timeline::DrawSwitches(QPainter& painter, uint16_t depth, int y) const {
+    const bool hidden = std::ranges::find(hidden_depths_, depth) != hidden_depths_.end();
+    const bool locked = std::ranges::find(locked_depths_, depth) != locked_depths_.end();
+    const int middle = y + kRowHeight / 2;
+    painter.save();
+    painter.setRenderHint(QPainter::Antialiasing);
+    const QRectF eye(kEyeLeft, middle - 3, kSwitchWidth, 6);
+    painter.setPen(QPen(hidden ? kSwitchOff : kSwitchOn, 1));
+    painter.setBrush(Qt::NoBrush);
+    painter.drawEllipse(eye);
+    if (!hidden) {
+        painter.setBrush(kSwitchOn);
+        painter.drawEllipse(eye.center(), 2, 2);
+    }
+    const QRectF body(kLockLeft + 2, middle - 1, kSwitchWidth - 4, 6);
+    painter.setPen(QPen(locked ? kSwitchOn : kSwitchOff, 1));
+    painter.setBrush(locked ? QBrush(kSwitchOn) : QBrush(Qt::NoBrush));
+    painter.drawRect(body);
+    painter.setBrush(Qt::NoBrush);
+    painter.drawArc(QRectF(kLockLeft + 3, middle - 6, kSwitchWidth - 6, 8), 0, 180 * 16);
+    painter.restore();
+}
+
 void Timeline::SetCharacterNames(std::map<uint16_t, QString> names) {
     names_ = std::move(names);
     update();
@@ -468,6 +513,7 @@ void Timeline::mousePressEvent(QMouseEvent* event) {
     const std::optional<std::size_t> lane = LaneAt(event->pos().y());
     if (lane) {
         const std::vector<Lane> lanes = Lanes();
+        if (PressSwitch(lanes[*lane], event->pos())) return;
         if (lanes[*lane].is_property) {
             PressKeys(lanes[*lane], event->pos(), toggle);
         } else {
@@ -630,12 +676,10 @@ void Timeline::paintEvent(QPaintEvent* event) {
         const auto row = std::ranges::find(rows_, lane.depth, &Document::DepthRow::depth);
         painter.fillRect(QRect(0, y, width(), kRowHeight - 1),
                          selected_depth_ == lane.depth ? kSelectedRow : kRow);
+        DrawSwitches(painter, lane.depth, y);
         painter.setPen(palette().color(QPalette::Text));
-        painter.drawText(QRect(0, y, kGutterWidth - 6, kRowHeight),
-                         Qt::AlignRight | Qt::AlignVCenter,
-                         std::ranges::find(locked_depths_, lane.depth) != locked_depths_.end()
-                             ? tr("%1 L").arg(lane.depth)
-                             : QString::number(lane.depth));
+        painter.drawText(QRect(kNumberLeft, y, kGutterWidth - 6 - kNumberLeft, kRowHeight),
+                         Qt::AlignRight | Qt::AlignVCenter, QString::number(lane.depth));
         const bool hidden = std::ranges::find(hidden_depths_, lane.depth) != hidden_depths_.end();
         if (row != rows_.end()) {
             for (const Document::Span& span : row->spans) {

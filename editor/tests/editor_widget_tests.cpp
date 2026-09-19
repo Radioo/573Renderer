@@ -304,6 +304,41 @@ TEST_CASE("A span's bar shows the name of what it places, and says it on hover")
     CHECK(timeline.SpanNameAt(QPoint(static_cast<int>(FrameX(5)), 4)).isEmpty());
 }
 
+TEST_CASE("The gutter's eye and lock switch a depth without choosing it or a frame") {
+    Editor::Timeline timeline;
+    timeline.resize(kTimelineWidth, 200);
+    timeline.ShowAnimation(
+        11,
+        {Document::DepthRow{.depth = 3,
+                            .spans = {Document::Span{.first_frame = 1, .last_frame = 9}}}},
+        {});
+    std::vector<uint16_t> seen;
+    std::vector<uint16_t> locked;
+    std::vector<uint32_t> chosen;
+    QObject::connect(&timeline, &Editor::Timeline::VisibilityToggled,
+                     [&seen](uint16_t depth) { seen.push_back(depth); });
+    QObject::connect(&timeline, &Editor::Timeline::LockToggled,
+                     [&locked](uint16_t depth) { locked.push_back(depth); });
+    QObject::connect(&timeline, &Editor::Timeline::DepthChosen,
+                     [&chosen](uint32_t depth) { chosen.push_back(depth); });
+    Click(timeline, QPointF(9, kDepthRowY));
+    CHECK(seen == std::vector<uint16_t>{3});
+    CHECK(locked.empty());
+    CHECK(chosen.empty());
+    Click(timeline, QPointF(23, kDepthRowY));
+    CHECK(locked == std::vector<uint16_t>{3});
+    CHECK(chosen.empty());
+    Click(timeline, QPointF(45, kDepthRowY));
+    CHECK(chosen == std::vector<uint32_t>{3});
+    CHECK(seen.size() == 1);
+    CHECK(locked.size() == 1);
+
+    const QRect gutter(0, kDepthRowY - 6, 56, 12);
+    const QImage plain = timeline.grab(gutter).toImage();
+    timeline.SetHiddenDepths({3});
+    CHECK(timeline.grab(gutter).toImage() != plain);
+}
+
 TEST_CASE("A locked depth is marked in the gutter") {
     Editor::Timeline timeline;
     timeline.resize(kTimelineWidth, 200);
