@@ -1677,6 +1677,24 @@ paste or a move that fails halfway leaves nothing behind.
   of its stretch. An unselected keyframe between `first` and `last` would land
   among the reversed ones, so the reverse is refused and names it. It returns
   where each selected keyframe went, in the order they were given.
+- `StretchKeys` is After Effects' keyframe time stretch (Alt-dragging the end
+  of a keyframe selection). Every selected keyframe moves away from the
+  earliest selected frame, of any property, by `percent` of its distance: from
+  `f` to `anchor + (f - anchor) * percent / 100`, rounded to the nearest frame
+  with a half frame going up, in whole numbers so the result is exact. Values
+  and eases stay with their keyframes. An ease is how the animation leaves a
+  keyframe, and a bezier's control points are fractions of the stretch it
+  describes, so a stretch keeps each curve's shape at its new length, and with
+  linear and bezier eases frame `anchor + (f - anchor) * percent / 100` shows
+  what frame `f` showed, give or take the rounding of one integer step.
+  Unselected keyframes stay where they are. The stretch is refused when a
+  keyframe would leave the owned range, or would land on or pass another
+  keyframe of its property (a shrink can round two onto one frame), and it is
+  refused at 0% and when no keyframe moves. It returns where each selected
+  keyframe went, in the order they were given. Only authored keyframes are
+  stretched: a captured span holds an update on every frame and the format has
+  no interpolation between them, so spreading them out would only make the
+  animation step.
 - `EasyEaseKeys` is After Effects' Easy Ease. A keyframe's ease describes the
   stretch leaving it, so easing the way out of a keyframe sets the first
   control point of its own curve to `(1/3, 0)`, and easing the way into it sets

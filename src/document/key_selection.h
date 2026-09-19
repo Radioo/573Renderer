@@ -46,6 +46,9 @@ ShiftKeys(AuthoredDepth& authored, const std::vector<KeyRef>& keys, int64_t by);
 [[nodiscard]] Support::Expected<std::vector<KeyRef>, std::string>
 ReverseKeys(AuthoredDepth& authored, const std::vector<KeyRef>& keys);
 
+[[nodiscard]] Support::Expected<std::vector<KeyRef>, std::string>
+StretchKeys(AuthoredDepth& authored, const std::vector<KeyRef>& keys, uint32_t percent);
+
 [[nodiscard]] Support::Expected<void, std::string>
 EasyEaseKeys(AuthoredDepth& authored, const std::vector<KeyRef>& keys, EasySide side);
 

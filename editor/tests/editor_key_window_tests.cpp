@@ -353,3 +353,71 @@ TEST_CASE("Cut and paste move keyframes, and paste takes whatever was copied las
     }
     CHECK(RowValue(*opened.inspector, "Depth") == "4");
 }
+
+TEST_CASE("Time-stretching an owned depth's keyframes spreads them from the first") {
+    Opened opened;
+    Open(opened, true);
+    auto* timeline = opened.window.findChild<Editor::Timeline*>();
+    auto* viewport = opened.window.findChild<Editor::Viewport*>();
+    REQUIRE(timeline != nullptr);
+    REQUIRE(viewport != nullptr);
+    {
+        Script inserted({Choose("Insert a frame at 2")});
+        emit timeline->MenuRequested(QPoint(4, 4), 2, QString());
+        REQUIRE(Settle([&inserted] { return inserted.Finished(); }));
+        CHECK(inserted.Problems().isEmpty());
+    }
+    OwnDroppedDot(opened);
+    const auto move_on = [&](uint32_t frame, double dx) {
+        emit timeline->FrameChosen(frame);
+        emit timeline->DepthChosen(3);
+        Script moved({});
+        emit viewport->Dragged(3, dx, 0, true);
+        QApplication::processEvents();
+        CHECK(moved.Problems().isEmpty());
+    };
+    const auto x_on = [&](uint32_t frame) {
+        emit timeline->FrameChosen(frame);
+        const QString text = QString::fromStdString(RowValue(*opened.inspector, "Translation"));
+        return text.section(',', 0, 0).trimmed().toInt();
+    };
+    move_on(0, 10);
+    move_on(1, 20);
+    const int first = x_on(0);
+    const int second = x_on(1);
+    const int last = x_on(3);
+    REQUIRE(first != second);
+
+    const auto ref = [](uint32_t frame) {
+        return Document::KeyRef{.property = "Translation", .frame = frame};
+    };
+    const auto stretch = [&](const Script::Step& answer) {
+        emit timeline->FrameChosen(1);
+        emit timeline->KeyChosen("Translation", 1);
+        timeline->SelectKeys({ref(0), ref(1)});
+        Script stretched({Choose("Time-stretch 2 keyframe(s)..."), answer});
+        emit timeline->KeyMenuRequested(QPoint(4, 4), "Translation", 1, true);
+        REQUIRE(Settle([&stretched] { return stretched.Finished(); }));
+        QApplication::processEvents();
+        return stretched.Problems();
+    };
+    CHECK(stretch(RejectInput()).isEmpty());
+    CHECK(x_on(1) == second);
+    CHECK(stretch(AnswerNumber(200)).isEmpty());
+    CHECK(RowValue(*opened.inspector, "Keyframe") == "Translation on frame 2");
+    std::vector<Document::KeyRef> selected = timeline->SelectedKeys();
+    std::ranges::sort(selected);
+    CHECK(selected == std::vector<Document::KeyRef>{ref(0), ref(2)});
+    CHECK(x_on(0) == first);
+    CHECK(x_on(2) == second);
+    CHECK(x_on(3) == last);
+    QAction* undo = ShortcutAction(opened.window, QKeySequence(QKeySequence::Undo));
+    REQUIRE(undo != nullptr);
+    undo->trigger();
+    CHECK(x_on(1) == second);
+
+    const QStringList refused = stretch(AnswerNumber(400));
+    REQUIRE_FALSE(refused.isEmpty());
+    CHECK(refused.front().contains("outside"));
+    CHECK(x_on(1) == second);
+}

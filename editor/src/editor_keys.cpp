@@ -264,6 +264,9 @@ void Window::ShowKeyMenu(const QPoint& where, const QString& property, uint32_t 
         selected > 1
             ? menu.addAction(tr("Time-reverse %n keyframe(s)", nullptr, static_cast<int>(selected)))
             : nullptr;
+    QAction* stretch = selected > 1 ? menu.addAction(tr("Time-stretch %n keyframe(s)...", nullptr,
+                                                        static_cast<int>(selected)))
+                                    : nullptr;
     if (key) {
         for (QAction* one : {hold, linear, bezier})
             one->setCheckable(true);
@@ -293,6 +296,10 @@ void Window::ShowKeyMenu(const QPoint& where, const QString& property, uint32_t 
     }
     if (chosen == reverse) {
         ReverseSelectedKeys();
+        return;
+    }
+    if (chosen == stretch) {
+        StretchSelectedKeys();
         return;
     }
     if (chosen == easy_both || chosen == easy_in || chosen == easy_out) {

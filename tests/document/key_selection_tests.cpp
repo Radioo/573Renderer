@@ -351,3 +351,72 @@ TEST_CASE("Toggling hold is refused, leaving the depth alone, where it cannot ap
     CHECK_FALSE(Document::ToggleHoldKeys(depth, {Ref("Blend", 0)}).has_value());
     CHECK(depth == before);
 }
+
+TEST_CASE("Stretching keyframes slows their stretch down frame by frame") {
+    Document::AuthoredDepth depth = Depth();
+    depth.tracks[0].keys[0].ease = Document::Ease::Bezier;
+    depth.tracks[0].keys[0].bezier = {.x1 = 0.5, .y1 = 0.0, .x2 = 0.75, .y2 = 0.25};
+    const Document::Track before = depth.tracks[0];
+    const auto stretched = Document::StretchKeys(
+        depth, {Ref("Translation", 8), Ref("Translation", 0), Ref("Translation", 4)}, 150);
+    INFO(Error(stretched));
+    REQUIRE(stretched.has_value());
+    CHECK(*stretched == std::vector<KeyRef>{Ref("Translation", 12), Ref("Translation", 0),
+                                            Ref("Translation", 6)});
+    CHECK(Frames(depth, "Translation") == std::vector<uint32_t>{0, 6, 12});
+    for (uint32_t step = 0; step <= 4; step++) {
+        INFO(step);
+        const std::vector<int64_t> now = Document::SampleTrack(depth.tracks[0], step * 3);
+        const std::vector<int64_t> then = Document::SampleTrack(before, step * 2);
+        REQUIRE(now.size() == then.size());
+        for (std::size_t i = 0; i < now.size(); i++)
+            CHECK(std::abs(now[i] - then[i]) <= 1);
+    }
+    CHECK(depth.tracks[0].keys[0].bezier == before.keys[0].bezier);
+    CHECK(depth.tracks[1] == Depth().tracks[1]);
+}
+
+TEST_CASE("Stretching keyframes counts from the earliest selected one of any property") {
+    Document::AuthoredDepth depth = Depth();
+    const auto stretched = Document::StretchKeys(
+        depth, {Ref("Multiply colour", 6), Ref("Translation", 8), Ref("Translation", 4)}, 50);
+    INFO(Error(stretched));
+    REQUIRE(stretched.has_value());
+    CHECK(*stretched == std::vector<KeyRef>{Ref("Multiply colour", 5), Ref("Translation", 6),
+                                            Ref("Translation", 4)});
+    CHECK(Frames(depth, "Translation") == std::vector<uint32_t>{0, 4, 6});
+    CHECK(Frames(depth, "Multiply colour") == std::vector<uint32_t>{0, 5});
+    CHECK(depth.tracks[0].keys[2].value == std::vector<int64_t>{80, 0});
+}
+
+TEST_CASE("Stretching puts a keyframe on the nearest frame, rounding a half frame up") {
+    Document::AuthoredDepth depth = Depth();
+    const auto stretched =
+        Document::StretchKeys(depth, {Ref("Translation", 4), Ref("Multiply colour", 6)}, 125);
+    INFO(Error(stretched));
+    REQUIRE(stretched.has_value());
+    CHECK(Frames(depth, "Multiply colour") == std::vector<uint32_t>{0, 7});
+    CHECK(Frames(depth, "Translation") == std::vector<uint32_t>{0, 4, 8});
+}
+
+TEST_CASE("Stretching is refused, leaving the depth alone, when the keys cannot all move") {
+    Document::AuthoredDepth depth = Depth();
+    const Document::AuthoredDepth before = depth;
+    const auto refusal = [&depth](const std::vector<KeyRef>& keys, uint32_t percent) {
+        return Error(Document::StretchKeys(depth, keys, percent));
+    };
+    CHECK(refusal({}, 150).find("no keyframes") != std::string::npos);
+    CHECK(refusal({Ref("Translation", 0), Ref("Translation", 4)}, 0).find("0%") !=
+          std::string::npos);
+    CHECK(refusal({Ref("Translation", 0), Ref("Translation", 5)}, 150).find("frame 5") !=
+          std::string::npos);
+    CHECK(refusal({Ref("Translation", 0), Ref("Translation", 8)}, 200).find("outside") !=
+          std::string::npos);
+    CHECK(refusal({Ref("Translation", 0), Ref("Translation", 4)}, 250).find("frame 8") !=
+          std::string::npos);
+    CHECK(refusal({Ref("Translation", 4), Ref("Translation", 8)}, 10).find("frame 4") !=
+          std::string::npos);
+    CHECK(refusal({Ref("Translation", 0), Ref("Translation", 4)}, 100).find("moves no") !=
+          std::string::npos);
+    CHECK(depth == before);
+}

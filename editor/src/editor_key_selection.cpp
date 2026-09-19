@@ -7,6 +7,7 @@
 #include "support/expected.h"
 
 #include <QAction>
+#include <QInputDialog>
 #include <QKeySequence>
 #include <QStatusBar>
 #include <QString>
@@ -176,14 +177,40 @@ void Window::ReverseSelectedKeys() {
                       })) {
         return;
     }
+    SelectMovedKeys(chosen, std::move(reversed));
+}
+
+void Window::StretchSelectedKeys() {
+    const std::vector<Document::KeyRef> chosen = timeline_->SelectedKeys();
+    bool accepted = false;
+    const int percent = QInputDialog::getInt(this, tr("Time-stretch keyframes"),
+                                             tr("Stretch factor (%)"), 100, 1, 10000, 1, &accepted);
+    if (!accepted) return;
+    std::vector<Document::KeyRef> stretched;
+    if (!EditAuthored(tr("Time-stretch %n keyframe(s)", nullptr, static_cast<int>(chosen.size())),
+                      [&chosen, percent, &stretched](Document::AuthoredDepth& authored) {
+                          using Changed = Support::Expected<void, std::string>;
+                          auto placed = Document::StretchKeys(authored, chosen,
+                                                              static_cast<uint32_t>(percent));
+                          if (!placed) return Changed(Support::Unexpected(placed.error()));
+                          stretched = std::move(*placed);
+                          return Changed();
+                      })) {
+        return;
+    }
+    SelectMovedKeys(chosen, std::move(stretched));
+}
+
+void Window::SelectMovedKeys(const std::vector<Document::KeyRef>& chosen,
+                             std::vector<Document::KeyRef> moved) {
     if (key_frame_) {
         const Document::KeyRef focused{.property = key_property_.toStdString(),
                                        .frame = *key_frame_};
         const auto at = std::ranges::find(chosen, focused);
         if (at != chosen.end())
-            key_frame_ = reversed.at(static_cast<std::size_t>(at - chosen.begin())).frame;
+            key_frame_ = moved.at(static_cast<std::size_t>(at - chosen.begin())).frame;
     }
-    timeline_->SelectKeys(std::move(reversed));
+    timeline_->SelectKeys(std::move(moved));
     ShowFrame();
 }
 

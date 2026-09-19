@@ -128,6 +128,9 @@ private:
     void SelectAllKeys();
     void ShiftSelectedKeys(int64_t by);
     void ReverseSelectedKeys();
+    void StretchSelectedKeys();
+    void SelectMovedKeys(const std::vector<Document::KeyRef>& chosen,
+                         std::vector<Document::KeyRef> moved);
     void EasyEaseSelectedKeys(Document::EasySide side);
     void ToggleHoldSelectedKeys();
     void ShowKeyMenu(const QPoint& where, const QString& property, uint32_t frame, bool on_key);
