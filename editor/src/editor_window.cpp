@@ -326,6 +326,7 @@ void Window::OpenDocument(const QString& path) {
     file_ = std::move(*file);
     history_.Clear();
     copied_span_.reset();
+    viewport_->ClearGuides();
     hidden_.clear();
     locked_.clear();
     document_path_ = path;

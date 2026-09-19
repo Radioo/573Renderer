@@ -1063,8 +1063,9 @@ pointer exactly; `TurnToReach` takes the angle swept around the anchor.
 `SnapMove` (`document/stage_snap.h`) adjusts a move so the object lines up.
 On each axis it takes the moving outline's lowest, middle and highest
 coordinate after the offset, and the lines it may land on: the stage's edges
-and centre, and the lowest, middle and highest coordinate of every other
-outline (the moving depth's own is skipped). The closest pair within `reach`
+and centre, the lowest, middle and highest coordinate of every other
+outline (the moving depth's own is skipped), and every guide on that axis (a
+vertical guide is an x line, a horizontal one a y line). The closest pair within `reach`
 stage units wins, the first one found on a tie, and the offset moves by their
 difference; the result also names the line as a guide. The two axes snap
 independently. An object

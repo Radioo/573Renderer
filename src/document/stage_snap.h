@@ -19,6 +19,7 @@ struct Snapped {
 };
 
 [[nodiscard]] Snapped SnapMove(const StageOutline& moving, const std::vector<StageOutline>& others,
-                               Point stage, Point offset, double reach);
+                               const std::vector<SnapGuide>& guides, Point stage, Point offset,
+                               double reach);
 
 }

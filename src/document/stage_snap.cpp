@@ -46,8 +46,8 @@ std::optional<Match> Nearest(const Lines& moving, const std::vector<double>& tar
 
 }
 
-Snapped SnapMove(const StageOutline& moving, const std::vector<StageOutline>& others, Point stage,
-                 Point offset, double reach) {
+Snapped SnapMove(const StageOutline& moving, const std::vector<StageOutline>& others,
+                 const std::vector<SnapGuide>& guides, Point stage, Point offset, double reach) {
     Snapped snapped{.offset = offset, .guides = {}};
     for (std::size_t axis = 0; axis < 2; axis++) {
         std::vector<double> targets{0, stage.at(axis) / 2, stage.at(axis)};
@@ -55,6 +55,9 @@ Snapped SnapMove(const StageOutline& moving, const std::vector<StageOutline>& ot
             if (other.depth == moving.depth) continue;
             const Lines lines = LinesOf(other, axis, 0);
             targets.insert(targets.end(), lines.begin(), lines.end());
+        }
+        for (const SnapGuide& guide : guides) {
+            if (guide.vertical == (axis == 0)) targets.push_back(guide.at);
         }
         const std::optional<Match> match =
             Nearest(LinesOf(moving, axis, offset.at(axis)), targets, reach);

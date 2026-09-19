@@ -41,6 +41,17 @@ void Window::AddViewMenu() {
         QSettings().setValue(kSnapKey, on);
         viewport_->SetSnapping(on);
     });
+    QAction* rulers = view->addAction(tr("&Rulers"));
+    rulers->setCheckable(true);
+    rulers->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_R));
+    rulers->setChecked(QSettings().value(kRulersKey, false).toBool());
+    viewport_->SetRulers(rulers->isChecked());
+    connect(rulers, &QAction::toggled, this, [this](bool on) {
+        QSettings().setValue(kRulersKey, on);
+        viewport_->SetRulers(on);
+    });
+    QAction* clear_guides = view->addAction(tr("Clear &guides"));
+    connect(clear_guides, &QAction::triggered, viewport_, &Viewport::ClearGuides);
     onion_action_ = view->addAction(tr("&Onion skin"));
     onion_action_->setCheckable(true);
     onion_action_->setChecked(QSettings().value(kOnionKey, false).toBool());

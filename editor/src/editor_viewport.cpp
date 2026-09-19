@@ -13,6 +13,8 @@
 #include <QMimeData>
 #include <QMouseEvent>
 #include <QPainter>
+#include <QRect>
+#include <QFont>
 #include <QPaintEvent>
 #include <QPen>
 #include <QPointF>
@@ -24,6 +26,8 @@
 #include <QWheelEvent>
 
 #include <algorithm>
+#include <array>
+#include <cstddef>
 #include <cmath>
 #include <cstdint>
 #include <limits>
@@ -53,6 +57,15 @@ constexpr double kLeastZoom = 0.25;
 constexpr double kMostZoom = 32.0;
 constexpr int kWheelNotch = 120;
 constexpr double kGhostOpacity = 0.35;
+constexpr int kRulerSize = 16;
+constexpr int kRulerTick = 5;
+constexpr int kRulerFont = 8;
+constexpr double kGuideReach = 4.0;
+constexpr double kTickSpacing = 50.0;
+constexpr std::array<int, 9> kTickSteps{1, 5, 10, 25, 50, 100, 250, 500, 1000};
+const QColor kRulerColour(44, 44, 48);
+const QColor kRulerMark(170, 170, 176);
+const QColor kGuideLine(0, 200, 230);
 
 QPointF Middle(QPointF a, QPointF b) {
     return (a + b) / 2.0;
@@ -182,6 +195,90 @@ void Viewport::wheelEvent(QWheelEvent* event) {
     emit ZoomChanged();
 }
 
+void Viewport::ClearGuides() {
+    guides_.clear();
+    dragged_guide_.reset();
+    update();
+}
+
+void Viewport::SetRulers(bool on) {
+    rulers_ = on;
+    update();
+}
+
+std::optional<std::size_t> Viewport::GuideNear(QPointF at) const {
+    for (std::size_t index = 0; index < guides_.size(); index++) {
+        const Document::SnapGuide& guide = guides_[index];
+        const double line =
+            guide.vertical ? ToWidget({guide.at, 0}).x() : ToWidget({0, guide.at}).y();
+        const double pointer = guide.vertical ? at.x() : at.y();
+        if (std::abs(pointer - line) <= kGuideReach) return index;
+    }
+    return std::nullopt;
+}
+
+bool Viewport::PressGuide(QPointF at) {
+    const std::optional<QPointF> stage = ToStage(at);
+    if (rulers_ && stage && (at.x() < kRulerSize || at.y() < kRulerSize)) {
+        const bool vertical = at.y() >= kRulerSize;
+        guides_.push_back(
+            Document::SnapGuide{.vertical = vertical, .at = vertical ? stage->x() : stage->y()});
+        dragged_guide_ = guides_.size() - 1;
+        return true;
+    }
+    dragged_guide_ = GuideNear(at);
+    return dragged_guide_.has_value();
+}
+
+void Viewport::DrawGuideLines(QPainter& painter) const {
+    painter.setPen(QPen(kGuideLine, 1));
+    for (const Document::SnapGuide& guide : guides_) {
+        if (guide.vertical) {
+            const double x = ToWidget({guide.at, 0}).x();
+            painter.drawLine(QPointF(x, 0), QPointF(x, height()));
+        } else {
+            const double y = ToWidget({0, guide.at}).y();
+            painter.drawLine(QPointF(0, y), QPointF(width(), y));
+        }
+    }
+}
+
+void Viewport::DrawRulers(QPainter& painter) const {
+    const QRectF target = Target();
+    if (stage_.isEmpty() || target.isEmpty()) return;
+    const double scale = target.width() / stage_.width();
+    const auto step =
+        std::ranges::find_if(kTickSteps, [scale](int one) { return one * scale >= kTickSpacing; });
+    const int every = step == kTickSteps.end() ? kTickSteps.back() : *step;
+    painter.fillRect(QRect(0, 0, width(), kRulerSize), kRulerColour);
+    painter.fillRect(QRect(0, 0, kRulerSize, height()), kRulerColour);
+    QFont font = painter.font();
+    font.setPixelSize(kRulerFont);
+    painter.setFont(font);
+    painter.setPen(kRulerMark);
+    const auto first = [every](double from) {
+        return static_cast<int>(std::ceil(from / every)) * every;
+    };
+    const QPointF top_left = ToStage(QPointF(0, 0)).value_or(QPointF());
+    const QPointF bottom_right = ToStage(QPointF(width(), height())).value_or(QPointF());
+    for (int at = first(top_left.x()); at <= bottom_right.x(); at += every) {
+        const double x = ToWidget({static_cast<double>(at), 0}).x();
+        if (x < kRulerSize) continue;
+        painter.drawLine(QPointF(x, kRulerSize - kRulerTick), QPointF(x, kRulerSize));
+        painter.drawText(QPointF(x + 2, kRulerFont + 1), QString::number(at));
+    }
+    for (int at = first(top_left.y()); at <= bottom_right.y(); at += every) {
+        const double y = ToWidget({0, static_cast<double>(at)}).y();
+        if (y < kRulerSize) continue;
+        painter.drawLine(QPointF(kRulerSize - kRulerTick, y), QPointF(kRulerSize, y));
+        painter.save();
+        painter.translate(kRulerFont + 1, y - 2);
+        painter.rotate(-90);
+        painter.drawText(QPointF(0, 0), QString::number(at));
+        painter.restore();
+    }
+}
+
 void Viewport::SetSnapping(bool on) {
     snapping_ = on;
 }
@@ -193,7 +290,7 @@ Document::Snapped Viewport::Moved(const Document::StageOutline& outline) const {
         return Document::Snapped{.offset = raw, .guides = {}};
     const double reach = kSnapReach * stage_.width() / target.width();
     return Document::SnapMove(
-        outline, outlines_,
+        outline, outlines_, guides_,
         {static_cast<double>(stage_.width()), static_cast<double>(stage_.height())}, raw, reach);
 }
 
@@ -316,12 +413,15 @@ void Viewport::paintEvent(QPaintEvent* event) {
     for (const QImage& ghost : ghosts_)
         painter.drawImage(Target(), ghost);
     painter.setOpacity(1.0);
+    DrawGuideLines(painter);
     const Document::StageOutline* selected = SelectedOutline();
-    if (selected == nullptr || stage_.isEmpty()) return;
-    DrawGuides(painter, *selected);
-    painter.setRenderHint(QPainter::Antialiasing);
-    painter.setPen(QPen(kSelectedColour, kOutlineWidth));
-    DrawSelection(painter, Preview(*selected));
+    if (selected != nullptr && !stage_.isEmpty()) {
+        DrawGuides(painter, *selected);
+        painter.setRenderHint(QPainter::Antialiasing);
+        painter.setPen(QPen(kSelectedColour, kOutlineWidth));
+        DrawSelection(painter, Preview(*selected));
+    }
+    if (rulers_) DrawRulers(painter);
 }
 
 void Viewport::resizeEvent(QResizeEvent* event) {
@@ -343,6 +443,8 @@ void Viewport::mousePressEvent(QMouseEvent* event) {
     const Document::StageOutline* selected = SelectedOutline();
     Gesture gesture =
         selected != nullptr ? GestureAt(*selected, event->position(), point) : Gesture::None;
+    if (gesture != Gesture::Scale && gesture != Gesture::Turn && PressGuide(event->position()))
+        return;
     if (gesture != Gesture::Scale && gesture != Gesture::Turn) {
         emit Picked(point[0], point[1]);
         selected = SelectedOutline();
@@ -361,6 +463,13 @@ void Viewport::mouseMoveEvent(QMouseEvent* event) {
     if (panning_from_ && (event->buttons() & Qt::MiddleButton) != 0) {
         pan_ += event->position() - *panning_from_;
         panning_from_ = event->position();
+        update();
+        return;
+    }
+    if (dragged_guide_ && (event->buttons() & Qt::LeftButton) != 0) {
+        const std::optional<QPointF> stage = ToStage(event->position());
+        Document::SnapGuide& guide = guides_[*dragged_guide_];
+        if (stage) guide.at = guide.vertical ? stage->x() : stage->y();
         update();
         return;
     }
@@ -404,6 +513,16 @@ void Viewport::mouseReleaseEvent(QMouseEvent* event) {
         return;
     }
     if (event->button() != Qt::LeftButton) return;
+    if (dragged_guide_) {
+        const Document::SnapGuide& guide = guides_[*dragged_guide_];
+        const bool back_on_ruler = guide.vertical ? event->position().x() < kRulerSize
+                                                  : event->position().y() < kRulerSize;
+        if (back_on_ruler)
+            guides_.erase(guides_.begin() + static_cast<std::ptrdiff_t>(*dragged_guide_));
+        dragged_guide_.reset();
+        update();
+        return;
+    }
     const Gesture gesture = dragging_ ? gesture_ : Gesture::None;
     const Document::StageOutline* selected = SelectedOutline();
     gesture_ = Gesture::None;

@@ -305,3 +305,4 @@ captured. This milestone is the editing itself.
 - `issues/97-save-frame-sequences.md` (milestone 8)
 - `issues/98-gutter-switches.md` (milestone 8)
 - `issues/99-onion-skin.md` (milestone 8)
+- `issues/100-rulers-and-guides.md` (milestone 8)

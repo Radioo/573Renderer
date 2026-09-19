@@ -509,6 +509,53 @@ TEST_CASE("A character dropped on the stage is reported at its stage point") {
     CHECK(dropped.size() == 1);
 }
 
+TEST_CASE("A guide pulled from the ruler is snapped to until it goes back or is cleared") {
+    Editor::Viewport viewport;
+    ShowStage(viewport);
+    viewport.SetSnapping(true);
+    std::vector<QPointF> picked;
+    QObject::connect(&viewport, &Editor::Viewport::Picked,
+                     [&picked](double x, double y) { picked.emplace_back(x, y); });
+    std::vector<Move> moves;
+    QObject::connect(&viewport, &Editor::Viewport::Dragged,
+                     [&moves](uint16_t, double dx, double dy, bool finished) {
+                         moves.push_back({.by = QPointF(dx, dy), .finished = finished});
+                     });
+    const auto moved_by = [&] {
+        moves.clear();
+        Drag(viewport, {150, 100}, {150, 148});
+        REQUIRE_FALSE(moves.empty());
+        return moves.back().by.y();
+    };
+    CHECK_THAT(moved_by(), WithinAbs(96, 1e-9));
+    const auto moved_up = [&] {
+        moves.clear();
+        Drag(viewport, {150, 100}, {150, 57});
+        REQUIRE_FALSE(moves.empty());
+        return moves.back().by.y();
+    };
+    CHECK_THAT(moved_up(), WithinAbs(-86, 1e-9));
+
+    picked.clear();
+    Click(viewport, {300, 5});
+    CHECK(picked.size() == 1);
+    viewport.SetRulers(true);
+    picked.clear();
+    Drag(viewport, {300, 5}, {300, 200});
+    CHECK(picked.empty());
+    CHECK(viewport.grab().toImage().pixelColor(700, 200) == QColor(0, 200, 230));
+    CHECK_THAT(moved_by(), WithinAbs(100, 1e-9));
+
+    Drag(viewport, {300, 200}, {300, 5});
+    CHECK_THAT(moved_by(), WithinAbs(96, 1e-9));
+    CHECK_THAT(moved_up(), WithinAbs(-86, 1e-9));
+
+    Drag(viewport, {300, 5}, {300, 200});
+    CHECK_THAT(moved_by(), WithinAbs(100, 1e-9));
+    viewport.ClearGuides();
+    CHECK_THAT(moved_by(), WithinAbs(96, 1e-9));
+}
+
 TEST_CASE("Dragging inside the selection moves it by the stage offset") {
     Editor::Viewport viewport;
     ShowStage(viewport);

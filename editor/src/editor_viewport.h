@@ -10,6 +10,7 @@
 #include <QString>
 #include <QWidget>
 
+#include <cstddef>
 #include <cstdint>
 #include <optional>
 #include <vector>
@@ -39,6 +40,8 @@ public:
                       std::optional<uint16_t> selected);
     [[nodiscard]] QSize FittedSize(QSize available) const;
     void SetSnapping(bool on);
+    void ClearGuides();
+    void SetRulers(bool on);
     void FitStage();
 
 signals:
@@ -76,9 +79,16 @@ private:
     [[nodiscard]] Document::Snapped Moved(const Document::StageOutline& outline) const;
     void DrawGuides(QPainter& painter, const Document::StageOutline& outline) const;
     void DrawSelection(QPainter& painter, const Document::StageOutline& outline) const;
+    void DrawGuideLines(QPainter& painter) const;
+    void DrawRulers(QPainter& painter) const;
+    [[nodiscard]] bool PressGuide(QPointF at);
+    [[nodiscard]] std::optional<std::size_t> GuideNear(QPointF at) const;
 
     QImage frame_;
     std::vector<QImage> ghosts_;
+    std::vector<Document::SnapGuide> guides_;
+    std::optional<std::size_t> dragged_guide_;
+    bool rulers_ = false;
     QSize stage_;
     QString message_;
     std::vector<Document::StageOutline> outlines_;

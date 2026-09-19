@@ -284,8 +284,24 @@ applied on release through `Document::ReshapeOwnedDepth` or
 the handle lies outside the outline. The timeline shades the selected depth's
 row.
 
-Moving snaps (`Document::SnapMove`) to the stage's edges and centre and to the
-other outlines' edges and centres within 6 screen pixels, drawing the lines it
+`View > Rulers` (Ctrl+R, remembered, off by default as in After Effects) draws
+a ruler along the top and left of the viewport in stage pixels, its ticks
+spaced by the first of 1, 5, 10, 25, 50, 100, 250, 500 or 1000 stage pixels
+that is at least 50 screen pixels apart at the current zoom. Pressing on a
+ruler and dragging pulls out a guide, horizontal from the top ruler and
+vertical from the left one, which is drawn in cyan across the viewport; a guide
+can be picked up within 4 screen pixels and dragged again, and dropping it
+back on its ruler removes it. The selection's scale and turn handles are
+reached before a guide under them. Guides are view state held by the viewport
+in stage coordinates, so they follow zoom and pan; `View > Clear guides`
+removes them all, and opening a document clears them. The widget test pulls a
+guide out, sees it drawn and snapped to, drops it back and clears another, and
+sees a press on the ruler picked normally while rulers are off; leaving out
+the guide in snapping, the axis check, the ruler press, the rulers setting, the
+removal or the clear fails it.
+
+Moving snaps (`Document::SnapMove`) to the stage's edges and centre, to the
+other outlines' edges and centres, and to the guides within 6 screen pixels, drawing the lines it
 snapped to in pink while the drag lasts. Holding Alt during the drag moves
 freely. `View > Snap while moving on stage` turns snapping off and is
 remembered; it is on by default. Scaling and turning do not snap.
