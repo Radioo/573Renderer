@@ -90,7 +90,10 @@ void Window::PasteCopiedKeys() {
 
 void Window::RemoveSelectedKeys() {
     const std::vector<Document::KeyRef> chosen = timeline_->SelectedKeys();
-    if (chosen.empty()) return;
+    if (chosen.empty()) {
+        RemoveChosenDepths(frame_);
+        return;
+    }
     if (!EditAuthored(tr("Delete %n keyframe(s)", nullptr, static_cast<int>(chosen.size())),
                       [&chosen](Document::AuthoredDepth& authored) {
                           return Document::RemoveKeys(authored, chosen);

@@ -2,6 +2,7 @@
 
 #include "document/authored.h"
 #include "document/clip.h"
+#include "document/frame_edit.h"
 #include "document/group_sprite.h"
 #include "document/outline.h"
 #include "document/span_clipboard.h"
@@ -23,6 +24,7 @@
 #include <optional>
 #include <string>
 #include <utility>
+#include <vector>
 
 namespace Editor {
 
@@ -237,6 +239,35 @@ void Window::PasteSpanAt(uint32_t frame) {
         return;
     }
     depth_ = depth;
+    ShowFrame();
+}
+
+void Window::RemoveChosenDepths(uint32_t frame) {
+    if (!file_ || animation_path_.empty()) return;
+    const std::vector<uint16_t> group = SelectedDepths();
+    if (group.empty()) return;
+    for (const uint16_t depth : group) {
+        if (AuthoredIndexAt(depth, frame)) {
+            ReportProblem(
+                tr("The project owns depth %1 here. Detach it before removing it.").arg(depth));
+            return;
+        }
+    }
+    const Document::ClipId clip = clip_;
+    const QString name = group.size() == 1
+                             ? tr("Remove depth %1").arg(group.front())
+                             : tr("Remove %n depths", nullptr, static_cast<int>(group.size()));
+    if (!EditAnimation(name, [clip, group, frame](AfpAnimation::Animation& edited) {
+            for (const uint16_t depth : group) {
+                auto removed = Document::RemoveDepth(edited, clip, depth, frame);
+                if (!removed) return removed;
+            }
+            return Support::Expected<void, std::string>();
+        })) {
+        return;
+    }
+    depth_.reset();
+    selected_depths_.clear();
     ShowFrame();
 }
 

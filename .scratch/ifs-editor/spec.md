@@ -308,3 +308,4 @@ captured. This milestone is the editing itself.
 - `issues/100-rulers-and-guides.md` (milestone 8)
 - `issues/101-choose-several-depths.md` (milestone 8)
 - `issues/102-align-and-spread.md` (milestone 8)
+- `issues/103-remove-chosen-depths.md` (milestone 8)

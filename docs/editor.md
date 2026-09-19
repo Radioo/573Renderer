@@ -422,6 +422,20 @@ drag fills with one offset for all; either way owned and baked depths move in
 one undo step. The window test drops a second depth, aligns the pair by their
 left edges and by their centres, undoes, and checks the refusals; giving every
 depth the same offset, or dropping the minimum, fails it.
+
+Removing works on the chosen depths too. The timeline menu offers `Remove N
+depths here` when several are chosen, and Delete, which removes the selected
+keyframes, removes the chosen depths when no keyframe is selected, as After
+Effects deletes the selected layers (`Window::RemoveChosenDepths`). Each depth's
+span at that frame goes through `Document::RemoveDepth`, all in one undo step,
+and the choice is cleared afterwards. It is refused, with nothing removed, when
+the project owns any of the depths there, the same as grouping and ungrouping,
+because the project would otherwise keep a record for a depth that is no longer
+placed; that also applies to removing a single depth, which used to go ahead.
+The window test drops a second depth, removes both with Delete, undoes, and
+sees the removal refused once the project owns one of them; removing only the
+first depth, dropping the ownership check or leaving Delete to keyframes only
+fails it.
 With a sprite picked in the clip box, the menu also names that sprite's export
 (`Window::NameShownSpriteExport`, through `Document::NameSpriteExport`): the box
 starts on the current name and an empty answer removes it. It is an undoable

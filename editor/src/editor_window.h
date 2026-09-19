@@ -164,6 +164,7 @@ private:
     void SaveFramesAs();
     [[nodiscard]] std::vector<uint16_t> SelectedDepths() const;
     void ChooseDepths(std::vector<uint16_t> depths);
+    void RemoveChosenDepths(uint32_t frame);
     void MoveDepthsOnStage(const std::vector<Document::DepthOffset>& moves, const QString& name,
                            bool finished);
     void ArrangeChosen(const QString& name,

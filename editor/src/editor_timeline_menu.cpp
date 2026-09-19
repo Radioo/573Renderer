@@ -37,8 +37,12 @@ void Window::ShowTimelineMenu(const QPoint& where, uint32_t frame, const QString
     QAction* add_depth =
         depth_ ? menu.addAction(tr("Add depth %1 from frame %2...").arg(*depth_).arg(frame))
                : nullptr;
-    QAction* remove_depth =
-        depth_ ? menu.addAction(tr("Remove depth %1 here").arg(*depth_)) : nullptr;
+    const std::vector<uint16_t> chosen_depths = SelectedDepths();
+    QAction* remove_depth = chosen_depths.size() > 1
+                                ? menu.addAction(tr("Remove %n depths here", nullptr,
+                                                    static_cast<int>(chosen_depths.size())))
+                            : depth_ ? menu.addAction(tr("Remove depth %1 here").arg(*depth_))
+                                     : nullptr;
     QAction* restack =
         depth_ ? menu.addAction(tr("Move depth %1 here to another depth...").arg(*depth_))
                : nullptr;
@@ -191,11 +195,7 @@ void Window::ShowTimelineMenu(const QPoint& where, uint32_t frame, const QString
         return;
     }
     if (chosen == remove_depth) {
-        const auto depth = static_cast<uint16_t>(*depth_);
-        EditAnimation(tr("Remove depth %1").arg(*depth_),
-                      [clip, depth, frame](AfpAnimation::Animation& edited) {
-                          return Document::RemoveDepth(edited, clip, depth, frame);
-                      });
+        RemoveChosenDepths(frame);
         return;
     }
 

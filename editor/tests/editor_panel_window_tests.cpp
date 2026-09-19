@@ -444,6 +444,81 @@ TEST_CASE("The Align menu lines chosen depths up as one undo step") {
     CHECK(x_of(3) != 10000);
 }
 
+TEST_CASE("Delete removes the chosen depths here as one undo step, but not owned ones") {
+    Opened opened;
+    Open(opened, true);
+    auto* library = opened.window.findChild<QTreeWidget*>("library");
+    auto* viewport = opened.window.findChild<Editor::Viewport*>();
+    auto* timeline = opened.window.findChild<Editor::Timeline*>();
+    REQUIRE(library != nullptr);
+    REQUIRE(viewport != nullptr);
+    REQUIRE(timeline != nullptr);
+    const auto dot_row = [&]() -> QTreeWidgetItem* {
+        for (int at = 0; at < library->topLevelItemCount(); at++) {
+            if (library->topLevelItem(at)->text(0).contains("dot"))
+                return library->topLevelItem(at);
+        }
+        return nullptr;
+    };
+    REQUIRE(dot_row() != nullptr);
+    const auto dot = static_cast<uint16_t>(dot_row()->data(0, Qt::UserRole).toUInt());
+    {
+        Script placed({});
+        emit viewport->CharacterDropped(dot, 500, 300);
+        QApplication::processEvents();
+        CHECK(placed.Problems().isEmpty());
+    }
+    CHECK(dot_row()->text(1) == "2");
+    emit timeline->DepthsChosen({2, 3});
+    {
+        bool offered = false;
+        Script looked({Look("Remove 2 depths here", offered)});
+        emit timeline->MenuRequested(QPoint(4, 4), 0, QString());
+        REQUIRE(Settle([&looked] { return looked.Finished(); }));
+        CHECK(offered);
+    }
+    QAction* remove = ShortcutAction(opened.window, QKeySequence(QKeySequence::Delete));
+    REQUIRE(remove != nullptr);
+    {
+        Script removed({});
+        remove->trigger();
+        QApplication::processEvents();
+        CHECK(removed.Problems().isEmpty());
+    }
+    CHECK(dot_row()->text(1) == "0");
+    QAction* undo = ShortcutAction(opened.window, QKeySequence(QKeySequence::Undo));
+    REQUIRE(undo != nullptr);
+    undo->trigger();
+    CHECK(dot_row()->text(1) == "2");
+
+    QAction* project = nullptr;
+    for (QAction* action : opened.window.findChildren<QAction*>()) {
+        if (action->text() == "&New project...") project = action;
+    }
+    REQUIRE(project != nullptr);
+    const QString folder = opened.dir.filePath("project");
+    REQUIRE(QDir().mkpath(folder));
+    {
+        Script made({PickFile(folder)});
+        project->trigger();
+        REQUIRE(Settle([&made] { return made.Finished(); }));
+        CHECK(made.Problems().isEmpty());
+    }
+    emit timeline->DepthChosen(3);
+    {
+        Script owned({Choose("Let the project own depth 3 from here")});
+        emit timeline->MenuRequested(QPoint(4, 4), 0, QString());
+        REQUIRE(Settle([&owned] { return owned.Finished(); }));
+        CHECK(owned.Problems().isEmpty());
+    }
+    emit timeline->DepthsChosen({2, 3});
+    Script refused({});
+    remove->trigger();
+    REQUIRE(Settle([&refused] { return !refused.Problems().isEmpty(); }));
+    CHECK(refused.Problems().front().contains("owns depth 3"));
+    CHECK(dot_row()->text(1) == "2");
+}
+
 TEST_CASE("A closed panel comes back from the View menu") {
     Opened opened;
     Open(opened);
