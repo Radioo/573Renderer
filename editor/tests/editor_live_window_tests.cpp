@@ -381,6 +381,44 @@ TEST_CASE(
     CHECK(opening.Problems().isEmpty());
 }
 
+TEST_CASE("Trimming the title to a work area reloads the host on the kept frames") {
+    const QString game = qEnvironmentVariable("R573_IIDX_DIR");
+    if (game.isEmpty()) SKIP("R573_IIDX_DIR not set");
+    QSettings().setValue("game/directory", game);
+    Editor::Window window;
+    QSettings().remove("game/directory");
+    window.resize(1600, 900);
+    window.show();
+    Script opening({});
+    window.OpenDocument(game + "/data/graphic/1/title.ifs");
+    REQUIRE(opening.Problems().isEmpty());
+    auto* timeline = window.findChild<Editor::Timeline*>();
+    REQUIRE(timeline != nullptr);
+    QAction* trim = ShortcutAction(window, QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_X));
+    QAction* start = ShortcutAction(window, QKeySequence(Qt::Key_B));
+    QAction* end = ShortcutAction(window, QKeySequence(Qt::Key_N));
+    REQUIRE(trim != nullptr);
+    REQUIRE(start != nullptr);
+    REQUIRE(end != nullptr);
+    emit timeline->FrameChosen(kPreviewFrame - 5);
+    start->trigger();
+    emit timeline->FrameChosen(kPreviewFrame);
+    end->trigger();
+    emit timeline->FrameChosen(kPreviewFrame - 3);
+    {
+        Script trimmed({});
+        trim->trigger();
+        QApplication::processEvents();
+        CHECK(trimmed.Problems().isEmpty());
+    }
+    window.statusBar()->clearMessage();
+    window.resize(1500, 880);
+    REQUIRE(Settle([&window] { return window.statusBar()->currentMessage().startsWith("Frame"); }));
+    INFO(window.statusBar()->currentMessage().toStdString());
+    CHECK(window.statusBar()->currentMessage() == "Frame 2 of 6");
+    CHECK(opening.Problems().isEmpty());
+}
+
 TEST_CASE("Onion skin shows the neighbouring frames and leaves the host on the playhead") {
     const QString game = qEnvironmentVariable("R573_IIDX_DIR");
     if (game.isEmpty()) SKIP("R573_IIDX_DIR not set");

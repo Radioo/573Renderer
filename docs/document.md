@@ -360,6 +360,38 @@ the clip's last frame, one right before another span of its depth, an image,
 and a swap from a sprite to a shape, and it checks every refusal leaves the
 clip unchanged.
 
+`CharacterOn` (the character a span shows on a frame, following swaps) and
+`IsStillCharacter` (an image or a shape) are shared with the clip trim.
+
+### Trimming a clip to a stretch of frames (`document/clip_trim.h`)
+
+`TrimClipToFrames(animation, clip, kept)` is After Effects' Trim Comp to Work
+Area: the clip keeps only the frames in `kept`, renumbered from 0, and every
+kept frame shows what it showed. `RemoveFrame` alone cannot do that, because it
+drops the placements on a removed frame, so a span that started before `kept`
+would lose its create and every update after it would place nothing. So the
+spans go first: a span wholly outside `kept` is removed (`RemoveDepth`), and a
+span crossing either end is trimmed to it with `TrimSpan`, which folds what the
+updates before the new first frame had set into a create on it. Only then are
+the frames after `kept` and before it removed, the latter one at a time from
+frame 0. `RemoveFrame` keeps the labels (a label on a removed frame lands on
+frame 0) and the definition tags, and moves the end frames.
+
+A span that crosses the new first frame gets a new object there. For an image
+or a shape that changes nothing, but a sprite, an imported clip or anything
+else starts its own timeline again from its first frame and runs its load
+actions again, which the format has no way to avoid. The trim goes ahead, since
+refusing would make it useless on nearly every shipped animation, and returns
+how many such spans there were so the editor can say so. A range that is not
+frames of the clip, or is the whole clip, is refused, and so is whatever
+`TrimSpan` refuses; the work is done on a copy, so a refusal changes nothing.
+Frame actions on removed frames go with them.
+
+`clip_trim_tests.cpp` replays the kept depths before and after, checks the
+removed spans are gone, the labels land where they should, a sprite crossing
+the start is counted while one starting on it or after it is not, and every
+refusal leaves the clip as it was.
+
 ### Copying a span between clips (`document/span_clipboard.h`)
 
 `CopySpan(animation, path, clip, depth, frame)` records the span of a depth

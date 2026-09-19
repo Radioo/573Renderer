@@ -48,6 +48,7 @@
 #include <QMessageBox>
 #include <QPoint>
 #include <QSettings>
+#include <QStatusBar>
 #include <QString>
 #include <QStringList>
 #include <QTableWidget>
@@ -655,6 +656,74 @@ TEST_CASE("Splitting a depth at the playhead keeps what it shows and refuses wha
     OwnDroppedDot(opened);
     choose(1, 3);
     CHECK(refusal().contains("owns depth 3"));
+}
+
+TEST_CASE("Trimming the clip to the work area keeps what those frames showed") {
+    Opened opened;
+    Open(opened, true);
+    auto* timeline = opened.window.findChild<Editor::Timeline*>();
+    REQUIRE(timeline != nullptr);
+    QAction* trim = ShortcutAction(opened.window, QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_X));
+    QAction* start = ShortcutAction(opened.window, QKeySequence(Qt::Key_B));
+    QAction* end = ShortcutAction(opened.window, QKeySequence(Qt::Key_N));
+    QAction* undo = ShortcutAction(opened.window, QKeySequence(QKeySequence::Undo));
+    REQUIRE(trim != nullptr);
+    REQUIRE(start != nullptr);
+    REQUIRE(end != nullptr);
+    REQUIRE(undo != nullptr);
+    const auto translation_on = [&](uint32_t frame) {
+        emit timeline->FrameChosen(frame);
+        emit timeline->DepthChosen(2);
+        return RowValue(*opened.inspector, "Translation");
+    };
+    const auto mark = [&](uint32_t first, uint32_t last) {
+        emit timeline->FrameChosen(first);
+        start->trigger();
+        emit timeline->FrameChosen(last);
+        end->trigger();
+    };
+    const auto refusal = [&] {
+        Script refused({});
+        trim->trigger();
+        REQUIRE(Settle([&refused] { return !refused.Problems().isEmpty(); }));
+        return refused.Problems().front();
+    };
+    CHECK(refusal().contains("work area first"));
+    const std::string at_one = translation_on(1);
+    const std::string at_two = translation_on(2);
+    REQUIRE(at_one != at_two);
+    mark(1, 2);
+    emit timeline->FrameChosen(1);
+    {
+        Script trimmed({});
+        trim->trigger();
+        QApplication::processEvents();
+        CHECK(trimmed.Problems().isEmpty());
+    }
+    CHECK(opened.window.statusBar()->currentMessage().contains("starts again"));
+    CHECK(RowValue(*opened.inspector, "Translation") == at_one);
+    CHECK(refusal().contains("work area first"));
+    CHECK(translation_on(0) == at_one);
+    CHECK(translation_on(1) == at_two);
+    mark(0, 1);
+    CHECK(refusal().contains("exactly those frames"));
+    undo->trigger();
+    CHECK(translation_on(2) == at_two);
+
+    mark(0, 1);
+    opened.window.statusBar()->clearMessage();
+    {
+        Script trimmed({});
+        trim->trigger();
+        QApplication::processEvents();
+        CHECK(trimmed.Problems().isEmpty());
+    }
+    CHECK_FALSE(opened.window.statusBar()->currentMessage().contains("starts again"));
+    undo->trigger();
+
+    OwnDroppedDot(opened);
+    mark(1, 2);
+    CHECK(refusal().contains("owns depths"));
 }
 
 TEST_CASE("The package and library searches hide what does not match, across refills") {

@@ -6,6 +6,7 @@
 #include "document/authored.h"
 #include "document/characters.h"
 #include "document/clip.h"
+#include "document/clip_trim.h"
 #include "document/hidden_depths.h"
 #include "document/keyframes.h"
 #include "document/outline.h"
@@ -35,6 +36,7 @@
 #include <QWidget>
 
 #include <algorithm>
+#include <cstddef>
 #include <cstdint>
 #include <map>
 #include <functional>
@@ -375,6 +377,46 @@ void Window::AddStepActions(QMenu* menu) {
         action->setShortcut(step.keys);
         connect(action, &QAction::triggered, this, step.run);
     }
+}
+
+void Window::TrimClipToWorkArea() {
+    if (!file_ || animation_path_.empty()) return;
+    if (!work_area_) {
+        ReportProblem(tr("Mark the frames to keep as the work area first, with B and N"));
+        return;
+    }
+    const bool owned = std::ranges::any_of(authored_, [this](const Document::AuthoredDepth& one) {
+        return one.animation == animation_path_ && one.clip == clip_;
+    });
+    if (owned) {
+        ReportProblem(tr("The project owns depths in this clip. Detach them before trimming it."));
+        return;
+    }
+    const Document::ClipId clip = clip_;
+    const Document::Span kept{.first_frame = work_area_->first_frame,
+                              .last_frame = work_area_->last_frame};
+    const uint32_t playhead =
+        frame_ < kept.first_frame ? 0 : std::min(frame_, kept.last_frame) - kept.first_frame;
+    std::size_t restarted = 0;
+    if (!EditAnimation(
+            tr("Trim the clip to frames %1 to %2").arg(kept.first_frame).arg(kept.last_frame),
+            [clip, kept,
+             &restarted](AfpAnimation::Animation& edited) -> Support::Expected<void, std::string> {
+                auto trimmed = Document::TrimClipToFrames(edited, clip, kept);
+                if (!trimmed) return Support::Unexpected(trimmed.error());
+                restarted = *trimmed;
+                return {};
+            })) {
+        return;
+    }
+    SetWorkArea(std::nullopt);
+    SeekTo(playhead);
+    if (restarted == 0) return;
+    statusBar()->showMessage(
+        tr("%n depth(s) crossing frame %1 show a sprite or another clip, which "
+           "now starts again from its own first frame",
+           nullptr, static_cast<int>(restarted))
+            .arg(kept.first_frame));
 }
 
 void Window::SetWorkArea(std::optional<Document::WorkArea> area) {

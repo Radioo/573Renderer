@@ -283,6 +283,9 @@ void Window::BuildMenus() {
     connect(split, &QAction::triggered, this, [this] {
         if (depth_) SplitDepthAt(static_cast<uint16_t>(*depth_), frame_);
     });
+    QAction* trim = edit->addAction(tr("&Trim the clip to the work area"));
+    trim->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_X));
+    connect(trim, &QAction::triggered, this, &Window::TrimClipToWorkArea);
 }
 
 void Window::ChooseGameDirectory() {

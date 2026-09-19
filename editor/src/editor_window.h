@@ -187,6 +187,7 @@ private:
     void StepToMark(Document::Direction direction);
     void AddStepActions(QMenu* menu);
     void SetWorkArea(std::optional<Document::WorkArea> area);
+    void TrimClipToWorkArea();
     void SeekViewport(uint32_t frame);
     QWidget* BuildTimelinePanel(QScrollArea* timeline_area);
     void FillClips();

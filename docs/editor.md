@@ -786,6 +786,22 @@ three frame work area on `graphic/1/title.ifs`, plays for 0.7 seconds and
 requires the playhead to have stopped inside it; with the work area left out
 of playback it was seen to fail.
 
+`Edit > Trim the clip to the work area` (Ctrl+Shift+X, After Effects' Trim Comp
+to Work Area) keeps only the work area's frames of the clip on screen
+(`Window::TrimClipToWorkArea`, through `Document::TrimClipToFrames`), as one
+undo step. The work area is cleared, since it is now the whole clip, and the
+playhead stays on the same content. The playhead is worked out before the edit,
+because the edit clamps it to the new frame count and it would otherwise land
+on frame 0. When spans showing a sprite or another clip cross the new first
+frame, the status bar says how many now start again. It is refused without a
+work area, and while the project owns a depth in the clip, since its records
+count frames. The window test trims the dot's intro to frames 1 and 2 with the
+playhead on 1, reads the translations on the new frames, sees the work area
+gone, the whole clip refused, the undo, a trim with nothing restarting that
+says nothing, and the owned refusal; the live test trims `title` to six frames
+around frame 400 and reads the host's frame. Dropping the clearing, the seek,
+the quiet case, the owned or work-area check, or the shortcut fails them.
+
 `Playback > Play` (the space bar) plays the animation and pauses it, and
 `Playback > Loop` decides whether it wraps at the end; the choice is remembered
 between runs. The timer's interval is `Document::FrameIntervalMs` of the

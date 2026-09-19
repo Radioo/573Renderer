@@ -315,3 +315,4 @@ captured. This milestone is the editing itself.
 - `issues/107-split-spans.md` (milestone 8)
 - `issues/108-time-reverse-keyframes.md` (milestone 8)
 - `issues/109-easy-ease.md` (milestone 8)
+- `issues/110-trim-clip-to-work-area.md` (milestone 8)

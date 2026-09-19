@@ -19,34 +19,6 @@ namespace Document {
 
 namespace {
 
-std::optional<uint16_t> ShownOn(const AfpAnimation::Container& clip, uint16_t depth,
-                                const Span& span, uint32_t frame) {
-    std::optional<uint16_t> shown;
-    for (uint32_t at = span.first_frame; at <= frame && at < clip.frames.size(); at++) {
-        const AfpAnimation::Frame& owner = clip.frames[at];
-        for (std::size_t tag = 0; tag < owner.tag_count; tag++) {
-            const std::size_t index = owner.first_tag + tag;
-            if (index >= clip.tags.size()) break;
-            const auto* placement = std::get_if<AfpAnimation::Placement>(&clip.tags[index].body);
-            if (placement != nullptr && placement->depth == depth && placement->character)
-                shown = placement->character;
-        }
-    }
-    return shown;
-}
-
-bool IsStill(const AfpAnimation::Animation& animation, uint16_t character) {
-    for (const AfpAnimation::Tag& tag : animation.root.tags) {
-        if (const auto* image = std::get_if<AfpAnimation::Image>(&tag.body)) {
-            if (image->id == character) return true;
-        }
-        if (const auto* shape = std::get_if<AfpAnimation::Shape>(&tag.body)) {
-            if (shape->id == character) return true;
-        }
-    }
-    return false;
-}
-
 Support::Expected<void, std::string> CheckSplittable(const AfpAnimation::Animation& animation,
                                                      const AfpAnimation::Container& clip,
                                                      uint16_t depth, uint32_t frame,
@@ -56,8 +28,8 @@ Support::Expected<void, std::string> CheckSplittable(const AfpAnimation::Animati
         return Support::Unexpected(named + " starts on frame " + std::to_string(frame) +
                                    ", so there is nothing before it to split from");
     }
-    const std::optional<uint16_t> character = ShownOn(clip, depth, span, frame);
-    if (!character || !IsStill(animation, *character)) {
+    const std::optional<uint16_t> character = CharacterOn(clip, depth, span, frame);
+    if (!character || !IsStillCharacter(animation, *character)) {
         return Support::Unexpected(
             named + " shows a character on frame " + std::to_string(frame) +
             " that is not an image or a shape, so a new object there would start again");
@@ -73,6 +45,34 @@ void Relabel(AfpAnimation::Container& clip, uint16_t from, const Span& span, uin
     }
 }
 
+}
+
+std::optional<uint16_t> CharacterOn(const AfpAnimation::Container& clip, uint16_t depth,
+                                    const Span& span, uint32_t frame) {
+    std::optional<uint16_t> shown;
+    for (uint32_t at = span.first_frame; at <= frame && at < clip.frames.size(); at++) {
+        const AfpAnimation::Frame& owner = clip.frames[at];
+        for (std::size_t tag = 0; tag < owner.tag_count; tag++) {
+            const std::size_t index = owner.first_tag + tag;
+            if (index >= clip.tags.size()) break;
+            const auto* placement = std::get_if<AfpAnimation::Placement>(&clip.tags[index].body);
+            if (placement != nullptr && placement->depth == depth && placement->character)
+                shown = placement->character;
+        }
+    }
+    return shown;
+}
+
+bool IsStillCharacter(const AfpAnimation::Animation& animation, uint16_t character) {
+    for (const AfpAnimation::Tag& tag : animation.root.tags) {
+        if (const auto* image = std::get_if<AfpAnimation::Image>(&tag.body)) {
+            if (image->id == character) return true;
+        }
+        if (const auto* shape = std::get_if<AfpAnimation::Shape>(&tag.body)) {
+            if (shape->id == character) return true;
+        }
+    }
+    return false;
 }
 
 Support::Expected<void, std::string> SplitSpan(AfpAnimation::Animation& animation, ClipId clip,
