@@ -299,3 +299,4 @@ captured. This milestone is the editing itself.
 - `issues/91-window-tests-under-load.md` (milestone 8)
 - `issues/92-library-panel.md` (milestone 8)
 - `issues/93-name-timeline-spans.md` (milestone 8)
+- `issues/94-drop-characters-on-the-stage.md` (milestone 8)

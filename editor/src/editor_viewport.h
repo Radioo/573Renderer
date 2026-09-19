@@ -14,6 +14,9 @@
 #include <optional>
 #include <vector>
 
+class QDragEnterEvent;
+class QDragMoveEvent;
+class QDropEvent;
 class QKeyEvent;
 class QMouseEvent;
 class QPainter;
@@ -43,6 +46,7 @@ signals:
     void Dragged(uint16_t depth, double dx, double dy, bool finished);
     void Reshaped(uint16_t depth, double scale_x, double scale_y, double turn, bool finished);
     void ZoomChanged();
+    void CharacterDropped(uint16_t character, double x, double y);
 
 protected:
     void paintEvent(QPaintEvent* event) override;
@@ -52,6 +56,9 @@ protected:
     void mouseReleaseEvent(QMouseEvent* event) override;
     void keyPressEvent(QKeyEvent* event) override;
     void wheelEvent(QWheelEvent* event) override;
+    void dragEnterEvent(QDragEnterEvent* event) override;
+    void dragMoveEvent(QDragMoveEvent* event) override;
+    void dropEvent(QDropEvent* event) override;
 
 private:
     enum class Gesture : uint8_t { None, Move, Scale, Turn };

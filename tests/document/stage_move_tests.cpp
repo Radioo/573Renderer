@@ -14,6 +14,7 @@
 #include <optional>
 #include <string>
 #include <utility>
+#include <variant>
 
 namespace {
 
@@ -57,6 +58,29 @@ TEST_CASE("Moving a depth adds the offset to the translation it is placed with, 
     REQUIRE(state.has_value());
     if (!state) return;
     CHECK(state->matrix == std::array<double, 6>{2.0, 0.0, 0.0, 1.0, 160.0, 10.0});
+}
+
+TEST_CASE("A character placed at a stage point shows there from its first frame to its last") {
+    AfpAnimation::Animation animation = Placed(0);
+    const auto placed = Document::PlaceAtPoint(animation, kRoot, 5, 9, 1, 2, {.x = 30, .y = 12.5});
+    INFO((placed.has_value() ? std::string() : placed.error()));
+    REQUIRE(placed.has_value());
+    const auto shown = Document::ReplayDepth(animation.root, 5, 0, kFrames - 1);
+    REQUIRE(shown.size() == 2);
+    CHECK(shown.front().first == 1);
+    CHECK(shown.back().first == 2);
+    std::optional<uint16_t> character;
+    for (const AfpAnimation::Tag& tag : animation.root.tags) {
+        const auto* placement = std::get_if<AfpAnimation::Placement>(&tag.body);
+        if (placement != nullptr && placement->depth == 5) character = placement->character;
+    }
+    CHECK(character == uint16_t{9});
+    CHECK(shown.front().second.matrix == std::array<double, 6>{1.0, 0.0, 0.0, 1.0, 600.0, 250.0});
+
+    const auto before = animation;
+    CHECK_FALSE(
+        Document::PlaceAtPoint(animation, kRoot, kDepth, 9, 0, 1, {.x = 1, .y = 1}).has_value());
+    CHECK(animation == before);
 }
 
 TEST_CASE("Moving where only the colour changes keeps the matrix it was showing") {

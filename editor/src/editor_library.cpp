@@ -1,12 +1,19 @@
 #include "editor_window.h"
 
+#include "editor_mime.h"
+
 #include "document/characters.h"
 #include "document/document.h"
 #include "document/frame_edit.h"
+#include "document/stage_move.h"
 #include "formats/afp_animation.h"
 
 #include <QAction>
+#include <QAbstractItemView>
 #include <QBrush>
+#include <QByteArray>
+#include <QList>
+#include <QMimeData>
 #include <QComboBox>
 #include <QInputDialog>
 #include <QMenu>
@@ -32,6 +39,16 @@ namespace {
 constexpr int kIdRole = Qt::UserRole;
 constexpr int kKindRole = Qt::UserRole + 1;
 
+class LibraryTree : public QTreeWidget {
+public:
+    [[nodiscard]] QMimeData* mimeData(const QList<QTreeWidgetItem*>& items) const override {
+        if (items.isEmpty()) return nullptr;
+        auto* data = new QMimeData;
+        data->setData(kCharacterMime, QByteArray::number(items.front()->data(0, kIdRole).toUInt()));
+        return data;
+    }
+};
+
 std::optional<uint16_t> SpriteOf(const QTreeWidgetItem* item) {
     if (item == nullptr) return std::nullopt;
     const auto kind = static_cast<Document::CharacterKind>(item->data(0, kKindRole).toInt());
@@ -42,10 +59,12 @@ std::optional<uint16_t> SpriteOf(const QTreeWidgetItem* item) {
 }
 
 QTreeWidget* Window::BuildLibrary() {
-    library_ = new QTreeWidget;
+    library_ = new LibraryTree;
     library_->setObjectName("library");
     library_->setHeaderLabels({tr("Character"), tr("Uses")});
     library_->setRootIsDecorated(false);
+    library_->setDragEnabled(true);
+    library_->setDragDropMode(QAbstractItemView::DragOnly);
     library_->setContextMenuPolicy(Qt::CustomContextMenu);
     connect(library_, &QTreeWidget::itemDoubleClicked, this, [this](const QTreeWidgetItem* item) {
         const std::optional<uint16_t> sprite = SpriteOf(item);
@@ -111,6 +130,32 @@ std::optional<uint32_t> Window::AskForLastFrame(uint32_t first) {
         std::max(clip_frames - 1, static_cast<int>(first)), 1, &answered);
     if (!answered) return std::nullopt;
     return static_cast<uint32_t>(last);
+}
+
+void Window::PlaceDroppedCharacter(uint16_t character, double x, double y) {
+    if (!file_ || animation_path_.empty()) return;
+    if (!OutlinesMatchView()) {
+        ReportProblem(tr("The stage shows the whole animation while a sprite is being edited, so "
+                         "a drop there has no place in the sprite. Show the sprite on its own "
+                         "first."));
+        return;
+    }
+    const std::optional<uint16_t> depth = NextFreeDepth(0);
+    if (!depth) return;
+    const uint32_t frames = ClipFrameCount();
+    const uint32_t first = frame_;
+    const uint32_t last = frames == 0 ? first : std::max(first, frames - 1);
+    const Document::ClipId clip = clip_;
+    const Document::StageOffset point{.x = x, .y = y};
+    if (!EditAnimation(
+            tr("Place character %1 on depth %2").arg(character).arg(*depth),
+            [clip, depth, character, first, last, point](AfpAnimation::Animation& edited) {
+                return Document::PlaceAtPoint(edited, clip, *depth, character, first, last, point);
+            })) {
+        return;
+    }
+    depth_ = *depth;
+    ShowFrame();
 }
 
 void Window::AddCharacterDepth(uint16_t depth, uint16_t character, uint32_t first, uint32_t last) {

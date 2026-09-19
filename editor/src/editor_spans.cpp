@@ -182,7 +182,7 @@ void Window::UngroupSpriteAt(uint16_t depth, uint32_t frame) {
     ShowFrame();
 }
 
-std::optional<uint16_t> Window::AskForFreeDepth(const QString& title, uint16_t fallback) {
+std::optional<uint16_t> Window::NextFreeDepth(uint16_t fallback) {
     const auto animation = file_->ReadAnimation(animation_path_);
     if (!animation) {
         ReportProblem(QString::fromStdString(animation.error()));
@@ -194,7 +194,13 @@ std::optional<uint16_t> Window::AskForFreeDepth(const QString& title, uint16_t f
         for (const Document::DepthRow& row : details->depths)
             highest = std::max(highest, row.depth);
     }
-    const int suggested = std::min<int>(highest + 1, std::numeric_limits<uint16_t>::max());
+    return static_cast<uint16_t>(std::min<int>(highest + 1, std::numeric_limits<uint16_t>::max()));
+}
+
+std::optional<uint16_t> Window::AskForFreeDepth(const QString& title, uint16_t fallback) {
+    const std::optional<uint16_t> next = NextFreeDepth(fallback);
+    if (!next) return std::nullopt;
+    const int suggested = *next;
     bool answered = false;
     const int chosen = QInputDialog::getInt(this, title, tr("Depth"), suggested, 0,
                                             std::numeric_limits<uint16_t>::max(), 1, &answered);

@@ -1,10 +1,16 @@
 #include "editor_viewport.h"
 
+#include "editor_mime.h"
+
 #include "document/stage_bounds.h"
 
 #include <QColor>
+#include <QDragEnterEvent>
+#include <QDragMoveEvent>
+#include <QDropEvent>
 #include <QKeyEvent>
 #include <QLineF>
+#include <QMimeData>
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPaintEvent>
@@ -20,6 +26,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <limits>
 #include <optional>
 #include <utility>
 #include <vector>
@@ -56,6 +63,7 @@ Viewport::Viewport(QWidget* parent) : QWidget(parent) {
     setMinimumSize(kMinimumWidth, kMinimumHeight);
     setAutoFillBackground(false);
     setFocusPolicy(Qt::StrongFocus);
+    setAcceptDrops(true);
     message_ = tr("No animation selected");
 }
 
@@ -124,6 +132,24 @@ void Viewport::FitStage() {
     pan_ = QPointF();
     update();
     emit ZoomChanged();
+}
+
+void Viewport::dragEnterEvent(QDragEnterEvent* event) {
+    if (event->mimeData()->hasFormat(kCharacterMime)) event->acceptProposedAction();
+}
+
+void Viewport::dragMoveEvent(QDragMoveEvent* event) {
+    if (event->mimeData()->hasFormat(kCharacterMime)) event->acceptProposedAction();
+}
+
+void Viewport::dropEvent(QDropEvent* event) {
+    if (!event->mimeData()->hasFormat(kCharacterMime)) return;
+    bool read = false;
+    const uint32_t character = event->mimeData()->data(kCharacterMime).toUInt(&read);
+    const std::optional<QPointF> stage = ToStage(event->position());
+    if (!read || character > std::numeric_limits<uint16_t>::max() || !stage) return;
+    event->acceptProposedAction();
+    emit CharacterDropped(static_cast<uint16_t>(character), stage->x(), stage->y());
 }
 
 void Viewport::wheelEvent(QWheelEvent* event) {

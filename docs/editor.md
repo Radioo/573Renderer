@@ -199,6 +199,18 @@ free one is suggested) and the last frame the way the timeline's add depth does
 The package tree and the library are named (`package`, `library`) so a test can
 tell the two trees apart.
 
+A character can also be dragged from the library onto the stage, as footage is
+dragged into a composition. The library's drag data carries the character id
+under `application/x-ifs-editor-character` (`editor_mime.h`); the viewport takes
+that format only, maps the drop point to stage pixels through the same
+rectangle every other stage gesture uses, and emits `CharacterDropped`. The
+window places the character on the first free depth (`Window::NextFreeDepth`,
+the rule add depth suggests with) from the playhead to the clip's last frame,
+with its origin at the drop point (`Document::PlaceAtPoint`), as one undo step,
+and selects the new depth. While a sprite is edited over the root view the
+stage shows the root, so a drop there has no place in the sprite and is refused
+with a message saying to show the sprite on its own first.
+
 **Inspector.** Selecting an item calls `Outline::Describe` and prints
 `Document::Fields` as one line per field. When the selection is an animation
 the window also shows it.

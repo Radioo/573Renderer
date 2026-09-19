@@ -4,6 +4,7 @@
 
 #include "editor_ease_dialog.h"
 #include "editor_timeline.h"
+#include "editor_mime.h"
 #include "editor_viewport.h"
 
 #include "document/key_selection.h"
@@ -18,6 +19,10 @@
 #include <QKeyEvent>
 #include <QMouseEvent>
 #include <QWheelEvent>
+#include <QByteArray>
+#include <QDragEnterEvent>
+#include <QDropEvent>
+#include <QMimeData>
 #include <QObject>
 #include <QPoint>
 #include <QPointF>
@@ -28,6 +33,7 @@
 #include <cmath>
 #include <cstdint>
 #include <optional>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -422,6 +428,33 @@ TEST_CASE("Dragging with the middle button pans the stage") {
     CHECK(PickedAt(viewport, {{250, 150}}) == std::vector<QPointF>{{300, 200}});
     viewport.FitStage();
     CHECK(PickedAt(viewport, {{300, 250}}) == std::vector<QPointF>{{600, 500}});
+}
+
+TEST_CASE("A character dropped on the stage is reported at its stage point") {
+    Editor::Viewport viewport;
+    ShowStage(viewport);
+    std::vector<std::pair<uint16_t, QPointF>> dropped;
+    QObject::connect(&viewport, &Editor::Viewport::CharacterDropped,
+                     [&dropped](uint16_t character, double x, double y) {
+                         dropped.emplace_back(character, QPointF(x, y));
+                     });
+    const auto drop = [&viewport](const QString& format, const QByteArray& bytes) {
+        QMimeData data;
+        data.setData(format, bytes);
+        QDragEnterEvent enter(QPoint(300, 200), Qt::CopyAction, &data, Qt::LeftButton,
+                              Qt::NoModifier);
+        QApplication::sendEvent(&viewport, &enter);
+        QDropEvent dropped_on(QPointF(300, 200), Qt::CopyAction, &data, Qt::LeftButton,
+                              Qt::NoModifier);
+        QApplication::sendEvent(&viewport, &dropped_on);
+        return enter.isAccepted();
+    };
+    CHECK(drop(Editor::kCharacterMime, "12"));
+    REQUIRE(dropped.size() == 1);
+    CHECK(dropped[0].first == 12);
+    CHECK(dropped[0].second == QPointF(600, 400));
+    CHECK_FALSE(drop("text/plain", "12"));
+    CHECK(dropped.size() == 1);
 }
 
 TEST_CASE("Dragging inside the selection moves it by the stage offset") {

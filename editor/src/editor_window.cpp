@@ -188,6 +188,7 @@ void Window::BuildPanels() {
     connect(viewport_, &Viewport::Picked, this, &Window::PickOnStage);
     connect(viewport_, &Viewport::Dragged, this, &Window::MoveOnStage);
     connect(viewport_, &Viewport::Reshaped, this, &Window::ReshapeOnStage);
+    connect(viewport_, &Viewport::CharacterDropped, this, &Window::PlaceDroppedCharacter);
 
     ads::CDockAreaWidget* centre = docks_->setCentralWidget(MakePanel(tr("Viewport"), viewport_));
     ads::CDockAreaWidget* package_area = docks_->addDockWidget(

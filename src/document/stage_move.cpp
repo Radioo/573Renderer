@@ -2,6 +2,7 @@
 
 #include "document/authored.h"
 #include "document/clip.h"
+#include "document/frame_edit.h"
 #include "document/keyframe_edit.h"
 #include "document/keyframes.h"
 #include "document/placement_edit.h"
@@ -194,6 +195,19 @@ Support::Expected<void, std::string> MoveBakedDepth(AfpAnimation::Animation& ani
         return Support::Unexpected("depth " + std::to_string(depth) + " is placed in 3D");
     if ((placement->flags & kUseMatrix) == 0) CarryMatrix(*placement, shown.back().second);
     return Shift(*placement, offset);
+}
+
+Support::Expected<void, std::string> PlaceAtPoint(AfpAnimation::Animation& animation, ClipId clip,
+                                                  uint16_t depth, uint16_t character,
+                                                  uint32_t first_frame, uint32_t last_frame,
+                                                  StageOffset point) {
+    AfpAnimation::Animation edited = animation;
+    auto added = AddDepth(edited, clip, depth, character, first_frame, last_frame);
+    if (!added) return Support::Unexpected(added.error());
+    auto moved = MoveBakedDepth(edited, clip, depth, first_frame, point);
+    if (!moved) return Support::Unexpected(moved.error());
+    animation = std::move(edited);
+    return {};
 }
 
 Support::Expected<void, std::string> ReshapeBakedDepth(AfpAnimation::Animation& animation,

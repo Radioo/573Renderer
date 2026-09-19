@@ -195,7 +195,9 @@ private:
     void MoveSpanInTime(uint16_t depth, uint32_t frame, int64_t by);
     void MoveSpanToDepth(uint16_t depth, uint32_t frame);
     void DuplicateSpanToDepth(uint16_t depth, uint32_t frame);
+    [[nodiscard]] std::optional<uint16_t> NextFreeDepth(uint16_t fallback);
     [[nodiscard]] std::optional<uint16_t> AskForFreeDepth(const QString& title, uint16_t fallback);
+    void PlaceDroppedCharacter(uint16_t character, double x, double y);
     [[nodiscard]] std::optional<uint32_t> AskForLastFrame(uint32_t first);
     void AddCharacterDepth(uint16_t depth, uint16_t character, uint32_t first, uint32_t last);
     [[nodiscard]] QTreeWidget* BuildLibrary();

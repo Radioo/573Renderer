@@ -369,6 +369,16 @@ controller, the shape files and listing, and the nested sprite refusal.
 Dropping the export, the recursion, the grid controller, the file removal, the
 listing filter or the nested check each fails them.
 
+### Placing at a stage point (`document/stage_move.h`)
+
+`PlaceAtPoint(animation, clip, depth, character, first, last, point)` is
+`AddDepth` followed by `MoveBakedDepth` on the first frame, so the new placement
+gets the identity matrix a move gives a placement without one and a translation
+of the point in twentieths of a pixel, the same encoding a stage drag writes.
+It changes nothing when either step is refused (a taken depth, a frame outside
+the clip). `stage_move_tests` checks the span, the character and the matrix,
+and fails when the move is left out.
+
 ### Trimming a span (`document/span_trim.h`)
 
 `TrimSpan` gives a span new first and last frames. The end is the simple side:
