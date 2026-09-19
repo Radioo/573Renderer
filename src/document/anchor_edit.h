@@ -15,4 +15,8 @@ namespace Document {
 CentreAnchor(AfpAnimation::Animation& animation, ClipId clip, uint16_t depth, uint32_t frame,
              const std::map<uint16_t, Box>& shape_bounds);
 
+[[nodiscard]] Support::Expected<void, std::string> MoveAnchor(AfpAnimation::Animation& animation,
+                                                              ClipId clip, uint16_t depth,
+                                                              uint32_t frame, Point stage_offset);
+
 }

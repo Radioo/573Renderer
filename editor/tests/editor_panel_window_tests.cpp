@@ -643,3 +643,28 @@ TEST_CASE("Centring a depth's anchor moves it onto the content without moving th
     REQUIRE_FALSE(owned.isEmpty());
     CHECK(owned.front().contains("owns depth 3"));
 }
+
+TEST_CASE("Dragging a depth's anchor on stage moves its origin and keeps it on screen") {
+    Opened opened;
+    Open(opened, true);
+    auto* timeline = opened.window.findChild<Editor::Timeline*>();
+    auto* viewport = opened.window.findChild<Editor::Viewport*>();
+    REQUIRE(timeline != nullptr);
+    REQUIRE(viewport != nullptr);
+    const auto drag_anchor = [&](uint32_t depth, double dx, double dy) {
+        emit timeline->FrameChosen(0);
+        emit timeline->DepthChosen(depth);
+        Script run({});
+        emit viewport->AnchorMoved(static_cast<uint16_t>(depth), dx, dy);
+        QApplication::processEvents();
+        return run.Problems();
+    };
+    CHECK(drag_anchor(2, 1.0, 0.5).isEmpty());
+    CHECK(RowValue(*opened.inspector, "Origin") == "20, 10");
+    CHECK(RowValue(*opened.inspector, "Translation") == "20, 10");
+
+    OwnDroppedDot(opened);
+    const QStringList owned = drag_anchor(3, 1.0, 0.5);
+    REQUIRE_FALSE(owned.isEmpty());
+    CHECK(owned.front().contains("owns depth 3"));
+}

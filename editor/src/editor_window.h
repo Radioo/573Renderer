@@ -224,6 +224,8 @@ private:
     [[nodiscard]] bool OutlinesMatchView() const;
     void UpdateOutlines(const AfpAnimation::Animation& animation);
     void CentreChosenAnchor();
+    void MoveAnchorOnStage(uint16_t depth, double dx, double dy);
+    [[nodiscard]] bool RefuseOwnedAnchor(uint16_t depth);
     [[nodiscard]] std::vector<Document::PathPoint>
     PathOfDepth(const AfpAnimation::Animation& animation) const;
     void PickOnStage(double x, double y);

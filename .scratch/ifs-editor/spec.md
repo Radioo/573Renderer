@@ -335,3 +335,4 @@ captured. This milestone is the editing itself.
 - `issues/127-time-stretch-keyframes.md` (milestone 8)
 - `issues/128-alt-drag-stretch-keyframes.md` (milestone 8)
 - `issues/129-centre-anchor.md` (milestone 8)
+- `issues/130-drag-the-anchor.md` (milestone 8)

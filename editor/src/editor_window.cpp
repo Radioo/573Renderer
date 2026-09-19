@@ -202,6 +202,7 @@ void Window::BuildPanels() {
     connect(viewport_, &Viewport::Picked, this, &Window::PickOnStage);
     connect(viewport_, &Viewport::Dragged, this, &Window::MoveOnStage);
     connect(viewport_, &Viewport::Reshaped, this, &Window::ReshapeOnStage);
+    connect(viewport_, &Viewport::AnchorMoved, this, &Window::MoveAnchorOnStage);
     connect(viewport_, &Viewport::CharacterDropped, this, &Window::PlaceDroppedCharacter);
     connect(viewport_, &Viewport::DepthsBanded, this, &Window::ChooseDepths);
 

@@ -1356,6 +1356,21 @@ Most shapes KONAMI ships already have their anchor there: of the first thirty
 scaled or turned spans in `title.ifs`'s sprites, twenty-six are refused as
 already centred.
 
+`MoveAnchor(animation, clip, depth, frame, stage_offset)` is After Effects'
+Pan Behind: the anchor moves by an offset in stage pixels, as a drag of it on
+the stage gives, and nothing on screen moves. The offset is taken into the
+object's own space through the inverse of the 2x2 live on `frame` (from
+`ReplayDepth`), `d = M^-1 * offset`, rounded to whole twentieths, and shifted
+through the span as above, so the anchor lands under the pointer on `frame`
+and moves by the same `d` in the object's space on every other frame, the way
+After Effects keeps an anchor fixed to the layer. A matrix squashed flat on
+`frame` (determinant zero) has no inverse and is refused, and so is an offset
+too small to move the origin by a twentieth. The check that `ReplayDepth`
+returned a state only guards the lookup: a span always starts with a create,
+so once the depth has a span on `frame` a state is there, and an update with
+no create before it gives no span at all and is refused as holding nothing
+(tested). Changing that check is therefore an equivalent mutant.
+
 The translation is whole twentieths, so `d * M` is rounded to the nearest one.
 That is exact when `M` is a whole scale and puts a point at most half a
 twentieth of a pixel (1/40) away otherwise. No edit can do better, since the
@@ -1366,7 +1381,11 @@ edge pixel by at most 255/40, about 6.4 levels.
 update, a colour-only update and an update that changes the origin, and
 requires every frame's outline to stay within the rounding; it checks the
 origins written, an object placed without a matrix, and the refusals (nothing
-on the frame, no known box, 3D, geometry, already centred). The proof that the
+on the frame, no known box, 3D, geometry, already centred). It moves an anchor
+by a stage offset on the turned frame, chosen so the shift is whole
+twentieths, and requires the anchor there to land exactly under it with every
+frame's outline in place, and refuses a frame with nothing, an offset too small
+and a flat matrix. The proof that the
 game agrees is `anchor_live_tests` (`local_dll`): it centres the anchor of the
 first scaled or turned span in a sprite of IIDX 33's `title.ifs` that is not
 centred yet (sprite 90, depth 4, scaled by fractions such as 1155/1024) and

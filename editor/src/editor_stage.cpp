@@ -187,18 +187,32 @@ AnimationChange OwnedAsAnimation(Document::AuthoredDepth authored, OwnedChange o
 void Window::CentreChosenAnchor() {
     if (!file_ || animation_path_.empty() || !depth_) return;
     const auto depth = static_cast<uint16_t>(*depth_);
-    if (AuthoredIndexAt(depth, frame_)) {
-        ReportProblem(tr("The project owns depth %1 and draws it from keyframes, which keep no "
-                         "anchor. Detach it before moving its anchor.")
-                          .arg(depth));
-        return;
-    }
+    if (RefuseOwnedAnchor(depth)) return;
     const std::map<uint16_t, Document::Box> shapes = file_->ShapeBounds(animation_path_);
     const Document::ClipId clip = clip_;
     const uint32_t frame = frame_;
     EditAnimation(tr("Centre the anchor of depth %1").arg(depth),
                   [clip, depth, frame, &shapes](AfpAnimation::Animation& edited) {
                       return Document::CentreAnchor(edited, clip, depth, frame, shapes);
+                  });
+}
+
+bool Window::RefuseOwnedAnchor(uint16_t depth) {
+    if (!AuthoredIndexAt(depth, frame_)) return false;
+    ReportProblem(tr("The project owns depth %1 and draws it from keyframes, which keep no "
+                     "anchor. Detach it before moving its anchor.")
+                      .arg(depth));
+    return true;
+}
+
+void Window::MoveAnchorOnStage(uint16_t depth, double dx, double dy) {
+    if (!file_ || animation_path_.empty() || RefuseOwnedAnchor(depth)) return;
+    const Document::ClipId clip = clip_;
+    const uint32_t frame = frame_;
+    EditAnimation(tr("Move the anchor of depth %1").arg(depth),
+                  [clip, depth, frame, dx, dy](AfpAnimation::Animation& edited) {
+                      return Document::MoveAnchor(edited, clip, depth, frame,
+                                                  Document::Point{dx, dy});
                   });
 }
 

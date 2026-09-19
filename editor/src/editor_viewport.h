@@ -51,6 +51,7 @@ signals:
     void Picked(double x, double y);
     void Dragged(uint16_t depth, double dx, double dy, bool finished);
     void Reshaped(uint16_t depth, double scale_x, double scale_y, double turn, bool finished);
+    void AnchorMoved(uint16_t depth, double dx, double dy);
     void ZoomChanged();
     void CharacterDropped(uint16_t character, double x, double y);
     void DepthsBanded(std::vector<uint16_t> depths);
@@ -68,7 +69,7 @@ protected:
     void dropEvent(QDropEvent* event) override;
 
 private:
-    enum class Gesture : uint8_t { None, Move, Scale, Turn };
+    enum class Gesture : uint8_t { None, Move, Scale, Turn, Anchor };
 
     [[nodiscard]] QRectF Target() const;
     [[nodiscard]] std::optional<QPointF> ToStage(QPointF widget) const;

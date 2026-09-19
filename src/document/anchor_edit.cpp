@@ -28,6 +28,7 @@ constexpr uint32_t kUpdateExisting = 0x1;
 constexpr uint32_t kUseMatrix = 0x4;
 constexpr uint32_t kThreeD = 0x04000000;
 constexpr double kUnitsPerPixel = 20.0;
+constexpr double kFlattest = 1e-9;
 
 using Units = std::array<int32_t, 2>;
 
@@ -82,6 +83,16 @@ Support::Expected<void, std::string> ShiftPlacement(AfpAnimation::Placement& pla
     return {};
 }
 
+Support::Expected<Span, std::string> SpanOn(const AfpAnimation::Container& clip, uint16_t depth,
+                                            uint32_t frame) {
+    const std::optional<Span> span = SpanOfDepth(clip, depth, frame);
+    if (!span) {
+        return Support::Unexpected(Named(depth) + " holds nothing on frame " +
+                                   std::to_string(frame));
+    }
+    return *span;
+}
+
 Support::Expected<void, std::string> ShiftAnchor(AfpAnimation::Animation& animation, ClipId clip,
                                                  uint16_t depth, const Span& span,
                                                  const Units& shift) {
@@ -105,11 +116,8 @@ Support::Expected<void, std::string> CentreAnchor(AfpAnimation::Animation& anima
     auto found = RequireClip(animation, clip);
     if (!found) return Support::Unexpected(found.error());
     const AfpAnimation::Container& target = **found;
-    const std::optional<Span> span = SpanOfDepth(target, depth, frame);
-    if (!span) {
-        return Support::Unexpected(Named(depth) + " holds nothing on frame " +
-                                   std::to_string(frame));
-    }
+    auto span = SpanOn(target, depth, frame);
+    if (!span) return Support::Unexpected(span.error());
     const std::optional<uint16_t> character = CharacterOn(target, depth, *span, frame);
     const std::optional<Box> box =
         character ? CharacterBox(animation, *character, shape_bounds) : std::nullopt;
@@ -126,6 +134,35 @@ Support::Expected<void, std::string> CentreAnchor(AfpAnimation::Animation& anima
         return Support::Unexpected("the anchor of " + Named(depth) +
                                    " is already at the centre of what it shows");
     }
+    return ShiftAnchor(animation, clip, depth, *span, shift);
+}
+
+Support::Expected<void, std::string> MoveAnchor(AfpAnimation::Animation& animation, ClipId clip,
+                                                uint16_t depth, uint32_t frame,
+                                                Point stage_offset) {
+    auto found = RequireClip(animation, clip);
+    if (!found) return Support::Unexpected(found.error());
+    const AfpAnimation::Container& target = **found;
+    auto span = SpanOn(target, depth, frame);
+    if (!span) return Support::Unexpected(span.error());
+    const auto replayed = ReplayDepth(target, depth, frame, frame);
+    if (replayed.empty()) {
+        return Support::Unexpected(Named(depth) + " holds nothing on frame " +
+                                   std::to_string(frame));
+    }
+    const std::array<double, 6>& m = replayed.front().second.matrix;
+    const double det = (m[0] * m[3]) - (m[1] * m[2]);
+    if (std::abs(det) < kFlattest) {
+        return Support::Unexpected(Named(depth) + " is squashed flat on frame " +
+                                   std::to_string(frame) +
+                                   ", so a point on the stage has no place in its own space");
+    }
+    const double x = ((m[3] * stage_offset[0]) - (m[2] * stage_offset[1])) / det;
+    const double y = ((m[0] * stage_offset[1]) - (m[1] * stage_offset[0])) / det;
+    const Units shift{static_cast<int32_t>(std::lround(x * kUnitsPerPixel)),
+                      static_cast<int32_t>(std::lround(y * kUnitsPerPixel))};
+    if (shift == Units{0, 0})
+        return Support::Unexpected("the anchor of " + Named(depth) + " would not move");
     return ShiftAnchor(animation, clip, depth, *span, shift);
 }
 

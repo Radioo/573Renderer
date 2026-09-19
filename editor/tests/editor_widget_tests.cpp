@@ -785,6 +785,51 @@ TEST_CASE("Dragging a corner scales and the round handle turns") {
     CHECK(turned[1].scale_x == 1);
 }
 
+TEST_CASE("Dragging the anchor cross moves the anchor, and a corner on it still scales") {
+    Editor::Viewport viewport;
+    ShowStage(viewport);
+    std::vector<QPointF> anchors;
+    std::vector<Move> moves;
+    std::vector<Reshape> reshapes;
+    QObject::connect(&viewport, &Editor::Viewport::AnchorMoved,
+                     [&anchors](uint16_t depth, double dx, double dy) {
+                         CHECK(depth == 5);
+                         anchors.emplace_back(dx, dy);
+                     });
+    QObject::connect(&viewport, &Editor::Viewport::Dragged,
+                     [&moves](uint16_t, double dx, double dy, bool finished) {
+                         moves.push_back({.by = QPointF(dx, dy), .finished = finished});
+                     });
+    QObject::connect(
+        &viewport, &Editor::Viewport::Reshaped,
+        [&reshapes](uint16_t depth, double sx, double sy, double turn, bool finished) {
+            reshapes.push_back(
+                {.depth = depth, .scale_x = sx, .scale_y = sy, .turn = turn, .finished = finished});
+        });
+    Drag(viewport, {50, 50}, {30, 50});
+    CHECK(anchors.empty());
+    CHECK(Finished(reshapes).size() == 1);
+
+    viewport.ShowOutlines(
+        {Document::StageOutline{.depth = 5,
+                                .corners = {Document::Point{100, 100}, Document::Point{500, 100},
+                                            Document::Point{500, 300}, Document::Point{100, 300}},
+                                .anchor = {300, 200},
+                                .linear = {}}},
+        uint16_t{5});
+    Send(viewport, QEvent::MouseButtonPress, {150, 100}, Qt::LeftButton);
+    Send(viewport, QEvent::MouseMove, {170, 90}, Qt::LeftButton);
+    const QImage during = viewport.grab().toImage();
+    CHECK(during.pixelColor(170, 90) == QColor(80, 200, 255));
+    CHECK(during.pixelColor(150, 100) != QColor(80, 200, 255));
+    CHECK(anchors.empty());
+    Send(viewport, QEvent::MouseButtonRelease, {170, 90}, Qt::NoButton);
+    REQUIRE(anchors.size() == 1);
+    CHECK_THAT(anchors[0].x(), WithinAbs(40, 1e-9));
+    CHECK_THAT(anchors[0].y(), WithinAbs(-20, 1e-9));
+    CHECK(moves.empty());
+}
+
 TEST_CASE("Dragging an ease handle moves it and keeps it inside the segment's time") {
     Editor::CurveEditor curve;
     curve.resize(328, 328);

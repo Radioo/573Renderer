@@ -163,3 +163,42 @@ TEST_CASE(
     CHECK(refusal(0, kShapes).find("already") != std::string::npos);
     CHECK(animation == centred);
 }
+
+TEST_CASE("Moving the anchor on stage puts it under the pointer and keeps every frame in place") {
+    AfpAnimation::Animation animation = Scene();
+    std::vector<Document::StageOutline> before;
+    before.reserve(4);
+    for (uint32_t frame = 0; frame < 4; frame++)
+        before.push_back(OutlineOn(animation, frame));
+    const auto moved = Document::MoveAnchor(animation, {}, kDepth, 1, Document::Point{2.5, -1});
+    INFO(Error(moved));
+    REQUIRE(moved.has_value());
+    for (uint32_t frame = 0; frame < 4; frame++) {
+        INFO(frame);
+        const Document::StageOutline after = OutlineOn(animation, frame);
+        for (std::size_t corner = 0; corner < 4; corner++)
+            CHECK(Near(after.corners.at(corner), before.at(frame).corners.at(corner)));
+    }
+    const Document::Point was = before.at(1).anchor;
+    CHECK(Near(OutlineOn(animation, 1).anchor, Document::Point{was[0] + 2.5, was[1] - 1}));
+    CHECK(PlacementAt(animation, 0).origin == std::array<int32_t, 2>{40, -20});
+}
+
+TEST_CASE("Moving the anchor is refused where the stage point has no place in the object") {
+    AfpAnimation::Animation animation = Scene();
+    const auto refusal = [&animation](uint32_t frame, Document::Point offset) {
+        return Error(Document::MoveAnchor(animation, {}, kDepth, frame, offset));
+    };
+    CHECK(refusal(9, Document::Point{1, 1}).find("holds nothing") != std::string::npos);
+    CHECK(refusal(1, Document::Point{0.01, 0}).find("would not move") != std::string::npos);
+    AfpAnimation::Placement flat = Update(kUseMatrix);
+    flat.scale = std::array<int32_t, 2>{0, 1024};
+    Put(animation, 2, flat);
+    const AfpAnimation::Animation squashed = animation;
+    CHECK(refusal(2, Document::Point{1, 1}).find("flat") != std::string::npos);
+    CHECK(animation == squashed);
+
+    animation = Frames(2);
+    Put(animation, 0, Update(kUseMatrix));
+    CHECK(refusal(0, Document::Point{1, 1}).find("holds nothing") != std::string::npos);
+}

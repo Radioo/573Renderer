@@ -410,6 +410,7 @@ Viewport::Gesture Viewport::GestureAt(const Document::StageOutline& outline, QPo
     for (const Document::Point& corner : outline.corners) {
         if (QLineF(ToWidget(corner), widget).length() <= kHandleReach) return Gesture::Scale;
     }
+    if (QLineF(ToWidget(outline.anchor), widget).length() <= kHandleReach) return Gesture::Anchor;
     if (QLineF(TurnHandle(outline), widget).length() <= kHandleReach) return Gesture::Turn;
     const std::vector<Document::StageOutline> only{outline};
     return Document::DepthAt(only, stage) ? Gesture::Move : Gesture::None;
@@ -432,6 +433,12 @@ Document::StageOutline Viewport::Preview(const Document::StageOutline& outline) 
         return Document::ReshapedOutline(outline, Document::ScaleToReach(outline, grab_, pointer_));
     case Gesture::Turn:
         return Document::ReshapedOutline(outline, Document::TurnToReach(outline, grab_, pointer_));
+    case Gesture::Anchor: {
+        Document::StageOutline moved = outline;
+        moved.anchor = {outline.anchor[0] + pointer_[0] - grab_[0],
+                        outline.anchor[1] + pointer_[1] - grab_[1]};
+        return moved;
+    }
     case Gesture::None:
         break;
     }
@@ -503,9 +510,10 @@ void Viewport::mousePressEvent(QMouseEvent* event) {
     const Document::StageOutline* selected = SelectedOutline();
     Gesture gesture =
         selected != nullptr ? GestureAt(*selected, event->position(), point) : Gesture::None;
-    if (gesture != Gesture::Scale && gesture != Gesture::Turn && PressGuide(event->position()))
-        return;
-    if (gesture != Gesture::Scale && gesture != Gesture::Turn) {
+    const bool on_handle =
+        gesture == Gesture::Scale || gesture == Gesture::Turn || gesture == Gesture::Anchor;
+    if (!on_handle && PressGuide(event->position())) return;
+    if (!on_handle) {
         emit Picked(point[0], point[1]);
         selected = SelectedOutline();
         gesture =
@@ -573,6 +581,10 @@ void Viewport::EmitGesture(Gesture gesture, const Document::StageOutline& outlin
         emit Reshaped(outline.depth, reshape.scale_x, reshape.scale_y, reshape.turn, finished);
         break;
     }
+    case Gesture::Anchor:
+        if (finished)
+            emit AnchorMoved(outline.depth, pointer_[0] - grab_[0], pointer_[1] - grab_[1]);
+        break;
     case Gesture::None:
         break;
     }

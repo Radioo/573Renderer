@@ -380,6 +380,22 @@ anchor, reads the new origin (the centre of its 2x1 quad) and the changed
 translation, is refused a second time, undoes, and is refused on an owned
 depth; dropping the owned check or the menu entry fails it.
 
+Dragging the anchor cross of the selection moves the anchor without moving
+the object (After Effects' Pan Behind, done here with the selection itself
+rather than a separate tool). The cross follows the pointer while dragging, and
+the release sends `Viewport::AnchorMoved` with the stage offset;
+`Window::MoveAnchorOnStage` applies it through `Document::MoveAnchor` as one
+undo step, refused on an owned depth as the centring is. Corner handles are
+checked first, so a corner the anchor sits on (the top left of an object
+placed without an origin) still scales; centre the anchor to move it off the
+corner. The widget test drags such a corner and sees a scale and no anchor
+move, then drags an anchor inside the box, reads the cross at the pointer and
+not at the old place mid-drag, and gets one offset on release and no move. The
+window test sends an offset for the dot and reads its new origin and
+translation, and is refused on an owned depth. Dropping the gesture, the
+corner priority, the preview, the release-only signal, the handle check that
+keeps the selection, the window's connection or the owned check fails them.
+
 `View > Rulers` (Ctrl+R, remembered, off by default as in After Effects) draws
 a ruler along the top and left of the viewport in stage pixels, its ticks
 spaced by the first of 1, 5, 10, 25, 50, 100, 250, 500 or 1000 stage pixels
