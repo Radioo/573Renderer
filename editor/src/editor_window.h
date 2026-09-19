@@ -159,6 +159,7 @@ private:
     };
     [[nodiscard]] Support::Expected<ShownFrame, std::string> ReadFrame();
     void SaveFrameAs();
+    void SaveFramesAs();
     void SaveImageAs(const QString& name);
     void AddImageFromFile();
     void ReplaceImageWithPicture(const QString& name);

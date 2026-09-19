@@ -664,6 +664,23 @@ matches the screen. What the host's alpha means has not been read, so this is
 deliberately not a transparent export; the renderer's own export path is where
 that belongs. Without a preview host it says so rather than writing a file.
 
+`File > Save the work area as PNG frames...` (Ctrl+Alt+Shift+S,
+`Window::SaveFramesAs`) does the same for every frame of the work area, or of
+the whole clip when no work area is set, into a chosen folder as
+`<animation>_<frame>.png`, the frame number padded to four digits so the files
+sort in order. Each frame is a host seek and one render at the stage size,
+composited onto black by the same `Opaque` step as a single frame, so frame N
+of a sequence is the file saving frame N on its own gives; a modal progress
+dialog shows the frame and how many of how many, and stopping it keeps the
+frames already written. Afterwards the viewport is resized back and the host
+sought back to the playhead, so the next render that does not seek (a resize,
+for one) shows the frame the timeline says. While a sprite is edited over the
+root view the host shows the root, so saving is refused there until the sprite
+is shown on its own. The live window test sets a work area of three frames,
+compares each saved frame with a single save of it and checks the playhead
+frame comes back; leaving out the seek, the work area's end, the black
+background or the restore each fails it.
+
 `File > Save` writes the encoded document over the opened path and `Save as...`
 asks for a new one. Whether the document is unsaved comes from the history, not
 from the document: the title carries `(unsaved)` while the current position in

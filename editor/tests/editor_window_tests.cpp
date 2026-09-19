@@ -706,6 +706,18 @@ TEST_CASE("B and N set the work area on the ruler and it can be cleared") {
     CHECK(picture() == plain);
 }
 
+TEST_CASE("Saving frames without the preview says why") {
+    Opened opened;
+    Open(opened);
+    QAction* save =
+        ShortcutAction(opened.window, QKeySequence(Qt::CTRL | Qt::ALT | Qt::SHIFT | Qt::Key_S));
+    REQUIRE(save != nullptr);
+    Script script({});
+    save->trigger();
+    REQUIRE(Settle([&script] { return !script.Problems().isEmpty(); }));
+    CHECK(script.Problems().front().contains("preview"));
+}
+
 TEST_CASE("Saving a frame without the preview says why") {
     Opened opened;
     Open(opened);

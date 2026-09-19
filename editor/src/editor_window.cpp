@@ -218,6 +218,9 @@ void Window::BuildMenus() {
     QAction* save_frame = file->addAction(tr("Save the &frame as PNG..."));
     save_frame->setShortcut(QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_S));
     connect(save_frame, &QAction::triggered, this, &Window::SaveFrameAs);
+    QAction* save_frames = file->addAction(tr("Save the work area as PNG f&rames..."));
+    save_frames->setShortcut(QKeySequence(Qt::CTRL | Qt::ALT | Qt::SHIFT | Qt::Key_S));
+    connect(save_frames, &QAction::triggered, this, &Window::SaveFramesAs);
     file->addSeparator();
     create_project_action_ = file->addAction(tr("&New project..."));
     connect(create_project_action_, &QAction::triggered, this, &Window::CreateProject);

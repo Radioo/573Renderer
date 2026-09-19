@@ -38,6 +38,7 @@
 #include <QMessageBox>
 #include <QPoint>
 #include <QSettings>
+#include <QStatusBar>
 #include <QString>
 #include <QStringList>
 #include <QTableWidget>
@@ -237,5 +238,77 @@ TEST_CASE("A saved frame is the stage size, opaque, and leaves the viewport as i
     }
     CHECK(drawn);
     CHECK(viewport->grab().toImage() == before);
+    CHECK(opening.Problems().isEmpty());
+}
+
+TEST_CASE("The work area saves as one PNG per frame, each as the frame saves on its own") {
+    const QString game = qEnvironmentVariable("R573_IIDX_DIR");
+    if (game.isEmpty()) SKIP("R573_IIDX_DIR not set");
+    QSettings().setValue("game/directory", game);
+    Editor::Window window;
+    QSettings().remove("game/directory");
+    window.resize(1600, 900);
+    window.show();
+    Script opening({});
+    window.OpenDocument(game + "/data/graphic/1/title.ifs");
+    REQUIRE(opening.Problems().isEmpty());
+    auto* timeline = window.findChild<Editor::Timeline*>();
+    auto* viewport = window.findChild<Editor::Viewport*>();
+    REQUIRE(timeline != nullptr);
+    REQUIRE(viewport != nullptr);
+    QAction* start = ShortcutAction(window, QKeySequence(Qt::Key_B));
+    QAction* end = ShortcutAction(window, QKeySequence(Qt::Key_N));
+    QAction* save_one = ShortcutAction(window, QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_S));
+    QAction* save_all =
+        ShortcutAction(window, QKeySequence(Qt::CTRL | Qt::ALT | Qt::SHIFT | Qt::Key_S));
+    REQUIRE(start != nullptr);
+    REQUIRE(end != nullptr);
+    REQUIRE(save_one != nullptr);
+    REQUIRE(save_all != nullptr);
+    emit timeline->FrameChosen(kPreviewFrame);
+    start->trigger();
+    emit timeline->FrameChosen(kPreviewFrame + 2);
+    end->trigger();
+    emit timeline->FrameChosen(kPreviewFrame + 1);
+    QApplication::processEvents();
+
+    QTemporaryDir dir;
+    REQUIRE(dir.isValid());
+    for (uint32_t frame = kPreviewFrame; frame <= kPreviewFrame + 2; frame++) {
+        emit timeline->FrameChosen(frame);
+        QApplication::processEvents();
+        Script saving({PickFile(dir.filePath(QString("single_%1.png").arg(frame)))});
+        save_one->trigger();
+        REQUIRE(Settle([&saving] { return saving.Finished(); }));
+        CHECK(saving.Problems().isEmpty());
+    }
+    emit timeline->FrameChosen(kPreviewFrame + 1);
+    QApplication::processEvents();
+    const QImage before = viewport->grab().toImage();
+    const QString folder = dir.filePath("frames");
+    REQUIRE(QDir().mkpath(folder));
+    {
+        Script saving({PickFile(folder)});
+        save_all->trigger();
+        REQUIRE(Settle([&saving] { return saving.Finished(); }));
+        INFO(saving.Problems().join("|").toStdString());
+        CHECK(saving.Problems().isEmpty());
+    }
+    QApplication::processEvents();
+    const QStringList files = QDir(folder).entryList({"*.png"}, QDir::Files, QDir::Name);
+    CHECK(files == QStringList{"title_0400.png", "title_0401.png", "title_0402.png"});
+    for (uint32_t frame = kPreviewFrame; frame <= kPreviewFrame + 2; frame++) {
+        const QImage saved(
+            QDir(folder).filePath(QString("title_%1.png").arg(frame, 4, 10, QChar('0'))));
+        REQUIRE_FALSE(saved.isNull());
+        CHECK(saved.size() == QSize(1920, 1080));
+        CHECK_FALSE(saved.hasAlphaChannel());
+        CHECK(saved == QImage(dir.filePath(QString("single_%1.png").arg(frame))));
+    }
+    CHECK(viewport->grab().toImage() == before);
+    window.resize(1500, 880);
+    REQUIRE(Settle([&window] { return window.statusBar()->currentMessage().startsWith("Frame"); }));
+    CHECK(window.statusBar()->currentMessage().startsWith(
+        QString("Frame %1 ").arg(kPreviewFrame + 1)));
     CHECK(opening.Problems().isEmpty());
 }
