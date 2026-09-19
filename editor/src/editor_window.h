@@ -22,6 +22,7 @@
 #include "document/span_arrange.h"
 #include "document/stage_align.h"
 #include "document/stage_bounds.h"
+#include "document/stage_fit.h"
 #include "document/stage_move.h"
 #include "document/timeline.h"
 #include "preview/preview_client.h"
@@ -226,6 +227,7 @@ private:
     void UpdateOutlines(const AfpAnimation::Animation& animation);
     void CentreChosenAnchor();
     void MoveAnchorOnStage(uint16_t depth, double dx, double dy);
+    void FitChosenToStage(Document::StageFit fit);
     [[nodiscard]] bool RefuseOwnedAnchor(uint16_t depth);
     [[nodiscard]] std::vector<Document::PathPoint>
     PathOfDepth(const AfpAnimation::Animation& animation) const;

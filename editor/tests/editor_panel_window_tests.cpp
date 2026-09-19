@@ -668,3 +668,58 @@ TEST_CASE("Dragging a depth's anchor on stage moves its origin and keeps it on s
     REQUIRE_FALSE(owned.isEmpty());
     CHECK(owned.front().contains("owns depth 3"));
 }
+
+TEST_CASE("Fitting a depth to the stage scales it about its anchor and centres it") {
+    Opened opened;
+    Open(opened, true);
+    auto* timeline = opened.window.findChild<Editor::Timeline*>();
+    REQUIRE(timeline != nullptr);
+    QAction* undo = ShortcutAction(opened.window, QKeySequence(QKeySequence::Undo));
+    REQUIRE(undo != nullptr);
+    const auto fit = [&](uint32_t depth, const QKeySequence& keys) {
+        emit timeline->FrameChosen(0);
+        emit timeline->DepthChosen(depth);
+        QAction* action = ShortcutAction(opened.window, keys);
+        REQUIRE(action != nullptr);
+        Script run({});
+        action->trigger();
+        QApplication::processEvents();
+        return run.Problems();
+    };
+    CHECK(fit(2, QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_F)).isEmpty());
+    CHECK(RowValue(*opened.inspector, "Scale") == "983040, 1105920");
+    undo->trigger();
+    CHECK(fit(2, QKeySequence(Qt::CTRL | Qt::ALT | Qt::SHIFT | Qt::Key_H)).isEmpty());
+    CHECK(RowValue(*opened.inspector, "Scale") == "983040, 983040");
+    CHECK(RowValue(*opened.inspector, "Translation") == "0, 1200");
+    undo->trigger();
+    CHECK(fit(2, QKeySequence(Qt::CTRL | Qt::ALT | Qt::SHIFT | Qt::Key_G)).isEmpty());
+    CHECK(RowValue(*opened.inspector, "Scale") == "1105920, 1105920");
+    CHECK(RowValue(*opened.inspector, "Translation") == "-2400, 0");
+    undo->trigger();
+
+    const QStringList unknown = fit(1, QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_F));
+    REQUIRE_FALSE(unknown.isEmpty());
+    CHECK(unknown.front().contains("box the editor knows"));
+
+    OwnDroppedDot(opened);
+    emit timeline->FrameChosen(0);
+    emit timeline->DepthChosen(3);
+    const std::string dropped_at = RowValue(*opened.inspector, "Translation");
+    CHECK(fit(3, QKeySequence(Qt::CTRL | Qt::ALT | Qt::SHIFT | Qt::Key_H)).isEmpty());
+    CHECK(RowValue(*opened.inspector, "Scale") == "983040, 983040");
+    CHECK(RowValue(*opened.inspector, "Translation") != dropped_at);
+
+    auto* library = opened.window.findChild<QTreeWidget*>("library");
+    REQUIRE(library != nullptr);
+    library->setCurrentItem(nullptr);
+    {
+        Script made({Choose("New empty sprite..."), AnswerNumber(5)});
+        emit library->customContextMenuRequested(QPoint(4, 4));
+        REQUIRE(Settle([&made] { return made.Finished(); }));
+        CHECK(made.Problems().isEmpty());
+    }
+    const QStringList sprite = fit(1, QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_F));
+    REQUIRE_FALSE(sprite.isEmpty());
+    CHECK(sprite.front().contains("no stage of its own"));
+}

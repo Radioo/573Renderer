@@ -11,6 +11,7 @@
 #include "document/motion_path.h"
 #include "document/stage_align.h"
 #include "document/stage_bounds.h"
+#include "document/stage_fit.h"
 #include "document/stage_move.h"
 #include "formats/afp_animation.h"
 #include "support/expected.h"
@@ -214,6 +215,44 @@ void Window::MoveAnchorOnStage(uint16_t depth, double dx, double dy) {
                       return Document::MoveAnchor(edited, clip, depth, frame,
                                                   Document::Point{dx, dy});
                   });
+}
+
+void Window::FitChosenToStage(Document::StageFit fit) {
+    if (!file_ || animation_path_.empty()) return;
+    if (clip_.sprite) {
+        ReportProblem(tr("A sprite has no stage of its own. Fit depths on the root timeline."));
+        return;
+    }
+    if (!depth_) return;
+    const auto animation = file_->ReadAnimation(animation_path_);
+    if (!animation) {
+        ReportOnce(QString::fromStdString(animation.error()));
+        return;
+    }
+    const auto depth = static_cast<uint16_t>(*depth_);
+    const uint32_t frame = frame_;
+    const auto change =
+        Document::FitToStage(*animation, depth, frame, file_->ShapeBounds(animation_path_), fit);
+    if (!change) {
+        ReportProblem(QString::fromStdString(change.error()));
+        return;
+    }
+    const Document::FitChange fitted = *change;
+    EditOnStage(
+        depth, tr("Fit depth %1 to the stage").arg(depth),
+        [frame, fitted](Document::AuthoredDepth& authored,
+                        const Document::BakedDepth& baked) -> Support::Expected<void, std::string> {
+            auto reshaped = Document::ReshapeOwnedDepth(authored, baked, frame, fitted.reshape);
+            if (!reshaped) return reshaped;
+            return Document::MoveOwnedDepth(authored, baked, frame, fitted.offset);
+        },
+        [depth, frame,
+         fitted](AfpAnimation::Animation& edited) -> Support::Expected<void, std::string> {
+            auto reshaped = Document::ReshapeBakedDepth(edited, {}, depth, frame, fitted.reshape);
+            if (!reshaped) return reshaped;
+            return Document::MoveBakedDepth(edited, {}, depth, frame, fitted.offset);
+        },
+        true);
 }
 
 void Window::EditOnStage(uint16_t depth, const QString& name, const OwnedChange& owned,

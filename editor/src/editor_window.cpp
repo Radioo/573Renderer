@@ -51,6 +51,7 @@
 #include <QTreeWidgetItemIterator>
 #include <QVariant>
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <fstream>
@@ -58,6 +59,7 @@
 #include <iterator>
 #include <string>
 #include <string_view>
+#include <tuple>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -310,6 +312,19 @@ void Window::BuildMenus() {
     QAction* centre = edit->addAction(tr("&Centre the anchor in the content"));
     centre->setShortcut(QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_Home));
     connect(centre, &QAction::triggered, this, &Window::CentreChosenAnchor);
+    const std::array<std::tuple<QString, QKeySequence, Document::StageFit>, 3> fits{{
+        {tr("&Fit to the stage"), QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_F),
+         Document::StageFit::Both},
+        {tr("Fit to the stage's &width"), QKeySequence(Qt::CTRL | Qt::ALT | Qt::SHIFT | Qt::Key_H),
+         Document::StageFit::Width},
+        {tr("Fit to the stage's &height"), QKeySequence(Qt::CTRL | Qt::ALT | Qt::SHIFT | Qt::Key_G),
+         Document::StageFit::Height},
+    }};
+    for (const auto& [text, keys, fit] : fits) {
+        QAction* action = edit->addAction(text);
+        action->setShortcut(keys);
+        connect(action, &QAction::triggered, this, [this, fit] { FitChosenToStage(fit); });
+    }
 }
 
 void Window::ChooseGameDirectory() {

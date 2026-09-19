@@ -64,6 +64,7 @@ set(R573_EDITOR_DOCUMENT_SOURCES
     src/document/clip_extract.cpp
     src/document/anchor_edit.cpp
     src/document/key_simplify.cpp
+    src/document/stage_fit.cpp
     src/document/span_sequence.cpp
     src/document/timeline_snap.cpp
     src/document/motion_path.cpp

@@ -1320,6 +1320,33 @@ out, which the matrix bit reads as the identity. `ReshapeOwnedDepth` keys Scale
 and Rotate skew on the frame (or their short twins when the depth tracks those),
 starting either track when it is missing.
 
+### Fitting a depth to the stage (`document/stage_fit.h`)
+
+`FitToStage(animation, depth, frame, shape_bounds, fit)` is After Effects' Fit
+to Comp (`StageFit::Both`), Fit to Comp Width and Fit to Comp Height. It works
+out the change and leaves applying it to the move and reshape edits above, so
+an owned depth and a baked one are fitted by the same rules as a drag: a
+`Reshape` that scales the depth along its own axes about its anchor, and a
+`StageOffset` that then moves its box's centre to the stage's centre. `Both`
+scales each axis on its own so the box fills the stage; `Width` and `Height`
+scale both axes by the one that makes that side fit, keeping the aspect.
+
+The stage is the animation's own Stage size, the header rect's maximum minus
+its minimum (see the animation settings), from (0, 0), the same stage afp-core
+draws a movie's background into. It is not the preview's render size, which is
+the game's resolution; for IIDX 33's screens the two are the same 1920x1080.
+Only root depths are fitted, since a sprite has no stage size of its own. The
+box is the depth's stage outline on `frame`, so a character with no known box
+is refused, and so is a turned or skewed depth, whose outline's box does not
+line up with the stage axes that a scale along its own axes changes, and a
+flat one, which no scale can make fill anything.
+
+`stage_fit_tests.cpp` fits a shape shown at twice its width with its anchor
+inside it, applies the change through `ReshapeBakedDepth` and `MoveBakedDepth`,
+and requires the outline's box to be the stage, the full width centred at a
+kept aspect, and the full height centred at a kept aspect; and checks every
+refusal, turned and skewed apart and flat in each axis apart.
+
 ## Moving the anchor (`document/anchor_edit.h`)
 
 `CentreAnchor(animation, clip, depth, frame, shape_bounds)` is After Effects'

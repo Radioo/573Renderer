@@ -380,6 +380,19 @@ anchor, reads the new origin (the centre of its 2x1 quad) and the changed
 translation, is refused a second time, undoes, and is refused on an owned
 depth; dropping the owned check or the menu entry fails it.
 
+`Edit > Fit to the stage` (Ctrl+Alt+F), `Fit to the stage's width`
+(Ctrl+Alt+Shift+H) and `Fit to the stage's height` (Ctrl+Alt+Shift+G), After
+Effects' Fit to Comp and its width and height forms, scale the chosen depth
+about its anchor so its box fills the stage (or one side of it, keeping the
+aspect) and centre it, on the playhead's frame, as one undo step
+(`Window::FitChosenToStage`, through `Document::FitToStage`). An owned depth
+takes the change through `ReshapeOwnedDepth` and `MoveOwnedDepth`, a baked one
+through `ReshapeBakedDepth` and `MoveBakedDepth`. Inside a sprite it is
+refused. The window test fits the dot each way and reads its scale and
+translation, undoing in between, is refused on depth 1 (no box), fits an owned
+depth to the width and sees it scaled and moved, and is refused inside a new
+sprite. Dropping the sprite check, either move, or a shortcut's mode fails it.
+
 Dragging the anchor cross of the selection moves the anchor without moving
 the object (After Effects' Pan Behind, done here with the selection itself
 rather than a separate tool). The cross follows the pointer while dragging, and
