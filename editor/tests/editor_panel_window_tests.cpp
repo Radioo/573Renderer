@@ -794,6 +794,13 @@ TEST_CASE("A closed panel comes back from the View menu") {
         }
     }
     REQUIRE(toggle != nullptr);
+    bool graph_listed = false;
+    for (const QMenu* menu : opened.window.findChildren<QMenu*>()) {
+        if (menu->title() != "&Panels") continue;
+        for (const QAction* action : menu->actions())
+            graph_listed = graph_listed || action->text() == "Graph";
+    }
+    CHECK(graph_listed);
     CHECK_FALSE(library->isClosed());
     library->closeDockWidget();
     CHECK(library->isClosed());

@@ -9,6 +9,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace Document {
 
@@ -22,6 +23,10 @@ RemoveKeyAt(AuthoredDepth& authored, std::string_view property, uint32_t frame);
                                                                  std::string_view property,
                                                                  uint32_t frame,
                                                                  std::string_view value);
+
+[[nodiscard]] Support::Expected<void, std::string>
+SetKeyValuesAt(AuthoredDepth& authored, std::string_view property, uint32_t frame,
+               const std::vector<int64_t>& values);
 
 [[nodiscard]] Support::Expected<void, std::string> SetKeyFilterFieldAt(AuthoredDepth& authored,
                                                                        uint32_t frame,
@@ -38,5 +43,8 @@ RemoveKeyFilterAt(AuthoredDepth& authored, uint32_t frame, std::string_view fiel
                                             std::string_view property, uint32_t frame);
 
 [[nodiscard]] std::string KeyValueText(const Keyframe& key);
+
+[[nodiscard]] std::optional<Track> GraphedTrack(const AuthoredDepth& authored,
+                                                std::string_view property);
 
 }

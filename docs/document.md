@@ -1501,7 +1501,15 @@ animating it.
 arity the keyframe already holds, which is the same rule the placement fields
 use, so a keyframe and the placement field it feeds are typed the same way.
 `KeyAt` and `KeyValueText` are the read side, so a widget showing a keyframe
-does not reimplement the lookup or the joining.
+does not reimplement the lookup or the joining. `SetKeyValuesAt` is the same
+edit with the numbers already in hand, which is what the graph sends; the text
+form parses and then calls it.
+
+`GraphedTrack(authored, property)` is the track the graph panel draws: the
+property's track when the depth animates it and the property is not stepped
+(`PropertyIsStepped`: character, clip depth, blend, filters and curves, which
+jump from one keyframe to the next and, for filters and curves, hold lists
+rather than numbers to plot).
 
 ## Keyframe selections (`document/key_selection.h`)
 

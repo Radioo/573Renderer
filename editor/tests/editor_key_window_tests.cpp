@@ -1,5 +1,6 @@
 #include <catch2/catch_test_macros.hpp>
 
+#include "editor_graph.h"
 #include "editor_timeline.h"
 #include "editor_viewport.h"
 #include "editor_window.h"
@@ -12,6 +13,7 @@
 #include <QPoint>
 #include <QString>
 #include <QTableWidget>
+#include <QWidget>
 
 #include <algorithm>
 #include <cstdint>
@@ -176,4 +178,55 @@ TEST_CASE("Easy ease smooths the selected keyframes from its keys and the lane m
     CHECK(out_refused.contains("neighbour"));
     timeline->SelectKeys({ref(0)});
     CHECK(refusal(in).contains("neighbour"));
+}
+
+TEST_CASE("The graph shows the focused property and edits its keyframes") {
+    Opened opened;
+    Open(opened, true);
+    auto* timeline = opened.window.findChild<Editor::Timeline*>();
+    auto* viewport = opened.window.findChild<Editor::Viewport*>();
+    Editor::GraphEditor* graph = nullptr;
+    for (QWidget* widget : QApplication::allWidgets()) {
+        if (auto* found = qobject_cast<Editor::GraphEditor*>(widget)) graph = found;
+    }
+    REQUIRE(timeline != nullptr);
+    REQUIRE(viewport != nullptr);
+    REQUIRE(graph != nullptr);
+    OwnDroppedDot(opened);
+    const auto move_on = [&](uint32_t frame, double dx) {
+        emit timeline->FrameChosen(frame);
+        emit timeline->DepthChosen(3);
+        Script moved({});
+        emit viewport->Dragged(3, dx, 0, true);
+        QApplication::processEvents();
+        CHECK(moved.Problems().isEmpty());
+    };
+    move_on(0, 10);
+    move_on(2, 40);
+    emit timeline->KeyChosen("Translation", 2);
+    REQUIRE(graph->KeyPoint(2, 0).has_value());
+    CHECK(graph->KeyPoint(0, 1).has_value());
+    CHECK_FALSE(graph->KeyPoint(1, 0).has_value());
+
+    {
+        Script edited({});
+        emit graph->KeyValueChanged("Translation", 2, {12345, 6000});
+        QApplication::processEvents();
+        CHECK(edited.Problems().isEmpty());
+    }
+    CHECK(RowValue(*opened.inspector, "Translation") == "12345, 6000");
+    emit graph->KeyChosen("Translation", 0);
+    CHECK(RowValue(*opened.inspector, "Keyframe") == "Translation on frame 0");
+    emit graph->FrameChosen(2);
+    CHECK(RowValue(*opened.inspector, "Translation") == "12345, 6000");
+    emit graph->FrameChosen(0);
+    CHECK(RowValue(*opened.inspector, "Translation") == "10200, 6000");
+    QAction* undo = ShortcutAction(opened.window, QKeySequence(QKeySequence::Undo));
+    REQUIRE(undo != nullptr);
+    undo->trigger();
+    emit timeline->FrameChosen(2);
+    CHECK(RowValue(*opened.inspector, "Translation") == "11000, 6000");
+
+    emit timeline->DepthChosen(2);
+    CHECK_FALSE(graph->KeyPoint(0, 0).has_value());
 }

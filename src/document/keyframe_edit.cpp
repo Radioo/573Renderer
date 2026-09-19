@@ -5,6 +5,7 @@
 #include "document/filter_fields.h"
 #include "document/filter_values.h"
 #include "document/keyframes.h"
+#include "document/placement_values.h"
 #include "formats/afp_animation.h"
 #include "support/expected.h"
 
@@ -100,7 +101,15 @@ Support::Expected<void, std::string> SetKeyValueAt(AuthoredDepth& authored,
     if (!key) return Support::Unexpected("frame " + std::to_string(frame) + " holds no keyframe");
     auto numbers = Numbers(value, key->value.size());
     if (!numbers) return Support::Unexpected(numbers.error());
-    return SetKeyframeValue(**track, frame, *numbers);
+    return SetKeyValuesAt(authored, property, frame, *numbers);
+}
+
+Support::Expected<void, std::string> SetKeyValuesAt(AuthoredDepth& authored,
+                                                    std::string_view property, uint32_t frame,
+                                                    const std::vector<int64_t>& values) {
+    auto track = TrackOf(authored, property);
+    if (!track) return Support::Unexpected(track.error());
+    return SetKeyframeValue(**track, frame, values);
 }
 
 Support::Expected<void, std::string> SetKeyFilterFieldAt(AuthoredDepth& authored, uint32_t frame,
@@ -141,6 +150,13 @@ std::string KeyValueText(const Keyframe& key) {
     for (const int64_t one : key.value)
         parts.push_back(std::to_string(one));
     return Join(parts);
+}
+
+std::optional<Track> GraphedTrack(const AuthoredDepth& authored, std::string_view property) {
+    if (PropertyIsStepped(property)) return std::nullopt;
+    const auto track = std::ranges::find(authored.tracks, property, &Track::property);
+    if (track == authored.tracks.end()) return std::nullopt;
+    return *track;
 }
 
 }

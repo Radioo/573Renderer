@@ -99,6 +99,30 @@ TEST_CASE("A keyframe value has to hold what the track keys") {
     CHECK(TrackOf(depth, "Translation").keys.back().value == std::vector<int64_t>{800, 400});
 }
 
+TEST_CASE("Keyframe values are set as numbers, as the text path sets them") {
+    Document::AuthoredDepth depth = Depth();
+    REQUIRE(Document::SetKeyValuesAt(depth, "Translation", 8, {-20, 60}).has_value());
+    CHECK(TrackOf(depth, "Translation").keys[1].value == std::vector<int64_t>{-20, 60});
+    const Document::AuthoredDepth before = depth;
+    CHECK_FALSE(Document::SetKeyValuesAt(depth, "Translation", 8, {1}).has_value());
+    CHECK_FALSE(Document::SetKeyValuesAt(depth, "Translation", 4, {1, 2}).has_value());
+    CHECK_FALSE(Document::SetKeyValuesAt(depth, "Scale", 8, {1, 2}).has_value());
+    CHECK(depth == before);
+}
+
+TEST_CASE("Only a tracked property that eases between keyframes is graphed") {
+    Document::AuthoredDepth depth = Depth();
+    depth.tracks.push_back(Document::Track{
+        .property = "Blend",
+        .keys = {Document::Keyframe{
+            .frame = 0, .value = {1}, .ease = Document::Ease::Hold, .bezier = {}}}});
+    const std::optional<Document::Track> graphed = Document::GraphedTrack(depth, "Translation");
+    REQUIRE(graphed.has_value());
+    CHECK(*graphed == TrackOf(depth, "Translation"));
+    CHECK_FALSE(Document::GraphedTrack(depth, "Blend").has_value());
+    CHECK_FALSE(Document::GraphedTrack(depth, "Scale").has_value());
+}
+
 TEST_CASE("A frame with no keyframe holds no value to set") {
     Document::AuthoredDepth depth = Depth();
     CHECK_FALSE(Document::SetKeyValueAt(depth, "Translation", 4, "1, 2").has_value());

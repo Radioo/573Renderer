@@ -2,6 +2,7 @@
 
 #include "editor_files.h"
 #include "editor_filter.h"
+#include "editor_graph.h"
 #include "editor_host.h"
 #include "editor_layout.h"
 #include "editor_timeline.h"
@@ -177,6 +178,10 @@ void Window::BuildPanels() {
     connect(timeline_, &Timeline::LockToggled, this, &Window::ToggleLocked);
     AddKeyActions();
     connect(timeline_, &Timeline::KeyMenuRequested, this, &Window::ShowKeyMenu);
+    graph_ = new GraphEditor;
+    connect(graph_, &GraphEditor::FrameChosen, this, &Window::SeekTo);
+    connect(graph_, &GraphEditor::KeyChosen, this, &Window::ChooseKey);
+    connect(graph_, &GraphEditor::KeyValueChanged, this, &Window::ApplyGraphValue);
     auto* timeline_area = new QScrollArea;
     timeline_area->setWidget(timeline_);
     timeline_area->setWidgetResizable(true);
@@ -212,8 +217,11 @@ void Window::BuildPanels() {
                           inspector_area);
     package_filter_->setObjectName("package_filter");
     library_filter_->setObjectName("library_filter");
-    docks_->addDockWidget(ads::BottomDockWidgetArea, MakePanel(tr("Timeline"), timeline_panel),
-                          centre);
+    ads::CDockWidget* timeline_dock = MakePanel(tr("Timeline"), timeline_panel);
+    ads::CDockAreaWidget* timing_area =
+        docks_->addDockWidget(ads::BottomDockWidgetArea, timeline_dock, centre);
+    docks_->addDockWidget(ads::CenterDockWidgetArea, MakePanel(tr("Graph"), graph_), timing_area);
+    timeline_dock->setAsCurrentTab();
 }
 
 void Window::BuildMenus() {

@@ -75,6 +75,7 @@ using AuthoredChange =
 using OwnedChange = std::function<Support::Expected<void, std::string>(
     Document::AuthoredDepth&, const Document::BakedDepth&)>;
 
+class GraphEditor;
 class Timeline;
 class Viewport;
 
@@ -112,6 +113,8 @@ private:
     bool EditAuthored(const QString& name, const AuthoredChange& change);
     void ChooseKey(const QString& property, uint32_t frame);
     void FocusKey(const QString& property, uint32_t frame);
+    void ApplyGraphValue(const QString& property, uint32_t frame,
+                         const std::vector<int64_t>& value);
     bool EditOwned(const QString& name, const OwnedChange& change);
     void AddKeyActions();
     void CopySelectedKeys();
@@ -274,6 +277,7 @@ private:
     QAction* background_action_ = nullptr;
     Viewport* viewport_ = nullptr;
     Timeline* timeline_ = nullptr;
+    GraphEditor* graph_ = nullptr;
     QTimer* resize_timer_ = nullptr;
     QTimer* play_timer_ = nullptr;
     QComboBox* clip_box_ = nullptr;

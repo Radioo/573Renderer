@@ -138,7 +138,7 @@ passed once each target had its own name.
 `Editor::Window` is a `QMainWindow` hosting a Qt Advanced Docking System
 `CDockManager`. The viewport is the dock manager's central widget, with the
 package tree docked left, the library below it, the inspector right with the
-history below it, and the timeline bottom. `View > Panels` has a toggle for each panel (the dock's
+history below it, and the timeline bottom with the graph as a second tab. `View > Panels` has a toggle for each panel (the dock's
 own toggle action), so a panel closed with its title bar button can be opened
 again. Qt 6
 Widgets is ADR 0003; the panel arrangement is the one the editor design
@@ -150,8 +150,8 @@ saved to `QSettings` on close and restored in the constructor
 layout version (`kDocksVersion`), and the dock manager ignores a saved state of
 another version, so a layout saved before a panel existed falls back to the
 default arrangement instead of restoring without the new panel. Raise the
-version whenever the set of panels changes; it went to 1 with the library and
-2 with the history. The organisation and application names
+version whenever the set of panels changes; it went to 1 with the library,
+2 with the history and 3 with the graph. The organisation and application names
 `QSettings` keys off are set in `main` before the window exists.
 
 ## The host
@@ -718,7 +718,39 @@ and reads the eased values between them, eases the first from the lane menu to
 `Linear` and sees both keyframes still selected, eases the way into the last
 from the submenu, and sees Ctrl+Shift+F9 on the last and Shift+F9 on the first
 refused. Dropping the selection restore, the F9 shortcut or the submenu's `In`
-fails it. How a keyframe leaves its frame applies to the whole
+fails it.
+
+The Graph panel, a tab beside the timeline, is After Effects' value graph
+(`Editor::GraphEditor`, `editor_graph.cpp`). It shows the focused keyframe's
+property of the selected owned depth over the depth's owned frames: one line
+per value (red, green, blue, amber in order, so x and y of a translation are
+red and green), sampled every frame with `Document::SampleTrack`, a filled box
+on every keyframe, the playhead as a line, and zero as an axis when it is in
+view. Which track it shows is `Document::GraphedTrack`: the focused property if
+the depth animates it and it eases between keyframes, so a character, blend,
+clip depth, filter list or curve set, which only hold, is not graphed. The
+vertical range is the values' range with a tenth of headroom, measured when the
+track is shown and kept while dragging. Dragging a box up or down changes that
+one value of that keyframe, drawn live, and on release the graph asks the
+window to focus the keyframe and, when the value changed, to set it
+(`Window::ApplyGraphValue`, `Document::SetKeyValuesAt`) as one undo step.
+Clicking elsewhere seeks to the nearest frame. Its signals are sent on release,
+because focusing a keyframe refills the graph, which would end a drag begun on
+the press. The widget tests read where each value is drawn (`KeyPoint`), the
+colours of a box and of the line between two keyframes, the live drag, which
+value a drag changes, a click on a keyframe changing nothing, and the seek. The
+window test focuses a keyframe of the dot's owned depth, sets a value from the
+graph, focuses another and seeks from it, undoes, and sees the graph empty for
+a depth the project does not own. Dropping the axis flip, the reach, the
+component, the change check, the focus, the rounding, the keyframe boxes, the
+line, the live value, the empty graph, the value edit, either connection or
+the dock fails one of them. Whether a keyframe is drawn as a box or a dot is
+not tested.
+
+A tab that is not in front is taken out of the window's widget tree by the dock
+manager, so `findChild` on the window cannot see the graph while the timeline
+tab is showing; the window test finds it through `QApplication::allWidgets`.
+ How a keyframe leaves its frame applies to the whole
 selection when the right-clicked keyframe is part of it, and to that keyframe
 alone otherwise. Bezier opens `Editor::EaseDialog`: the curve drawn with
 `Document::EaseProgress` over a unit square that has room above and below for

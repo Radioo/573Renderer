@@ -1,6 +1,7 @@
 #include "editor_window.h"
 
 #include "editor_ease_dialog.h"
+#include "editor_graph.h"
 #include "editor_timeline.h"
 
 #include "document/colour_pick.h"
@@ -36,9 +37,21 @@ namespace Editor {
 void Window::ShowKeysForDepth(const Document::AuthoredDepth* owned) {
     if (owned == nullptr) {
         timeline_->ShowKeys(std::nullopt, {});
+        graph_->ShowTrack(std::nullopt, 0, 0, 0);
         return;
     }
     timeline_->ShowKeys(owned->depth, owned->tracks);
+    graph_->ShowTrack(Document::GraphedTrack(*owned, key_property_.toStdString()),
+                      owned->first_frame, owned->last_frame, frame_);
+}
+
+void Window::ApplyGraphValue(const QString& property, uint32_t frame,
+                             const std::vector<int64_t>& value) {
+    const std::string name = property.toStdString();
+    EditAuthored(tr("%1 on frame %2").arg(property).arg(frame),
+                 [&name, frame, &value](Document::AuthoredDepth& owned) {
+                     return Document::SetKeyValuesAt(owned, name, frame, value);
+                 });
 }
 
 std::optional<std::size_t> Window::AuthoredIndexAt(uint16_t depth, uint32_t frame) const {
