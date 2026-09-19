@@ -363,6 +363,23 @@ clip unchanged.
 `CharacterOn` (the character a span shows on a frame, following swaps) and
 `IsStillCharacter` (an image or a shape) are shared with the clip trim.
 
+### Sequencing spans (`document/span_sequence.h`)
+
+`SequenceSpans(animation, clip, depths, frame)` is After Effects' Sequence
+Layers. It takes the span each chosen depth shows on `frame`, in depth order,
+which is the order the timeline lists them, keeps the first where it is and
+moves each next one with `MoveSpan` so it starts on the frame after the one
+before it ends. Since every chosen span covers `frame`, each one after the
+first moves later. It needs two depths or more, and every one of them has to
+show something on `frame`. Whatever `MoveSpan` refuses, a span leaving the clip
+or running into another span of its depth, refuses the whole sequence, and the
+work is done on a copy, so a refusal leaves the clip alone. It returns each
+move (the depth, a frame the span covered before and how far it went) so the
+editor can move a project-owned record by the same amount with
+`ShiftAuthored`. `span_sequence_tests.cpp` covers spans of different lengths
+chosen out of order, a depth's other span and an unchosen depth left alone, and
+the refusals.
+
 ### Trimming a clip to a stretch of frames (`document/clip_trim.h`)
 
 `TrimClipToFrames(animation, clip, kept)` is After Effects' Trim Comp to Work

@@ -7,6 +7,7 @@
 #include "document/outline.h"
 #include "document/span_arrange.h"
 #include "document/span_clipboard.h"
+#include "document/span_sequence.h"
 #include "document/span_split.h"
 #include "document/span_edit.h"
 #include "document/span_transplant.h"
@@ -150,6 +151,39 @@ void Window::SplitDepthAt(uint16_t depth, uint32_t frame) {
                   [clip, depth, frame](AfpAnimation::Animation& edited) {
                       return Document::SplitSpan(edited, clip, depth, frame);
                   });
+}
+
+void Window::SequenceChosenDepths(uint32_t frame) {
+    if (!file_ || animation_path_.empty()) return;
+    const std::vector<uint16_t> chosen = SelectedDepths();
+    std::vector<std::optional<std::size_t>> owned;
+    owned.reserve(chosen.size());
+    for (const uint16_t depth : chosen)
+        owned.push_back(AuthoredIndexAt(depth, frame));
+    const Document::ClipId clip = clip_;
+    std::vector<Document::SpanShift> shifts;
+    if (!EditAnimation(tr("Sequence %n depths", nullptr, static_cast<int>(chosen.size())),
+                       [clip, &chosen, frame, &shifts](AfpAnimation::Animation& edited)
+                           -> Support::Expected<void, std::string> {
+                           auto sequenced = Document::SequenceSpans(edited, clip, chosen, frame);
+                           if (!sequenced) return Support::Unexpected(sequenced.error());
+                           shifts = std::move(*sequenced);
+                           return {};
+                       })) {
+        return;
+    }
+    bool saved = false;
+    for (const Document::SpanShift& shift : shifts) {
+        const auto at = std::ranges::find(chosen, shift.depth);
+        const std::optional<std::size_t> index =
+            owned.at(static_cast<std::size_t>(at - chosen.begin()));
+        if (!index) continue;
+        auto moved = Document::ShiftAuthored(authored_[*index], shift.by);
+        if (!moved) ReportProblem(QString::fromStdString(moved.error()));
+        saved = true;
+    }
+    if (saved) SaveProject();
+    ShowFrame();
 }
 
 void Window::AddArrangeMenu(QMenu* edit) {

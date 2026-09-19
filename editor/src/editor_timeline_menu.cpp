@@ -43,6 +43,10 @@ void Window::ShowTimelineMenu(const QPoint& where, uint32_t frame, const QString
                                                     static_cast<int>(chosen_depths.size())))
                             : depth_ ? menu.addAction(tr("Remove depth %1 here").arg(*depth_))
                                      : nullptr;
+    QAction* sequence = chosen_depths.size() > 1
+                            ? menu.addAction(tr("Sequence %n depths one after another", nullptr,
+                                                static_cast<int>(chosen_depths.size())))
+                            : nullptr;
     QAction* restack =
         depth_ ? menu.addAction(tr("Move depth %1 here to another depth...").arg(*depth_))
                : nullptr;
@@ -196,6 +200,10 @@ void Window::ShowTimelineMenu(const QPoint& where, uint32_t frame, const QString
         if (chosen == duplicate) DuplicateSpanToDepth(depth, frame);
         if (chosen == group) GroupDepthsIntoSprite(depth, frame);
         if (chosen == ungroup) UngroupSpriteAt(depth, frame);
+        return;
+    }
+    if (chosen == sequence) {
+        SequenceChosenDepths(frame);
         return;
     }
     if (chosen == remove_depth) {

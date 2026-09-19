@@ -400,6 +400,16 @@ first frame, sees a depth showing a character that is not an image or a shape
 refused, undoes, splits again from the timeline menu, and sees an owned depth
 refused. Dropping the ownership check, the shortcut or the menu entry fails it.
 
+With several depths chosen, the timeline menu offers `Sequence N depths one
+after another` (`Window::SequenceChosenDepths`, through `Document::SequenceSpans`):
+their spans under the cursor are put end to end in depth order, as one undo
+step, and every project-owned record among them moves with its span and is
+saved. The window test inserts frames, shortens two spans, sequences them and
+reads which frames each depth shows, undoes, then sequences an owned depth and
+sees its record offered for detaching on its new frames and saved there.
+Dropping the menu entry, the ownership lookup, the record move or the save
+fails it.
+
 `Edit > Arrange` changes the selected depth's place in the stacking order at the
 playhead, with After Effects' shortcuts: `Bring forward` (Ctrl+]), `Send
 backward` (Ctrl+[), `Bring to front` (Ctrl+Shift+]) and `Send to back`

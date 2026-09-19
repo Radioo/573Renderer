@@ -726,6 +726,77 @@ TEST_CASE("Trimming the clip to the work area keeps what those frames showed") {
     CHECK(refusal().contains("owns depths"));
 }
 
+TEST_CASE("Chosen depths are sequenced one after another, owned records moving with them") {
+    Opened opened;
+    Open(opened, true);
+    auto* timeline = opened.window.findChild<Editor::Timeline*>();
+    REQUIRE(timeline != nullptr);
+    for (int inserted = 0; inserted < 3; inserted++) {
+        Script more({Choose("Insert a frame at 2")});
+        emit timeline->MenuRequested(QPoint(4, 4), 2, QString());
+        REQUIRE(Settle([&more] { return more.Finished(); }));
+        CHECK(more.Problems().isEmpty());
+    }
+    const auto shows = [&](uint16_t depth, uint32_t frame) {
+        emit timeline->FrameChosen(frame);
+        emit timeline->DepthChosen(depth);
+        return RowValue(*opened.inspector, "Character") != "no Character row";
+    };
+    const auto sequence = [&](uint32_t frame, const QString& entry) {
+        Script sequenced({Choose(entry)});
+        emit timeline->MenuRequested(QPoint(4, 4), frame, QString());
+        REQUIRE(Settle([&sequenced] { return sequenced.Finished(); }));
+        return sequenced.Problems();
+    };
+    {
+        Script trimmed({});
+        emit timeline->SpanTrimmed(1, 0, 0, 1);
+        emit timeline->SpanTrimmed(2, 0, 0, 2);
+        QApplication::processEvents();
+        CHECK(trimmed.Problems().isEmpty());
+    }
+    CHECK(shows(2, 0));
+    CHECK_FALSE(shows(2, 5));
+    emit timeline->FrameChosen(0);
+    emit timeline->DepthsChosen({1, 2});
+    CHECK(sequence(0, "Sequence 2 depths one after another").isEmpty());
+    CHECK(shows(1, 1));
+    CHECK_FALSE(shows(2, 0));
+    CHECK_FALSE(shows(2, 1));
+    CHECK(shows(2, 2));
+    CHECK(shows(2, 4));
+    CHECK_FALSE(shows(2, 5));
+    QAction* undo = ShortcutAction(opened.window, QKeySequence(QKeySequence::Undo));
+    REQUIRE(undo != nullptr);
+    undo->trigger();
+    CHECK(shows(2, 0));
+
+    const QString folder = OwnDroppedDot(opened);
+    {
+        Script trimmed({});
+        emit timeline->SpanTrimmed(3, 0, 0, 1);
+        QApplication::processEvents();
+        CHECK(trimmed.Problems().isEmpty());
+    }
+    emit timeline->FrameChosen(0);
+    emit timeline->DepthsChosen({2, 3});
+    CHECK(sequence(0, "Sequence 2 depths one after another").isEmpty());
+    CHECK(shows(3, 3));
+    emit timeline->DepthChosen(3);
+    bool owned_there = false;
+    {
+        Script looked({Look("Detach depth 3 back to baked data", owned_there)});
+        emit timeline->MenuRequested(QPoint(4, 4), 3, QString());
+        REQUIRE(Settle([&looked] { return looked.Finished(); }));
+    }
+    CHECK(owned_there);
+    const auto project = Document::ReadProject(Editor::ReadFileBytes(
+        QString::fromStdString(Document::ProjectManifestPath(folder.toStdString()))));
+    REQUIRE(project.has_value());
+    REQUIRE(project->content.size() == 1);
+    CHECK(project->content.front().first_frame == 3);
+}
+
 TEST_CASE("The package and library searches hide what does not match, across refills") {
     Opened opened;
     Open(opened, true);
