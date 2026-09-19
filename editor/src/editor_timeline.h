@@ -44,6 +44,7 @@ public:
         return selected_keys_;
     }
     void SelectDepth(std::optional<uint16_t> depth);
+    void SelectDepths(std::vector<uint16_t> depths);
     void SetHiddenDepths(std::vector<uint16_t> depths);
     void SetLockedDepths(std::vector<uint16_t> depths);
     void SetCharacterNames(std::map<uint16_t, QString> names);
@@ -55,6 +56,7 @@ public:
 signals:
     void FrameChosen(uint32_t frame);
     void DepthChosen(uint32_t depth);
+    void DepthsChosen(std::vector<uint16_t> depths);
     void KeyChosen(const QString& property, uint32_t frame);
     void KeysShifted(int64_t by);
     void SpanMoved(uint16_t depth, uint32_t frame, int64_t by);
@@ -106,6 +108,8 @@ private:
     void Resize();
     [[nodiscard]] QString LabelNear(int x) const;
     [[nodiscard]] bool PressSwitch(const Lane& lane, QPoint at);
+    [[nodiscard]] bool PressDepthNumber(const Lane& lane, QPoint at,
+                                        Qt::KeyboardModifiers modifiers);
     void DrawSwitches(QPainter& painter, uint16_t depth, int y) const;
     [[nodiscard]] QString SpanName(const Document::DepthRow& row, const Document::Span& span) const;
     void DrawSpanName(QPainter& painter, const QString& name, const QRect& bar) const;
@@ -115,7 +119,7 @@ private:
     std::vector<Document::DepthRow> rows_;
     std::vector<Document::AnimationLabel> labels_;
     std::optional<uint16_t> keyed_depth_;
-    std::optional<uint16_t> selected_depth_;
+    std::vector<uint16_t> selected_depths_;
     std::vector<uint16_t> hidden_depths_;
     std::vector<uint16_t> locked_depths_;
     std::map<uint16_t, QString> names_;

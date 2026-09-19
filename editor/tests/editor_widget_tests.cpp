@@ -339,6 +339,38 @@ TEST_CASE("The gutter's eye and lock switch a depth without choosing it or a fra
     CHECK(timeline.grab(gutter).toImage() != plain);
 }
 
+TEST_CASE("Ctrl and Shift clicks on depth numbers choose several depths without seeking") {
+    Editor::Timeline timeline;
+    timeline.resize(kTimelineWidth, 200);
+    std::vector<Document::DepthRow> rows;
+    for (const uint16_t depth : {2, 3, 4, 5}) {
+        rows.push_back(Document::DepthRow{
+            .depth = depth, .spans = {Document::Span{.first_frame = 1, .last_frame = 9}}});
+    }
+    timeline.ShowAnimation(11, rows, {});
+    std::vector<uint32_t> chosen;
+    std::vector<std::vector<uint16_t>> groups;
+    int seeks = 0;
+    QObject::connect(&timeline, &Editor::Timeline::DepthChosen,
+                     [&chosen](uint32_t depth) { chosen.push_back(depth); });
+    QObject::connect(&timeline, &Editor::Timeline::DepthsChosen,
+                     [&groups](std::vector<uint16_t> depths) { groups.push_back(depths); });
+    QObject::connect(&timeline, &Editor::Timeline::FrameChosen, [&seeks](uint32_t) { seeks++; });
+    const auto row = [](int lane) { return QPointF(45, kDepthRowY + (lane * 16)); };
+    Click(timeline, row(0));
+    CHECK(chosen == std::vector<uint32_t>{2});
+    Click(timeline, row(2), Qt::ControlModifier);
+    REQUIRE(groups.size() == 1);
+    CHECK(groups.back() == std::vector<uint16_t>{2, 4});
+    Click(timeline, row(3), Qt::ShiftModifier);
+    CHECK(groups.back() == std::vector<uint16_t>{4, 5});
+    Click(timeline, row(3), Qt::ControlModifier);
+    CHECK(groups.back() == std::vector<uint16_t>{4});
+    Click(timeline, row(0), Qt::ShiftModifier);
+    CHECK(groups.back() == std::vector<uint16_t>{4, 3, 2});
+    CHECK(seeks == 0);
+}
+
 TEST_CASE("A locked depth is marked in the gutter") {
     Editor::Timeline timeline;
     timeline.resize(kTimelineWidth, 200);
@@ -423,6 +455,44 @@ TEST_CASE("Ghosts are drawn faintly over the frame until the next frame arrives"
     frame.fill(QColor(0, 0, 0));
     viewport.ShowFrame(frame, QSize(1920, 1080));
     CHECK(viewport.grab().toImage() == plain);
+}
+
+TEST_CASE("Every depth in the selection is outlined") {
+    Editor::Viewport viewport;
+    ShowStage(viewport);
+    const Document::StageOutline second{
+        .depth = 6,
+        .corners = {Document::Point{1000, 600}, Document::Point{1400, 600},
+                    Document::Point{1400, 800}, Document::Point{1000, 800}},
+        .anchor = {1000, 600},
+        .linear = {}};
+    const Document::StageOutline first{
+        .depth = 5,
+        .corners = {Document::Point{100, 100}, Document::Point{500, 100}, Document::Point{500, 300},
+                    Document::Point{100, 300}},
+        .anchor = {100, 100},
+        .linear = {}};
+    const QPoint edge(600, 300);
+    viewport.ShowOutlines({first, second}, uint16_t{5});
+    const QColor alone = viewport.grab().toImage().pixelColor(edge);
+    viewport.ShowOutlines({first, second}, uint16_t{5}, {5, 6});
+    const QColor grouped = viewport.grab().toImage().pixelColor(edge);
+    CHECK(alone != grouped);
+
+    viewport.SetSnapping(true);
+    std::vector<Move> moves;
+    QObject::connect(&viewport, &Editor::Viewport::Dragged,
+                     [&moves](uint16_t, double dx, double dy, bool finished) {
+                         moves.push_back({.by = QPointF(dx, dy), .finished = finished});
+                     });
+    Drag(viewport, {150, 100}, {398, 100});
+    REQUIRE_FALSE(moves.empty());
+    CHECK_THAT(moves.back().by.x(), WithinAbs(496, 1e-9));
+    moves.clear();
+    viewport.ShowOutlines({first, second}, uint16_t{5});
+    Drag(viewport, {150, 100}, {398, 100});
+    REQUIRE_FALSE(moves.empty());
+    CHECK_THAT(moves.back().by.x(), WithinAbs(500, 1e-9));
 }
 
 TEST_CASE("Clicking the stage reports where in stage pixels") {

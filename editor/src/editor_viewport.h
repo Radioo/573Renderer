@@ -37,7 +37,7 @@ public:
     void ShowMessage(const QString& message);
     void ShowGhosts(std::vector<QImage> ghosts);
     void ShowOutlines(std::vector<Document::StageOutline> outlines,
-                      std::optional<uint16_t> selected);
+                      std::optional<uint16_t> selected, std::vector<uint16_t> group = {});
     [[nodiscard]] QSize FittedSize(QSize available) const;
     void SetSnapping(bool on);
     void ClearGuides();
@@ -80,6 +80,8 @@ private:
     void DrawGuides(QPainter& painter, const Document::StageOutline& outline) const;
     void DrawSelection(QPainter& painter, const Document::StageOutline& outline) const;
     void DrawGuideLines(QPainter& painter) const;
+    void DrawGroup(QPainter& painter, const Document::StageOutline& primary) const;
+    [[nodiscard]] bool InGroup(uint16_t depth) const;
     void DrawRulers(QPainter& painter) const;
     [[nodiscard]] bool PressGuide(QPointF at);
     [[nodiscard]] std::optional<std::size_t> GuideNear(QPointF at) const;
@@ -93,6 +95,7 @@ private:
     QString message_;
     std::vector<Document::StageOutline> outlines_;
     std::optional<uint16_t> selected_;
+    std::vector<uint16_t> group_;
     Gesture gesture_ = Gesture::None;
     QPointF press_;
     Document::Point grab_{};

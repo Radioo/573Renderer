@@ -165,6 +165,7 @@ void Window::BuildPanels() {
     timeline_ = new Timeline;
     connect(timeline_, &Timeline::FrameChosen, this, &Window::SeekTo);
     connect(timeline_, &Timeline::DepthChosen, this, &Window::ChooseDepth);
+    connect(timeline_, &Timeline::DepthsChosen, this, &Window::ChooseDepths);
     connect(timeline_, &Timeline::MenuRequested, this, &Window::ShowTimelineMenu);
     connect(timeline_, &Timeline::KeyChosen, this, &Window::FocusKey);
     connect(timeline_, &Timeline::KeysShifted, this, &Window::ShiftSelectedKeys);
@@ -402,6 +403,17 @@ void Window::ShowSelectedEntry() {
 
 void Window::ChooseDepth(uint32_t depth) {
     depth_ = depth;
+    selected_depths_ = {static_cast<uint16_t>(depth)};
+    ShowFrame();
+}
+
+void Window::ChooseDepths(std::vector<uint16_t> depths) {
+    if (depths.empty()) {
+        depth_.reset();
+    } else {
+        depth_ = depths.back();
+    }
+    selected_depths_ = std::move(depths);
     ShowFrame();
 }
 
@@ -415,8 +427,7 @@ void Window::ShowFrame() {
     const Document::AuthoredDepth* owned =
         depth_ ? AuthoredAt(static_cast<uint16_t>(*depth_), frame_) : nullptr;
     ShowKeysForDepth(owned);
-    timeline_->SelectDepth(depth_ ? std::optional<uint16_t>(static_cast<uint16_t>(*depth_))
-                                  : std::nullopt);
+    timeline_->SelectDepths(SelectedDepths());
     FillInspector(Document::InspectFrame(
         *animation, Document::Selection{
                         .depth = depth_ ? std::optional<uint16_t>(static_cast<uint16_t>(*depth_))

@@ -130,13 +130,17 @@ bool Timeline::IsSelected(const Document::KeyRef& key) const {
 }
 
 void Timeline::SelectDepth(std::optional<uint16_t> depth) {
-    if (selected_depth_ == depth) return;
-    selected_depth_ = depth;
+    SelectDepths(depth ? std::vector<uint16_t>{*depth} : std::vector<uint16_t>{});
+}
+
+void Timeline::SelectDepths(std::vector<uint16_t> depths) {
+    if (selected_depths_ == depths) return;
+    selected_depths_ = std::move(depths);
     update();
 }
 
 void Timeline::Clear() {
-    selected_depth_.reset();
+    selected_depths_.clear();
     selected_keys_.clear();
     frame_count_ = 0;
     frame_ = 0;
@@ -358,6 +362,36 @@ bool Timeline::PressSwitch(const Lane& lane, QPoint at) {
     return false;
 }
 
+bool Timeline::PressDepthNumber(const Lane& lane, QPoint at, Qt::KeyboardModifiers modifiers) {
+    if (lane.is_property || at.x() < kNumberLeft || at.x() >= kGutterWidth) return false;
+    const bool adding = (modifiers & Qt::ControlModifier) != 0;
+    const bool ranging = (modifiers & Qt::ShiftModifier) != 0 && !selected_depths_.empty();
+    if (!adding && !ranging) {
+        SelectDepths({lane.depth});
+        emit DepthChosen(lane.depth);
+        return true;
+    }
+    std::vector<uint16_t> chosen = selected_depths_;
+    if (ranging) {
+        const uint16_t anchor = selected_depths_.back();
+        const uint16_t low = std::min(anchor, lane.depth);
+        const uint16_t high = std::max(anchor, lane.depth);
+        chosen = {anchor};
+        for (const Lane& other : Lanes()) {
+            if (other.is_property || other.depth < low || other.depth > high) continue;
+            if (other.depth != anchor && other.depth != lane.depth) chosen.push_back(other.depth);
+        }
+        if (lane.depth != anchor) chosen.push_back(lane.depth);
+    } else if (const auto found = std::ranges::find(chosen, lane.depth); found != chosen.end()) {
+        chosen.erase(found);
+    } else {
+        chosen.push_back(lane.depth);
+    }
+    SelectDepths(chosen);
+    emit DepthsChosen(chosen);
+    return true;
+}
+
 void Timeline::DrawSwitches(QPainter& painter, uint16_t depth, int y) const {
     const bool hidden = std::ranges::find(hidden_depths_, depth) != hidden_depths_.end();
     const bool locked = std::ranges::find(locked_depths_, depth) != locked_depths_.end();
@@ -514,6 +548,7 @@ void Timeline::mousePressEvent(QMouseEvent* event) {
     if (lane) {
         const std::vector<Lane> lanes = Lanes();
         if (PressSwitch(lanes[*lane], event->pos())) return;
+        if (PressDepthNumber(lanes[*lane], event->pos(), event->modifiers())) return;
         if (lanes[*lane].is_property) {
             PressKeys(lanes[*lane], event->pos(), toggle);
         } else {
@@ -675,7 +710,9 @@ void Timeline::paintEvent(QPaintEvent* event) {
 
         const auto row = std::ranges::find(rows_, lane.depth, &Document::DepthRow::depth);
         painter.fillRect(QRect(0, y, width(), kRowHeight - 1),
-                         selected_depth_ == lane.depth ? kSelectedRow : kRow);
+                         std::ranges::find(selected_depths_, lane.depth) != selected_depths_.end()
+                             ? kSelectedRow
+                             : kRow);
         DrawSwitches(painter, lane.depth, y);
         painter.setPen(palette().color(QPalette::Text));
         painter.drawText(QRect(kNumberLeft, y, kGutterWidth - 6 - kNumberLeft, kRowHeight),

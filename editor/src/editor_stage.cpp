@@ -22,6 +22,7 @@
 #include <QString>
 #include <QTimer>
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <optional>
@@ -100,7 +101,8 @@ void Window::UpdateOutlines(const AfpAnimation::Animation& animation) {
     }
     viewport_->ShowOutlines(VisibleOutlines(animation),
                             depth_ ? std::optional<uint16_t>(static_cast<uint16_t>(*depth_))
-                                   : std::nullopt);
+                                   : std::nullopt,
+                            SelectedDepths());
 }
 
 void Window::PickOnStage(double x, double y) {
@@ -111,11 +113,18 @@ void Window::PickOnStage(double x, double y) {
         return;
     }
     const std::optional<uint16_t> picked = Document::DepthAt(VisibleOutlines(*animation), {x, y});
+    const std::vector<uint16_t> group = SelectedDepths();
+    if (picked && group.size() > 1 && std::ranges::find(group, *picked) != group.end()) {
+        depth_ = *picked;
+        ShowFrame();
+        return;
+    }
     if (picked) {
         ChooseDepth(*picked);
         return;
     }
     depth_.reset();
+    selected_depths_.clear();
     ShowFrame();
 }
 
@@ -153,6 +162,74 @@ void Window::EditOnStage(uint16_t depth, const QString& name, const OwnedChange&
     previewed_ = false;
 }
 
+std::vector<uint16_t> Window::SelectedDepths() const {
+    if (!depth_) return {};
+    const auto primary = static_cast<uint16_t>(*depth_);
+    if (std::ranges::find(selected_depths_, primary) != selected_depths_.end())
+        return selected_depths_;
+    return {primary};
+}
+
+void Window::MoveGroupOnStage(const std::vector<uint16_t>& group, Document::StageOffset offset,
+                              bool finished) {
+    if (!file_ || animation_path_.empty()) return;
+    const auto animation = file_->ReadAnimation(animation_path_);
+    if (!animation) {
+        ReportOnce(QString::fromStdString(animation.error()));
+        return;
+    }
+    const uint32_t frame = frame_;
+    const Document::ClipId clip = clip_;
+    std::vector<std::pair<std::size_t, Document::AuthoredDepth>> owned;
+    std::vector<uint16_t> baked;
+    for (const uint16_t depth : group) {
+        const std::optional<std::size_t> index = AuthoredIndexAt(depth, frame);
+        if (!index) {
+            baked.push_back(depth);
+            continue;
+        }
+        Document::AuthoredDepth moved = authored_[*index];
+        const auto state = Document::BakedFor(*animation, moved);
+        auto shifted =
+            state ? Document::MoveOwnedDepth(moved, *state, frame, offset)
+                  : Support::Expected<void, std::string>(Support::Unexpected(state.error()));
+        if (!shifted) {
+            ReportOnce(QString::fromStdString(shifted.error()));
+            return;
+        }
+        owned.emplace_back(*index, std::move(moved));
+    }
+    const AnimationChange change = [owned, baked, clip, frame,
+                                    offset](AfpAnimation::Animation& edited) {
+        using Changed = Support::Expected<void, std::string>;
+        for (const auto& [index, moved] : owned) {
+            const auto state = Document::BakedFor(edited, moved);
+            if (!state) return Changed(Support::Unexpected(state.error()));
+            auto written = Document::WriteAuthored(edited, moved, *state);
+            if (!written) return written;
+        }
+        for (const uint16_t depth : baked) {
+            auto shifted = Document::MoveBakedDepth(edited, clip, depth, frame, offset);
+            if (!shifted) return shifted;
+        }
+        return Changed();
+    };
+    if (!finished) {
+        PreviewOnStage(change);
+        return;
+    }
+    pending_preview_.reset();
+    const bool changed =
+        EditAnimation(tr("Move %n depths", nullptr, static_cast<int>(group.size())), change);
+    if (!changed && previewed_) Reload();
+    previewed_ = false;
+    if (!changed) return;
+    for (auto& [index, moved] : owned)
+        authored_[index] = std::move(moved);
+    if (!owned.empty()) SaveProject();
+    ShowFrame();
+}
+
 void Window::PreviewOnStage(AnimationChange change) {
     pending_preview_ = std::move(change);
     if (preview_scheduled_) return;
@@ -177,6 +254,11 @@ void Window::RunStagePreview() {
 
 void Window::MoveOnStage(uint16_t depth, double dx, double dy, bool finished) {
     const Document::StageOffset offset{.x = dx, .y = dy};
+    const std::vector<uint16_t> group = SelectedDepths();
+    if (group.size() > 1 && std::ranges::find(group, depth) != group.end()) {
+        MoveGroupOnStage(group, offset, finished);
+        return;
+    }
     const uint32_t frame = frame_;
     const Document::ClipId clip = clip_;
     EditOnStage(

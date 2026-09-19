@@ -387,6 +387,28 @@ widget tests click each switch and the number, and see the gutter drawn
 differently for a hidden and a locked depth; the window test hides, locks and
 shows a depth again through the switches. Leaving out the switch press, either
 connection or the drawing fails them.
+
+Several depths can be chosen at once, as layers are in After Effects. Clicking
+a depth's number chooses it alone without moving the playhead, Ctrl+click adds
+or drops a depth, and Shift+click chooses every depth row from the last chosen
+one to the clicked one (`Timeline::DepthsChosen`, the clicked depth last). The
+window keeps the chosen depths (`Window::SelectedDepths`, the last one being the
+depth the inspector and the menus act on) and the timeline shades all of their
+rows. On stage every chosen depth is outlined, the last one with its handles,
+and picking one of them keeps the group instead of choosing it alone. Dragging
+or nudging moves the whole group by the same offset as one undo step
+(`Window::MoveGroupOnStage`): baked depths through `Document::MoveBakedDepth`,
+and project-owned ones by keying their translation on a copy that is written
+into the animation in the same edit and stored in the project once the edit
+lands, so the project never disagrees with the document. While a group moves it
+does not snap to its own members, which move with it, and the preview shows
+every member moved. The widget tests choose depths with Ctrl and Shift, see the
+group outlined and not snapped to; the window test drops a second depth, lets
+the project own it, moves the pair and checks both moved, that a later nudge of
+the owned depth starts from where the group left it, and that undo puts both
+back. Leaving out the group move, the kept pick, storing the owned depth, the
+group outlines, the snap filter, the Ctrl toggle or the unseeking number click
+fails them.
 With a sprite picked in the clip box, the menu also names that sprite's export
 (`Window::NameShownSpriteExport`, through `Document::NameSpriteExport`): the box
 starts on the current name and an empty answer removes it. It is an undoable

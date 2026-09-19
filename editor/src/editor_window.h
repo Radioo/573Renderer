@@ -19,6 +19,7 @@
 #include "document/outline.h"
 #include "document/place_image.h"
 #include "document/stage_bounds.h"
+#include "document/stage_move.h"
 #include "document/timeline.h"
 #include "preview/preview_client.h"
 #include "preview/shared_texture.h"
@@ -160,6 +161,10 @@ private:
     [[nodiscard]] Support::Expected<ShownFrame, std::string> ReadFrame();
     void SaveFrameAs();
     void SaveFramesAs();
+    [[nodiscard]] std::vector<uint16_t> SelectedDepths() const;
+    void ChooseDepths(std::vector<uint16_t> depths);
+    void MoveGroupOnStage(const std::vector<uint16_t>& group, Document::StageOffset offset,
+                          bool finished);
     void ShowGhostsAround(uint32_t frame);
     void SaveImageAs(const QString& name);
     void AddImageFromFile();
@@ -242,6 +247,7 @@ private:
     QTreeWidget* package_tree_ = nullptr;
     QTreeWidget* library_ = nullptr;
     QAction* onion_action_ = nullptr;
+    std::vector<uint16_t> selected_depths_;
     QListWidget* history_list_ = nullptr;
     QTableWidget* inspector_ = nullptr;
     QAction* background_action_ = nullptr;

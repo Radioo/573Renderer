@@ -279,6 +279,86 @@ TEST_CASE("Clicking a step in the history panel undoes or redoes up to it") {
     CHECK(history->currentRow() == 1);
 }
 
+TEST_CASE("Depths chosen together move together, owned or not, as one undo step") {
+    Opened opened;
+    Open(opened, true);
+    auto* library = opened.window.findChild<QTreeWidget*>("library");
+    auto* viewport = opened.window.findChild<Editor::Viewport*>();
+    auto* timeline = opened.window.findChild<Editor::Timeline*>();
+    REQUIRE(library != nullptr);
+    REQUIRE(viewport != nullptr);
+    REQUIRE(timeline != nullptr);
+    std::optional<uint16_t> dot;
+    for (int at = 0; at < library->topLevelItemCount(); at++) {
+        if (library->topLevelItem(at)->text(0).contains("dot"))
+            dot = static_cast<uint16_t>(library->topLevelItem(at)->data(0, Qt::UserRole).toUInt());
+    }
+    REQUIRE(dot.has_value());
+    if (!dot) return;
+    {
+        Script placed({});
+        emit viewport->CharacterDropped(*dot, 500, 300);
+        QApplication::processEvents();
+        CHECK(placed.Problems().isEmpty());
+    }
+    QAction* project = nullptr;
+    for (QAction* action : opened.window.findChildren<QAction*>()) {
+        if (action->text() == "&New project...") project = action;
+    }
+    REQUIRE(project != nullptr);
+    const QString folder = opened.dir.filePath("project");
+    REQUIRE(QDir().mkpath(folder));
+    {
+        Script made({PickFile(folder)});
+        project->trigger();
+        REQUIRE(Settle([&made] { return made.Finished(); }));
+        CHECK(made.Problems().isEmpty());
+    }
+    emit timeline->DepthChosen(3);
+    {
+        Script owned({Choose("Let the project own depth 3 from here")});
+        emit timeline->MenuRequested(QPoint(4, 4), 0, QString());
+        REQUIRE(Settle([&owned] { return owned.Finished(); }));
+        INFO(owned.Problems().join("|").toStdString());
+        CHECK(owned.Problems().isEmpty());
+    }
+    const auto x_of = [&](uint16_t depth) {
+        emit timeline->DepthChosen(depth);
+        const QString text = QString::fromStdString(RowValue(*opened.inspector, "Translation"));
+        return text.section(',', 0, 0).trimmed().toInt();
+    };
+    const int baked_before = x_of(2);
+    CHECK(x_of(3) == 10000);
+
+    emit timeline->DepthsChosen({2, 3});
+    {
+        Script moved({});
+        emit viewport->Picked(501, 301);
+        emit viewport->Dragged(2, 10, 0, true);
+        QApplication::processEvents();
+        INFO(moved.Problems().join("|").toStdString());
+        CHECK(moved.Problems().isEmpty());
+    }
+    CHECK(x_of(3) == 10200);
+    CHECK(x_of(2) == baked_before + 200);
+
+    emit timeline->DepthChosen(3);
+    {
+        Script nudged({});
+        emit viewport->Dragged(3, 1, 0, true);
+        QApplication::processEvents();
+        CHECK(nudged.Problems().isEmpty());
+    }
+    CHECK(x_of(3) == 10220);
+
+    QAction* undo = ShortcutAction(opened.window, QKeySequence(QKeySequence::Undo));
+    REQUIRE(undo != nullptr);
+    undo->trigger();
+    undo->trigger();
+    CHECK(x_of(3) == 10000);
+    CHECK(x_of(2) == baked_before);
+}
+
 TEST_CASE("A closed panel comes back from the View menu") {
     Opened opened;
     Open(opened);

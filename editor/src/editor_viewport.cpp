@@ -128,10 +128,28 @@ void Viewport::ShowMessage(const QString& message) {
 }
 
 void Viewport::ShowOutlines(std::vector<Document::StageOutline> outlines,
-                            std::optional<uint16_t> selected) {
+                            std::optional<uint16_t> selected, std::vector<uint16_t> group) {
     outlines_ = std::move(outlines);
     selected_ = selected;
+    group_ = std::move(group);
     update();
+}
+
+bool Viewport::InGroup(uint16_t depth) const {
+    return std::ranges::find(group_, depth) != group_.end();
+}
+
+void Viewport::DrawGroup(QPainter& painter, const Document::StageOutline& primary) const {
+    const Document::Point offset =
+        dragging_ && gesture_ == Gesture::Move ? Moved(primary).offset : Document::Point{0, 0};
+    painter.setBrush(Qt::NoBrush);
+    for (const Document::StageOutline& outline : outlines_) {
+        if (outline.depth == primary.depth || !InGroup(outline.depth)) continue;
+        QPolygonF polygon;
+        for (const Document::Point& corner : outline.corners)
+            polygon << ToWidget({corner[0] + offset[0], corner[1] + offset[1]});
+        painter.drawPolygon(polygon);
+    }
 }
 
 void Viewport::ShowGhosts(std::vector<QImage> ghosts) {
@@ -289,8 +307,12 @@ Document::Snapped Viewport::Moved(const Document::StageOutline& outline) const {
     if (!snapping_ || snap_suspended_ || stage_.isEmpty() || target.isEmpty())
         return Document::Snapped{.offset = raw, .guides = {}};
     const double reach = kSnapReach * stage_.width() / target.width();
+    std::vector<Document::StageOutline> still;
+    for (const Document::StageOutline& other : outlines_) {
+        if (!InGroup(other.depth)) still.push_back(other);
+    }
     return Document::SnapMove(
-        outline, outlines_, guides_,
+        outline, still, guides_,
         {static_cast<double>(stage_.width()), static_cast<double>(stage_.height())}, raw, reach);
 }
 
@@ -420,6 +442,7 @@ void Viewport::paintEvent(QPaintEvent* event) {
         painter.setRenderHint(QPainter::Antialiasing);
         painter.setPen(QPen(kSelectedColour, kOutlineWidth));
         DrawSelection(painter, Preview(*selected));
+        DrawGroup(painter, *selected);
     }
     if (rulers_) DrawRulers(painter);
 }
