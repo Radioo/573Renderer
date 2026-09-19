@@ -288,6 +288,7 @@ void Window::BuildMenus() {
     edit->addSeparator();
     AddAlignMenu(edit);
     AddArrangeMenu(edit);
+    AddPlayheadMenu(edit);
     QAction* split = edit->addAction(tr("&Split depth at the playhead"));
     split->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_D));
     connect(split, &QAction::triggered, this, [this] {

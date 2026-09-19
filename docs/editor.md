@@ -475,6 +475,20 @@ sees its record offered for detaching on its new frames and saved there.
 Dropping the menu entry, the ownership lookup, the record move or the save
 fails it.
 
+`Edit > At the playhead` holds After Effects' bracket keys for the selected
+depth: `[` moves its span so it starts on the playhead and `]` so it ends there
+(`Window::MoveEdgeToPlayhead`, through `MoveSpanInTime`), Alt+`[` trims its
+start to the playhead and Alt+`]` its end (`Window::TrimEdgeToPlayhead`,
+through `TrimSpanOnTimeline`), so a project-owned span moves or trims its record
+with it as a drag on the timeline does. The span is the one under the playhead,
+or the nearest one on that depth (`Document::NearestSpan`), so Alt+`[` before a
+span stretches it back to the playhead. A move that would change nothing is not
+made, so it leaves no empty undo step, and a depth with nothing in the clip is
+reported. The window test shortens a span and walks it through all four keys,
+reading the frames it shows after each, sees `[` on an aligned span leave the
+undo name alone, and sees the refusal; swapping either end of the move, either
+trim end, the empty-move guard or the report fails it.
+
 `Edit > Arrange` changes the selected depth's place in the stacking order at the
 playhead, with After Effects' shortcuts: `Bring forward` (Ctrl+]), `Send
 backward` (Ctrl+[), `Bring to front` (Ctrl+Shift+]) and `Send to back`

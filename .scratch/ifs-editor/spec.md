@@ -323,3 +323,4 @@ captured. This milestone is the editing itself.
 - `issues/115-drop-characters-on-the-timeline.md` (milestone 8)
 - `issues/116-new-empty-sprite.md` (milestone 8)
 - `issues/117-stage-marquee.md` (milestone 8)
+- `issues/118-playhead-bracket-keys.md` (milestone 8)

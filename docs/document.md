@@ -283,6 +283,12 @@ was moved (a span that is closed by the next span's create rather than by a
 remove cannot move later, because nothing would close the span before it). It
 works on a copy and returns the new frames.
 
+`NearestSpan(clip, depth, frame)` is the span of a depth that the editor's
+playhead keys act on: the one under `frame`, or else the one whose nearer end is
+closest to it, the earlier one when two are as close. `span_edit_tests` checks
+a frame inside, before, after and between two spans, the tie, and a depth with
+no span.
+
 `ChangeSpanDepth` gives a span another depth number, which is its place in the
 drawing order. The new depth must hold nothing and be neither placed nor removed
 from the span's first frame to the frame after it, and depth `0x3000` is refused

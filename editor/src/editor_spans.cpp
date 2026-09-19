@@ -25,6 +25,7 @@
 
 #include <algorithm>
 #include <array>
+#include <functional>
 #include <cstddef>
 #include <cstdint>
 #include <limits>
@@ -184,6 +185,57 @@ void Window::SequenceChosenDepths(uint32_t frame) {
     }
     if (saved) SaveProject();
     ShowFrame();
+}
+
+std::optional<Document::Span> Window::SpanNearPlayhead() {
+    if (!file_ || animation_path_.empty() || !depth_) return std::nullopt;
+    const auto animation = file_->ReadAnimation(animation_path_);
+    if (!animation) {
+        ReportProblem(QString::fromStdString(animation.error()));
+        return std::nullopt;
+    }
+    const AfpAnimation::Container* shown = Document::FindClip(*animation, clip_);
+    const auto depth = static_cast<uint16_t>(*depth_);
+    std::optional<Document::Span> span =
+        shown != nullptr ? Document::NearestSpan(*shown, depth, frame_) : std::nullopt;
+    if (!span) ReportProblem(tr("Depth %1 holds nothing in this clip").arg(depth));
+    return span;
+}
+
+void Window::MoveEdgeToPlayhead(SpanEnd end) {
+    const std::optional<Document::Span> span = SpanNearPlayhead();
+    if (!span) return;
+    const int64_t by =
+        static_cast<int64_t>(frame_) -
+        static_cast<int64_t>(end == SpanEnd::Start ? span->first_frame : span->last_frame);
+    if (by != 0) MoveSpanInTime(static_cast<uint16_t>(*depth_), span->first_frame, by);
+}
+
+void Window::TrimEdgeToPlayhead(SpanEnd end) {
+    const std::optional<Document::Span> span = SpanNearPlayhead();
+    if (!span) return;
+    TrimSpanOnTimeline(static_cast<uint16_t>(*depth_), span->first_frame,
+                       end == SpanEnd::Start ? frame_ : span->first_frame,
+                       end == SpanEnd::Start ? span->last_frame : frame_);
+}
+
+void Window::AddPlayheadMenu(QMenu* edit) {
+    QMenu* here = edit->addMenu(tr("At the &playhead"));
+    const std::array<std::tuple<QString, QKeySequence, std::function<void()>>, 4> lines{{
+        {tr("Move the depth's &start here"), QKeySequence(Qt::Key_BracketLeft),
+         [this] { MoveEdgeToPlayhead(SpanEnd::Start); }},
+        {tr("Move the depth's &end here"), QKeySequence(Qt::Key_BracketRight),
+         [this] { MoveEdgeToPlayhead(SpanEnd::End); }},
+        {tr("&Trim the depth's start here"), QKeySequence(Qt::ALT | Qt::Key_BracketLeft),
+         [this] { TrimEdgeToPlayhead(SpanEnd::Start); }},
+        {tr("T&rim the depth's end here"), QKeySequence(Qt::ALT | Qt::Key_BracketRight),
+         [this] { TrimEdgeToPlayhead(SpanEnd::End); }},
+    }};
+    for (const auto& [text, keys, run] : lines) {
+        QAction* action = here->addAction(text);
+        action->setShortcut(keys);
+        connect(action, &QAction::triggered, this, run);
+    }
 }
 
 void Window::AddArrangeMenu(QMenu* edit) {

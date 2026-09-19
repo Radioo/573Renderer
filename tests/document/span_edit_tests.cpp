@@ -206,3 +206,19 @@ TEST_CASE("A span is only duplicated onto a depth that is free over its frames")
     CHECK_FALSE(Document::DuplicateSpan(animation, kRoot, kDepth, 6, 9).has_value());
     CHECK(animation == before);
 }
+
+TEST_CASE("The nearest span is the one under the frame, or else the closest on the depth") {
+    AfpAnimation::Animation animation = Clip(20);
+    Add(animation, kDepth, 2, 4);
+    Add(animation, kDepth, 10, 12);
+    const auto nearest = [&animation](uint32_t frame) {
+        return Document::NearestSpan(animation.root, kDepth, frame);
+    };
+    CHECK(nearest(3) == Document::Span{.first_frame = 2, .last_frame = 4});
+    CHECK(nearest(0) == Document::Span{.first_frame = 2, .last_frame = 4});
+    CHECK(nearest(6) == Document::Span{.first_frame = 2, .last_frame = 4});
+    CHECK(nearest(7) == Document::Span{.first_frame = 2, .last_frame = 4});
+    CHECK(nearest(8) == Document::Span{.first_frame = 10, .last_frame = 12});
+    CHECK(nearest(19) == Document::Span{.first_frame = 10, .last_frame = 12});
+    CHECK_FALSE(Document::NearestSpan(animation.root, kDepth + 1, 3).has_value());
+}

@@ -79,6 +79,12 @@ Support::Expected<void, std::string> PlaceShifted(AfpAnimation::Container& clip,
     return {};
 }
 
+uint32_t FramesAway(const Span& span, uint32_t frame) {
+    if (frame < span.first_frame) return span.first_frame - frame;
+    if (frame > span.last_frame) return frame - span.last_frame;
+    return 0;
+}
+
 std::string NothingAt(uint16_t depth, uint32_t frame) {
     return "depth " + std::to_string(depth) + " holds nothing on frame " + std::to_string(frame);
 }
@@ -118,6 +124,22 @@ std::optional<Span> SpanOfDepth(const AfpAnimation::Container& clip, uint16_t de
         }
     }
     return std::nullopt;
+}
+
+std::optional<Span> NearestSpan(const AfpAnimation::Container& clip, uint16_t depth,
+                                uint32_t frame) {
+    std::optional<Span> nearest;
+    uint32_t best = std::numeric_limits<uint32_t>::max();
+    for (const DepthRow& row : DepthRows(clip)) {
+        if (row.depth != depth) continue;
+        for (const Span& span : row.spans) {
+            const uint32_t away = FramesAway(span, frame);
+            if (away >= best) continue;
+            best = away;
+            nearest = span;
+        }
+    }
+    return nearest;
 }
 
 Support::Expected<Span, std::string> MoveSpan(AfpAnimation::Animation& animation, ClipId clip,

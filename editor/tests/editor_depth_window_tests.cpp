@@ -459,3 +459,67 @@ TEST_CASE("A marquee on the stage chooses the depths it touches") {
     }
     CHECK(offered);
 }
+
+TEST_CASE("The bracket keys move and trim the chosen depth's span to the playhead") {
+    Opened opened;
+    Open(opened, true);
+    auto* timeline = opened.window.findChild<Editor::Timeline*>();
+    REQUIRE(timeline != nullptr);
+    for (int inserted = 0; inserted < 3; inserted++) {
+        Script more({Choose("Insert a frame at 2")});
+        emit timeline->MenuRequested(QPoint(4, 4), 2, QString());
+        REQUIRE(Settle([&more] { return more.Finished(); }));
+    }
+    {
+        Script trimmed({});
+        emit timeline->SpanTrimmed(2, 0, 1, 2);
+        QApplication::processEvents();
+        CHECK(trimmed.Problems().isEmpty());
+    }
+    const auto key = [&](const QKeySequence& keys) {
+        QAction* action = ShortcutAction(opened.window, keys);
+        REQUIRE(action != nullptr);
+        return action;
+    };
+    QAction* start_here = key(QKeySequence(Qt::Key_BracketLeft));
+    QAction* end_here = key(QKeySequence(Qt::Key_BracketRight));
+    QAction* trim_start = key(QKeySequence(Qt::ALT | Qt::Key_BracketLeft));
+    QAction* trim_end = key(QKeySequence(Qt::ALT | Qt::Key_BracketRight));
+    QAction* undo = key(QKeySequence(QKeySequence::Undo));
+    const auto shown_on = [&] {
+        std::vector<uint32_t> frames;
+        for (uint32_t frame = 0; frame < 6; frame++) {
+            emit timeline->FrameChosen(frame);
+            emit timeline->DepthChosen(2);
+            if (RowValue(*opened.inspector, "Character") != "no Character row")
+                frames.push_back(frame);
+        }
+        return frames;
+    };
+    const auto press = [&](QAction* action, uint32_t playhead) {
+        emit timeline->FrameChosen(playhead);
+        emit timeline->DepthChosen(2);
+        Script pressed({});
+        action->trigger();
+        QApplication::processEvents();
+        CHECK(pressed.Problems().isEmpty());
+    };
+    CHECK(shown_on() == std::vector<uint32_t>{1, 2});
+    press(start_here, 3);
+    CHECK(shown_on() == std::vector<uint32_t>{3, 4});
+    press(end_here, 5);
+    CHECK(shown_on() == std::vector<uint32_t>{4, 5});
+    press(trim_start, 2);
+    CHECK(shown_on() == std::vector<uint32_t>{2, 3, 4, 5});
+    press(trim_end, 3);
+    CHECK(shown_on() == std::vector<uint32_t>{2, 3});
+    const QString before = undo->text();
+    press(start_here, 2);
+    CHECK(undo->text() == before);
+
+    emit timeline->DepthChosen(9);
+    Script refused({});
+    start_here->trigger();
+    REQUIRE(Settle([&refused] { return !refused.Problems().isEmpty(); }));
+    CHECK(refused.Problems().front().contains("holds nothing"));
+}

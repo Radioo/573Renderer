@@ -15,6 +15,9 @@ namespace Document {
 [[nodiscard]] std::optional<Span> SpanOfDepth(const AfpAnimation::Container& clip, uint16_t depth,
                                               uint32_t frame);
 
+[[nodiscard]] std::optional<Span> NearestSpan(const AfpAnimation::Container& clip, uint16_t depth,
+                                              uint32_t frame);
+
 [[nodiscard]] Support::Expected<Span, std::string> MoveSpan(AfpAnimation::Animation& animation,
                                                             ClipId clip, uint16_t depth,
                                                             uint32_t frame, int64_t by);

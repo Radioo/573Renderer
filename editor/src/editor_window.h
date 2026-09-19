@@ -62,6 +62,8 @@ namespace Editor {
 using AnimationChange =
     std::function<Support::Expected<void, std::string>(AfpAnimation::Animation&)>;
 
+enum class SpanEnd : uint8_t { Start, End };
+
 struct Placeable {
     std::optional<uint16_t> character;
     std::string image;
@@ -223,6 +225,10 @@ private:
     void ArrangeDepth(Document::Arrange how, const QString& name);
     void SplitDepthAt(uint16_t depth, uint32_t frame);
     void SequenceChosenDepths(uint32_t frame);
+    [[nodiscard]] std::optional<Document::Span> SpanNearPlayhead();
+    void MoveEdgeToPlayhead(SpanEnd end);
+    void TrimEdgeToPlayhead(SpanEnd end);
+    void AddPlayheadMenu(QMenu* edit);
     void AddArrangeMenu(QMenu* edit);
     void DuplicateSpanToDepth(uint16_t depth, uint32_t frame);
     [[nodiscard]] std::optional<uint16_t> NextFreeDepth(uint16_t fallback);
