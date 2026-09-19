@@ -262,6 +262,42 @@ TEST_CASE("A hidden depth's bars are drawn grey") {
     CHECK(timeline.grab().toImage().pixelColor(inside) == QColor(70, 128, 196));
 }
 
+TEST_CASE("A span's bar shows the name of what it places, and says it on hover") {
+    Editor::Timeline timeline;
+    timeline.resize(kTimelineWidth, 200);
+    timeline.ShowAnimation(
+        11,
+        {Document::DepthRow{.depth = 3,
+                            .spans = {Document::Span{.first_frame = 1, .last_frame = 9}},
+                            .shows = {{1U, uint16_t{12}}}},
+         Document::DepthRow{.depth = 4,
+                            .spans = {Document::Span{.first_frame = 2, .last_frame = 2}},
+                            .shows = {{2U, uint16_t{12}}}}},
+        {});
+    const auto lettering = [&timeline](int y) {
+        const QImage image = timeline.grab().toImage();
+        int bright = 0;
+        for (int x = static_cast<int>(FrameX(1)); x < static_cast<int>(FrameX(9)); x++) {
+            for (int dy = -4; dy <= 4; dy++) {
+                const QColor colour = image.pixelColor(x, y + dy);
+                if (colour.red() > 180 && colour.green() > 180 && colour.blue() > 180) bright++;
+            }
+        }
+        return bright;
+    };
+    CHECK(lettering(kDepthRowY) == 0);
+    timeline.SetCharacterNames({{uint16_t{12}, QString("Sprite 12: banner")}});
+    CHECK(lettering(kDepthRowY) > 20);
+    CHECK(lettering(kDepthRowY + 16) == 0);
+
+    CHECK(timeline.SpanNameAt(QPoint(static_cast<int>(FrameX(5)), kDepthRowY)) ==
+          "Sprite 12: banner");
+    CHECK(timeline.SpanNameAt(QPoint(static_cast<int>(FrameX(2)), kDepthRowY + 16)) ==
+          "Sprite 12: banner");
+    CHECK(timeline.SpanNameAt(QPoint(static_cast<int>(FrameX(10)), kDepthRowY)).isEmpty());
+    CHECK(timeline.SpanNameAt(QPoint(static_cast<int>(FrameX(5)), 4)).isEmpty());
+}
+
 TEST_CASE("A locked depth is marked in the gutter") {
     Editor::Timeline timeline;
     timeline.resize(kTimelineWidth, 200);

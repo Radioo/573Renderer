@@ -31,6 +31,20 @@ void Close(std::map<uint16_t, DepthRow>& rows, std::map<uint16_t, uint32_t>& ope
     open.erase(found);
 }
 
+void Walk(const AfpAnimation::Tag& tag, uint32_t number, std::map<uint16_t, DepthRow>& rows,
+          std::map<uint16_t, uint32_t>& open) {
+    if (const auto* placement = std::get_if<AfpAnimation::Placement>(&tag.body)) {
+        if ((placement->flags & kUpdateExisting) != 0) return;
+        if (number > 0) Close(rows, open, placement->depth, number - 1);
+        open.emplace(placement->depth, number);
+        DepthRow& row = rows[placement->depth];
+        row.depth = placement->depth;
+        if (placement->character) row.shows[number] = *placement->character;
+    } else if (const auto* remove = std::get_if<AfpAnimation::Remove>(&tag.body)) {
+        Close(rows, open, remove->depth, number > 0 ? number - 1 : 0);
+    }
+}
+
 }
 
 std::vector<DepthRow> DepthRows(const AfpAnimation::Container& clip) {
@@ -42,15 +56,7 @@ std::vector<DepthRow> DepthRows(const AfpAnimation::Container& clip) {
         for (uint32_t tag = 0; tag < frame.tag_count; tag++) {
             const std::size_t position = frame.first_tag + tag;
             if (position >= clip.tags.size()) break;
-            const auto& body = clip.tags[position].body;
-            if (const auto* placement = std::get_if<AfpAnimation::Placement>(&body)) {
-                if ((placement->flags & kUpdateExisting) != 0) continue;
-                if (number > 0) Close(rows, open, placement->depth, number - 1);
-                open.emplace(placement->depth, number);
-                rows[placement->depth].depth = placement->depth;
-            } else if (const auto* remove = std::get_if<AfpAnimation::Remove>(&body)) {
-                Close(rows, open, remove->depth, number > 0 ? number - 1 : 0);
-            }
+            Walk(clip.tags[position], number, rows, open);
         }
     }
     const auto last = clip.frames.empty() ? 0 : static_cast<uint32_t>(clip.frames.size() - 1);

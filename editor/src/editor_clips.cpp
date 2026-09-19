@@ -36,6 +36,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <map>
 #include <functional>
 #include <optional>
 #include <string>
@@ -244,7 +245,13 @@ void Window::ShowClipTimeline() {
         ShowClipTimeline();
         return;
     }
-    FillLibrary(*animation);
+    const std::vector<Document::CharacterSummary> characters =
+        Document::Characters(*animation, file_->ShapeImages(animation_path_));
+    FillLibrary(*animation, characters);
+    std::map<uint16_t, QString> names;
+    for (const Document::CharacterSummary& one : characters)
+        names.emplace(one.id, QString::fromStdString(one.label));
+    timeline_->SetCharacterNames(std::move(names));
     const uint32_t count = ClipFrameCount();
     timeline_->ShowAnimation(count, details->depths, details->labels);
     UpdateViewRows();

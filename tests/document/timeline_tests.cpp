@@ -4,6 +4,7 @@
 #include "formats/afp_animation.h"
 
 #include <cstdint>
+#include <map>
 #include <optional>
 #include <vector>
 
@@ -83,6 +84,25 @@ TEST_CASE("Replacing the character at a depth starts a second span") {
     CHECK(rows[0].spans[0].last_frame == 1);
     CHECK(rows[0].spans[1].first_frame == 2);
     CHECK(rows[0].spans[1].last_frame == 3);
+}
+
+TEST_CASE("Each span records the character its placement shows") {
+    const auto showing = [](uint16_t depth, uint16_t character) {
+        AfpAnimation::Tag tag = Place(kCreate, depth);
+        std::get<AfpAnimation::Placement>(tag.body).character = character;
+        return tag;
+    };
+    const AfpAnimation::Container clip = ClipOf({
+        {showing(4, 10), Place(kCreate, 6)},
+        {Place(kUpdate, 4)},
+        {showing(4, 11)},
+        {},
+    });
+    const std::vector<Document::DepthRow> rows = Document::DepthRows(clip);
+    REQUIRE(rows.size() == 2);
+    REQUIRE(rows[0].spans.size() == 2);
+    CHECK(rows[0].shows == std::map<uint32_t, uint16_t>{{0U, uint16_t{10}}, {2U, uint16_t{11}}});
+    CHECK(rows[1].shows.empty());
 }
 
 TEST_CASE("Rows come back one per depth, in depth order") {

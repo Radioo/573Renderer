@@ -6,6 +6,10 @@
 
 #include <QColor>
 #include <QContextMenuEvent>
+#include <QEvent>
+#include <QFont>
+#include <QFontMetrics>
+#include <QHelpEvent>
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPaintEvent>
@@ -14,6 +18,7 @@
 #include <QScrollArea>
 #include <QScrollBar>
 #include <QString>
+#include <QToolTip>
 #include <QWheelEvent>
 
 #include <algorithm>
@@ -21,6 +26,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <map>
 #include <optional>
 #include <utility>
 #include <vector>
@@ -32,7 +38,10 @@ namespace {
 constexpr int kGutterWidth = 56;
 constexpr int kRulerHeight = 26;
 constexpr int kRowHeight = 16;
-constexpr int kBarInset = 3;
+constexpr int kBarInset = 2;
+constexpr int kShortestNamedBar = 24;
+constexpr int kNamePadding = 3;
+constexpr int kNamePixels = 10;
 constexpr int kEmptyHeight = 80;
 constexpr int kLabelReach = 30;
 constexpr int kKeyReach = 6;
@@ -48,6 +57,7 @@ constexpr std::array<uint32_t, 10> kTickSteps{1, 2, 5, 10, 20, 50, 100, 200, 500
 
 const QColor kRuler(58, 58, 62);
 const QColor kRow(40, 40, 44);
+const QColor kSpanName(240, 240, 244);
 const QColor kPropertyRow(34, 34, 38);
 const QColor kSelectedRow(44, 66, 88);
 const QColor kBar(70, 128, 196);
@@ -326,6 +336,53 @@ void Timeline::PressKeys(const Lane& lane, QPoint at, bool toggle) {
     emit KeyChosen(QString::fromStdString(pressed.property), pressed.frame);
 }
 
+void Timeline::SetCharacterNames(std::map<uint16_t, QString> names) {
+    names_ = std::move(names);
+    update();
+}
+
+QString Timeline::SpanName(const Document::DepthRow& row, const Document::Span& span) const {
+    const auto shown = row.shows.find(span.first_frame);
+    if (shown == row.shows.end()) return {};
+    const auto name = names_.find(shown->second);
+    return name == names_.end() ? QString() : name->second;
+}
+
+void Timeline::DrawSpanName(QPainter& painter, const QString& name, const QRect& bar) const {
+    if (name.isEmpty() || bar.width() < kShortestNamedBar) return;
+    QFont font = painter.font();
+    font.setPixelSize(kNamePixels);
+    painter.setFont(font);
+    const QRect inside = bar.adjusted(kNamePadding, 0, -kNamePadding, 0);
+    painter.setPen(kSpanName);
+    painter.drawText(inside, Qt::AlignLeft | Qt::AlignVCenter,
+                     painter.fontMetrics().elidedText(name, Qt::ElideRight, inside.width()));
+}
+
+QString Timeline::SpanNameAt(QPoint at) const {
+    const std::optional<std::size_t> lane = LaneAt(at.y());
+    if (!lane) return {};
+    const Lane found = Lanes()[*lane];
+    if (found.is_property) return {};
+    const auto row = std::ranges::find(rows_, found.depth, &Document::DepthRow::depth);
+    const std::optional<Document::Span> span = SpanAt(found.depth, at.x());
+    if (row == rows_.end() || !span) return {};
+    return SpanName(*row, *span);
+}
+
+bool Timeline::event(QEvent* event) {
+    if (event->type() != QEvent::ToolTip) return QWidget::event(event);
+    const auto* help = static_cast<QHelpEvent*>(event);
+    const QString name = SpanNameAt(help->pos());
+    if (name.isEmpty()) {
+        QToolTip::hideText();
+        event->ignore();
+    } else {
+        QToolTip::showText(help->globalPos(), name, this);
+    }
+    return true;
+}
+
 std::optional<Document::Span> Timeline::SpanAt(uint16_t depth, int x) const {
     const auto row = std::ranges::find(rows_, depth, &Document::DepthRow::depth);
     if (row == rows_.end()) return std::nullopt;
@@ -584,9 +641,10 @@ void Timeline::paintEvent(QPaintEvent* event) {
             for (const Document::Span& span : row->spans) {
                 const int from = FrameToX(span.first_frame);
                 const int to = FrameToX(span.last_frame);
-                painter.fillRect(QRect(from, y + kBarInset, std::max(2, to - from),
-                                       kRowHeight - 1 - 2 * kBarInset),
-                                 hidden ? kHiddenBar : kBar);
+                const QRect bar(from, y + kBarInset, std::max(2, to - from),
+                                kRowHeight - 1 - 2 * kBarInset);
+                painter.fillRect(bar, hidden ? kHiddenBar : kBar);
+                DrawSpanName(painter, SpanName(*row, span), bar);
                 if (span_dragging_ && span_depth_ == lane.depth && span_grabbed_ == span)
                     DrawSpanGhost(painter, span, y);
             }

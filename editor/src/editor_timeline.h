@@ -11,8 +11,12 @@
 #include <QString>
 #include <QWidget>
 
+class QEvent;
+class QPainter;
+
 #include <cstddef>
 #include <cstdint>
+#include <map>
 #include <optional>
 #include <vector>
 
@@ -42,6 +46,8 @@ public:
     void SelectDepth(std::optional<uint16_t> depth);
     void SetHiddenDepths(std::vector<uint16_t> depths);
     void SetLockedDepths(std::vector<uint16_t> depths);
+    void SetCharacterNames(std::map<uint16_t, QString> names);
+    [[nodiscard]] QString SpanNameAt(QPoint at) const;
     void SetWorkArea(std::optional<Document::WorkArea> area);
     void Clear();
     void SetFrame(uint32_t frame);
@@ -58,6 +64,7 @@ signals:
                           bool on_key);
 
 protected:
+    bool event(QEvent* event) override;
     void paintEvent(QPaintEvent* event) override;
     void mousePressEvent(QMouseEvent* event) override;
     void mouseMoveEvent(QMouseEvent* event) override;
@@ -96,6 +103,8 @@ private:
     void DrawSpanGhost(QPainter& painter, const Document::Span& span, int y) const;
     void Resize();
     [[nodiscard]] QString LabelNear(int x) const;
+    [[nodiscard]] QString SpanName(const Document::DepthRow& row, const Document::Span& span) const;
+    void DrawSpanName(QPainter& painter, const QString& name, const QRect& bar) const;
 
     uint32_t frame_count_ = 0;
     uint32_t frame_ = 0;
@@ -105,6 +114,7 @@ private:
     std::optional<uint16_t> selected_depth_;
     std::vector<uint16_t> hidden_depths_;
     std::vector<uint16_t> locked_depths_;
+    std::map<uint16_t, QString> names_;
     std::optional<Document::WorkArea> work_area_;
     std::vector<Document::Track> tracks_;
     std::vector<Document::KeyRef> selected_keys_;

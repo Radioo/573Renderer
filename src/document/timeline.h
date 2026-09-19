@@ -3,6 +3,7 @@
 #include "formats/afp_animation.h"
 
 #include <cstdint>
+#include <map>
 #include <optional>
 #include <vector>
 
@@ -18,6 +19,7 @@ struct Span {
 struct DepthRow {
     uint16_t depth = 0;
     std::vector<Span> spans;
+    std::map<uint32_t, uint16_t> shows;
 };
 
 enum class Direction : uint8_t { Back, Forward };

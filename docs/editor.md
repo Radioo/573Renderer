@@ -330,7 +330,13 @@ switched off, so both pictures are taken with no depth selected.
 
 **Timeline.** `Editor::Timeline` draws a ruler carrying the animation's labels
 at their frames, then one row per depth from `Document::DepthRows`, with a bar
-over each frame span and the depth number in the gutter. Clicking or dragging
+over each frame span and the depth number in the gutter. Each bar carries the
+name of what its span places (`DepthRow::shows`, named by the same
+`Document::Characters` labels the library uses and handed over with
+`SetCharacterNames` whenever the clip timeline is filled), elided to fit and
+left out of a bar under 24 pixels; hovering a bar shows the name as a tooltip,
+which is how a narrow bar is read (`Timeline::SpanNameAt`). The bars are inset
+two pixels from their row so a 10 pixel name fits inside them. Clicking or dragging
 picks a frame, which seeks the host and re-renders. The widget lives in a
 `QScrollArea` because a busy animation has more depths than the dock is tall.
 

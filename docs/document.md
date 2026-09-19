@@ -57,6 +57,10 @@ whose tag range points past the tag list stops the walk rather than reading out
 of bounds.
 
 Rows come back sorted by depth and each row's spans sorted by first frame.
+`shows` maps a span's first frame to the character the placement that opened
+it names, so the timeline can say what each span places; a span opened by a
+placement that names no character has no entry. `timeline_tests` covers a
+depth whose character is replaced mid-way, and dropping the entry fails it.
 
 `DepthMarks(clip, depth)` lists the frames where a placement or remove touches
 a depth, once each, and `NextMark(marks, frame, direction)` finds the nearest

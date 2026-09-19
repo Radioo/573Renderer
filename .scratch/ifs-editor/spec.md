@@ -298,3 +298,4 @@ captured. This milestone is the editing itself.
 - `issues/90-paste-grid-controllers.md` (milestone 8)
 - `issues/91-window-tests-under-load.md` (milestone 8)
 - `issues/92-library-panel.md` (milestone 8)
+- `issues/93-name-timeline-spans.md` (milestone 8)

@@ -23,6 +23,7 @@
 #include <cstdint>
 #include <map>
 #include <optional>
+#include <vector>
 
 namespace Editor {
 
@@ -55,12 +56,12 @@ QTreeWidget* Window::BuildLibrary() {
     return library_;
 }
 
-void Window::FillLibrary(const AfpAnimation::Animation& animation) {
+void Window::FillLibrary(const AfpAnimation::Animation& animation,
+                         const std::vector<Document::CharacterSummary>& characters) {
     library_->clear();
     const std::map<uint16_t, std::size_t> uses = Document::CharacterUses(animation);
     const QBrush unused = library_->palette().brush(QPalette::Disabled, QPalette::Text);
-    for (const Document::CharacterSummary& one :
-         Document::Characters(animation, file_->ShapeImages(animation_path_))) {
+    for (const Document::CharacterSummary& one : characters) {
         const auto found = uses.find(one.id);
         const std::size_t count = found == uses.end() ? 0 : found->second;
         auto* item = new QTreeWidgetItem(

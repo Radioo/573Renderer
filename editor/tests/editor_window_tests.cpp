@@ -332,6 +332,16 @@ TEST_CASE("The library counts uses, places a character and shows a sprite on its
     CHECK(clips->currentData().toInt() == id.toInt());
 }
 
+TEST_CASE("The timeline names what each depth places") {
+    Opened opened;
+    Open(opened, true);
+    auto* timeline = opened.window.findChild<Editor::Timeline*>();
+    REQUIRE(timeline != nullptr);
+    const int middle = timeline->width() / 2;
+    CHECK(timeline->SpanNameAt(QPoint(middle, 34)).isEmpty());
+    CHECK(timeline->SpanNameAt(QPoint(middle, 50)).contains("dot"));
+}
+
 TEST_CASE("A closed panel comes back from the View menu") {
     Opened opened;
     Open(opened);
