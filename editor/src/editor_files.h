@@ -13,6 +13,7 @@ inline constexpr const char* kProjectDirKey = "project/directory";
 inline constexpr const char* kLoopKey = "playback/loop";
 inline constexpr const char* kBackgroundKey = "preview/background";
 inline constexpr const char* kSnapKey = "stage/snap";
+inline constexpr const char* kOnionKey = "stage/onion";
 inline constexpr const char* kBuildSlug = "iidx33";
 
 [[nodiscard]] std::vector<uint8_t> ReadFileBytes(const QString& path);

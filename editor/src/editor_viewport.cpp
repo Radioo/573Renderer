@@ -52,6 +52,7 @@ constexpr double kZoomStep = 1.25;
 constexpr double kLeastZoom = 0.25;
 constexpr double kMostZoom = 32.0;
 constexpr int kWheelNotch = 120;
+constexpr double kGhostOpacity = 0.35;
 
 QPointF Middle(QPointF a, QPointF b) {
     return (a + b) / 2.0;
@@ -98,6 +99,7 @@ void Viewport::keyPressEvent(QKeyEvent* event) {
 
 void Viewport::ShowFrame(const QImage& frame, QSize stage) {
     frame_ = frame;
+    ghosts_.clear();
     stage_ = stage;
     message_.clear();
     update();
@@ -105,6 +107,7 @@ void Viewport::ShowFrame(const QImage& frame, QSize stage) {
 
 void Viewport::ShowMessage(const QString& message) {
     frame_ = QImage();
+    ghosts_.clear();
     outlines_.clear();
     selected_.reset();
     message_ = message;
@@ -115,6 +118,11 @@ void Viewport::ShowOutlines(std::vector<Document::StageOutline> outlines,
                             std::optional<uint16_t> selected) {
     outlines_ = std::move(outlines);
     selected_ = selected;
+    update();
+}
+
+void Viewport::ShowGhosts(std::vector<QImage> ghosts) {
+    ghosts_ = std::move(ghosts);
     update();
 }
 
@@ -304,6 +312,10 @@ void Viewport::paintEvent(QPaintEvent* event) {
     }
     painter.setRenderHint(QPainter::SmoothPixmapTransform);
     painter.drawImage(Target(), frame_);
+    painter.setOpacity(kGhostOpacity);
+    for (const QImage& ghost : ghosts_)
+        painter.drawImage(Target(), ghost);
+    painter.setOpacity(1.0);
     const Document::StageOutline* selected = SelectedOutline();
     if (selected == nullptr || stage_.isEmpty()) return;
     DrawGuides(painter, *selected);

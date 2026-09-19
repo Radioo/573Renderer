@@ -14,6 +14,7 @@
 #include <DockWidget.h>
 
 #include <QAction>
+#include <QImage>
 #include <QKeySequence>
 #include <QMenu>
 #include <QMenuBar>
@@ -40,12 +41,37 @@ void Window::AddViewMenu() {
         QSettings().setValue(kSnapKey, on);
         viewport_->SetSnapping(on);
     });
+    onion_action_ = view->addAction(tr("&Onion skin"));
+    onion_action_->setCheckable(true);
+    onion_action_->setChecked(QSettings().value(kOnionKey, false).toBool());
+    connect(onion_action_, &QAction::toggled, this, [this](bool on) {
+        QSettings().setValue(kOnionKey, on);
+        if (!on) {
+            viewport_->ShowGhosts({});
+            return;
+        }
+        if (host_.Running() && !animation_name_.empty()) RenderFrame();
+    });
     QMenu* panels = view->addMenu(tr("&Panels"));
     for (ads::CDockWidget* dock : docks_->dockWidgetsMap())
         panels->addAction(dock->toggleViewAction());
     QAction* fit = view->addAction(tr("&Fit the stage in the view"));
     fit->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_0));
     connect(fit, &QAction::triggered, viewport_, &Viewport::FitStage);
+}
+
+void Window::ShowGhostsAround(uint32_t frame) {
+    std::vector<QImage> ghosts;
+    for (const int64_t step : {int64_t{-1}, int64_t{1}}) {
+        const int64_t neighbour = static_cast<int64_t>(frame) + step;
+        if (neighbour < 0 || neighbour >= static_cast<int64_t>(frame_count_)) continue;
+        if (!host_.Seek(static_cast<uint32_t>(neighbour))) continue;
+        auto read = ReadFrame();
+        if (read) ghosts.push_back(std::move(read->image));
+    }
+    const auto back = host_.Seek(frame);
+    if (!back) ReportOnce(QString::fromStdString(back.error()));
+    viewport_->ShowGhosts(std::move(ghosts));
 }
 
 bool Window::OutlinesMatchView() const {

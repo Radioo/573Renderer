@@ -688,6 +688,8 @@ void Window::RenderFrame() {
     timeline_->SetFrame(frame->frame);
     statusBar()->showMessage(tr("Frame %1 of %2").arg(frame->frame).arg(frame_count_));
     last_error_.clear();
+    if (onion_action_ != nullptr && onion_action_->isChecked() && !Playing())
+        ShowGhostsAround(frame->frame);
 }
 
 bool Window::Save() {

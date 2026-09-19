@@ -256,6 +256,19 @@ resize uses), up to the stage's own size or the fitted size when that is
 larger. Past that the game's pixels are shown enlarged, which is what the game
 would draw, rather than a render the game never makes.
 
+`View > Onion skin` (remembered, off by default) draws the frames either side
+of the one shown over it at 35% opacity while playback is stopped, as Flash
+and After Effects do, so a pose can be judged against its neighbours. After
+each render the window asks the host for the previous and next frames of what
+it has loaded (`Window::ShowGhostsAround`), seeks it back to the frame shown,
+and hands the two pictures to the viewport (`Viewport::ShowGhosts`); a new
+frame clears them, so a ghost never outlives the frame it belonged to. Playback
+skips them, since every step would cost two more renders. The live window test
+turns it on at frame 401, sees the picture change, and checks a later render
+that does not seek still shows frame 401; it also sees the picture come back
+when onion skin is turned off. Leaving out the seek back, the ghost renders,
+the ghost painting or the clearing on a new frame fails the tests.
+
 Clicking the viewport maps the point to stage pixels through that rectangle
 and selects the highest depth whose `Document::StageOutlines` outline
 holds it, or clears the selection; the selected depth is outlined. Dragging

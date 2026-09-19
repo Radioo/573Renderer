@@ -312,3 +312,46 @@ TEST_CASE("The work area saves as one PNG per frame, each as the frame saves on 
         QString("Frame %1 ").arg(kPreviewFrame + 1)));
     CHECK(opening.Problems().isEmpty());
 }
+
+TEST_CASE("Onion skin shows the neighbouring frames and leaves the host on the playhead") {
+    const QString game = qEnvironmentVariable("R573_IIDX_DIR");
+    if (game.isEmpty()) SKIP("R573_IIDX_DIR not set");
+    QSettings().setValue("game/directory", game);
+    QSettings().remove("stage/onion");
+    Editor::Window window;
+    QSettings().remove("game/directory");
+    window.resize(1600, 900);
+    window.show();
+    Script opening({});
+    window.OpenDocument(game + "/data/graphic/1/title.ifs");
+    REQUIRE(opening.Problems().isEmpty());
+    auto* timeline = window.findChild<Editor::Timeline*>();
+    auto* viewport = window.findChild<Editor::Viewport*>();
+    REQUIRE(timeline != nullptr);
+    REQUIRE(viewport != nullptr);
+    QAction* onion = nullptr;
+    for (QAction* action : window.findChildren<QAction*>()) {
+        if (action->text() == "&Onion skin") onion = action;
+    }
+    REQUIRE(onion != nullptr);
+    CHECK_FALSE(onion->isChecked());
+    emit timeline->FrameChosen(kPreviewFrame + 1);
+    QApplication::processEvents();
+    const QImage plain = viewport->grab().toImage();
+
+    onion->trigger();
+    QApplication::processEvents();
+    CHECK(viewport->grab().toImage() != plain);
+    window.statusBar()->clearMessage();
+    window.resize(1500, 880);
+    REQUIRE(Settle([&window] { return window.statusBar()->currentMessage().startsWith("Frame"); }));
+    CHECK(window.statusBar()->currentMessage().startsWith(
+        QString("Frame %1 ").arg(kPreviewFrame + 1)));
+
+    onion->trigger();
+    window.resize(1600, 900);
+    QApplication::processEvents();
+    REQUIRE(Settle([&] { return viewport->grab().toImage() == plain; }));
+    QSettings().remove("stage/onion");
+    CHECK(opening.Problems().isEmpty());
+}

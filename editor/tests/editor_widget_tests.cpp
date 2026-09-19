@@ -408,6 +408,23 @@ TEST_CASE("A selection loses keyframes that are gone and all of it when the dept
     CHECK_FALSE(timeline.grab().isNull());
 }
 
+TEST_CASE("Ghosts are drawn faintly over the frame until the next frame arrives") {
+    Editor::Viewport viewport;
+    ShowStage(viewport);
+    const QPoint middle(480, 270);
+    const QImage plain = viewport.grab().toImage();
+    QImage white(1920, 1080, QImage::Format_ARGB32);
+    white.fill(QColor(255, 255, 255));
+    viewport.ShowGhosts({white});
+    const QColor ghosted = viewport.grab().toImage().pixelColor(middle);
+    CHECK(ghosted.red() > 70);
+    CHECK(ghosted.red() < 110);
+    QImage frame(1920, 1080, QImage::Format_ARGB32);
+    frame.fill(QColor(0, 0, 0));
+    viewport.ShowFrame(frame, QSize(1920, 1080));
+    CHECK(viewport.grab().toImage() == plain);
+}
+
 TEST_CASE("Clicking the stage reports where in stage pixels") {
     Editor::Viewport viewport;
     ShowStage(viewport);

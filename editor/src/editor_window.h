@@ -160,6 +160,7 @@ private:
     [[nodiscard]] Support::Expected<ShownFrame, std::string> ReadFrame();
     void SaveFrameAs();
     void SaveFramesAs();
+    void ShowGhostsAround(uint32_t frame);
     void SaveImageAs(const QString& name);
     void AddImageFromFile();
     void ReplaceImageWithPicture(const QString& name);
@@ -240,6 +241,7 @@ private:
     ads::CDockManager* docks_ = nullptr;
     QTreeWidget* package_tree_ = nullptr;
     QTreeWidget* library_ = nullptr;
+    QAction* onion_action_ = nullptr;
     QListWidget* history_list_ = nullptr;
     QTableWidget* inspector_ = nullptr;
     QAction* background_action_ = nullptr;

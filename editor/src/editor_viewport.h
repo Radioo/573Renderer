@@ -34,6 +34,7 @@ public:
 
     void ShowFrame(const QImage& frame, QSize stage);
     void ShowMessage(const QString& message);
+    void ShowGhosts(std::vector<QImage> ghosts);
     void ShowOutlines(std::vector<Document::StageOutline> outlines,
                       std::optional<uint16_t> selected);
     [[nodiscard]] QSize FittedSize(QSize available) const;
@@ -77,6 +78,7 @@ private:
     void DrawSelection(QPainter& painter, const Document::StageOutline& outline) const;
 
     QImage frame_;
+    std::vector<QImage> ghosts_;
     QSize stage_;
     QString message_;
     std::vector<Document::StageOutline> outlines_;
