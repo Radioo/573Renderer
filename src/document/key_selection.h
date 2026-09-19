@@ -49,4 +49,7 @@ ReverseKeys(AuthoredDepth& authored, const std::vector<KeyRef>& keys);
 [[nodiscard]] Support::Expected<void, std::string>
 EasyEaseKeys(AuthoredDepth& authored, const std::vector<KeyRef>& keys, EasySide side);
 
+[[nodiscard]] Support::Expected<void, std::string> ToggleHoldKeys(AuthoredDepth& authored,
+                                                                  const std::vector<KeyRef>& keys);
+
 }

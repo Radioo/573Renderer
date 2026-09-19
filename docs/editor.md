@@ -792,6 +792,13 @@ dragging it, reverses the three from the menu, and reads the values on every
 frame, the new selection (frames 0, 2 and 3), the focused keyframe on frame 3,
 and the undo. Dropping the menu entry, the selection or the focus fails it.
 
+Ctrl+Alt+H, or `Toggle hold` in the lane menu, toggles hold on the selected
+keyframes (`Window::ToggleHoldSelectedKeys`, through `Document::ToggleHoldKeys`),
+one undo step. The window test drags two held keyframes onto the dot's owned
+depth, toggles them to linear and back with the keys and to linear again from
+the menu, reading the value between them; dropping the shortcut or the menu
+entry fails it.
+
 Easy ease is After Effects' F9 (`Window::EasyEaseSelectedKeys`, through
 `Document::EasyEaseKeys`): F9 eases both sides of each selected keyframe,
 Shift+F9 only the way into it and Ctrl+Shift+F9 only the way out of it, and

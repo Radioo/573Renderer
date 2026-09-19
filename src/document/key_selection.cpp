@@ -337,4 +337,15 @@ Support::Expected<void, std::string> EasyEaseKeys(AuthoredDepth& authored,
     return {};
 }
 
+Support::Expected<void, std::string> ToggleHoldKeys(AuthoredDepth& authored,
+                                                    const std::vector<KeyRef>& keys) {
+    const bool all_hold = std::ranges::all_of(keys, [&authored](const KeyRef& key) {
+        const Track* track = TrackNamed(authored, key.property);
+        if (track == nullptr) return false;
+        const auto found = std::ranges::find(track->keys, key.frame, &Keyframe::frame);
+        return found != track->keys.end() && found->ease == Ease::Hold;
+    });
+    return SetKeysEase(authored, keys, all_hold ? Ease::Linear : Ease::Hold, {});
+}
+
 }

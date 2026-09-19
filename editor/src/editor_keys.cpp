@@ -255,6 +255,7 @@ void Window::ShowKeyMenu(const QPoint& where, const QString& property, uint32_t 
         selected > 0
             ? menu.addAction(tr("Delete %n keyframe(s)", nullptr, static_cast<int>(selected)))
             : nullptr;
+    QAction* toggle_hold = selected > 0 ? menu.addAction(tr("Toggle hold")) : nullptr;
     QMenu* easy = selected > 0 ? menu.addMenu(tr("Easy ease")) : nullptr;
     QAction* easy_both = easy != nullptr ? easy->addAction(tr("Both sides")) : nullptr;
     QAction* easy_in = easy != nullptr ? easy->addAction(tr("In")) : nullptr;
@@ -284,6 +285,10 @@ void Window::ShowKeyMenu(const QPoint& where, const QString& property, uint32_t 
     }
     if (chosen == erase) {
         RemoveSelectedKeys();
+        return;
+    }
+    if (chosen == toggle_hold) {
+        ToggleHoldSelectedKeys();
         return;
     }
     if (chosen == reverse) {

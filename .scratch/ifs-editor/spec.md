@@ -325,3 +325,4 @@ captured. This milestone is the editing itself.
 - `issues/117-stage-marquee.md` (milestone 8)
 - `issues/118-playhead-bracket-keys.md` (milestone 8)
 - `issues/119-drag-labels.md` (milestone 8)
+- `issues/120-toggle-hold.md` (milestone 8)

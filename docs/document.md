@@ -1614,6 +1614,15 @@ paste or a move that fails halfway leaves nothing behind.
   the `Ease` preset, and a bezier keeps the side that is not eased. A property
   that only holds is refused, as `SetKeysEase` refuses it, and so is a
   selection where no keyframe has a neighbour on the eased side.
+- `ToggleHoldKeys` is After Effects' Toggle Hold Keyframe: when every selected
+  keyframe already holds, they all go back to linear; otherwise they all hold.
+  After Effects remembers the interpolation a hold replaced; the model keeps
+  one ease per keyframe, so turning a hold off gives linear. The work is
+  `SetKeysEase`, so a missing keyframe, a property the depth does not animate
+  and a property that only holds (switching to linear) are refused the same
+  way. The check for a missing keyframe while deciding "every one holds" only
+  keeps that decision from reading past the track; `SetKeysEase` is what
+  refuses it, so the check has no visible effect of its own.
 
 ## Export drift (`document/project_drift.h`)
 

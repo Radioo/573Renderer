@@ -126,6 +126,7 @@ private:
     void ShiftSelectedKeys(int64_t by);
     void ReverseSelectedKeys();
     void EasyEaseSelectedKeys(Document::EasySide side);
+    void ToggleHoldSelectedKeys();
     void ShowKeyMenu(const QPoint& where, const QString& property, uint32_t frame, bool on_key);
     bool ApplyKeyEdit(const QString& value);
     bool ApplyKeyFilterEdit(const QString& field, const QString& value);

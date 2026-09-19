@@ -247,3 +247,53 @@ TEST_CASE("The graph shows the focused property and edits its keyframes") {
     emit timeline->DepthChosen(2);
     CHECK_FALSE(graph->KeyPoint(0, 0).has_value());
 }
+
+TEST_CASE("Toggling hold switches the selected keyframes between holding and linear") {
+    Opened opened;
+    Open(opened, true);
+    auto* timeline = opened.window.findChild<Editor::Timeline*>();
+    auto* viewport = opened.window.findChild<Editor::Viewport*>();
+    REQUIRE(timeline != nullptr);
+    REQUIRE(viewport != nullptr);
+    {
+        Script inserted({Choose("Insert a frame at 2")});
+        emit timeline->MenuRequested(QPoint(4, 4), 2, QString());
+        REQUIRE(Settle([&inserted] { return inserted.Finished(); }));
+    }
+    OwnDroppedDot(opened);
+    const auto move_on = [&](uint32_t frame, double dx) {
+        emit timeline->FrameChosen(frame);
+        emit timeline->DepthChosen(3);
+        Script moved({});
+        emit viewport->Dragged(3, dx, 0, true);
+        QApplication::processEvents();
+        CHECK(moved.Problems().isEmpty());
+    };
+    const auto x_on = [&](uint32_t frame) {
+        emit timeline->FrameChosen(frame);
+        const QString text = QString::fromStdString(RowValue(*opened.inspector, "Translation"));
+        return text.section(',', 0, 0).trimmed().toInt();
+    };
+    const auto ref = [](uint32_t frame) {
+        return Document::KeyRef{.property = "Translation", .frame = frame};
+    };
+    move_on(0, 10);
+    move_on(3, 40);
+    CHECK(x_on(1) == 10200);
+    QAction* toggle = ShortcutAction(opened.window, QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_H));
+    REQUIRE(toggle != nullptr);
+    timeline->SelectKeys({ref(0), ref(3)});
+    toggle->trigger();
+    const int linear = x_on(1);
+    CHECK(linear > 10200);
+    CHECK(linear < 11000);
+    toggle->trigger();
+    CHECK(x_on(1) == 10200);
+    {
+        Script toggled({Choose("Toggle hold")});
+        emit timeline->KeyMenuRequested(QPoint(4, 4), "Translation", 0, true);
+        REQUIRE(Settle([&toggled] { return toggled.Finished(); }));
+        CHECK(toggled.Problems().isEmpty());
+    }
+    CHECK(x_on(1) == linear);
+}

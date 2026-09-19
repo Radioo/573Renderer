@@ -324,3 +324,30 @@ TEST_CASE("Easy ease is refused, leaving the depth alone, when there is nothing 
     CHECK(stepped.error().find("only holds") != std::string::npos);
     CHECK(depth == before);
 }
+
+TEST_CASE("Toggling hold holds every selected keyframe unless all already hold") {
+    Document::AuthoredDepth depth = Depth();
+    depth.tracks[0].keys[0].ease = Document::Ease::Hold;
+    REQUIRE(Document::ToggleHoldKeys(depth, {Ref("Translation", 0), Ref("Translation", 4)})
+                .has_value());
+    CHECK(depth.tracks[0].keys[0].ease == Document::Ease::Hold);
+    CHECK(depth.tracks[0].keys[1].ease == Document::Ease::Hold);
+    CHECK(depth.tracks[0].keys[2].ease == Document::Ease::Linear);
+    REQUIRE(Document::ToggleHoldKeys(depth, {Ref("Translation", 0), Ref("Translation", 4)})
+                .has_value());
+    CHECK(depth.tracks[0].keys[0].ease == Document::Ease::Linear);
+    CHECK(depth.tracks[0].keys[1].ease == Document::Ease::Linear);
+}
+
+TEST_CASE("Toggling hold is refused, leaving the depth alone, where it cannot apply") {
+    Document::AuthoredDepth depth = Depth();
+    depth.tracks.push_back(
+        Document::Track{.property = "Blend", .keys = {Key(0, {1}, Document::Ease::Hold)}});
+    const Document::AuthoredDepth before = depth;
+    CHECK_FALSE(Document::ToggleHoldKeys(depth, {}).has_value());
+    CHECK_FALSE(Document::ToggleHoldKeys(depth, {Ref("Translation", 5)}).has_value());
+    CHECK_FALSE(Document::ToggleHoldKeys(depth, {Ref("Scale", 0)}).has_value());
+    CHECK_FALSE(Document::ToggleHoldKeys(depth, {Ref("Blend", 0), Ref("Blend", 3)}).has_value());
+    CHECK_FALSE(Document::ToggleHoldKeys(depth, {Ref("Blend", 0)}).has_value());
+    CHECK(depth == before);
+}
