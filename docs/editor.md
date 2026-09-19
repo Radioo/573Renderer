@@ -383,6 +383,19 @@ after opening another animation of the package brings the sprites and shapes
 the depth uses along under new ids, as one undo step. Opening a package drops
 the copy, because its shapes and images belong to the package it came from.
 
+`Edit > Split depth at the playhead` (Ctrl+Shift+D), or `Split depth N at
+frame F` in the timeline menu, splits the selected depth's span at the playhead
+into two bars on the same depth (`Window::SplitDepthAt`, through
+`Document::SplitSpan`), as one undo step. Each half can then be moved, trimmed
+or removed on its own. A split of a depth the project owns is refused, because
+its record describes one span, the same as removing or grouping it; so is a
+split `Document::SplitSpan` refuses, with its reason in the status bar. The
+window test splits the dot's depth, reads the same translation on both sides
+of the split, sees a second split on that frame refused because it is now a
+first frame, sees a depth showing a character that is not an image or a shape
+refused, undoes, splits again from the timeline menu, and sees an owned depth
+refused. Dropping the ownership check, the shortcut or the menu entry fails it.
+
 `Edit > Arrange` changes the selected depth's place in the stacking order at the
 playhead, with After Effects' shortcuts: `Bring forward` (Ctrl+]), `Send
 backward` (Ctrl+[), `Bring to front` (Ctrl+Shift+]) and `Send to back`

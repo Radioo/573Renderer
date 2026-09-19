@@ -312,3 +312,4 @@ captured. This milestone is the editing itself.
 - `issues/104-search-filters.md` (milestone 8)
 - `issues/105-arrange-depths.md` (milestone 8)
 - `issues/106-motion-path.md` (milestone 8)
+- `issues/107-split-spans.md` (milestone 8)

@@ -278,6 +278,11 @@ void Window::BuildMenus() {
     edit->addSeparator();
     AddAlignMenu(edit);
     AddArrangeMenu(edit);
+    QAction* split = edit->addAction(tr("&Split depth at the playhead"));
+    split->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_D));
+    connect(split, &QAction::triggered, this, [this] {
+        if (depth_) SplitDepthAt(static_cast<uint16_t>(*depth_), frame_);
+    });
 }
 
 void Window::ChooseGameDirectory() {

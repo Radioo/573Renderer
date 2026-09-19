@@ -313,7 +313,7 @@ it passed drops one place, as a layer brought to the front pushes the others
 down; `Back` does the same downwards.
 
 Each swap is three `ChangeSpanDepth` calls through a scratch depth, the first
-depth number the clip never places: the span goes to the scratch depth, the
+depth number the clip never places (`UnusedDepth` in `document/timeline.h`): the span goes to the scratch depth, the
 other span takes its depth, and the span takes the other depth. So every rule of
 `ChangeSpanDepth` holds for both spans, and when the two spans cover different
 frames and one would run into another span of its new depth, the arrange is
@@ -329,6 +329,36 @@ script that addresses a depth by number is not followed, as with
 `span_arrange_tests.cpp` covers the four directions, skipping a depth not shown
 on the frame, depth 0 being in use (so the scratch depth is not simply 0), and
 the refusals, each leaving the clip unchanged.
+
+### Splitting a span (`document/span_split.h`)
+
+`SplitSpan(animation, clip, depth, frame)` is After Effects' Split Layer, kept
+on the same depth: the span under `frame` becomes one span ending on the frame
+before and one starting on it, and every frame draws what it drew before. The
+second span needs a create of its own on `frame` that holds everything the
+object had there, which is what `TrimSpan` already builds when it moves a start
+later. So the split duplicates the span onto a scratch depth (`UnusedDepth`),
+trims the copy to start on `frame`, trims the original to end on the frame
+before, and gives the copy's tags back to the depth. The order matters: the
+original's trim puts its remove first on `frame`, ahead of the copy's create,
+so the game removes the old object before it creates the new one; the other way
+round it would remove the new object.
+
+A new object is not the old one continued, so the split is refused where that
+shows. The character shown on `frame` must be an image or a shape. A sprite, an
+imported clip, or anything else would be a new instance that starts its own
+timeline again from its first frame and runs its load actions again. The
+character is followed through the span's updates, since an update can swap it.
+The split is also refused on the span's first frame, where there is nothing
+before it. Whatever `TrimSpan` refuses (a span mixing 2D and 3D, curves that no
+longer fit) is refused too. The work is done on a copy, so a refusal leaves the
+clip as it was.
+
+`span_split_tests.cpp` checks that the halves replay exactly as the span did,
+with updates before, on and after the split frame. It covers a span running to
+the clip's last frame, one right before another span of its depth, an image,
+and a swap from a sprite to a shape, and it checks every refusal leaves the
+clip unchanged.
 
 ### Copying a span between clips (`document/span_clipboard.h`)
 

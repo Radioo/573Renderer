@@ -6,8 +6,10 @@
 #include <cstddef>
 #include <cstdint>
 #include <iterator>
+#include <limits>
 #include <map>
 #include <optional>
+#include <set>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -69,6 +71,16 @@ std::vector<DepthRow> DepthRows(const AfpAnimation::Container& clip) {
         out.push_back(std::move(row));
     }
     return out;
+}
+
+std::optional<uint16_t> UnusedDepth(const AfpAnimation::Container& clip) {
+    std::set<uint32_t> used;
+    for (const DepthRow& row : DepthRows(clip))
+        used.insert(row.depth);
+    for (uint32_t depth = 0; depth <= std::numeric_limits<uint16_t>::max(); depth++) {
+        if (!used.contains(depth)) return static_cast<uint16_t>(depth);
+    }
+    return std::nullopt;
 }
 
 std::vector<uint32_t> DepthMarks(const AfpAnimation::Container& clip, uint16_t depth) {

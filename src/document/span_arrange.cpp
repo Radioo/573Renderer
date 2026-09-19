@@ -13,7 +13,6 @@
 #include <cstdint>
 #include <iterator>
 #include <optional>
-#include <set>
 #include <string>
 #include <utility>
 #include <variant>
@@ -22,8 +21,6 @@
 namespace Document {
 
 namespace {
-
-constexpr uint32_t kDepths = 0x10000;
 
 std::vector<uint16_t> ShownAt(const AfpAnimation::Container& clip, uint32_t frame) {
     std::vector<uint16_t> shown;
@@ -48,16 +45,6 @@ std::vector<uint16_t> Passed(const std::vector<uint16_t>& shown, uint16_t depth,
     if ((how == Arrange::Forward || how == Arrange::Backward) && passed.size() > 1)
         passed.resize(1);
     return passed;
-}
-
-std::optional<uint16_t> ScratchDepth(const AfpAnimation::Container& clip) {
-    std::set<uint32_t> used;
-    for (const DepthRow& row : DepthRows(clip))
-        used.insert(row.depth);
-    for (uint32_t depth = 0; depth < kDepths; depth++) {
-        if (!used.contains(depth)) return static_cast<uint16_t>(depth);
-    }
-    return std::nullopt;
 }
 
 Support::Expected<void, std::string> CheckUnmasked(const AfpAnimation::Container& clip,
@@ -114,7 +101,7 @@ ArrangeSpan(AfpAnimation::Animation& animation, ClipId clip, uint16_t depth, uin
         unmasked = CheckUnmasked(target, other, frame);
     }
     if (!unmasked) return Support::Unexpected(unmasked.error());
-    const std::optional<uint16_t> scratch = ScratchDepth(target);
+    const std::optional<uint16_t> scratch = UnusedDepth(target);
     if (!scratch) return Support::Unexpected(std::string("every depth of the clip is in use"));
 
     AfpAnimation::Animation edited = animation;

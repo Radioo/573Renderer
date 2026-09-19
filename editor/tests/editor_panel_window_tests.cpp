@@ -638,6 +638,97 @@ TEST_CASE("Arranging swaps depths in the stacking order and carries what the pro
     CHECK(owns(3));
 }
 
+TEST_CASE("Splitting a depth at the playhead keeps what it shows and refuses what it cannot") {
+    Opened opened;
+    Open(opened, true);
+    auto* timeline = opened.window.findChild<Editor::Timeline*>();
+    auto* viewport = opened.window.findChild<Editor::Viewport*>();
+    auto* library = opened.window.findChild<QTreeWidget*>("library");
+    REQUIRE(timeline != nullptr);
+    REQUIRE(viewport != nullptr);
+    REQUIRE(library != nullptr);
+    QAction* split = ShortcutAction(opened.window, QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_D));
+    QAction* undo = ShortcutAction(opened.window, QKeySequence(QKeySequence::Undo));
+    REQUIRE(split != nullptr);
+    REQUIRE(undo != nullptr);
+    const auto choose = [&](uint32_t frame, uint16_t depth) {
+        emit timeline->FrameChosen(frame);
+        emit timeline->DepthChosen(depth);
+    };
+    const auto translation_on = [&](uint32_t frame) {
+        choose(frame, 2);
+        return RowValue(*opened.inspector, "Translation");
+    };
+    const auto refusal = [&] {
+        Script refused({});
+        split->trigger();
+        REQUIRE(Settle([&refused] { return !refused.Problems().isEmpty(); }));
+        return refused.Problems().front();
+    };
+    const std::string at_one = translation_on(1);
+    const std::string at_two = translation_on(2);
+    choose(1, 2);
+    {
+        Script done({});
+        split->trigger();
+        QApplication::processEvents();
+        CHECK(done.Problems().isEmpty());
+    }
+    CHECK(translation_on(1) == at_one);
+    CHECK(translation_on(2) == at_two);
+    choose(1, 2);
+    CHECK(refusal().contains("starts on frame 1"));
+    choose(1, 1);
+    CHECK(refusal().contains("start again"));
+    undo->trigger();
+    choose(1, 2);
+    {
+        Script again({Choose("Split depth 2 at frame 1")});
+        emit timeline->MenuRequested(QPoint(4, 4), 1, QString());
+        REQUIRE(Settle([&again] { return again.Finished(); }));
+        CHECK(again.Problems().isEmpty());
+    }
+    CHECK(refusal().contains("starts on frame 1"));
+    undo->trigger();
+
+    std::optional<uint16_t> dot;
+    for (int at = 0; at < library->topLevelItemCount(); at++) {
+        if (library->topLevelItem(at)->text(0).contains("dot"))
+            dot = static_cast<uint16_t>(library->topLevelItem(at)->data(0, Qt::UserRole).toUInt());
+    }
+    REQUIRE(dot.has_value());
+    if (!dot) return;
+    choose(0, 2);
+    {
+        Script placed({});
+        emit viewport->CharacterDropped(*dot, 500, 300);
+        QApplication::processEvents();
+        CHECK(placed.Problems().isEmpty());
+    }
+    QAction* project = nullptr;
+    for (QAction* action : opened.window.findChildren<QAction*>()) {
+        if (action->text() == "&New project...") project = action;
+    }
+    REQUIRE(project != nullptr);
+    const QString folder = opened.dir.filePath("project");
+    REQUIRE(QDir().mkpath(folder));
+    {
+        Script made({PickFile(folder)});
+        project->trigger();
+        REQUIRE(Settle([&made] { return made.Finished(); }));
+        CHECK(made.Problems().isEmpty());
+    }
+    emit timeline->DepthChosen(3);
+    {
+        Script owned({Choose("Let the project own depth 3 from here")});
+        emit timeline->MenuRequested(QPoint(4, 4), 0, QString());
+        REQUIRE(Settle([&owned] { return owned.Finished(); }));
+        CHECK(owned.Problems().isEmpty());
+    }
+    choose(1, 3);
+    CHECK(refusal().contains("owns depth 3"));
+}
+
 TEST_CASE("The package and library searches hide what does not match, across refills") {
     Opened opened;
     Open(opened, true);

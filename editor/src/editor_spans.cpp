@@ -7,6 +7,7 @@
 #include "document/outline.h"
 #include "document/span_arrange.h"
 #include "document/span_clipboard.h"
+#include "document/span_split.h"
 #include "document/span_edit.h"
 #include "document/span_transplant.h"
 #include "document/span_trim.h"
@@ -135,6 +136,20 @@ void Window::ArrangeDepth(Document::Arrange how, const QString& name) {
     if (!owned.empty()) SaveProject();
     depth_ = changes.front().to;
     ShowFrame();
+}
+
+void Window::SplitDepthAt(uint16_t depth, uint32_t frame) {
+    if (!file_ || animation_path_.empty()) return;
+    if (AuthoredIndexAt(depth, frame)) {
+        ReportProblem(
+            tr("The project owns depth %1 here. Detach it before splitting it.").arg(depth));
+        return;
+    }
+    const Document::ClipId clip = clip_;
+    EditAnimation(tr("Split depth %1 at frame %2").arg(depth).arg(frame),
+                  [clip, depth, frame](AfpAnimation::Animation& edited) {
+                      return Document::SplitSpan(edited, clip, depth, frame);
+                  });
 }
 
 void Window::AddArrangeMenu(QMenu* edit) {

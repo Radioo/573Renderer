@@ -215,6 +215,7 @@ private:
     void MoveSpanInTime(uint16_t depth, uint32_t frame, int64_t by);
     void MoveSpanToDepth(uint16_t depth, uint32_t frame);
     void ArrangeDepth(Document::Arrange how, const QString& name);
+    void SplitDepthAt(uint16_t depth, uint32_t frame);
     void AddArrangeMenu(QMenu* edit);
     void DuplicateSpanToDepth(uint16_t depth, uint32_t frame);
     [[nodiscard]] std::optional<uint16_t> NextFreeDepth(uint16_t fallback);

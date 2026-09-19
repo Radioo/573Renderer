@@ -46,6 +46,8 @@ void Window::ShowTimelineMenu(const QPoint& where, uint32_t frame, const QString
     QAction* restack =
         depth_ ? menu.addAction(tr("Move depth %1 here to another depth...").arg(*depth_))
                : nullptr;
+    QAction* split =
+        depth_ ? menu.addAction(tr("Split depth %1 at frame %2").arg(*depth_).arg(frame)) : nullptr;
     QAction* copy = depth_ ? menu.addAction(tr("Copy depth %1 here").arg(*depth_)) : nullptr;
     QAction* paste = copied_span_ ? menu.addAction(tr("Paste the copied depth here...")) : nullptr;
     QAction* duplicate =
@@ -186,9 +188,11 @@ void Window::ShowTimelineMenu(const QPoint& where, uint32_t frame, const QString
         PasteSpanAt(frame);
         return;
     }
-    if (chosen == restack || chosen == duplicate || chosen == group || chosen == ungroup) {
+    if (chosen == restack || chosen == split || chosen == duplicate || chosen == group ||
+        chosen == ungroup) {
         const auto depth = static_cast<uint16_t>(*depth_);
         if (chosen == restack) MoveSpanToDepth(depth, frame);
+        if (chosen == split) SplitDepthAt(depth, frame);
         if (chosen == duplicate) DuplicateSpanToDepth(depth, frame);
         if (chosen == group) GroupDepthsIntoSprite(depth, frame);
         if (chosen == ungroup) UngroupSpriteAt(depth, frame);
