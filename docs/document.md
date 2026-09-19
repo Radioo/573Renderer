@@ -1871,6 +1871,40 @@ run a line misses by one at tolerance 0 and simplifies it at 1, keeps a hold
 across a gap as a hold next to a merged run, and checks stepped properties are
 left alone along with every refusal.
 
+## Wiggling keyframes (`document/key_wiggle.h`)
+
+`WiggleKeys(authored, keys, wiggle)` is After Effects' Wiggler keyframe
+assistant: between each property's first and last selected keyframe it puts a
+keyframe every `wiggle.every` frames holding what the track sampled there plus
+a random offset in `[-magnitude, magnitude]`, drawn separately for each value
+of the property (After Effects' "dimensions independently"). The first and
+last selected keyframes are kept as they are, the selected ones between them
+are replaced, and the new keyframes ease linearly, so the depth jitters about
+the path it had.
+
+The offsets come straight from `std::mt19937` seeded with `wiggle.seed`, one
+draw per value, taken modulo `2 * magnitude + 1`. The standard fixes that
+engine's output sequence, while the algorithm behind
+`std::uniform_int_distribution` is left to the library, so the same seed makes
+the same wiggle whichever compiler built the editor. The modulo leans very
+slightly towards smaller offsets when the range does not divide 2^32, which
+does not matter for jitter. The editor seeds each wiggle with a fresh random
+number; the project stores the keyframes, not the seed.
+
+Like the reverse and the simplify, a missing keyframe, an unselected keyframe
+between selected ones and a keyframe of a property the depth does not animate
+are refused. So are `every` 0, a magnitude of 0 or less, a property whose first
+and last selected keyframes leave no frame for a wiggle keyframe, and a
+selection with no property that has two selected keyframes and moves (stepped
+properties are left alone). It returns the property's keyframes from the first
+to the last selected, new ones included, so the editor can select them.
+
+`key_wiggle_tests.cpp` wiggles a run with a selected keyframe in the middle and
+checks the new frames, the kept ends, the linear eases, every value within the
+magnitude of the old curve and some of them moved, x and y drawn apart, and
+the returned keyframes; that one seed repeats and another does not; and every
+refusal, including a gap exactly one wiggle wide.
+
 ## Export drift (`document/project_drift.h`)
 
 A project stores only the authored half, so the baked spans in the IFS are the

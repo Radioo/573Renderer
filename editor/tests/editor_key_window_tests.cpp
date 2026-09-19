@@ -17,6 +17,7 @@
 #include <QWidget>
 
 #include <algorithm>
+#include <cstdlib>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -493,4 +494,63 @@ TEST_CASE("Simplifying an owned depth's keyframes keeps the ends of a straight r
     CHECK(opened.window.statusBar()->currentMessage().contains("2 keyframe(s) removed"));
     CHECK(RowValue(*opened.inspector, "Keyframe") != "Translation on frame 1");
     CHECK(std::vector<int>{x_on(0), x_on(1), x_on(2), x_on(3)} == before);
+}
+
+TEST_CASE("Wiggling an owned depth's keyframes adds jittered keyframes between them") {
+    Opened opened;
+    Open(opened, true);
+    auto* timeline = opened.window.findChild<Editor::Timeline*>();
+    auto* viewport = opened.window.findChild<Editor::Viewport*>();
+    REQUIRE(timeline != nullptr);
+    REQUIRE(viewport != nullptr);
+    {
+        Script inserted({Choose("Insert a frame at 2")});
+        emit timeline->MenuRequested(QPoint(4, 4), 2, QString());
+        REQUIRE(Settle([&inserted] { return inserted.Finished(); }));
+        CHECK(inserted.Problems().isEmpty());
+    }
+    OwnDroppedDot(opened);
+    const auto move_on = [&](uint32_t frame, double dx) {
+        emit timeline->FrameChosen(frame);
+        emit timeline->DepthChosen(3);
+        Script moved({});
+        emit viewport->Dragged(3, dx, 0, true);
+        QApplication::processEvents();
+        CHECK(moved.Problems().isEmpty());
+    };
+    const auto x_on = [&](uint32_t frame) {
+        emit timeline->FrameChosen(frame);
+        const QString text = QString::fromStdString(RowValue(*opened.inspector, "Translation"));
+        return text.section(',', 0, 0).trimmed().toInt();
+    };
+    move_on(0, 10);
+    move_on(3, 20);
+    const std::vector<int> before{x_on(0), x_on(1), x_on(2), x_on(3)};
+
+    const auto ref = [](uint32_t frame) {
+        return Document::KeyRef{.property = "Translation", .frame = frame};
+    };
+    const auto wiggle = [&](std::vector<Script::Step> steps) {
+        emit timeline->FrameChosen(0);
+        emit timeline->KeyChosen("Translation", 0);
+        timeline->SelectKeys({ref(0), ref(3)});
+        Script run(std::move(steps));
+        emit timeline->KeyMenuRequested(QPoint(4, 4), "Translation", 0, true);
+        REQUIRE(Settle([&run] { return run.Finished(); }));
+        QApplication::processEvents();
+        return run.Problems();
+    };
+    CHECK(wiggle({Choose("Wiggle 2 keyframe(s)..."), RejectInput()}).isEmpty());
+    CHECK(wiggle({Choose("Wiggle 2 keyframe(s)..."), AnswerNumber(1), RejectInput()}).isEmpty());
+    CHECK(std::vector<int>{x_on(0), x_on(1), x_on(2), x_on(3)} == before);
+    CHECK(wiggle({Choose("Wiggle 2 keyframe(s)..."), AnswerNumber(1), AnswerNumber(20)}).isEmpty());
+    std::vector<Document::KeyRef> selected = timeline->SelectedKeys();
+    std::ranges::sort(selected);
+    CHECK(selected == std::vector<Document::KeyRef>{ref(0), ref(1), ref(2), ref(3)});
+    CHECK(x_on(0) == before[0]);
+    CHECK(x_on(3) == before[3]);
+    for (const uint32_t frame : {1U, 2U}) {
+        INFO(frame);
+        CHECK(std::abs(x_on(frame) - before[frame]) <= 20);
+    }
 }

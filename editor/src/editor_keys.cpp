@@ -264,6 +264,10 @@ void Window::ShowKeyMenu(const QPoint& where, const QString& property, uint32_t 
         selected > 1
             ? menu.addAction(tr("Time-reverse %n keyframe(s)", nullptr, static_cast<int>(selected)))
             : nullptr;
+    QAction* wiggle =
+        selected > 1
+            ? menu.addAction(tr("Wiggle %n keyframe(s)...", nullptr, static_cast<int>(selected)))
+            : nullptr;
     QAction* simplify =
         selected > 2
             ? menu.addAction(tr("Simplify %n keyframe(s)...", nullptr, static_cast<int>(selected)))
@@ -304,6 +308,10 @@ void Window::ShowKeyMenu(const QPoint& where, const QString& property, uint32_t 
     }
     if (chosen == stretch) {
         StretchSelectedKeys();
+        return;
+    }
+    if (chosen == wiggle) {
+        WiggleSelectedKeys();
         return;
     }
     if (chosen == simplify) {

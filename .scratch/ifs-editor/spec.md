@@ -338,3 +338,4 @@ captured. This milestone is the editing itself.
 - `issues/130-drag-the-anchor.md` (milestone 8)
 - `issues/131-simplify-keyframes.md` (milestone 8)
 - `issues/132-fit-to-stage.md` (milestone 8)
+- `issues/133-wiggle-keyframes.md` (milestone 8)

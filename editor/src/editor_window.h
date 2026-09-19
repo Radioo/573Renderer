@@ -131,6 +131,7 @@ private:
     void ReverseSelectedKeys();
     void StretchSelectedKeys();
     void SimplifySelectedKeys();
+    void WiggleSelectedKeys();
     void StretchSelectedKeysBy(const Document::KeyStretch& stretch);
     void SelectMovedKeys(const std::vector<Document::KeyRef>& chosen,
                          std::vector<Document::KeyRef> moved);

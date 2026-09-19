@@ -878,6 +878,18 @@ dragging it, reverses the three from the menu, and reads the values on every
 frame, the new selection (frames 0, 2 and 3), the focused keyframe on frame 3,
 and the undo. Dropping the menu entry, the selection or the focus fails it.
 
+The lane menu offers `Wiggle N keyframe(s)...` for two or more selected
+keyframes (`Window::WiggleSelectedKeys`, through `Document::WiggleKeys`). It
+asks how many frames apart the wiggle keyframes go and the largest change, in
+the property's own units, then adds the jittered keyframes between the first
+and last selected of each property as one undo step and selects them with the
+ends. Each wiggle is seeded from `QRandomGenerator`. The window test owns the
+dot's depth, keys frames 0 and 3, cancels at each of the two questions and sees
+nothing change, wiggles every frame by up to 20, and reads the four keyframes
+selected, the ends unchanged and frames 1 and 2 within 20 of where they were.
+Dropping the menu entry or its count, either cancel check or the new selection
+fails it.
+
 The lane menu offers `Simplify N keyframe(s)...` for three or more selected
 keyframes (`Window::SimplifySelectedKeys`, through `Document::SimplifyKeys`).
 It asks for the largest change allowed on any frame, in the property's own

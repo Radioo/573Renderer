@@ -5,11 +5,13 @@
 #include "document/authored.h"
 #include "document/key_selection.h"
 #include "document/key_simplify.h"
+#include "document/key_wiggle.h"
 #include "support/expected.h"
 
 #include <QAction>
 #include <QInputDialog>
 #include <QKeySequence>
+#include <QRandomGenerator>
 #include <QStatusBar>
 #include <QString>
 
@@ -231,6 +233,35 @@ void Window::SimplifySelectedKeys() {
     }
     const std::size_t removed = chosen.size() - remaining.size();
     statusBar()->showMessage(tr("%n keyframe(s) removed", nullptr, static_cast<int>(removed)));
+    ShowFrame();
+}
+
+void Window::WiggleSelectedKeys() {
+    const std::vector<Document::KeyRef> chosen = timeline_->SelectedKeys();
+    bool accepted = false;
+    const int every =
+        QInputDialog::getInt(this, tr("Wiggle keyframes"), tr("A keyframe every how many frames"),
+                             2, 1, 10000, 1, &accepted);
+    if (!accepted) return;
+    const int magnitude = QInputDialog::getInt(this, tr("Wiggle keyframes"),
+                                               tr("Largest change, in the property's own units"),
+                                               20, 1, 1000000, 1, &accepted);
+    if (!accepted) return;
+    const Document::Wiggle wiggle{.every = static_cast<uint32_t>(every),
+                                  .magnitude = magnitude,
+                                  .seed = QRandomGenerator::global()->generate()};
+    std::vector<Document::KeyRef> wiggled;
+    if (!EditAuthored(tr("Wiggle %n keyframe(s)", nullptr, static_cast<int>(chosen.size())),
+                      [&chosen, &wiggle, &wiggled](Document::AuthoredDepth& authored) {
+                          using Changed = Support::Expected<void, std::string>;
+                          auto placed = Document::WiggleKeys(authored, chosen, wiggle);
+                          if (!placed) return Changed(Support::Unexpected(placed.error()));
+                          wiggled = std::move(*placed);
+                          return Changed();
+                      })) {
+        return;
+    }
+    timeline_->SelectKeys(std::move(wiggled));
     ShowFrame();
 }
 
