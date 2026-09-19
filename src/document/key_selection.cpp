@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <map>
 #include <set>
 #include <string>
 #include <string_view>
@@ -102,6 +103,53 @@ Support::Expected<void, std::string> ShiftTrack(const AuthoredDepth& limits, Tra
     return {};
 }
 
+Support::Expected<void, std::string> CheckHeld(const AuthoredDepth& authored,
+                                               const std::vector<KeyRef>& keys) {
+    for (const KeyRef& key : keys) {
+        const Track* track = TrackNamed(authored, key.property);
+        if (track == nullptr || !Holds(*track, key.frame)) return Support::Unexpected(Missing(key));
+    }
+    return {};
+}
+
+Bezier Mirrored(const Bezier& curve) {
+    return Bezier{
+        .x1 = 1.0 - curve.x2, .y1 = 1.0 - curve.y2, .x2 = 1.0 - curve.x1, .y2 = 1.0 - curve.y1};
+}
+
+Support::Expected<std::map<uint32_t, uint32_t>, std::string>
+ReverseTrack(Track& track, const std::set<uint32_t>& selected) {
+    const uint32_t first = *selected.begin();
+    const uint32_t last = *selected.rbegin();
+    std::vector<Keyframe> chosen;
+    std::vector<Keyframe> kept;
+    for (const Keyframe& key : track.keys) {
+        if (selected.contains(key.frame)) {
+            chosen.push_back(key);
+            continue;
+        }
+        if (key.frame > first && key.frame < last) {
+            return Support::Unexpected("the " + track.property + " keyframe at frame " +
+                                       std::to_string(key.frame) +
+                                       " lies between the selected ones, so select it too");
+        }
+        kept.push_back(key);
+    }
+    std::map<uint32_t, uint32_t> moved;
+    for (std::size_t i = 0; i < chosen.size(); i++) {
+        Keyframe key = chosen[i];
+        key.frame = first + last - chosen[i].frame;
+        const Keyframe& leaving = i == 0 ? chosen.back() : chosen[i - 1];
+        key.ease = leaving.ease;
+        key.bezier = i == 0 ? leaving.bezier : Mirrored(leaving.bezier);
+        moved[chosen[i].frame] = key.frame;
+        kept.push_back(std::move(key));
+    }
+    std::ranges::sort(kept, {}, &Keyframe::frame);
+    track.keys = std::move(kept);
+    return moved;
+}
+
 }
 
 std::vector<KeyRef> AllKeys(const AuthoredDepth& authored) {
@@ -128,10 +176,8 @@ Support::Expected<KeyClip, std::string> CopyKeys(const AuthoredDepth& authored,
         }
         if (!copied.keys.empty()) clip.tracks.push_back(std::move(copied));
     }
-    for (const KeyRef& key : keys) {
-        const Track* track = TrackNamed(authored, key.property);
-        if (track == nullptr || !Holds(*track, key.frame)) return Support::Unexpected(Missing(key));
-    }
+    auto held = CheckHeld(authored, keys);
+    if (!held) return Support::Unexpected(held.error());
     return clip;
 }
 
@@ -204,6 +250,39 @@ ShiftKeys(AuthoredDepth& authored, const std::vector<KeyRef>& keys, int64_t by) 
         return Support::Unexpected(std::string("a selected keyframe belongs to no track"));
     authored = std::move(edited);
     return shifted;
+}
+
+Support::Expected<std::vector<KeyRef>, std::string> ReverseKeys(AuthoredDepth& authored,
+                                                                const std::vector<KeyRef>& keys) {
+    if (keys.empty()) return Support::Unexpected(std::string("no keyframes are selected"));
+    AuthoredDepth edited = authored;
+    std::map<KeyRef, uint32_t> moved;
+    auto held = CheckHeld(edited, keys);
+    if (!held) return Support::Unexpected(held.error());
+    for (Track& track : edited.tracks) {
+        std::set<uint32_t> selected;
+        for (const KeyRef& key : keys) {
+            if (key.property == track.property) selected.insert(key.frame);
+        }
+        if (selected.size() < 2) continue;
+        auto flipped = ReverseTrack(track, selected);
+        if (!flipped) return Support::Unexpected(flipped.error());
+        for (const auto& [from, to] : *flipped)
+            moved[KeyRef{.property = track.property, .frame = from}] = to;
+    }
+    if (moved.empty()) {
+        return Support::Unexpected(
+            std::string("time-reversing needs two selected keyframes of one property"));
+    }
+    std::vector<KeyRef> reversed;
+    reversed.reserve(keys.size());
+    for (const KeyRef& key : keys) {
+        const auto found = moved.find(key);
+        reversed.push_back(
+            found == moved.end() ? key : KeyRef{.property = key.property, .frame = found->second});
+    }
+    authored = std::move(edited);
+    return reversed;
 }
 
 }

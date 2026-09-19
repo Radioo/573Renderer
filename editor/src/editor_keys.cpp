@@ -225,6 +225,10 @@ void Window::ShowKeyMenu(const QPoint& where, const QString& property, uint32_t 
         selected > 0
             ? menu.addAction(tr("Delete %n keyframe(s)", nullptr, static_cast<int>(selected)))
             : nullptr;
+    QAction* reverse =
+        selected > 1
+            ? menu.addAction(tr("Time-reverse %n keyframe(s)", nullptr, static_cast<int>(selected)))
+            : nullptr;
     if (key) {
         for (QAction* one : {hold, linear, bezier})
             one->setCheckable(true);
@@ -246,6 +250,10 @@ void Window::ShowKeyMenu(const QPoint& where, const QString& property, uint32_t 
     }
     if (chosen == erase) {
         RemoveSelectedKeys();
+        return;
+    }
+    if (chosen == reverse) {
+        ReverseSelectedKeys();
         return;
     }
     if (chosen == add) {

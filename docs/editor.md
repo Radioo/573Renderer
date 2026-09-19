@@ -689,7 +689,15 @@ selected there (starting any track it does not have yet), Delete removes it and
 Ctrl+A selects every keyframe of the depth. Right-clicking a lane offers the same
 copy, paste and delete, to add a keyframe where there is none, and to remove one
 or change how it leaves its frame where there is. The copied keyframes are kept
-by the window, so they can be pasted into another owned depth. How a keyframe leaves its frame applies to the whole
+by the window, so they can be pasted into another owned depth. With two or
+more keyframes selected, the lane menu also offers `Time-reverse N
+keyframe(s)` (`Window::ReverseSelectedKeys`, through `Document::ReverseKeys`),
+which keeps the same keyframes selected at their new frames and keeps the
+focused one focused where it went. The window test inserts a frame so the
+dropped dot spans four, owns it, sets keyframes on frames 0, 1 and 3 by
+dragging it, reverses the three from the menu, and reads the values on every
+frame, the new selection (frames 0, 2 and 3), the focused keyframe on frame 3,
+and the undo. Dropping the menu entry, the selection or the focus fails it. How a keyframe leaves its frame applies to the whole
 selection when the right-clicked keyframe is part of it, and to that keyframe
 alone otherwise. Bezier opens `Editor::EaseDialog`: the curve drawn with
 `Document::EaseProgress` over a unit square that has room above and below for

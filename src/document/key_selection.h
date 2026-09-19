@@ -41,4 +41,7 @@ SetKeysEase(AuthoredDepth& authored, const std::vector<KeyRef>& keys, Ease ease,
 [[nodiscard]] Support::Expected<std::vector<KeyRef>, std::string>
 ShiftKeys(AuthoredDepth& authored, const std::vector<KeyRef>& keys, int64_t by);
 
+[[nodiscard]] Support::Expected<std::vector<KeyRef>, std::string>
+ReverseKeys(AuthoredDepth& authored, const std::vector<KeyRef>& keys);
+
 }

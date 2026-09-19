@@ -1490,6 +1490,23 @@ paste or a move that fails halfway leaves nothing behind.
 - `ShiftKeys` moves them all by the same number of frames. A move that would
   land on a keyframe that is not moving, or leave the owned range, is refused.
   It returns where the keyframes went.
+- `ReverseKeys` is After Effects' Time-Reverse Keyframes. In each track with at
+  least two selected keyframes, a selected keyframe on frame `f` moves to
+  `first + last - f`, where `first` and `last` are that track's earliest and
+  latest selected frames, and keeps its value. A track with one selected
+  keyframe is left alone; a selection with no such track is refused. The ease
+  moves with the stretch it describes, since a keyframe's ease is how the
+  animation leaves it: each moved keyframe takes the ease of the one that used
+  to lead into it, with a bezier reflected through the curve's centre,
+  `(1 - x2, 1 - y2, 1 - x1, 1 - y1)`, and the keyframe that lands on `last`
+  keeps the ease the old `last` keyframe had, since the stretch after it is not
+  reversed. With linear and bezier eases every frame between `first` and `last`
+  then shows what frame `first + last - f` showed, give or take the rounding
+  of one integer step. A hold cannot be mirrored exactly, because a held value
+  lasts until the next keyframe, so after the reverse it jumps at the other end
+  of its stretch. An unselected keyframe between `first` and `last` would land
+  among the reversed ones, so the reverse is refused and names it. It returns
+  where each selected keyframe went, in the order they were given.
 
 ## Export drift (`document/project_drift.h`)
 

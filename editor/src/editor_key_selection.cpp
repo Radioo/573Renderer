@@ -12,6 +12,7 @@
 #include <QString>
 
 #include <algorithm>
+#include <cstddef>
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -109,6 +110,30 @@ void Window::SelectAllKeys() {
     if (!depth_) return;
     const Document::AuthoredDepth* owned = AuthoredAt(static_cast<uint16_t>(*depth_), frame_);
     if (owned != nullptr) timeline_->SelectKeys(Document::AllKeys(*owned));
+}
+
+void Window::ReverseSelectedKeys() {
+    const std::vector<Document::KeyRef> chosen = timeline_->SelectedKeys();
+    std::vector<Document::KeyRef> reversed;
+    if (!EditAuthored(tr("Time-reverse %n keyframe(s)", nullptr, static_cast<int>(chosen.size())),
+                      [&chosen, &reversed](Document::AuthoredDepth& authored) {
+                          using Changed = Support::Expected<void, std::string>;
+                          auto flipped = Document::ReverseKeys(authored, chosen);
+                          if (!flipped) return Changed(Support::Unexpected(flipped.error()));
+                          reversed = std::move(*flipped);
+                          return Changed();
+                      })) {
+        return;
+    }
+    if (key_frame_) {
+        const Document::KeyRef focused{.property = key_property_.toStdString(),
+                                       .frame = *key_frame_};
+        const auto at = std::ranges::find(chosen, focused);
+        if (at != chosen.end())
+            key_frame_ = reversed.at(static_cast<std::size_t>(at - chosen.begin())).frame;
+    }
+    timeline_->SelectKeys(std::move(reversed));
+    ShowFrame();
 }
 
 void Window::ShiftSelectedKeys(int64_t by) {

@@ -6,7 +6,9 @@
 #include "document/keyframes.h"
 
 #include <algorithm>
+#include <cstddef>
 #include <cstdint>
+#include <cstdlib>
 #include <optional>
 #include <string>
 #include <utility>
@@ -199,4 +201,76 @@ TEST_CASE("A pasted filter keyframe replaces one that holds a different number o
     INFO(Error(pasted));
     REQUIRE(pasted.has_value());
     CHECK(depth.tracks.back().keys[1].value == std::vector<int64_t>{0});
+}
+
+TEST_CASE("Time-reversing keyframes plays their stretch backwards frame by frame") {
+    Document::AuthoredDepth depth = Depth();
+    depth.tracks[0].keys[0].ease = Document::Ease::Bezier;
+    depth.tracks[0].keys[0].bezier = {.x1 = 0.5, .y1 = 0.0, .x2 = 0.75, .y2 = 0.25};
+    depth.tracks[0].keys[2].ease = Document::Ease::Hold;
+    const Document::Track before = depth.tracks[0];
+    const auto reversed = Document::ReverseKeys(
+        depth, {Ref("Translation", 8), Ref("Translation", 0), Ref("Translation", 4)});
+    INFO(Error(reversed));
+    REQUIRE(reversed.has_value());
+    CHECK(*reversed ==
+          std::vector<KeyRef>{Ref("Translation", 0), Ref("Translation", 8), Ref("Translation", 4)});
+    for (uint32_t frame = 0; frame <= 8; frame++) {
+        INFO(frame);
+        const std::vector<int64_t> now = Document::SampleTrack(depth.tracks[0], frame);
+        const std::vector<int64_t> then = Document::SampleTrack(before, 8 - frame);
+        REQUIRE(now.size() == then.size());
+        for (std::size_t i = 0; i < now.size(); i++)
+            CHECK(std::abs(now[i] - then[i]) <= 1);
+    }
+    CHECK(depth.tracks[0].keys[0].ease == Document::Ease::Linear);
+    CHECK(depth.tracks[0].keys[1].ease == Document::Ease::Bezier);
+    CHECK(depth.tracks[0].keys[1].bezier ==
+          Document::Bezier{.x1 = 0.25, .y1 = 0.75, .x2 = 0.5, .y2 = 1.0});
+    CHECK(depth.tracks[0].keys[2].ease == Document::Ease::Hold);
+    CHECK(depth.tracks[1] == Depth().tracks[1]);
+}
+
+TEST_CASE("Time-reversing keeps the reversed stretch inside the selected keys' frames") {
+    Document::AuthoredDepth depth = Depth();
+    REQUIRE(
+        Document::ReverseKeys(depth, {Ref("Translation", 4), Ref("Translation", 8)}).has_value());
+    CHECK(Frames(depth, "Translation") == std::vector<uint32_t>{0, 4, 8});
+    CHECK(depth.tracks[0].keys[1].value == std::vector<int64_t>{80, 0});
+    CHECK(depth.tracks[0].keys[2].value == std::vector<int64_t>{40, 0});
+    CHECK(depth.tracks[0].keys[0].value == std::vector<int64_t>{0, 0});
+}
+
+TEST_CASE("Time-reversing is refused, leaving the depth alone, when it cannot mirror the keys") {
+    Document::AuthoredDepth depth = Depth();
+    const Document::AuthoredDepth before = depth;
+    CHECK_FALSE(Document::ReverseKeys(depth, {}).has_value());
+    CHECK_FALSE(Document::ReverseKeys(depth, {Ref("Translation", 4)}).has_value());
+    const auto between =
+        Document::ReverseKeys(depth, {Ref("Translation", 0), Ref("Translation", 8)});
+    REQUIRE_FALSE(between.has_value());
+    CHECK(between.error().find("frame 4") != std::string::npos);
+    CHECK_FALSE(Document::ReverseKeys(
+                    depth, {Ref("Translation", 4), Ref("Translation", 8), Ref("Translation", 9)})
+                    .has_value());
+    CHECK(depth == before);
+    const auto lone = Document::ReverseKeys(
+        depth, {Ref("Multiply colour", 6), Ref("Translation", 0), Ref("Translation", 4)});
+    REQUIRE(lone.has_value());
+    CHECK(*lone == std::vector<KeyRef>{Ref("Multiply colour", 6), Ref("Translation", 4),
+                                       Ref("Translation", 0)});
+    CHECK(depth.tracks[1] == before.tracks[1]);
+}
+
+TEST_CASE("The keyframe that ends up last keeps the ease it leaves the stretch with") {
+    Document::AuthoredDepth depth = Depth();
+    depth.tracks[0].keys[1].ease = Document::Ease::Bezier;
+    depth.tracks[0].keys[1].bezier = {.x1 = 0.5, .y1 = 0.0, .x2 = 0.75, .y2 = 0.25};
+    REQUIRE(
+        Document::ReverseKeys(depth, {Ref("Translation", 0), Ref("Translation", 4)}).has_value());
+    CHECK(depth.tracks[0].keys[1].value == std::vector<int64_t>{0, 0});
+    CHECK(depth.tracks[0].keys[1].ease == Document::Ease::Bezier);
+    CHECK(depth.tracks[0].keys[1].bezier ==
+          Document::Bezier{.x1 = 0.5, .y1 = 0.0, .x2 = 0.75, .y2 = 0.25});
+    CHECK(depth.tracks[0].keys[0].ease == Document::Ease::Linear);
 }
