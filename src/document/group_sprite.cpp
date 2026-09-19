@@ -382,4 +382,20 @@ Support::Expected<uint16_t, std::string> DuplicateSprite(AfpAnimation::Animation
     return *id;
 }
 
+Support::Expected<uint16_t, std::string> NewSprite(AfpAnimation::Animation& animation,
+                                                   uint32_t frames) {
+    if (frames == 0 || frames > std::numeric_limits<uint16_t>::max()) {
+        return Support::Unexpected("a sprite holds 1 to 65535 frames, not " +
+                                   std::to_string(frames));
+    }
+    if (animation.root.frames.empty())
+        return Support::Unexpected(std::string("the animation has no frame to define a sprite in"));
+    const auto id = NextCharacterId(animation);
+    if (!id) return Support::Unexpected(id.error());
+    AfpAnimation::Sprite sprite{.id = *id, .container = {}};
+    sprite.container.frames.assign(frames, AfpAnimation::Frame{.first_tag = 0, .tag_count = 0});
+    InsertTag(animation.root, 0, AfpAnimation::Tag{std::move(sprite)});
+    return *id;
+}
+
 }

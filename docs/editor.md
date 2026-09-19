@@ -73,8 +73,10 @@ Ctrl press) were each seen to fail a case before the tests were trusted.
 `build-editor/editor_window_tests.exe` builds the whole `Editor::Window` from the
 same sources, with no host, and drives it the way a user would. The cases that
 need no game install live in `editor/tests/editor_window_tests.cpp`,
-`editor/tests/editor_panel_window_tests.cpp` (the panels and the depth edits)
-and `editor/tests/editor_key_window_tests.cpp` (the keyframe edits), and the
+`editor/tests/editor_panel_window_tests.cpp` (the panels),
+`editor/tests/editor_depth_window_tests.cpp` (arranging, splitting, sequencing,
+trimming the clip, timeline drops and new sprites) and
+`editor/tests/editor_key_window_tests.cpp` (the keyframe edits), and the
 ones that start the preview host live in
 `editor/tests/editor_live_window_tests.cpp` (they skip without
 `R573_IIDX_DIR`). The `Script`, its steps and the package helpers are shared
@@ -211,7 +213,17 @@ with a depth selected, `Use on depth N from frame F`, which sets the character
 of the placement live on that frame through the same field edit the inspector's
 Character row uses, as After Effects replaces a layer's source. Duplicating a
 sprite and using the copy on a depth is how a variant is made without touching
-the other places the original is shown.
+the other places the original is shown. The menu always offers `New empty
+sprite...`, with or without a character under the cursor, as After Effects
+offers New Composition: it asks for a frame count (the current clip's is
+suggested), defines an empty sprite of that many frames (`Document::NewSprite`,
+one undo step), refills the clip box and opens the new sprite in it
+(`Window::ShowLibrarySprite`, as a double-click does), so depths can be added to
+it straight away, for one by dropping a character on the timeline. The window
+test makes a five frame sprite from a library with nothing selected, sees it in
+the clip box and the library, drops a character into it on its fifth frame, and
+sees the entry offered with an item selected too; dropping the refill, the
+opening, the entry or its handling fails it.
 The package tree and the library are named (`package`, `library`) so a test can
 tell the two trees apart.
 

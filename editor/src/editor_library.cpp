@@ -36,6 +36,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <map>
+#include <limits>
 #include <optional>
 #include <string>
 #include <vector>
@@ -110,19 +111,29 @@ void Window::ShowLibrarySprite(uint16_t sprite) {
 }
 
 void Window::ShowLibraryMenu(const QPoint& where) {
+    if (!file_ || animation_path_.empty()) return;
     const QTreeWidgetItem* item = library_->currentItem();
-    if (item == nullptr || !file_ || animation_path_.empty()) return;
-    const auto character = static_cast<uint16_t>(item->data(0, kIdRole).toUInt());
-    const std::optional<uint16_t> sprite = SpriteOf(item);
+    const auto character =
+        item != nullptr ? static_cast<uint16_t>(item->data(0, kIdRole).toUInt()) : uint16_t{0};
+    const std::optional<uint16_t> sprite = item != nullptr ? SpriteOf(item) : std::nullopt;
     QMenu menu(this);
-    QAction* place = menu.addAction(tr("Place on a new depth from frame %1...").arg(frame_));
+    QAction* place = item != nullptr
+                         ? menu.addAction(tr("Place on a new depth from frame %1...").arg(frame_))
+                         : nullptr;
     QAction* show = sprite ? menu.addAction(tr("Show this sprite on its own")) : nullptr;
     QAction* duplicate = sprite ? menu.addAction(tr("Duplicate this sprite")) : nullptr;
     QAction* use =
-        depth_ ? menu.addAction(tr("Use on depth %1 from frame %2").arg(*depth_).arg(frame_))
-               : nullptr;
+        item != nullptr && depth_
+            ? menu.addAction(tr("Use on depth %1 from frame %2").arg(*depth_).arg(frame_))
+            : nullptr;
+    menu.addSeparator();
+    QAction* fresh = menu.addAction(tr("New empty sprite..."));
     const QAction* chosen = menu.exec(where);
     if (chosen == nullptr) return;
+    if (chosen == fresh) {
+        NewEmptySprite();
+        return;
+    }
     if (chosen == duplicate && sprite) {
         DuplicateLibrarySprite(*sprite);
         return;
@@ -168,6 +179,28 @@ void Window::DuplicateLibrarySprite(uint16_t sprite) {
     RefillClipsKeepingChoice();
     if (copy)
         statusBar()->showMessage(tr("Sprite %1 is a copy of sprite %2").arg(*copy).arg(sprite));
+}
+
+void Window::NewEmptySprite() {
+    bool answered = false;
+    const int frames = QInputDialog::getInt(this, tr("New empty sprite"), tr("Frames"),
+                                            std::max(1, static_cast<int>(ClipFrameCount())), 1,
+                                            std::numeric_limits<uint16_t>::max(), 1, &answered);
+    if (!answered) return;
+    std::optional<uint16_t> made;
+    if (!EditAnimation(tr("New sprite of %n frame(s)", nullptr, frames),
+                       [frames, &made](AfpAnimation::Animation& edited) {
+                           using Made = Support::Expected<void, std::string>;
+                           auto sprite = Document::NewSprite(edited, static_cast<uint32_t>(frames));
+                           if (!sprite) return Made(Support::Unexpected(sprite.error()));
+                           made = *sprite;
+                           return Made();
+                       }) ||
+        !made) {
+        return;
+    }
+    FillClips();
+    ShowLibrarySprite(*made);
 }
 
 void Window::UseCharacterOnDepth(uint16_t character, uint16_t depth) {

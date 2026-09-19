@@ -26,4 +26,7 @@ UngroupSprite(AfpAnimation::Animation& animation, ClipId clip, uint16_t depth, u
 [[nodiscard]] Support::Expected<uint16_t, std::string>
 DuplicateSprite(AfpAnimation::Animation& animation, uint16_t sprite);
 
+[[nodiscard]] Support::Expected<uint16_t, std::string> NewSprite(AfpAnimation::Animation& animation,
+                                                                 uint32_t frames);
+
 }

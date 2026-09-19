@@ -221,3 +221,30 @@ TEST_CASE("Frames where a clip depth is in use are not grouped") {
     CreateAt(earlier, 1).clip_depth = uint16_t{3};
     CHECK(Document::GroupIntoSprite(earlier, Range(2, 2, 1, 6)).has_value());
 }
+
+TEST_CASE("A new sprite is defined empty with the frames asked for under the next free id") {
+    AfpAnimation::Animation animation = Clip(4);
+    Add(animation, 2, 0, 3);
+    const auto made = Document::NewSprite(animation, 12);
+    REQUIRE(made.has_value());
+    CHECK(*made == 0);
+    const AfpAnimation::Container* sprite =
+        Document::FindClip(animation, Document::ClipId{.sprite = *made});
+    REQUIRE(sprite != nullptr);
+    CHECK(sprite->frames.size() == 12);
+    CHECK(sprite->tags.empty());
+    CHECK(Document::DepthRows(animation.root).size() == 1);
+    const auto second = Document::NewSprite(animation, 1);
+    REQUIRE(second.has_value());
+    CHECK(*second == 1);
+}
+
+TEST_CASE("A new sprite needs a frame of its own and a root frame to be defined in") {
+    AfpAnimation::Animation animation = Clip(4);
+    const AfpAnimation::Animation before = animation;
+    CHECK_FALSE(Document::NewSprite(animation, 0).has_value());
+    CHECK_FALSE(Document::NewSprite(animation, 0x10000).has_value());
+    CHECK(animation == before);
+    AfpAnimation::Animation empty = Clip(0);
+    CHECK_FALSE(Document::NewSprite(empty, 3).has_value());
+}

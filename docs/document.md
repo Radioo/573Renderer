@@ -1355,6 +1355,14 @@ the id or the frame is left as it was. A live test (`sprite_duplicate_live_tests
 `title`, points it at a duplicate of that sprite, and requires the host to draw
 the frame exactly as before; emptying the copy's timeline fails it.
 
+`NewSprite(animation, frames)` defines an empty sprite: `frames` frames with no
+tags, under the next free character id, in root frame 0 where
+`GroupIntoSprite` puts its sprites. It takes 1 to 65535 frames, since a
+placement's end frame and every frame index in a clip are 16 bits, and needs a
+root frame to be defined in. `group_sprite_tests` checks the id, the frame
+count, the empty timeline, the root left alone, the next id after it, and the
+refusals.
+
 ### Hiding depths in the view (`document/hidden_depths.h`)
 
 `HideDepths(animation, clip, depths)` drops every placement and remove of those
