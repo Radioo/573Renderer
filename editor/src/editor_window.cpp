@@ -301,6 +301,8 @@ void Window::BuildMenus() {
     QAction* trim = edit->addAction(tr("&Trim the clip to the work area"));
     trim->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_X));
     connect(trim, &QAction::triggered, this, &Window::TrimClipToWorkArea);
+    QAction* extract = edit->addAction(tr("E&xtract the work area"));
+    connect(extract, &QAction::triggered, this, &Window::ExtractWorkArea);
 }
 
 void Window::ChooseGameDirectory() {

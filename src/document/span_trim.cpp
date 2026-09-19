@@ -357,4 +357,19 @@ Support::Expected<void, std::string> TrimAuthored(AuthoredDepth& authored, const
     return {};
 }
 
+Support::Expected<void, std::string> CarryUpdates(AfpAnimation::Container& clip, uint16_t depth,
+                                                  uint32_t first, uint32_t onto) {
+    const std::vector<std::size_t> carried = PlacementsBetween(clip, depth, first, onto);
+    if (carried.empty()) return {};
+    AfpAnimation::Placement update = PlacementAt(clip, carried.front());
+    for (std::size_t i = 1; i < carried.size(); i++) {
+        const std::size_t index = carried[i];
+        auto done = Fold(update, PlacementAt(clip, index), FrameHolding(clip, index));
+        if (!done) return Support::Unexpected(done.error());
+    }
+    EraseAll(clip, carried);
+    InsertTag(clip, onto, AfpAnimation::Tag{std::move(update)});
+    return {};
+}
+
 }

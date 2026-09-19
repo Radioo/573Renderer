@@ -440,6 +440,43 @@ removed spans are gone, the labels land where they should, a sprite crossing
 the start is counted while one starting on it or after it is not, and every
 refusal leaves the clip as it was.
 
+### Extracting frames (`document/clip_extract.h`)
+
+`ExtractFrames(animation, clip, cut)` is After Effects' Extract Work Area: the
+frames in `cut` go, the frames after them move up to close the gap, and every
+frame that stays shows what it showed. It is the trim turned inside out, and
+the order is the same: the spans are fixed first, then `RemoveFrame` drops the
+cut frames one at a time from `cut.first_frame`. A span wholly inside the cut
+is removed. A span that runs into the cut and ends in it is trimmed to end on
+the frame before it, and one that runs out of it is trimmed to start on the
+frame after it, which folds the updates it lost into a new create there, as
+the trim does.
+
+A span that crosses the whole cut keeps its object. `CarryUpdates` (in
+`span_trim.h`) folds the updates on the cut frames and the frame after into
+one update with the same fold `TrimSpan` uses, and puts it on the frame after
+the cut, so that once the cut frames go that frame sets everything the lost
+updates had set. The object is not recreated, so a sprite on such a span keeps
+its own timeline running, but that timeline no longer runs through the cut
+frames, so from the cut on it is that many frames behind where it was. Those
+spans, and the spans that start again after the cut, are counted and returned
+so the editor can say so.
+
+A span whose remove sat on the first cut frame (it ended just before the cut,
+or ran into it) needs that remove on the frame that now follows it, and
+`RemoveFrame` drops a removed frame's removes with its placements. So those
+depths are collected before the frames go and get a remove put first on
+`cut.first_frame` afterwards, unless the cut was the end of the clip. Labels
+on the cut frames land on the frame after the cut, and later ones move up. A
+range that is not frames of the clip, or that is the whole clip, is refused,
+and a refusal changes nothing.
+
+`clip_extract_tests.cpp` cuts four frames out of a scene with a depth inside
+the cut, one crossing it, one running in, one running out and one ending on the
+frame before it, and checks the new spans, the replayed states on both sides,
+that nothing of the inner depth is left, the carried matrix and colour, the
+sprite count, the labels and the refusals.
+
 ### Copying a span between clips (`document/span_clipboard.h`)
 
 `CopySpan(animation, path, clip, depth, frame)` records the span of a depth

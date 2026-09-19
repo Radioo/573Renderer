@@ -6,6 +6,7 @@
 #include "document/authored.h"
 #include "document/characters.h"
 #include "document/clip.h"
+#include "document/clip_extract.h"
 #include "document/clip_trim.h"
 #include "document/hidden_depths.h"
 #include "document/keyframes.h"
@@ -391,22 +392,56 @@ void Window::AddStepActions(QMenu* menu) {
     }
 }
 
-void Window::TrimClipToWorkArea() {
-    if (!file_ || animation_path_.empty()) return;
+std::optional<Document::Span> Window::WorkAreaToEdit() {
+    if (!file_ || animation_path_.empty()) return std::nullopt;
     if (!work_area_) {
-        ReportProblem(tr("Mark the frames to keep as the work area first, with B and N"));
-        return;
+        ReportProblem(tr("Mark the frames as the work area first, with B and N"));
+        return std::nullopt;
     }
     const bool owned = std::ranges::any_of(authored_, [this](const Document::AuthoredDepth& one) {
         return one.animation == animation_path_ && one.clip == clip_;
     });
     if (owned) {
-        ReportProblem(tr("The project owns depths in this clip. Detach them before trimming it."));
+        ReportProblem(
+            tr("The project owns depths in this clip. Detach them before cutting its frames."));
+        return std::nullopt;
+    }
+    return Document::Span{.first_frame = work_area_->first_frame,
+                          .last_frame = work_area_->last_frame};
+}
+
+void Window::ExtractWorkArea() {
+    const std::optional<Document::Span> cut = WorkAreaToEdit();
+    if (!cut) return;
+    const Document::ClipId clip = clip_;
+    const uint32_t removed = cut->last_frame - cut->first_frame + 1;
+    uint32_t playhead = frame_;
+    if (frame_ >= cut->first_frame)
+        playhead = frame_ > cut->last_frame ? frame_ - removed : cut->first_frame;
+    std::size_t moving = 0;
+    if (!EditAnimation(tr("Extract frames %1 to %2").arg(cut->first_frame).arg(cut->last_frame),
+                       [clip, &cut, &moving](AfpAnimation::Animation& edited)
+                           -> Support::Expected<void, std::string> {
+                           auto extracted = Document::ExtractFrames(edited, clip, *cut);
+                           if (!extracted) return Support::Unexpected(extracted.error());
+                           moving = *extracted;
+                           return {};
+                       })) {
         return;
     }
+    SetWorkArea(std::nullopt);
+    SeekTo(std::min(playhead, std::max<uint32_t>(ClipFrameCount(), 1) - 1));
+    if (moving == 0) return;
+    statusBar()->showMessage(tr("%n depth(s) showing a sprite or another clip cross the cut, so "
+                                "their own timelines no longer line up with the frames after it",
+                                nullptr, static_cast<int>(moving)));
+}
+
+void Window::TrimClipToWorkArea() {
+    const std::optional<Document::Span> work = WorkAreaToEdit();
+    if (!work) return;
     const Document::ClipId clip = clip_;
-    const Document::Span kept{.first_frame = work_area_->first_frame,
-                              .last_frame = work_area_->last_frame};
+    const Document::Span kept = *work;
     const uint32_t playhead =
         frame_ < kept.first_frame ? 0 : std::min(frame_, kept.last_frame) - kept.first_frame;
     std::size_t restarted = 0;

@@ -198,6 +198,8 @@ private:
     void AddStepActions(QMenu* menu);
     void SetWorkArea(std::optional<Document::WorkArea> area);
     void TrimClipToWorkArea();
+    void ExtractWorkArea();
+    [[nodiscard]] std::optional<Document::Span> WorkAreaToEdit();
     void SeekViewport(uint32_t frame);
     QWidget* BuildTimelinePanel(QScrollArea* timeline_area);
     void FillClips();

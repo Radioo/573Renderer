@@ -21,4 +21,7 @@ TrimOwnedSpan(AfpAnimation::Animation& animation, AuthoredDepth& authored, const
 [[nodiscard]] Support::Expected<void, std::string> TrimAuthored(AuthoredDepth& authored,
                                                                 const Span& wanted);
 
+[[nodiscard]] Support::Expected<void, std::string>
+CarryUpdates(AfpAnimation::Container& clip, uint16_t depth, uint32_t first, uint32_t onto);
+
 }

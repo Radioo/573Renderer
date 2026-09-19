@@ -676,3 +676,69 @@ TEST_CASE("With no keyframe selected the clipboard keys copy, cut and paste the 
     paste_here();
     CHECK(character_of(3) == dot);
 }
+
+TEST_CASE("Extracting the work area closes the gap and keeps the playhead on its content") {
+    Opened opened;
+    Open(opened, true);
+    auto* timeline = opened.window.findChild<Editor::Timeline*>();
+    REQUIRE(timeline != nullptr);
+    for (int inserted = 0; inserted < 3; inserted++) {
+        Script more({Choose("Insert a frame at 2")});
+        emit timeline->MenuRequested(QPoint(4, 4), 2, QString());
+        REQUIRE(Settle([&more] { return more.Finished(); }));
+    }
+    QAction* extract = nullptr;
+    for (QAction* action : opened.window.findChildren<QAction*>()) {
+        if (action->text() == "E&xtract the work area") extract = action;
+    }
+    QAction* start = ShortcutAction(opened.window, QKeySequence(Qt::Key_B));
+    QAction* end = ShortcutAction(opened.window, QKeySequence(Qt::Key_N));
+    REQUIRE(extract != nullptr);
+    REQUIRE(start != nullptr);
+    REQUIRE(end != nullptr);
+    const auto translation_on = [&](uint32_t frame) {
+        emit timeline->FrameChosen(frame);
+        emit timeline->DepthChosen(2);
+        return RowValue(*opened.inspector, "Translation");
+    };
+    const auto mark = [&](uint32_t first, uint32_t last) {
+        emit timeline->FrameChosen(first);
+        start->trigger();
+        emit timeline->FrameChosen(last);
+        end->trigger();
+    };
+    const auto refusal = [&] {
+        Script refused({});
+        extract->trigger();
+        REQUIRE(Settle([&refused] { return !refused.Problems().isEmpty(); }));
+        return refused.Problems().front();
+    };
+    const std::string first = translation_on(0);
+    const std::string last = translation_on(5);
+    REQUIRE(first != last);
+    const auto extract_with_playhead = [&](uint32_t playhead) {
+        mark(2, 3);
+        emit timeline->FrameChosen(playhead);
+        emit timeline->DepthChosen(2);
+        Script extracted({});
+        extract->trigger();
+        QApplication::processEvents();
+        CHECK(extracted.Problems().isEmpty());
+        return RowValue(*opened.inspector, "Translation");
+    };
+    QAction* undo = ShortcutAction(opened.window, QKeySequence(QKeySequence::Undo));
+    REQUIRE(undo != nullptr);
+    CHECK(extract_with_playhead(3) == first);
+    undo->trigger();
+    CHECK(extract_with_playhead(4) == first);
+    CHECK(opened.window.statusBar()->currentMessage().contains("cross the cut"));
+    CHECK(refusal().contains("work area first"));
+    CHECK(translation_on(0) == first);
+    CHECK(translation_on(3) == last);
+    mark(0, 3);
+    CHECK(refusal().contains("leave the clip empty"));
+
+    OwnDroppedDot(opened);
+    mark(1, 1);
+    CHECK(refusal().contains("owns depths"));
+}

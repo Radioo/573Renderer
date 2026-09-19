@@ -1012,6 +1012,20 @@ says nothing, and the owned refusal; the live test trims `title` to six frames
 around frame 400 and reads the host's frame. Dropping the clearing, the seek,
 the quiet case, the owned or work-area check, or the shortcut fails them.
 
+`Edit > Extract the work area` (After Effects' Extract Work Area, no shortcut)
+takes the work area's frames out of the clip and closes the gap
+(`Window::ExtractWorkArea`, through `Document::ExtractFrames`), as one undo
+step. The work area is cleared, and the playhead keeps its content: a frame
+after the cut moves up by the cut's length, and a frame inside the cut lands on
+the frame that now follows it. When sprites or other clips run across the cut,
+the status bar says their own timelines no longer line up. It shares the trim's
+refusals (`Window::WorkAreaToEdit`): no work area, or a depth the project owns.
+The window test gives the dot's intro six frames, extracts frames 2 and 3 with
+the playhead on each side of the cut, reads the translations on the new frames,
+sees the status message, the cleared work area, the whole clip refused and the
+owned refusal; dropping the playhead's branch, the clearing or either
+refusal fails it.
+
 `Playback > Play` (the space bar) plays the animation and pauses it, and
 `Playback > Loop` decides whether it wraps at the end; the choice is remembered
 between runs. The timer's interval is `Document::FrameIntervalMs` of the
