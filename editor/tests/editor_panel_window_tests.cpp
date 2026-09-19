@@ -519,6 +519,58 @@ TEST_CASE("Delete removes the chosen depths here as one undo step, but not owned
     CHECK(dot_row()->text(1) == "2");
 }
 
+TEST_CASE("The package and library searches hide what does not match, across refills") {
+    Opened opened;
+    Open(opened, true);
+    auto* package_filter = opened.window.findChild<QLineEdit*>("package_filter");
+    auto* library_filter = opened.window.findChild<QLineEdit*>("library_filter");
+    auto* library = opened.window.findChild<QTreeWidget*>("library");
+    auto* viewport = opened.window.findChild<Editor::Viewport*>();
+    REQUIRE(package_filter != nullptr);
+    REQUIRE(library_filter != nullptr);
+    REQUIRE(library != nullptr);
+    REQUIRE(viewport != nullptr);
+    const auto visible = [](QTreeWidget& tree, const QString& text) {
+        for (QTreeWidgetItemIterator it(&tree); *it != nullptr; ++it) {
+            if ((*it)->text(0) == text) return !(*it)->isHidden();
+        }
+        return false;
+    };
+    CHECK(visible(*opened.tree, "intro"));
+    CHECK(visible(*opened.tree, "dot"));
+    package_filter->setText("DOT");
+    CHECK_FALSE(visible(*opened.tree, "intro"));
+    CHECK(visible(*opened.tree, "dot"));
+    package_filter->clear();
+    CHECK(visible(*opened.tree, "intro"));
+
+    REQUIRE(library->topLevelItemCount() > 0);
+    QTreeWidgetItem* first = library->topLevelItem(0);
+    const auto character = static_cast<uint16_t>(first->data(0, Qt::UserRole).toUInt());
+    library_filter->setText("no such character");
+    package_filter->setText("INTRO");
+    CHECK(library->topLevelItem(0)->isHidden());
+    {
+        Script placed({});
+        emit viewport->CharacterDropped(character, 100, 50);
+        QApplication::processEvents();
+        CHECK(placed.Problems().isEmpty());
+    }
+    REQUIRE(library->topLevelItemCount() > 0);
+    CHECK(library->topLevelItem(0)->isHidden());
+    opened.tree->setCurrentItem(AnimationNamed(*opened.tree, "intro"));
+    {
+        Script duplicated({Choose("Duplicate intro..."), AcceptInput()});
+        RunMenu(duplicated, *opened.tree);
+        CHECK(duplicated.Problems().isEmpty());
+    }
+    REQUIRE(AnimationNamed(*opened.tree, "intro_copy") != nullptr);
+    CHECK(visible(*opened.tree, "intro_copy"));
+    CHECK_FALSE(visible(*opened.tree, "dot"));
+    library_filter->clear();
+    CHECK_FALSE(library->topLevelItem(0)->isHidden());
+}
+
 TEST_CASE("A closed panel comes back from the View menu") {
     Opened opened;
     Open(opened);

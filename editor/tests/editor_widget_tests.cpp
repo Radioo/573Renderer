@@ -4,6 +4,7 @@
 
 #include "editor_ease_dialog.h"
 #include "editor_timeline.h"
+#include "editor_filter.h"
 #include "editor_mime.h"
 #include "editor_viewport.h"
 
@@ -24,6 +25,8 @@
 #include <QDropEvent>
 #include <QMimeData>
 #include <QObject>
+#include <QTreeWidget>
+#include <QTreeWidgetItem>
 #include <QPoint>
 #include <QPointF>
 #include <QRect>
@@ -369,6 +372,29 @@ TEST_CASE("Ctrl and Shift clicks on depth numbers choose several depths without 
     Click(timeline, row(0), Qt::ShiftModifier);
     CHECK(groups.back() == std::vector<uint16_t>{4, 3, 2});
     CHECK(seeks == 0);
+}
+
+TEST_CASE("A search keeps what matches, the folders around it and what a matching folder holds") {
+    QTreeWidget tree;
+    auto* tex = new QTreeWidgetItem(&tree, {QString("tex")});
+    auto* dot = new QTreeWidgetItem(tex, {QString("dot")});
+    auto* leaf = new QTreeWidgetItem(tex, {QString("leaf")});
+    auto* afp = new QTreeWidgetItem(&tree, {QString("afp")});
+    auto* intro = new QTreeWidgetItem(afp, {QString("intro")});
+    const auto shown = [&] {
+        std::vector<bool> visible;
+        for (const QTreeWidgetItem* item : {tex, dot, leaf, afp, intro})
+            visible.push_back(!item->isHidden());
+        return visible;
+    };
+    Editor::ApplyFilter(tree, "DO");
+    CHECK(shown() == std::vector<bool>{true, true, false, false, false});
+    Editor::ApplyFilter(tree, "tex");
+    CHECK(shown() == std::vector<bool>{true, true, true, false, false});
+    Editor::ApplyFilter(tree, "zzz");
+    CHECK(shown() == std::vector<bool>{false, false, false, false, false});
+    Editor::ApplyFilter(tree, "");
+    CHECK(shown() == std::vector<bool>{true, true, true, true, true});
 }
 
 TEST_CASE("A locked depth is marked in the gutter") {

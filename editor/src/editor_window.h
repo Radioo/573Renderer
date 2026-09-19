@@ -51,6 +51,7 @@ class QPoint;
 class QTableWidget;
 class QTableWidgetItem;
 class QTimer;
+class QLineEdit;
 class QListWidget;
 class QTreeWidget;
 
@@ -253,6 +254,8 @@ private:
     ads::CDockManager* docks_ = nullptr;
     QTreeWidget* package_tree_ = nullptr;
     QTreeWidget* library_ = nullptr;
+    QLineEdit* package_filter_ = nullptr;
+    QLineEdit* library_filter_ = nullptr;
     QAction* onion_action_ = nullptr;
     std::vector<uint16_t> selected_depths_;
     QListWidget* history_list_ = nullptr;

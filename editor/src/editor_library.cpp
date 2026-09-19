@@ -1,5 +1,6 @@
 #include "editor_window.h"
 
+#include "editor_filter.h"
 #include "editor_mime.h"
 
 #include "document/characters.h"
@@ -98,6 +99,7 @@ void Window::FillLibrary(const AfpAnimation::Animation& animation,
         }
     }
     library_->resizeColumnToContents(0);
+    ApplyFilter(*library_, library_filter_->text());
 }
 
 void Window::ShowLibrarySprite(uint16_t sprite) {

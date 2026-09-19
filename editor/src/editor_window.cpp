@@ -1,6 +1,7 @@
 #include "editor_window.h"
 
 #include "editor_files.h"
+#include "editor_filter.h"
 #include "editor_host.h"
 #include "editor_layout.h"
 #include "editor_timeline.h"
@@ -31,6 +32,7 @@
 #include <QHeaderView>
 #include <QImage>
 #include <QKeySequence>
+#include <QLineEdit>
 #include <QListWidget>
 #include <QMenu>
 #include <QMenuBar>
@@ -196,13 +198,20 @@ void Window::BuildPanels() {
 
     ads::CDockAreaWidget* centre = docks_->setCentralWidget(MakePanel(tr("Viewport"), viewport_));
     ads::CDockAreaWidget* package_area = docks_->addDockWidget(
-        ads::LeftDockWidgetArea, MakePanel(tr("Package"), package_tree_), centre);
-    docks_->addDockWidget(ads::BottomDockWidgetArea, MakePanel(tr("Library"), BuildLibrary()),
-                          package_area);
+        ads::LeftDockWidgetArea,
+        MakePanel(tr("Package"), WithFilter(package_tree_, package_filter_ = new QLineEdit)),
+        centre);
+    QTreeWidget* library = BuildLibrary();
+    docks_->addDockWidget(
+        ads::BottomDockWidgetArea,
+        MakePanel(tr("Library"), WithFilter(library, library_filter_ = new QLineEdit)),
+        package_area);
     ads::CDockAreaWidget* inspector_area = docks_->addDockWidget(
         ads::RightDockWidgetArea, MakePanel(tr("Inspector"), inspector_), centre);
     docks_->addDockWidget(ads::BottomDockWidgetArea, MakePanel(tr("History"), BuildHistory()),
                           inspector_area);
+    package_filter_->setObjectName("package_filter");
+    library_filter_->setObjectName("library_filter");
     docks_->addDockWidget(ads::BottomDockWidgetArea, MakePanel(tr("Timeline"), timeline_panel),
                           centre);
 }
@@ -353,6 +362,7 @@ void Window::FillTree() {
     AddNodes(file_->Nodes(), package_tree_, nullptr);
     for (int column = 0; column < package_tree_->columnCount(); column++)
         package_tree_->resizeColumnToContents(column);
+    ApplyFilter(*package_tree_, package_filter_->text());
 }
 
 void Window::FillInspector(const std::vector<Document::InspectedRow>& rows) {

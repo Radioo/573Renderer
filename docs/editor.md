@@ -207,6 +207,19 @@ the other places the original is shown.
 The package tree and the library are named (`package`, `library`) so a test can
 tell the two trees apart.
 
+Both trees have a search box above them (`editor_filter.cpp`), as the After
+Effects Project panel does. Typing hides every row whose name does not contain
+the text, ignoring case; a folder stays shown while something inside it
+matches, and everything inside a matching folder stays shown, so searching
+`tex` keeps the whole texture folder. The boxes are named `package_filter` and
+`library_filter`. A refill builds every row again shown, so `FillTree` and
+`FillLibrary` apply the current text once they finish; without that, the first
+edit after a search would bring every row back while the box still held the
+text. `editor_widget_tests` checks the matching rules on a small tree, and the
+window test searches both trees, drops a character and duplicates an animation
+(the two refills) and sees the search still applied; dropping either reapply,
+the case folding, the folder rule or the matching folder rule fails one of them.
+
 A character can also be dragged from the library onto the stage, as footage is
 dragged into a composition. The library's drag data carries the character id
 under `application/x-ifs-editor-character` (`editor_mime.h`); the viewport takes
