@@ -363,6 +363,20 @@ clip unchanged.
 `CharacterOn` (the character a span shows on a frame, following swaps) and
 `IsStillCharacter` (an image or a shape) are shared with the clip trim.
 
+### Snapping on the timeline (`document/timeline_snap.h`)
+
+The frames the timeline snaps a dragged span to are boundaries between frames:
+a span from `a` to `b` has edges `a` and `b + 1`. `SnapTargets(rows, depth,
+dragged, marks)` lists the edges of every span except the dragged one, plus the
+marks the caller adds (the playhead, labels, the clip's start and end), sorted
+and without repeats. `SnapShift(span, by, targets, reach)` moves the span by
+`by` and then pulls it so that whichever of its two edges is nearer a target
+lands on it, if that target is within `reach` frames; when both edges are as
+near, the start wins. `SnapEdge(edge, targets, reach)` does the same for one
+edge, for trims, taking the earlier target when two are as near.
+`timeline_snap_tests.cpp` checks the target list, both edges pulling, the reach
+bound, the ties, and nothing moving out of reach.
+
 ### Sequencing spans (`document/span_sequence.h`)
 
 `SequenceSpans(animation, clip, depths, frame)` is After Effects' Sequence

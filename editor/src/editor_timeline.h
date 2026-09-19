@@ -100,6 +100,7 @@ private:
     [[nodiscard]] std::optional<Document::Span> SpanAt(uint16_t depth, int x) const;
     [[nodiscard]] SpanDrag DragAt(const Document::Span& span, int x) const;
     [[nodiscard]] Document::Span Dragged(const Document::Span& span, uint32_t to) const;
+    [[nodiscard]] uint32_t SnappedTo(uint16_t depth, uint32_t to) const;
     void ShowHoverCursor(QPoint at);
     [[nodiscard]] bool IsSelected(const Document::KeyRef& key) const;
     void SelectBand(bool adding);

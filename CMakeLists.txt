@@ -879,6 +879,7 @@ add_executable(document_tests
     tests/document/span_split_tests.cpp
     tests/document/clip_trim_tests.cpp
     tests/document/span_sequence_tests.cpp
+    tests/document/timeline_snap_tests.cpp
     tests/document/motion_path_tests.cpp
     tests/document/span_clipboard_tests.cpp
     tests/document/span_transplant_tests.cpp

@@ -318,3 +318,4 @@ captured. This milestone is the editing itself.
 - `issues/110-trim-clip-to-work-area.md` (milestone 8)
 - `issues/111-graph-editor.md` (milestone 8)
 - `issues/112-sequence-depths.md` (milestone 8)
+- `issues/113-timeline-snapping.md` (milestone 8)

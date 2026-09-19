@@ -3,6 +3,7 @@
 #include "document/keyframes.h"
 #include "document/outline.h"
 #include "document/timeline.h"
+#include "document/timeline_snap.h"
 
 #include <QColor>
 #include <QContextMenuEvent>
@@ -56,6 +57,7 @@ constexpr int kKeyRadius = 4;
 constexpr int kPropertyIndent = 8;
 constexpr int kSpanDragThreshold = 4;
 constexpr int kEdgeReach = 3;
+constexpr double kSnapPixels = 8.0;
 constexpr double kZoomStep = 1.25;
 constexpr double kMostPixelsPerFrame = 48.0;
 constexpr int kTickSpacing = 60;
@@ -497,6 +499,29 @@ Document::Span Timeline::Dragged(const Document::Span& span, uint32_t to) const 
                 std::clamp<int64_t>(static_cast<int64_t>(span.last_frame) + by, 0, last))};
 }
 
+uint32_t Timeline::SnappedTo(uint16_t depth, uint32_t to) const {
+    if (!span_grabbed_ || frame_count_ <= 1) return to;
+    std::vector<uint32_t> marks{0, frame_count_, frame_};
+    for (const Document::AnimationLabel& label : labels_)
+        marks.push_back(label.frame);
+    const std::vector<uint32_t> targets =
+        Document::SnapTargets(rows_, depth, *span_grabbed_, marks);
+    const double frames_per_pixel =
+        static_cast<double>(frame_count_ - 1) / static_cast<double>(width() - kGutterWidth - 1);
+    const auto reach = static_cast<uint32_t>(kSnapPixels * frames_per_pixel);
+    switch (span_drag_) {
+    case SpanDrag::TrimStart:
+        return Document::SnapEdge(to, targets, reach);
+    case SpanDrag::TrimEnd:
+        return std::max<uint32_t>(Document::SnapEdge(to + 1, targets, reach), 1) - 1;
+    case SpanDrag::Move:
+        break;
+    }
+    const int64_t by = static_cast<int64_t>(to) - static_cast<int64_t>(span_from_);
+    const int64_t snapped = Document::SnapShift(*span_grabbed_, by, targets, reach);
+    return static_cast<uint32_t>(std::max<int64_t>(static_cast<int64_t>(span_from_) + snapped, 0));
+}
+
 void Timeline::ShowHoverCursor(QPoint at) {
     const std::optional<std::size_t> lane = LaneAt(at.y());
     std::optional<Document::Span> span;
@@ -555,6 +580,10 @@ void Timeline::mousePressEvent(QMouseEvent* event) {
             PressSpan(lanes[*lane], event->pos());
         }
     }
+    if (span_depth_) {
+        emit DepthChosen(*span_depth_);
+        return;
+    }
     if (!(band_from_ && toggle)) ChooseAt(event->pos().x(), event->pos().y());
 }
 
@@ -579,6 +608,8 @@ void Timeline::mouseMoveEvent(QMouseEvent* event) {
             return;
         span_dragging_ = true;
         span_to_ = XToFrame(event->pos().x());
+        if ((event->modifiers() & Qt::ShiftModifier) != 0)
+            span_to_ = SnappedTo(*span_depth_, span_to_);
         update();
         return;
     }
@@ -589,13 +620,20 @@ void Timeline::mouseReleaseEvent(QMouseEvent* event) {
     if (event->button() != Qt::LeftButton) return;
     const std::optional<uint32_t> from = drag_from_;
     const std::optional<uint16_t> span_depth = span_dragging_ ? span_depth_ : std::nullopt;
+    const bool clicked_bar = span_depth_ && !span_dragging_;
+    uint32_t to = XToFrame(event->pos().x());
+    if (span_depth && (event->modifiers() & Qt::ShiftModifier) != 0)
+        to = SnappedTo(*span_depth, to);
     drag_from_.reset();
     band_from_.reset();
     span_depth_.reset();
     span_dragging_ = false;
     update();
+    if (clicked_bar) {
+        ChooseAt(event->pos().x(), event->pos().y());
+        return;
+    }
     if (span_depth && span_grabbed_) {
-        const uint32_t to = XToFrame(event->pos().x());
         if (span_drag_ == SpanDrag::Move) {
             const int64_t moved = static_cast<int64_t>(to) - static_cast<int64_t>(span_from_);
             if (moved != 0) emit SpanMoved(*span_depth, span_from_, moved);

@@ -256,6 +256,79 @@ TEST_CASE("Dragging a depth's bar asks to move that span by whole frames") {
     CHECK(moves.size() == 1);
 }
 
+TEST_CASE("Pressing a bar chooses its depth, and only a click without a drag seeks") {
+    Editor::Timeline timeline;
+    timeline.resize(kTimelineWidth, 200);
+    timeline.ShowAnimation(
+        11,
+        {Document::DepthRow{
+            .depth = 3, .spans = {Document::Span{.first_frame = 1, .last_frame = 8}}, .shows = {}}},
+        {});
+    std::vector<uint32_t> depths;
+    std::vector<uint32_t> frames;
+    QObject::connect(&timeline, &Editor::Timeline::DepthChosen,
+                     [&depths](uint32_t depth) { depths.push_back(depth); });
+    QObject::connect(&timeline, &Editor::Timeline::FrameChosen,
+                     [&frames](uint32_t frame) { frames.push_back(frame); });
+    Drag(timeline, {FrameX(3), kDepthRowY}, {FrameX(5), kDepthRowY});
+    CHECK_FALSE(depths.empty());
+    CHECK(frames.empty());
+    Click(timeline, {FrameX(6), kDepthRowY});
+    CHECK(frames == std::vector<uint32_t>{6});
+}
+
+TEST_CASE("Holding Shift snaps a dragged bar's ends to other spans and the clip's marks") {
+    constexpr uint32_t kFrames = 201;
+    Editor::Timeline timeline;
+    timeline.resize(kTimelineWidth, 200);
+    timeline.ShowAnimation(
+        kFrames,
+        {Document::DepthRow{.depth = 3,
+                            .spans = {Document::Span{.first_frame = 10, .last_frame = 40}},
+                            .shows = {}},
+         Document::DepthRow{.depth = 5,
+                            .spans = {Document::Span{.first_frame = 60, .last_frame = 80}},
+                            .shows = {}}},
+        {Document::AnimationLabel{.name = "loop", .frame = 150}});
+    timeline.SetFrame(100);
+    const auto x_of = [](uint32_t frame) {
+        return FrameX(0) + ((FrameX(10) - FrameX(0)) * frame / (kFrames - 1));
+    };
+    std::vector<int64_t> moves;
+    std::vector<Document::Span> trims;
+    QObject::connect(&timeline, &Editor::Timeline::SpanMoved,
+                     [&moves](uint16_t, uint32_t, int64_t by) { moves.push_back(by); });
+    QObject::connect(&timeline, &Editor::Timeline::SpanTrimmed,
+                     [&trims](uint16_t, uint32_t, uint32_t first, uint32_t last) {
+                         trims.push_back({.first_frame = first, .last_frame = last});
+                     });
+    Drag(timeline, {x_of(20), kDepthRowY}, {x_of(38), kDepthRowY});
+    Drag(timeline, {x_of(20), kDepthRowY}, {x_of(38), kDepthRowY}, Qt::ShiftModifier);
+    CHECK(moves == std::vector<int64_t>{18, 19});
+    constexpr int kSecondRowY = kDepthRowY + 16;
+    Drag(timeline, {x_of(70), kSecondRowY}, {x_of(88), kSecondRowY}, Qt::ShiftModifier);
+    Drag(timeline, {x_of(70), kSecondRowY}, {x_of(138), kSecondRowY}, Qt::ShiftModifier);
+    Drag(timeline, {x_of(70), kSecondRowY}, {x_of(189), kSecondRowY}, Qt::ShiftModifier);
+    CHECK(moves == std::vector<int64_t>{18, 19, 19, 69, 120});
+    const auto ghost_reaches = [&timeline](double x) {
+        const QImage drawn = timeline.grab().toImage();
+        for (int y = 26; y < 26 + 16; y++) {
+            if (drawn.pixelColor(static_cast<int>(x), y) == QColor(240, 190, 80)) return true;
+        }
+        return false;
+    };
+    Send(timeline, QEvent::MouseButtonPress, {x_of(40), kDepthRowY}, Qt::LeftButton);
+    Send(timeline, QEvent::MouseMove, {x_of(58), kDepthRowY}, Qt::LeftButton);
+    CHECK_FALSE(ghost_reaches(x_of(59) - 1));
+    Send(timeline, QEvent::MouseMove, {x_of(58), kDepthRowY}, Qt::LeftButton, Qt::ShiftModifier);
+    CHECK(ghost_reaches(x_of(59) - 1));
+    Send(timeline, QEvent::MouseButtonRelease, {x_of(58), kDepthRowY}, Qt::NoButton,
+         Qt::ShiftModifier);
+    Drag(timeline, {x_of(10), kDepthRowY}, {x_of(1), kDepthRowY}, Qt::ShiftModifier);
+    CHECK(trims == std::vector<Document::Span>{{.first_frame = 10, .last_frame = 59},
+                                               {.first_frame = 0, .last_frame = 40}});
+}
+
 TEST_CASE("A hidden depth's bars are drawn grey") {
     Editor::Timeline timeline;
     timeline.resize(kTimelineWidth, 200);

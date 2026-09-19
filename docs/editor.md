@@ -372,7 +372,26 @@ timeline, with an outline showing where it will land, and letting go applies
 with it (`Document::ShiftAuthored`) and the project is saved. Pressing within three
 pixels of a bar's start or end, where the pointer turns into a sizing arrow,
 trims the span instead (`Document::TrimSpan`, or `Document::TrimOwnedSpan` for
-an owned depth, whose trimmed keyframes are then kept). The timeline menu
+an owned depth, whose trimmed keyframes are then kept). Holding Shift while
+dragging a bar snaps it, as it does in After Effects (`Timeline::SnappedTo`,
+through `Document::SnapTargets`, `SnapShift` and `SnapEdge`): a moved bar puts
+whichever of its ends lands nearest on a target, a trimmed edge goes to the
+nearest one, and the outline shows the snapped place while dragging. The
+targets are where every other span starts and where it ends (the frame after
+its last), the playhead, the labels, and the clip's first frame and end. The
+reach is 8 pixels turned into frames at the current zoom, so it grows as the
+timeline is zoomed out and is no frames at all once a frame is wider than 8
+pixels. Pressing a bar chooses its depth straight away but seeks only if the
+mouse is let go without dragging, so a drag leaves the playhead where it was
+and a bar can be snapped to it; a click on a bar still seeks as before. The
+widget tests Shift-drag bars onto another span, the playhead, a label and the
+clip's end, see the outline snap before the release and a plain drag not snap,
+trim both edges with Shift, and check that a drag on a bar does not seek while
+a click does. Dropping the Shift check while dragging or on release, any of
+the marks, either edge rule, the reach, the deferred seek or choosing the depth
+on the press fails them.
+
+The timeline menu
 offers to move the span under the playhead to another depth number
 (`Document::ChangeSpanDepth`), which moves an owned depth's record with it, and
 to duplicate it onto another depth (`Window::DuplicateSpanToDepth`, suggesting
