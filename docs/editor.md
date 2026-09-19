@@ -477,6 +477,21 @@ sees its record offered for detaching on its new frames and saved there.
 Dropping the menu entry, the ownership lookup, the record move or the save
 fails it.
 
+With the timeline focused, the clipboard keys work on keyframes when some are
+selected and on the chosen depth otherwise, the way Delete already does:
+Ctrl+C copies the selected keyframes or the chosen depth's span under the
+playhead (`Window::CopySelection`), Ctrl+X copies and then deletes them or
+removes the chosen depths (`Window::CutSelection`, deleting only when the copy
+worked), and Ctrl+V pastes whichever was copied last, keyframes onto the
+playhead or a span through the usual paste that asks for a depth
+(`Window::PasteClipboard`, `keys_copied_last_`). The depth window test copies
+a depth, pastes it onto a new depth, cuts that depth and pastes it back; the
+keyframe window test cuts a keyframe and pastes it on another frame, copies
+one and pastes it, then copies a depth and sees Ctrl+V paste the depth rather
+than the keyframes. Dropping either record of what was copied, the delete
+after a keyframe cut, the removal after a depth cut, the depth copy, the paste
+choice, the cut shortcut or the keyframe copy fails them.
+
 `Edit > Duplicate depth` (Ctrl+D, After Effects' Duplicate Layer) copies the
 selected depth's span under the playhead onto the first depth above it that is
 free for it (`Window::DuplicateChosenDepth`, `Document::FreeDepthAbove`), with

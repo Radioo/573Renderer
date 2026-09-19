@@ -50,8 +50,9 @@ void Window::AddKeyActions() {
         connect(action, &QAction::triggered, this, slot);
         timeline_->addAction(action);
     };
-    add(tr("Copy keyframes"), QKeySequence::Copy, &Window::CopySelectedKeys);
-    add(tr("Paste keyframes"), QKeySequence::Paste, &Window::PasteCopiedKeys);
+    add(tr("Copy"), QKeySequence::Copy, &Window::CopySelection);
+    add(tr("Cut"), QKeySequence::Cut, &Window::CutSelection);
+    add(tr("Paste"), QKeySequence::Paste, &Window::PasteClipboard);
     add(tr("Delete keyframes"), QKeySequence::Delete, &Window::RemoveSelectedKeys);
     add(tr("Select every keyframe"), QKeySequence::SelectAll, &Window::SelectAllKeys);
     add(tr("Toggle hold"), QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_H),
@@ -64,18 +65,44 @@ void Window::AddKeyActions() {
         [this] { EasyEaseSelectedKeys(Document::EasySide::Out); });
 }
 
-void Window::CopySelectedKeys() {
-    if (!depth_) return;
+bool Window::CopySelectedKeys() {
+    if (!depth_) return false;
     const Document::AuthoredDepth* owned = AuthoredAt(static_cast<uint16_t>(*depth_), frame_);
-    if (owned == nullptr) return;
+    if (owned == nullptr) return false;
     const auto copied = Document::CopyKeys(*owned, timeline_->SelectedKeys());
     if (!copied) {
         ReportProblem(QString::fromStdString(copied.error()));
-        return;
+        return false;
     }
     copied_keys_ = *copied;
+    keys_copied_last_ = true;
     statusBar()->showMessage(
         tr("Copied %n keyframe(s)", nullptr, static_cast<int>(timeline_->SelectedKeys().size())));
+    return true;
+}
+
+void Window::CopySelection() {
+    if (!timeline_->SelectedKeys().empty()) {
+        CopySelectedKeys();
+        return;
+    }
+    if (depth_) CopySpanAt(static_cast<uint16_t>(*depth_), frame_);
+}
+
+void Window::CutSelection() {
+    if (!timeline_->SelectedKeys().empty()) {
+        if (CopySelectedKeys()) RemoveSelectedKeys();
+        return;
+    }
+    if (depth_ && CopySpanAt(static_cast<uint16_t>(*depth_), frame_)) RemoveChosenDepths(frame_);
+}
+
+void Window::PasteClipboard() {
+    if (keys_copied_last_) {
+        PasteCopiedKeys();
+        return;
+    }
+    PasteSpanAt(frame_);
 }
 
 void Window::PasteCopiedKeys() {

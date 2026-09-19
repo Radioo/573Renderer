@@ -297,3 +297,59 @@ TEST_CASE("Toggling hold switches the selected keyframes between holding and lin
     }
     CHECK(x_on(1) == linear);
 }
+
+TEST_CASE("Cut and paste move keyframes, and paste takes whatever was copied last") {
+    Opened opened;
+    Open(opened, true);
+    auto* timeline = opened.window.findChild<Editor::Timeline*>();
+    auto* viewport = opened.window.findChild<Editor::Viewport*>();
+    REQUIRE(timeline != nullptr);
+    REQUIRE(viewport != nullptr);
+    OwnDroppedDot(opened);
+    const auto move_on = [&](uint32_t frame, double dx) {
+        emit timeline->FrameChosen(frame);
+        emit timeline->DepthChosen(3);
+        Script moved({});
+        emit viewport->Dragged(3, dx, 0, true);
+        QApplication::processEvents();
+        CHECK(moved.Problems().isEmpty());
+    };
+    const auto x_on = [&](uint32_t frame) {
+        emit timeline->FrameChosen(frame);
+        const QString text = QString::fromStdString(RowValue(*opened.inspector, "Translation"));
+        return text.section(',', 0, 0).trimmed().toInt();
+    };
+    QAction* copy = ShortcutAction(opened.window, QKeySequence(QKeySequence::Copy));
+    QAction* cut = ShortcutAction(opened.window, QKeySequence(QKeySequence::Cut));
+    QAction* paste = ShortcutAction(opened.window, QKeySequence(QKeySequence::Paste));
+    REQUIRE(copy != nullptr);
+    REQUIRE(cut != nullptr);
+    REQUIRE(paste != nullptr);
+    move_on(0, 10);
+    move_on(2, 40);
+    CHECK(x_on(2) == 11000);
+    timeline->SelectKeys({Document::KeyRef{.property = "Translation", .frame = 2}});
+    cut->trigger();
+    CHECK(x_on(2) == 10200);
+    emit timeline->FrameChosen(1);
+    paste->trigger();
+    CHECK(x_on(1) == 11000);
+    timeline->SelectKeys({Document::KeyRef{.property = "Translation", .frame = 0}});
+    copy->trigger();
+    emit timeline->FrameChosen(2);
+    paste->trigger();
+    CHECK(x_on(2) == 10200);
+    CHECK(x_on(1) == 11000);
+
+    timeline->SelectKeys({});
+    emit timeline->FrameChosen(0);
+    emit timeline->DepthChosen(3);
+    copy->trigger();
+    {
+        Script pasted({AcceptInput()});
+        paste->trigger();
+        REQUIRE(Settle([&pasted] { return pasted.Finished(); }));
+        CHECK(pasted.Problems().isEmpty());
+    }
+    CHECK(RowValue(*opened.inspector, "Depth") == "4");
+}

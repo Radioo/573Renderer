@@ -633,3 +633,46 @@ TEST_CASE("Ctrl+D duplicates the chosen depth onto the first free depth above it
     REQUIRE(Settle([&refused] { return !refused.Problems().isEmpty(); }));
     CHECK(refused.Problems().front() == "Depth 9 holds nothing on frame 1");
 }
+
+TEST_CASE("With no keyframe selected the clipboard keys copy, cut and paste the chosen depth") {
+    Opened opened;
+    Open(opened, true);
+    auto* timeline = opened.window.findChild<Editor::Timeline*>();
+    REQUIRE(timeline != nullptr);
+    QAction* copy = ShortcutAction(opened.window, QKeySequence(QKeySequence::Copy));
+    QAction* cut = ShortcutAction(opened.window, QKeySequence(QKeySequence::Cut));
+    QAction* paste = ShortcutAction(opened.window, QKeySequence(QKeySequence::Paste));
+    REQUIRE(copy != nullptr);
+    REQUIRE(cut != nullptr);
+    REQUIRE(paste != nullptr);
+    const auto character_of = [&](uint16_t depth) {
+        emit timeline->FrameChosen(1);
+        emit timeline->DepthChosen(depth);
+        return RowValue(*opened.inspector, "Character");
+    };
+    const std::string dot = character_of(2);
+    copy->trigger();
+    CHECK(opened.window.statusBar()->currentMessage() == "Copied depth 2, 3 frames");
+    const auto paste_here = [&] {
+        emit timeline->FrameChosen(0);
+        Script pasted({AcceptInput()});
+        paste->trigger();
+        REQUIRE(Settle([&pasted] { return pasted.Finished(); }));
+        INFO(pasted.Problems().join("|").toStdString());
+        CHECK(pasted.Problems().isEmpty());
+    };
+    paste_here();
+    CHECK(character_of(3) == dot);
+    {
+        Script removed({});
+        emit timeline->DepthChosen(3);
+        cut->trigger();
+        QApplication::processEvents();
+        INFO(removed.Problems().join("|").toStdString());
+        CHECK(removed.Problems().isEmpty());
+    }
+    CHECK(character_of(3) == "no Character row");
+    CHECK(character_of(2) == dot);
+    paste_here();
+    CHECK(character_of(3) == dot);
+}

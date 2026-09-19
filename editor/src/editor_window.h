@@ -119,7 +119,10 @@ private:
                         const std::vector<int64_t>& value);
     bool EditOwned(const QString& name, const OwnedChange& change);
     void AddKeyActions();
-    void CopySelectedKeys();
+    bool CopySelectedKeys();
+    void CopySelection();
+    void CutSelection();
+    void PasteClipboard();
     void PasteCopiedKeys();
     void RemoveSelectedKeys();
     void SelectAllKeys();
@@ -253,7 +256,7 @@ private:
                      const std::vector<Document::CharacterSummary>& characters);
     void ShowLibrarySprite(uint16_t sprite);
     void ShowLibraryMenu(const QPoint& where);
-    void CopySpanAt(uint16_t depth, uint32_t frame);
+    bool CopySpanAt(uint16_t depth, uint32_t frame);
     void PasteSpanAt(uint32_t frame);
     void GroupDepthsIntoSprite(uint16_t depth, uint32_t frame);
     void UngroupSpriteAt(uint16_t depth, uint32_t frame);
@@ -315,6 +318,7 @@ private:
     QString key_property_;
     std::optional<uint32_t> key_frame_;
     std::optional<Document::KeyClip> copied_keys_;
+    bool keys_copied_last_ = false;
     std::string package_name_;
     std::string animation_path_;
     std::string animation_name_;

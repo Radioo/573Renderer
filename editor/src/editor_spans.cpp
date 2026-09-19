@@ -364,15 +364,17 @@ std::optional<uint16_t> Window::AskForFreeDepth(const QString& title, uint16_t f
     return static_cast<uint16_t>(chosen);
 }
 
-void Window::CopySpanAt(uint16_t depth, uint32_t frame) {
-    if (!file_ || animation_path_.empty()) return;
+bool Window::CopySpanAt(uint16_t depth, uint32_t frame) {
+    if (!file_ || animation_path_.empty()) return false;
     auto copied = Document::CopySpanFrom(*file_, animation_path_, clip_, depth, frame);
     if (!copied) {
         ReportProblem(QString::fromStdString(copied.error()));
-        return;
+        return false;
     }
     copied_span_ = std::move(*copied);
+    keys_copied_last_ = false;
     statusBar()->showMessage(tr("Copied depth %1, %2 frames").arg(depth).arg(copied_span_->length));
+    return true;
 }
 
 void Window::PasteSpanAt(uint32_t frame) {
