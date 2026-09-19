@@ -5,6 +5,7 @@
 #include "document/frame_edit.h"
 #include "document/group_sprite.h"
 #include "document/outline.h"
+#include "document/span_arrange.h"
 #include "document/span_clipboard.h"
 #include "document/span_edit.h"
 #include "document/span_transplant.h"
@@ -13,16 +14,21 @@
 #include "formats/afp_animation.h"
 #include "support/expected.h"
 
+#include <QAction>
 #include <QInputDialog>
+#include <QKeySequence>
+#include <QMenu>
 #include <QStatusBar>
 #include <QString>
 
 #include <algorithm>
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <limits>
 #include <optional>
 #include <string>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -101,6 +107,53 @@ void Window::MoveSpanToDepth(uint16_t depth, uint32_t frame) {
         SaveProject();
     }
     ShowFrame();
+}
+
+void Window::ArrangeDepth(Document::Arrange how, const QString& name) {
+    if (!file_ || animation_path_.empty() || !depth_) return;
+    const auto depth = static_cast<uint16_t>(*depth_);
+    const uint32_t frame = frame_;
+    const Document::ClipId clip = clip_;
+    std::vector<Document::DepthChange> changes;
+    if (!EditAnimation(name.arg(depth),
+                       [&changes, clip, depth, frame, how](AfpAnimation::Animation& edited)
+                           -> Support::Expected<void, std::string> {
+                           auto arranged = Document::ArrangeSpan(edited, clip, depth, frame, how);
+                           if (!arranged) return Support::Unexpected(arranged.error());
+                           changes = std::move(*arranged);
+                           return {};
+                       })) {
+        return;
+    }
+    std::vector<std::pair<std::size_t, uint16_t>> owned;
+    for (const Document::DepthChange& change : changes) {
+        if (const auto index = AuthoredIndexAt(change.from, frame))
+            owned.emplace_back(*index, change.to);
+    }
+    for (const auto& [index, to] : owned)
+        authored_[index].depth = to;
+    if (!owned.empty()) SaveProject();
+    depth_ = changes.front().to;
+    ShowFrame();
+}
+
+void Window::AddArrangeMenu(QMenu* edit) {
+    QMenu* arrange = edit->addMenu(tr("A&rrange"));
+    const std::array<std::tuple<QString, QKeySequence, Document::Arrange, QString>, 4> lines{{
+        {tr("Bring &forward"), QKeySequence(Qt::CTRL | Qt::Key_BracketRight),
+         Document::Arrange::Forward, tr("Bring depth %1 forward")},
+        {tr("Send &backward"), QKeySequence(Qt::CTRL | Qt::Key_BracketLeft),
+         Document::Arrange::Backward, tr("Send depth %1 backward")},
+        {tr("Bring to f&ront"), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_BracketRight),
+         Document::Arrange::Front, tr("Bring depth %1 to the front")},
+        {tr("Send to bac&k"), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_BracketLeft),
+         Document::Arrange::Back, tr("Send depth %1 to the back")},
+    }};
+    for (const auto& [text, keys, how, name] : lines) {
+        QAction* action = arrange->addAction(text);
+        action->setShortcut(keys);
+        connect(action, &QAction::triggered, this, [this, how, name] { ArrangeDepth(how, name); });
+    }
 }
 
 bool Window::OwnsDepthIn(const Document::GroupRange& range) const {

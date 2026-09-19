@@ -277,6 +277,7 @@ void Window::BuildMenus() {
     connect(redo_action_, &QAction::triggered, this, &Window::Redo);
     edit->addSeparator();
     AddAlignMenu(edit);
+    AddArrangeMenu(edit);
 }
 
 void Window::ChooseGameDirectory() {

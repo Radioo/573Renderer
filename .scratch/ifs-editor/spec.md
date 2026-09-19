@@ -310,3 +310,4 @@ captured. This milestone is the editing itself.
 - `issues/102-align-and-spread.md` (milestone 8)
 - `issues/103-remove-chosen-depths.md` (milestone 8)
 - `issues/104-search-filters.md` (milestone 8)
+- `issues/105-arrange-depths.md` (milestone 8)

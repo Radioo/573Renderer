@@ -2,6 +2,7 @@
 
 #include <DockWidget.h>
 
+#include "editor_files.h"
 #include "editor_mime.h"
 #include "editor_timeline.h"
 #include "editor_viewport.h"
@@ -14,6 +15,7 @@
 #include "document/stage_bounds.h"
 #include "document/frame_edit.h"
 #include "document/place_image.h"
+#include "document/project.h"
 #include "document/tags.h"
 #include "formats/afp_animation.h"
 #include "formats/ifs_archive.h"
@@ -517,6 +519,123 @@ TEST_CASE("Delete removes the chosen depths here as one undo step, but not owned
     REQUIRE(Settle([&refused] { return !refused.Problems().isEmpty(); }));
     CHECK(refused.Problems().front().contains("owns depth 3"));
     CHECK(dot_row()->text(1) == "2");
+}
+
+TEST_CASE("Arranging swaps depths in the stacking order and carries what the project owns") {
+    Opened opened;
+    Open(opened, true);
+    auto* timeline = opened.window.findChild<Editor::Timeline*>();
+    auto* viewport = opened.window.findChild<Editor::Viewport*>();
+    auto* library = opened.window.findChild<QTreeWidget*>("library");
+    REQUIRE(timeline != nullptr);
+    REQUIRE(viewport != nullptr);
+    REQUIRE(library != nullptr);
+    std::optional<uint16_t> dot;
+    for (int at = 0; at < library->topLevelItemCount(); at++) {
+        if (library->topLevelItem(at)->text(0).contains("dot"))
+            dot = static_cast<uint16_t>(library->topLevelItem(at)->data(0, Qt::UserRole).toUInt());
+    }
+    REQUIRE(dot.has_value());
+    if (!dot) return;
+    {
+        Script placed({});
+        emit viewport->CharacterDropped(*dot, 500, 300);
+        QApplication::processEvents();
+        CHECK(placed.Problems().isEmpty());
+    }
+    QAction* project = nullptr;
+    for (QAction* action : opened.window.findChildren<QAction*>()) {
+        if (action->text() == "&New project...") project = action;
+    }
+    REQUIRE(project != nullptr);
+    const QString folder = opened.dir.filePath("project");
+    REQUIRE(QDir().mkpath(folder));
+    {
+        Script made({PickFile(folder)});
+        project->trigger();
+        REQUIRE(Settle([&made] { return made.Finished(); }));
+        CHECK(made.Problems().isEmpty());
+    }
+    emit timeline->DepthChosen(3);
+    {
+        Script owned({Choose("Let the project own depth 3 from here")});
+        emit timeline->MenuRequested(QPoint(4, 4), 0, QString());
+        REQUIRE(Settle([&owned] { return owned.Finished(); }));
+        CHECK(owned.Problems().isEmpty());
+    }
+    const auto x_of = [&](uint16_t depth) {
+        emit timeline->DepthChosen(depth);
+        const QString text = QString::fromStdString(RowValue(*opened.inspector, "Translation"));
+        return text.section(',', 0, 0).trimmed().toInt();
+    };
+    const auto owns = [&](uint16_t depth) {
+        emit timeline->DepthChosen(depth);
+        bool offered = false;
+        Script looked({Look(QString("Detach depth %1 back to baked data").arg(depth), offered)});
+        emit timeline->MenuRequested(QPoint(4, 4), 0, QString());
+        REQUIRE(Settle([&looked] { return looked.Finished(); }));
+        return offered;
+    };
+    const auto saved_depth = [&folder]() -> std::optional<uint16_t> {
+        const auto project = Document::ReadProject(Editor::ReadFileBytes(
+            QString::fromStdString(Document::ProjectManifestPath(folder.toStdString()))));
+        if (!project || project->content.size() != 1) return std::nullopt;
+        return project->content.front().depth;
+    };
+    const int baked = x_of(2);
+    CHECK(x_of(3) == 10000);
+    CHECK(owns(3));
+    CHECK(saved_depth() == uint16_t{3});
+
+    QAction* backward = ShortcutAction(opened.window, QKeySequence(Qt::CTRL | Qt::Key_BracketLeft));
+    QAction* front =
+        ShortcutAction(opened.window, QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_BracketRight));
+    QAction* forward = ShortcutAction(opened.window, QKeySequence(Qt::CTRL | Qt::Key_BracketRight));
+    REQUIRE(backward != nullptr);
+    REQUIRE(front != nullptr);
+    REQUIRE(forward != nullptr);
+    emit timeline->DepthChosen(3);
+    {
+        Script sent({});
+        backward->trigger();
+        QApplication::processEvents();
+        CHECK(sent.Problems().isEmpty());
+    }
+    CHECK(RowValue(*opened.inspector, "Depth") == "2");
+    CHECK(x_of(2) == 10000);
+    CHECK(x_of(3) == baked);
+    CHECK(owns(2));
+    CHECK_FALSE(owns(3));
+    CHECK(saved_depth() == uint16_t{2});
+
+    emit timeline->DepthChosen(1);
+    {
+        Script brought({});
+        front->trigger();
+        QApplication::processEvents();
+        CHECK(brought.Problems().isEmpty());
+    }
+    CHECK(RowValue(*opened.inspector, "Depth") == "3");
+    CHECK(RowValue(*opened.inspector, "Character") == "7");
+    CHECK(x_of(1) == 10000);
+    CHECK(x_of(2) == baked);
+    CHECK(owns(1));
+
+    emit timeline->DepthChosen(3);
+    {
+        Script refused({});
+        forward->trigger();
+        REQUIRE(Settle([&refused] { return !refused.Problems().isEmpty(); }));
+        CHECK(refused.Problems().front().contains("already at the front"));
+    }
+
+    QAction* undo = ShortcutAction(opened.window, QKeySequence(QKeySequence::Undo));
+    REQUIRE(undo != nullptr);
+    undo->trigger();
+    undo->trigger();
+    CHECK(x_of(3) == 10000);
+    CHECK(x_of(2) == baked);
+    CHECK(owns(3));
 }
 
 TEST_CASE("The package and library searches hide what does not match, across refills") {

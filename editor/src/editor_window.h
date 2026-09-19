@@ -18,6 +18,7 @@
 #include "support/expected.h"
 #include "document/outline.h"
 #include "document/place_image.h"
+#include "document/span_arrange.h"
 #include "document/stage_align.h"
 #include "document/stage_bounds.h"
 #include "document/stage_move.h"
@@ -210,6 +211,8 @@ private:
     void ReshapeOnStage(uint16_t depth, double scale_x, double scale_y, double turn, bool finished);
     void MoveSpanInTime(uint16_t depth, uint32_t frame, int64_t by);
     void MoveSpanToDepth(uint16_t depth, uint32_t frame);
+    void ArrangeDepth(Document::Arrange how, const QString& name);
+    void AddArrangeMenu(QMenu* edit);
     void DuplicateSpanToDepth(uint16_t depth, uint32_t frame);
     [[nodiscard]] std::optional<uint16_t> NextFreeDepth(uint16_t fallback);
     [[nodiscard]] std::optional<uint16_t> AskForFreeDepth(const QString& title, uint16_t fallback);

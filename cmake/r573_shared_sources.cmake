@@ -58,6 +58,7 @@ set(R573_EDITOR_DOCUMENT_SOURCES
     src/document/label_edit.cpp
     src/document/script_source.cpp
     src/document/span_edit.cpp
+    src/document/span_arrange.cpp
     src/document/span_clipboard.cpp
     src/document/span_transplant.cpp
     src/document/unused_definitions.cpp

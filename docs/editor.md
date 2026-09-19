@@ -362,7 +362,23 @@ the cursor into whichever clip is picked (`Window::PasteSpanAt`,
 or between sprites. The copy remembers the animation it came from, so pasting
 after opening another animation of the package brings the sprites and shapes
 the depth uses along under new ids, as one undo step. Opening a package drops
-the copy, because its shapes and images belong to the package it came from. It also offers to group the selected depth and the ones above it
+the copy, because its shapes and images belong to the package it came from.
+
+`Edit > Arrange` changes the selected depth's place in the stacking order at the
+playhead, with After Effects' shortcuts: `Bring forward` (Ctrl+]), `Send
+backward` (Ctrl+[), `Bring to front` (Ctrl+Shift+]) and `Send to back`
+(Ctrl+Shift+[) (`Window::ArrangeDepth`, through `Document::ArrangeSpan`). It is
+one undo step named after the depth, the arranged span stays selected on its new
+depth, and every project-owned record among the spans that moved takes its new
+depth before the project is saved, the same as `Move to another depth` does for
+one span. A refusal, such as a depth already at the front, shows in the status
+bar and changes nothing. The window test sends an owned depth backward and
+brings another to the front, reads the depths, the characters, the owned
+translation and the saved manifest, and undoes both; leaving the owned records
+or the manifest alone, not following the selection, or wiring `Bring to front`
+to `Forward` fails it.
+
+The timeline menu also offers to group the selected depth and the ones above it
 into a sprite (`Window::GroupDepthsIntoSprite`): it asks for the last depth, then
 the first and last frame, which start as the widest span those depths have under
 the playhead, and applies `Document::GroupIntoSprite` as one undo step. It is

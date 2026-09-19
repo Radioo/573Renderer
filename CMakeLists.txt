@@ -875,6 +875,7 @@ add_executable(document_tests
     tests/document/project_tests.cpp
     tests/document/script_source_tests.cpp
     tests/document/span_edit_tests.cpp
+    tests/document/span_arrange_tests.cpp
     tests/document/span_clipboard_tests.cpp
     tests/document/span_transplant_tests.cpp
     tests/document/unused_definitions_tests.cpp

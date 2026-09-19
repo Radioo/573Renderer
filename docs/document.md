@@ -301,6 +301,35 @@ owning only the original.
 `ShiftAuthored` moves a project-owned depth's range and every keyframe by the
 same frames, so the project keeps describing the span after `MoveSpan`.
 
+### Arranging a span in the stacking order (`document/span_arrange.h`)
+
+`ArrangeSpan(animation, clip, depth, frame, how)` is After Effects' Layer >
+Arrange. The depths it works among are the ones showing something on that
+frame, in depth order; empty depth numbers in between are skipped, since moving
+into one changes nothing on the stage. `Forward` swaps the span with the one on
+the next shown depth above, `Backward` with the next below. `Front` swaps it
+with every shown depth above in turn, so it ends on the highest and each depth
+it passed drops one place, as a layer brought to the front pushes the others
+down; `Back` does the same downwards.
+
+Each swap is three `ChangeSpanDepth` calls through a scratch depth, the first
+depth number the clip never places: the span goes to the scratch depth, the
+other span takes its depth, and the span takes the other depth. So every rule of
+`ChangeSpanDepth` holds for both spans, and when the two spans cover different
+frames and one would run into another span of its new depth, the arrange is
+refused. It is refused as well when the span is already at the front or back,
+when the depth shows nothing on the frame, and when any span involved carries a
+clip depth: a mask keeps its range as a number, so moving it, or moving a depth
+past it, would change what it masks. It works on a copy, so a refusal leaves
+the clip as it was. It returns every span's old and new depth, the arranged
+span first, which is what the editor needs to move project-owned records. A
+script that addresses a depth by number is not followed, as with
+`ChangeSpanDepth`.
+
+`span_arrange_tests.cpp` covers the four directions, skipping a depth not shown
+on the frame, depth 0 being in use (so the scratch depth is not simply 0), and
+the refusals, each leaving the clip unchanged.
+
 ### Copying a span between clips (`document/span_clipboard.h`)
 
 `CopySpan(animation, path, clip, depth, frame)` records the span of a depth
