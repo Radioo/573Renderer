@@ -37,6 +37,12 @@ public:
 
     [[nodiscard]] std::optional<Snapshot> Redo(Snapshot current);
 
+    [[nodiscard]] std::vector<std::string> Names() const;
+
+    [[nodiscard]] std::size_t Position() const { return undo_.size(); }
+
+    [[nodiscard]] std::optional<Snapshot> Jump(std::size_t position, Snapshot current);
+
     void MarkSaved() { clean_depth_ = undo_.size(); }
 
     [[nodiscard]] bool Saved() const;

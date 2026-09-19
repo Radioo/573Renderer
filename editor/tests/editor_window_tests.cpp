@@ -1,9 +1,6 @@
 #include <catch2/catch_session.hpp>
 #include <catch2/catch_test_macros.hpp>
 
-#include <DockWidget.h>
-
-#include "editor_mime.h"
 #include "editor_timeline.h"
 #include "editor_viewport.h"
 #include "editor_window.h"
@@ -40,8 +37,6 @@
 #include <QLineEdit>
 #include <QList>
 #include <QMenu>
-#include <QMimeData>
-#include <QModelIndex>
 #include <QMessageBox>
 #include <QPoint>
 #include <QSettings>
@@ -65,7 +60,6 @@
 #include <deque>
 #include <span>
 #include <functional>
-#include <memory>
 #include <optional>
 #include <string>
 #include <utility>
@@ -284,196 +278,6 @@ TEST_CASE("An animation duplicated from the package menu opens as the copy") {
     RunMenu(refused, *opened.tree);
     REQUIRE_FALSE(refused.Problems().isEmpty());
     CHECK(refused.Problems().front().contains("already"));
-}
-
-TEST_CASE("The library counts uses, places a character and shows a sprite on its own") {
-    Opened opened;
-    Open(opened, true);
-    auto* library = opened.window.findChild<QTreeWidget*>("library");
-    auto* timeline = opened.window.findChild<Editor::Timeline*>();
-    auto* clips = opened.window.findChild<QComboBox*>();
-    REQUIRE(library != nullptr);
-    REQUIRE(timeline != nullptr);
-    REQUIRE(clips != nullptr);
-    const auto row = [&](const QString& part) -> QTreeWidgetItem* {
-        for (QTreeWidgetItemIterator it(library); *it != nullptr; ++it) {
-            if ((*it)->text(0).contains(part)) return *it;
-        }
-        return nullptr;
-    };
-    REQUIRE(row("dot") != nullptr);
-    CHECK(row("dot")->text(1) == "1");
-
-    library->setCurrentItem(row("dot"));
-    {
-        Script placed(
-            {Choose("Place on a new depth from frame 0..."), AcceptInput(), AcceptInput()});
-        emit library->customContextMenuRequested(QPoint(4, 4));
-        REQUIRE(Settle([&placed] { return placed.Finished(); }));
-        INFO(placed.Problems().join("|").toStdString());
-        CHECK(placed.Problems().isEmpty());
-    }
-    REQUIRE(row("dot") != nullptr);
-    CHECK(row("dot")->text(1) == "2");
-    CHECK(RowValue(*opened.inspector, "Depth") == "3");
-
-    emit timeline->DepthChosen(3);
-    {
-        Script grouped({Choose("Group depth 3 and up here into a sprite..."), AcceptInput(),
-                        AcceptInput(), AcceptInput()});
-        emit timeline->MenuRequested(QPoint(4, 4), 0, QString());
-        REQUIRE(Settle([&grouped] { return grouped.Finished(); }));
-        INFO(grouped.Problems().join("|").toStdString());
-        CHECK(grouped.Problems().isEmpty());
-    }
-    QTreeWidgetItem* sprite = row("Sprite");
-    REQUIRE(sprite != nullptr);
-    CHECK(sprite->text(1) == "1");
-    CHECK(clips->currentIndex() == 0);
-    const QVariant id = sprite->data(0, Qt::UserRole);
-    emit library->itemDoubleClicked(sprite, 0);
-    REQUIRE(Settle([&] { return clips->currentIndex() != 0; }));
-    CHECK(clips->currentData().toInt() == id.toInt());
-}
-
-TEST_CASE("The timeline names what each depth places") {
-    Opened opened;
-    Open(opened, true);
-    auto* timeline = opened.window.findChild<Editor::Timeline*>();
-    REQUIRE(timeline != nullptr);
-    const int middle = timeline->width() / 2;
-    CHECK(timeline->SpanNameAt(QPoint(middle, 34)).isEmpty());
-    CHECK(timeline->SpanNameAt(QPoint(middle, 50)).contains("dot"));
-}
-
-TEST_CASE("A character dragged from the library lands on a new depth where it is dropped") {
-    Opened opened;
-    Open(opened, true);
-    auto* library = opened.window.findChild<QTreeWidget*>("library");
-    auto* viewport = opened.window.findChild<Editor::Viewport*>();
-    REQUIRE(library != nullptr);
-    REQUIRE(viewport != nullptr);
-    int dot = -1;
-    for (int at = 0; at < library->topLevelItemCount(); at++) {
-        if (library->topLevelItem(at)->text(0).contains("dot")) dot = at;
-    }
-    REQUIRE(dot >= 0);
-    const QModelIndex index = library->model()->index(dot, 0);
-    const std::unique_ptr<QMimeData> data(library->model()->mimeData({index}));
-    REQUIRE(data != nullptr);
-    REQUIRE(data->hasFormat(Editor::kCharacterMime));
-    const auto character = static_cast<uint16_t>(data->data(Editor::kCharacterMime).toUInt());
-    CHECK(character == library->topLevelItem(dot)->data(0, Qt::UserRole).toUInt());
-
-    {
-        Script placed({});
-        emit viewport->CharacterDropped(character, 100, 50);
-        QApplication::processEvents();
-        CHECK(placed.Problems().isEmpty());
-    }
-    CHECK(RowValue(*opened.inspector, "Depth") == "3");
-    CHECK(RowValue(*opened.inspector, "Translation") == "2000, 1000");
-    CHECK(library->topLevelItem(dot)->text(1) == "2");
-
-    auto* timeline = opened.window.findChild<Editor::Timeline*>();
-    auto* clips = opened.window.findChild<QComboBox*>();
-    REQUIRE(timeline != nullptr);
-    REQUIRE(clips != nullptr);
-    emit timeline->DepthChosen(1);
-    {
-        Script grouped({Choose("Group depth 1 and up here into a sprite..."), AcceptInput(),
-                        AcceptInput(), AcceptInput()});
-        emit timeline->MenuRequested(QPoint(4, 4), 0, QString());
-        REQUIRE(Settle([&grouped] { return grouped.Finished(); }));
-        CHECK(grouped.Problems().isEmpty());
-    }
-    clips->setCurrentIndex(1);
-    Script refused({});
-    emit viewport->CharacterDropped(character, 100, 50);
-    REQUIRE(Settle([&refused] { return !refused.Problems().isEmpty(); }));
-    CHECK(refused.Problems().front().contains("on its own"));
-}
-
-TEST_CASE("A sprite duplicated in the library can be put on a depth in place of the original") {
-    Opened opened;
-    Open(opened, true);
-    auto* library = opened.window.findChild<QTreeWidget*>("library");
-    auto* timeline = opened.window.findChild<Editor::Timeline*>();
-    auto* clips = opened.window.findChild<QComboBox*>();
-    REQUIRE(library != nullptr);
-    REQUIRE(timeline != nullptr);
-    REQUIRE(clips != nullptr);
-    emit timeline->DepthChosen(2);
-    {
-        Script grouped({Choose("Group depth 2 and up here into a sprite..."), AcceptInput(),
-                        AcceptInput(), AcceptInput()});
-        emit timeline->MenuRequested(QPoint(4, 4), 0, QString());
-        REQUIRE(Settle([&grouped] { return grouped.Finished(); }));
-        CHECK(grouped.Problems().isEmpty());
-    }
-    const auto sprites = [&] {
-        std::vector<QTreeWidgetItem*> found;
-        for (int at = 0; at < library->topLevelItemCount(); at++) {
-            if (library->topLevelItem(at)->text(0).startsWith("Sprite"))
-                found.push_back(library->topLevelItem(at));
-        }
-        return found;
-    };
-    REQUIRE(sprites().size() == 1);
-    const QString original = sprites()[0]->data(0, Qt::UserRole).toString();
-    const int clip_count = clips->count();
-    library->setCurrentItem(sprites()[0]);
-    {
-        Script duplicated({Choose("Duplicate this sprite")});
-        emit library->customContextMenuRequested(QPoint(4, 4));
-        REQUIRE(Settle([&duplicated] { return duplicated.Finished(); }));
-        CHECK(duplicated.Problems().isEmpty());
-    }
-    REQUIRE(sprites().size() == 2);
-    CHECK(clips->count() == clip_count + 1);
-    QTreeWidgetItem* copy =
-        sprites()[0]->data(0, Qt::UserRole).toString() == original ? sprites()[1] : sprites()[0];
-    const QString copied = copy->data(0, Qt::UserRole).toString();
-    CHECK(copy->text(1) == "0");
-
-    emit timeline->DepthChosen(2);
-    library->setCurrentItem(copy);
-    {
-        Script used({Choose("Use on depth 2 from frame 0")});
-        emit library->customContextMenuRequested(QPoint(4, 4));
-        REQUIRE(Settle([&used] { return used.Finished(); }));
-        INFO(used.Problems().join("|").toStdString());
-        CHECK(used.Problems().isEmpty());
-    }
-    CHECK(RowValue(*opened.inspector, "Character") == copied.toStdString());
-    for (QTreeWidgetItem* one : sprites()) {
-        const bool is_copy = one->data(0, Qt::UserRole).toString() == copied;
-        CHECK(one->text(1) == (is_copy ? "1" : "0"));
-    }
-}
-
-TEST_CASE("A closed panel comes back from the View menu") {
-    Opened opened;
-    Open(opened);
-    ads::CDockWidget* library = nullptr;
-    for (ads::CDockWidget* dock : opened.window.findChildren<ads::CDockWidget*>()) {
-        if (dock->windowTitle() == "Library") library = dock;
-    }
-    REQUIRE(library != nullptr);
-    QAction* toggle = nullptr;
-    for (const QMenu* menu : opened.window.findChildren<QMenu*>()) {
-        if (menu->title() != "&Panels") continue;
-        for (QAction* action : menu->actions()) {
-            if (action->text() == "Library") toggle = action;
-        }
-    }
-    REQUIRE(toggle != nullptr);
-    CHECK_FALSE(library->isClosed());
-    library->closeDockWidget();
-    CHECK(library->isClosed());
-    CHECK_FALSE(toggle->isChecked());
-    toggle->trigger();
-    CHECK_FALSE(library->isClosed());
 }
 
 TEST_CASE("A package with no animation takes its first from another IFS") {

@@ -133,8 +133,8 @@ passed once each target had its own name.
 
 `Editor::Window` is a `QMainWindow` hosting a Qt Advanced Docking System
 `CDockManager`. The viewport is the dock manager's central widget, with the
-package tree docked left, the library below it, the inspector right
-and the timeline bottom. `View > Panels` has a toggle for each panel (the dock's
+package tree docked left, the library below it, the inspector right with the
+history below it, and the timeline bottom. `View > Panels` has a toggle for each panel (the dock's
 own toggle action), so a panel closed with its title bar button can be opened
 again. Qt 6
 Widgets is ADR 0003; the panel arrangement is the one the editor design
@@ -146,7 +146,8 @@ saved to `QSettings` on close and restored in the constructor
 layout version (`kDocksVersion`), and the dock manager ignores a saved state of
 another version, so a layout saved before a panel existed falls back to the
 default arrangement instead of restoring without the new panel. Raise the
-version whenever the set of panels changes; it went to 1 with the library. The organisation and application names
+version whenever the set of panels changes; it went to 1 with the library and
+2 with the history. The organisation and application names
 `QSettings` keys off are set in `main` before the window exists.
 
 ## The host
@@ -217,6 +218,16 @@ with its origin at the drop point (`Document::PlaceAtPoint`), as one undo step,
 and selects the new depth. While a sprite is edited over the root view the
 stage shows the root, so a drop there has no place in the sprite and is refused
 with a message saying to show the sprite on its own first.
+
+**History.** Every step the undo stack holds, under a first row, `Start`, which
+is the oldest document the stack can still reach (32 steps back at most), then
+each edit by the name the Edit menu gives it. The row for where the document is
+now is selected and the steps after it, which redo would bring back, are
+greyed. Clicking a row jumps there in one go (`Window::JumpInHistory`,
+`Document::History::Jump`) and shows the result once, instead of once per
+step. The list is refilled with the Edit menu's labels (`RefreshState`), so it
+follows every edit, undo, redo and jump; the jump is posted to the event loop
+because refilling deletes the clicked row.
 
 **Inspector.** Selecting an item calls `Outline::Describe` and prints
 `Document::Fields` as one line per field. When the selection is an animation

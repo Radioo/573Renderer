@@ -1,8 +1,11 @@
 #include "document/history.h"
 
+#include <cstddef>
 #include <optional>
+#include <ranges>
 #include <string>
 #include <utility>
+#include <vector>
 
 namespace Document {
 
@@ -56,6 +59,31 @@ std::optional<Snapshot> History::Redo(Snapshot current) {
     redo_.pop_back();
     undo_.push_back(Step{.name = step.name, .state = std::move(current)});
     return std::move(step.state);
+}
+
+std::vector<std::string> History::Names() const {
+    std::vector<std::string> names;
+    names.reserve(undo_.size() + redo_.size());
+    for (const Step& step : undo_)
+        names.push_back(step.name);
+    for (const Step& step : std::views::reverse(redo_))
+        names.push_back(step.name);
+    return names;
+}
+
+std::optional<Snapshot> History::Jump(std::size_t position, Snapshot current) {
+    if (position > undo_.size() + redo_.size()) return std::nullopt;
+    while (undo_.size() > position) {
+        std::optional<Snapshot> undone = Undo(std::move(current));
+        if (!undone) return std::nullopt;
+        current = std::move(*undone);
+    }
+    while (undo_.size() < position) {
+        std::optional<Snapshot> redone = Redo(std::move(current));
+        if (!redone) return std::nullopt;
+        current = std::move(*redone);
+    }
+    return current;
 }
 
 bool History::Saved() const {

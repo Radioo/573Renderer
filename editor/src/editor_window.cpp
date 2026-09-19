@@ -31,6 +31,7 @@
 #include <QHeaderView>
 #include <QImage>
 #include <QKeySequence>
+#include <QListWidget>
 #include <QMenu>
 #include <QMenuBar>
 #include <QMessageBox>
@@ -195,7 +196,10 @@ void Window::BuildPanels() {
         ads::LeftDockWidgetArea, MakePanel(tr("Package"), package_tree_), centre);
     docks_->addDockWidget(ads::BottomDockWidgetArea, MakePanel(tr("Library"), BuildLibrary()),
                           package_area);
-    docks_->addDockWidget(ads::RightDockWidgetArea, MakePanel(tr("Inspector"), inspector_), centre);
+    ads::CDockAreaWidget* inspector_area = docks_->addDockWidget(
+        ads::RightDockWidgetArea, MakePanel(tr("Inspector"), inspector_), centre);
+    docks_->addDockWidget(ads::BottomDockWidgetArea, MakePanel(tr("History"), BuildHistory()),
+                          inspector_area);
     docks_->addDockWidget(ads::BottomDockWidgetArea, MakePanel(tr("Timeline"), timeline_panel),
                           centre);
 }
@@ -733,6 +737,7 @@ void Window::RefreshState() {
     redo_action_->setText(history_.CanRedo()
                               ? tr("&Redo %1").arg(QString::fromStdString(history_.RedoName()))
                               : tr("&Redo"));
+    FillHistory();
     if (!file_) {
         setWindowTitle(tr("IFS Editor"));
         return;

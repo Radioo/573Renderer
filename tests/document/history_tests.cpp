@@ -105,6 +105,46 @@ TEST_CASE("Undo and redo walk the document back and forward") {
     CHECK_FALSE(history.CanRedo());
 }
 
+TEST_CASE("Jumping to a step undoes or redoes everything between here and there") {
+    Document::History history;
+    Document::File file = OpenSample();
+    for (const std::string name : {"a", "b", "c"}) {
+        history.Record("Add label " + name, Of(file));
+        AddLabel(file, name, 1);
+    }
+    const std::vector<std::string> names{"Add label a", "Add label b", "Add label c"};
+    CHECK(history.Names() == names);
+    CHECK(history.Position() == 3);
+
+    auto back = history.Jump(1, Of(file));
+    REQUIRE(back.has_value());
+    if (!back) return;
+    file = std::move(back->file);
+    CHECK(LabelCount(file) == 2);
+    CHECK(history.Position() == 1);
+    CHECK(history.Names() == names);
+    CHECK(history.UndoName() == "Add label a");
+    CHECK(history.RedoName() == "Add label b");
+
+    auto forward = history.Jump(3, Of(file));
+    REQUIRE(forward.has_value());
+    if (!forward) return;
+    file = std::move(forward->file);
+    CHECK(LabelCount(file) == 4);
+    CHECK(history.Position() == 3);
+
+    auto start = history.Jump(0, Of(file));
+    REQUIRE(start.has_value());
+    if (!start) return;
+    file = std::move(start->file);
+    CHECK(LabelCount(file) == 1);
+    CHECK_FALSE(history.CanUndo());
+
+    CHECK_FALSE(history.Jump(4, Of(file)).has_value());
+    CHECK(history.Position() == 0);
+    CHECK(history.Names() == names);
+}
+
 TEST_CASE("An empty history undoes and redoes nothing") {
     Document::History history;
     const Document::File file = OpenSample();

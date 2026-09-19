@@ -77,6 +77,7 @@ add_executable(ifs_editor WIN32
     src/editor_snapshot.cpp
     src/editor_images.cpp
     src/editor_library.cpp
+    src/editor_history.cpp
     src/editor_animations.cpp
     src/editor_key_selection.cpp
     src/editor_ease_dialog.cpp
@@ -125,6 +126,7 @@ r573_deploy_qt_plugin(editor_widget_tests Qt6::QJpegPlugin)
 add_executable(editor_window_tests
     tests/editor_window_tests.cpp
     tests/editor_live_window_tests.cpp
+    tests/editor_panel_window_tests.cpp
     src/editor_window.cpp
     src/editor_files.cpp
     src/editor_host.cpp
@@ -138,6 +140,7 @@ add_executable(editor_window_tests
     src/editor_snapshot.cpp
     src/editor_images.cpp
     src/editor_library.cpp
+    src/editor_history.cpp
     src/editor_animations.cpp
     src/editor_key_selection.cpp
     src/editor_ease_dialog.cpp

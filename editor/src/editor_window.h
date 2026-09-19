@@ -49,6 +49,7 @@ class QPoint;
 class QTableWidget;
 class QTableWidgetItem;
 class QTimer;
+class QListWidget;
 class QTreeWidget;
 
 namespace Editor {
@@ -203,6 +204,9 @@ private:
     [[nodiscard]] std::optional<uint32_t> AskForLastFrame(uint32_t first);
     void AddCharacterDepth(uint16_t depth, uint16_t character, uint32_t first, uint32_t last);
     [[nodiscard]] QTreeWidget* BuildLibrary();
+    [[nodiscard]] QListWidget* BuildHistory();
+    void FillHistory();
+    void JumpInHistory(int row);
     void FillLibrary(const AfpAnimation::Animation& animation,
                      const std::vector<Document::CharacterSummary>& characters);
     void ShowLibrarySprite(uint16_t sprite);
@@ -235,6 +239,7 @@ private:
     ads::CDockManager* docks_ = nullptr;
     QTreeWidget* package_tree_ = nullptr;
     QTreeWidget* library_ = nullptr;
+    QListWidget* history_list_ = nullptr;
     QTableWidget* inspector_ = nullptr;
     QAction* background_action_ = nullptr;
     Viewport* viewport_ = nullptr;

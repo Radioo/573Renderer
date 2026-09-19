@@ -131,6 +131,15 @@ format that are kept byte for byte cannot be disturbed from the inspector.
 records the document as it was, with a name a user recognises; `Undo(current)`
 hands back the recorded document and keeps the current one for `Redo`.
 
+`Names()` lists every step the stack holds in the order they were made, the
+undoable ones first and then the redoable ones in the order they would be
+redone, and `Position()` is how many of them are applied. `Jump(position,
+current)` walks there through `Undo` and `Redo` one step at a time and hands
+back the document at that point, so jumping any distance keeps the same
+invariants a single step does, and a position past the end is refused.
+`history_tests` jumps back, forward and to the start, and fails without the
+redo walk or with the redo names left out.
+
 A step is a `Snapshot`: the `File` and the project's authored content
 (`std::vector<AuthoredDepth>`) together. The authored content is not stored in
 the file until export, so a history of files alone undid a keyframe edit in the

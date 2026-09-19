@@ -301,3 +301,4 @@ captured. This milestone is the editing itself.
 - `issues/93-name-timeline-spans.md` (milestone 8)
 - `issues/94-drop-characters-on-the-stage.md` (milestone 8)
 - `issues/95-duplicate-sprites.md` (milestone 8)
+- `issues/96-history-panel.md` (milestone 8)
