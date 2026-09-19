@@ -179,6 +179,7 @@ void Window::BuildPanels() {
     AddKeyActions();
     connect(timeline_, &Timeline::KeyMenuRequested, this, &Window::ShowKeyMenu);
     connect(timeline_, &Timeline::CharacterDropped, this, &Window::DropCharacterOnTimeline);
+    connect(timeline_, &Timeline::LabelMoved, this, &Window::MoveLabelTo);
     graph_ = new GraphEditor;
     connect(graph_, &GraphEditor::FrameChosen, this, &Window::SeekTo);
     connect(graph_, &GraphEditor::KeyChosen, this, &Window::ChooseKey);

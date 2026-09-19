@@ -59,6 +59,7 @@ constexpr int kNamePadding = 3;
 constexpr int kNamePixels = 10;
 constexpr int kEmptyHeight = 80;
 constexpr int kLabelReach = 30;
+constexpr int kLabelGrab = 4;
 constexpr int kKeyReach = 6;
 constexpr int kKeyRadius = 4;
 constexpr int kPropertyIndent = 8;
@@ -305,9 +306,9 @@ void Timeline::ChooseAt(int x, int y) {
     emit FrameChosen(frame);
 }
 
-QString Timeline::LabelNear(int x) const {
+QString Timeline::LabelNear(int x, int reach) const {
     QString found;
-    int best = kLabelReach;
+    int best = reach;
     for (const Document::AnimationLabel& label : labels_) {
         const int distance = std::abs(FrameToX(label.frame) - x);
         if (distance > best) continue;
@@ -332,7 +333,7 @@ void Timeline::contextMenuEvent(QContextMenuEvent* event) {
             return;
         }
     }
-    emit MenuRequested(event->globalPos(), XToFrame(x), LabelNear(x));
+    emit MenuRequested(event->globalPos(), XToFrame(x), LabelNear(x, kLabelReach));
 }
 
 void Timeline::PressKeys(const Lane& lane, QPoint at, bool toggle) {
@@ -568,12 +569,28 @@ void Timeline::SelectBand(bool adding) {
     selected_keys_ = std::move(chosen);
 }
 
+bool Timeline::PressLabel(QPoint at) {
+    if (at.y() >= kRulerHeight) return false;
+    const QString name = LabelNear(at.x(), kLabelGrab);
+    const auto label =
+        std::ranges::find(labels_, name.toStdString(), &Document::AnimationLabel::name);
+    if (name.isEmpty() || label == labels_.end()) return false;
+    label_grabbed_ = name;
+    label_from_ = label->frame;
+    label_to_ = label->frame;
+    label_press_x_ = at.x();
+    return true;
+}
+
 void Timeline::mousePressEvent(QMouseEvent* event) {
     drag_from_.reset();
     band_from_.reset();
     span_depth_.reset();
     span_dragging_ = false;
+    label_grabbed_.reset();
+    label_dragging_ = false;
     if (event->button() != Qt::LeftButton) return;
+    if (PressLabel(event->pos())) return;
     const bool toggle = (event->modifiers() & Qt::ControlModifier) != 0;
     const std::optional<std::size_t> lane = LaneAt(event->pos().y());
     if (lane) {
@@ -596,6 +613,14 @@ void Timeline::mousePressEvent(QMouseEvent* event) {
 void Timeline::mouseMoveEvent(QMouseEvent* event) {
     if ((event->buttons() & Qt::LeftButton) == 0) {
         ShowHoverCursor(event->pos());
+        return;
+    }
+    if (label_grabbed_) {
+        if (!label_dragging_ && std::abs(event->pos().x() - label_press_x_) < kSpanDragThreshold)
+            return;
+        label_dragging_ = true;
+        label_to_ = XToFrame(event->pos().x());
+        update();
         return;
     }
     if (drag_from_) {
@@ -624,6 +649,19 @@ void Timeline::mouseMoveEvent(QMouseEvent* event) {
 
 void Timeline::mouseReleaseEvent(QMouseEvent* event) {
     if (event->button() != Qt::LeftButton) return;
+    if (label_grabbed_) {
+        const QString label = *label_grabbed_;
+        const bool dragged = label_dragging_;
+        label_grabbed_.reset();
+        label_dragging_ = false;
+        update();
+        if (!dragged) {
+            ChooseAt(event->pos().x(), event->pos().y());
+            return;
+        }
+        if (label_to_ != label_from_) emit LabelMoved(label, label_to_);
+        return;
+    }
     const std::optional<uint32_t> from = drag_from_;
     const std::optional<uint16_t> span_depth = span_dragging_ ? span_depth_ : std::nullopt;
     const bool clicked_bar = span_depth_ && !span_dragging_;
@@ -727,7 +765,9 @@ void Timeline::paintEvent(QPaintEvent* event) {
     painter.drawText(QRect(0, 0, kGutterWidth, kRulerHeight), Qt::AlignCenter,
                      QString::number(frame_));
     for (const Document::AnimationLabel& label : labels_) {
-        const int x = FrameToX(label.frame);
+        const bool dragged = label_dragging_ && label_grabbed_ &&
+                             *label_grabbed_ == QString::fromStdString(label.name);
+        const int x = FrameToX(dragged ? label_to_ : label.frame);
         painter.setPen(kLabelMark);
         painter.drawLine(x, 0, x, kRulerHeight);
         painter.drawText(x + 3, kRulerHeight - 8, QString::fromStdString(label.name));

@@ -234,6 +234,7 @@ private:
     [[nodiscard]] std::optional<uint16_t> NextFreeDepth(uint16_t fallback);
     [[nodiscard]] std::optional<uint16_t> AskForFreeDepth(const QString& title, uint16_t fallback);
     void PlaceDroppedCharacter(uint16_t character, double x, double y);
+    void MoveLabelTo(const QString& label, uint32_t frame);
     void DropCharacterOnTimeline(uint16_t character, uint32_t frame, std::optional<uint16_t> row);
     void DuplicateLibrarySprite(uint16_t sprite);
     void NewEmptySprite();

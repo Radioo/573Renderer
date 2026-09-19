@@ -71,6 +71,7 @@ signals:
     void KeyMenuRequested(const QPoint& where, const QString& property, uint32_t frame,
                           bool on_key);
     void CharacterDropped(uint16_t character, uint32_t frame, std::optional<uint16_t> depth);
+    void LabelMoved(const QString& label, uint32_t frame);
 
 protected:
     bool event(QEvent* event) override;
@@ -116,7 +117,8 @@ private:
     void DrawKeys(QPainter& painter, const Document::Track& track, int y) const;
     void DrawSpanGhost(QPainter& painter, const Document::Span& span, int y) const;
     void Resize();
-    [[nodiscard]] QString LabelNear(int x) const;
+    [[nodiscard]] QString LabelNear(int x, int reach) const;
+    [[nodiscard]] bool PressLabel(QPoint at);
     [[nodiscard]] bool PressSwitch(const Lane& lane, QPoint at);
     [[nodiscard]] bool PressDepthNumber(const Lane& lane, QPoint at,
                                         Qt::KeyboardModifiers modifiers);
@@ -144,6 +146,11 @@ private:
     int span_press_x_ = 0;
     uint32_t span_from_ = 0;
     uint32_t span_to_ = 0;
+    std::optional<QString> label_grabbed_;
+    uint32_t label_from_ = 0;
+    uint32_t label_to_ = 0;
+    int label_press_x_ = 0;
+    bool label_dragging_ = false;
     bool span_dragging_ = false;
     SpanDrag span_drag_ = SpanDrag::Move;
     QPoint band_to_;

@@ -913,6 +913,22 @@ stops playback, stays inside the clip, and seeks the same way a click on the
 ruler does (`Window::JumpToFrame`); the clip's frame count comes from the host
 when it shows the clip and from the model otherwise (`Window::ClipFrameCount`).
 
+A label can be dragged along the ruler, as a marker is in After Effects:
+pressing within 4 pixels of its line on the ruler grabs it instead of seeking,
+it is drawn where it is being dragged once the pointer has moved past the drag
+threshold, and letting go moves it there (`Timeline::LabelMoved`, then
+`Window::MoveLabelTo` with `Document::MoveLabel`, one undo step, the same edit
+as the menu's `Move <label> to frame N`). A press that is not dragged seeks as
+any click on the ruler does, a drag that ends on the label's own frame changes
+nothing, and a press further than 4 pixels from a label, or on a depth row
+under it, is an ordinary seek or span press. The widget test drags a label and
+sees it drawn at the new frame before the release, clicks it, drags it back to
+its own frame, drags from 10 pixels beside it and from the depth row below it;
+the window test moves the sample's label and reads its frame from the saved
+IFS. Dropping the ruler rule, the tight reach, the drag threshold, the
+same-frame guard, the seek on a click, the live drawing, the connection or the
+frame fails them.
+
 B and N start and end the work area at the playhead and `Clear the work area`
 drops it (`Window::SetWorkArea`). Playback then stays inside it, and the ruler
 shades it (`Timeline::SetWorkArea`). It belongs to the clip on screen and is

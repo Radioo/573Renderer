@@ -523,3 +523,30 @@ TEST_CASE("The bracket keys move and trim the chosen depth's span to the playhea
     REQUIRE(Settle([&refused] { return !refused.Problems().isEmpty(); }));
     CHECK(refused.Problems().front().contains("holds nothing"));
 }
+
+TEST_CASE("A label dragged on the ruler is moved in the saved package") {
+    Opened opened;
+    Open(opened, true);
+    auto* timeline = opened.window.findChild<Editor::Timeline*>();
+    REQUIRE(timeline != nullptr);
+    {
+        Script moved({});
+        emit timeline->LabelMoved("loop", 1);
+        QApplication::processEvents();
+        CHECK(moved.Problems().isEmpty());
+    }
+    QAction* save = ShortcutAction(opened.window, QKeySequence(QKeySequence::Save));
+    REQUIRE(save != nullptr);
+    save->trigger();
+    QFile read(opened.dir.filePath("sample.ifs"));
+    REQUIRE(read.open(QIODevice::ReadOnly));
+    const QByteArray bytes = read.readAll();
+    const auto file = Document::File::Open(
+        std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(bytes.constData()),
+                                 static_cast<std::size_t>(bytes.size())));
+    REQUIRE(file.has_value());
+    const auto animation = file->ReadAnimation("afp/" + SamplePackage::HashPath("intro"));
+    REQUIRE(animation.has_value());
+    REQUIRE(animation->root.labels.size() == 1);
+    CHECK(animation->root.labels.front().frame == 1);
+}

@@ -22,6 +22,14 @@
 
 namespace Editor {
 
+void Window::MoveLabelTo(const QString& label, uint32_t frame) {
+    const Document::ClipId clip = clip_;
+    const std::string named = label.toStdString();
+    EditAnimation(tr("Move %1").arg(label), [clip, named, frame](AfpAnimation::Animation& edited) {
+        return Document::MoveLabel(edited, clip, named, frame);
+    });
+}
+
 void Window::ShowTimelineMenu(const QPoint& where, uint32_t frame, const QString& label) {
     if (!file_ || animation_path_.empty()) return;
     const Document::ClipId clip = clip_;
@@ -237,10 +245,7 @@ void Window::ShowTimelineMenu(const QPoint& where, uint32_t frame, const QString
         return;
     }
     if (chosen == move) {
-        EditAnimation(tr("Move %1").arg(label),
-                      [clip, named, frame](AfpAnimation::Animation& edited) {
-                          return Document::MoveLabel(edited, clip, named, frame);
-                      });
+        MoveLabelTo(label, frame);
         return;
     }
     if (chosen == remove) {
