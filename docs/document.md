@@ -296,6 +296,17 @@ because afp-core stops on it (`AFP_UNUSED_DEPTH used` in the placement parser).
 A script that addresses the depth by number (`swapDepths`, a target path) is not
 followed.
 
+`FreeDepthAbove(clip, depth, frame)` is the first depth above `depth` that the
+span on `frame` could be moved or copied to under those rules (`FreeTarget`):
+free over the span's frames, not placed or removed from its first frame to the
+frame after it, and not `0x3000`. It is where the editor's Ctrl+D puts a copy,
+so the copy draws directly over the original when nothing is in between. It
+returns nothing when the depth shows nothing on `frame`, and checks that first
+so it does not walk every depth number to find nothing. `span_edit_tests`
+covers a depth above that is taken, one that is taken only on other frames,
+the next depth up being free, nothing on the frame, and stepping over
+`0x3000`.
+
 `DuplicateSpan` copies a span onto another depth under the same rules: every
 placement of the span and the remove that closes it is copied with the new
 depth into the frame it came from, placements at the end of the frame and the

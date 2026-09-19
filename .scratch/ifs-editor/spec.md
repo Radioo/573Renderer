@@ -328,3 +328,4 @@ captured. This milestone is the editing itself.
 - `issues/120-toggle-hold.md` (milestone 8)
 - `issues/121-go-to-frame.md` (milestone 8)
 - `issues/122-timeline-zoom-keys.md` (milestone 8)
+- `issues/123-duplicate-depth.md` (milestone 8)

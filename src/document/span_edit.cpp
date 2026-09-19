@@ -197,6 +197,16 @@ Support::Expected<void, std::string> ChangeSpanDepth(AfpAnimation::Animation& an
     return {};
 }
 
+std::optional<uint16_t> FreeDepthAbove(const AfpAnimation::Container& clip, uint16_t depth,
+                                       uint32_t frame) {
+    if (!SpanOfDepth(clip, depth, frame)) return std::nullopt;
+    for (uint32_t above = depth + 1U; above <= std::numeric_limits<uint16_t>::max(); above++) {
+        if (FreeTarget(clip, depth, frame, static_cast<uint16_t>(above)))
+            return static_cast<uint16_t>(above);
+    }
+    return std::nullopt;
+}
+
 Support::Expected<void, std::string> DuplicateSpan(AfpAnimation::Animation& animation, ClipId clip,
                                                    uint16_t depth, uint32_t frame, uint16_t to) {
     auto found = RequireClip(animation, clip);

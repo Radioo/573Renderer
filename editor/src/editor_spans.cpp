@@ -429,8 +429,28 @@ void Window::DuplicateSpanToDepth(uint16_t depth, uint32_t frame) {
     if (!file_ || animation_path_.empty()) return;
     const std::optional<uint16_t> chosen =
         AskForFreeDepth(tr("Duplicate onto another depth"), depth);
-    if (!chosen) return;
-    const auto to = *chosen;
+    if (chosen) DuplicateSpanOnto(depth, frame, *chosen);
+}
+
+void Window::DuplicateChosenDepth() {
+    if (!file_ || animation_path_.empty() || !depth_) return;
+    const auto animation = file_->ReadAnimation(animation_path_);
+    if (!animation) {
+        ReportProblem(QString::fromStdString(animation.error()));
+        return;
+    }
+    const AfpAnimation::Container* shown = Document::FindClip(*animation, clip_);
+    const auto depth = static_cast<uint16_t>(*depth_);
+    const std::optional<uint16_t> above =
+        shown != nullptr ? Document::FreeDepthAbove(*shown, depth, frame_) : std::nullopt;
+    if (!above) {
+        ReportProblem(tr("Depth %1 holds nothing on frame %2").arg(depth).arg(frame_));
+        return;
+    }
+    DuplicateSpanOnto(depth, frame_, *above);
+}
+
+void Window::DuplicateSpanOnto(uint16_t depth, uint32_t frame, uint16_t to) {
     const Document::ClipId clip = clip_;
     if (!EditAnimation(tr("Duplicate depth %1 onto depth %2").arg(depth).arg(to),
                        [clip, depth, frame, to](AfpAnimation::Animation& edited) {

@@ -601,3 +601,35 @@ TEST_CASE("The timeline zoom keys zoom the timeline") {
     zoom_out->trigger();
     CHECK(timeline->minimumWidth() == fitted);
 }
+
+TEST_CASE("Ctrl+D duplicates the chosen depth onto the first free depth above it") {
+    Opened opened;
+    Open(opened, true);
+    auto* timeline = opened.window.findChild<Editor::Timeline*>();
+    REQUIRE(timeline != nullptr);
+    QAction* duplicate = ShortcutAction(opened.window, QKeySequence(Qt::CTRL | Qt::Key_D));
+    QAction* undo = ShortcutAction(opened.window, QKeySequence(QKeySequence::Undo));
+    REQUIRE(duplicate != nullptr);
+    REQUIRE(undo != nullptr);
+    const auto press = [&] {
+        Script pressed({});
+        duplicate->trigger();
+        QApplication::processEvents();
+        CHECK(pressed.Problems().isEmpty());
+    };
+    emit timeline->FrameChosen(1);
+    emit timeline->DepthChosen(1);
+    press();
+    CHECK(RowValue(*opened.inspector, "Depth") == "3");
+    CHECK(RowValue(*opened.inspector, "Character") == "7");
+    press();
+    CHECK(RowValue(*opened.inspector, "Depth") == "4");
+    undo->trigger();
+    emit timeline->DepthChosen(4);
+    CHECK(RowValue(*opened.inspector, "Character") == "no Character row");
+    emit timeline->DepthChosen(9);
+    Script refused({});
+    duplicate->trigger();
+    REQUIRE(Settle([&refused] { return !refused.Problems().isEmpty(); }));
+    CHECK(refused.Problems().front() == "Depth 9 holds nothing on frame 1");
+}

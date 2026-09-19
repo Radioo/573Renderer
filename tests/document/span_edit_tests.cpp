@@ -222,3 +222,16 @@ TEST_CASE("The nearest span is the one under the frame, or else the closest on t
     CHECK(nearest(19) == Document::Span{.first_frame = 10, .last_frame = 12});
     CHECK_FALSE(Document::NearestSpan(animation.root, kDepth + 1, 3).has_value());
 }
+
+TEST_CASE("The free depth above a span is the first one its frames leave free") {
+    AfpAnimation::Animation animation = Clip(10);
+    Add(animation, 1, 0, 5);
+    Add(animation, 2, 0, 2);
+    Add(animation, 3, 4, 5);
+    CHECK(Document::FreeDepthAbove(animation.root, 1, 0) == uint16_t{4});
+    CHECK(Document::FreeDepthAbove(animation.root, 2, 1) == uint16_t{3});
+    CHECK(Document::FreeDepthAbove(animation.root, 3, 4) == uint16_t{4});
+    CHECK_FALSE(Document::FreeDepthAbove(animation.root, 1, 7).has_value());
+    Add(animation, 0x2FFF, 0, 1);
+    CHECK(Document::FreeDepthAbove(animation.root, 0x2FFF, 0) == uint16_t{0x3001});
+}

@@ -26,6 +26,9 @@ namespace Document {
 ChangeSpanDepth(AfpAnimation::Animation& animation, ClipId clip, uint16_t depth, uint32_t frame,
                 uint16_t to);
 
+[[nodiscard]] std::optional<uint16_t> FreeDepthAbove(const AfpAnimation::Container& clip,
+                                                     uint16_t depth, uint32_t frame);
+
 [[nodiscard]] Support::Expected<void, std::string> DuplicateSpan(AfpAnimation::Animation& animation,
                                                                  ClipId clip, uint16_t depth,
                                                                  uint32_t frame, uint16_t to);

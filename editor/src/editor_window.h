@@ -233,6 +233,8 @@ private:
     void AddPlayheadMenu(QMenu* edit);
     void AddArrangeMenu(QMenu* edit);
     void DuplicateSpanToDepth(uint16_t depth, uint32_t frame);
+    void DuplicateChosenDepth();
+    void DuplicateSpanOnto(uint16_t depth, uint32_t frame, uint16_t to);
     [[nodiscard]] std::optional<uint16_t> NextFreeDepth(uint16_t fallback);
     [[nodiscard]] std::optional<uint16_t> AskForFreeDepth(const QString& title, uint16_t fallback);
     void PlaceDroppedCharacter(uint16_t character, double x, double y);

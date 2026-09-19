@@ -477,6 +477,17 @@ sees its record offered for detaching on its new frames and saved there.
 Dropping the menu entry, the ownership lookup, the record move or the save
 fails it.
 
+`Edit > Duplicate depth` (Ctrl+D, After Effects' Duplicate Layer) copies the
+selected depth's span under the playhead onto the first depth above it that is
+free for it (`Window::DuplicateChosenDepth`, `Document::FreeDepthAbove`), with
+no dialog, as one undo step, and selects the copy; the timeline menu's
+duplicate still asks for a depth, and both go through
+`Window::DuplicateSpanOnto`. A depth showing nothing on the playhead is
+reported. The window test duplicates depth 1 past the taken depth 2 onto 3,
+then 3 onto 4, undoes, and reads the report's exact text, which is what tells
+it apart from the document's own refusal; skipping a depth, taking a taken
+one, dropping the report or the shortcut fails it.
+
 `Edit > At the playhead` holds After Effects' bracket keys for the selected
 depth: `[` moves its span so it starts on the playhead and `]` so it ends there
 (`Window::MoveEdgeToPlayhead`, through `MoveSpanInTime`), Alt+`[` trims its
