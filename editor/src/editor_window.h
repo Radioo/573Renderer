@@ -238,6 +238,7 @@ private:
     void PreviewOnStage(AnimationChange change);
     void RunStagePreview();
     void MoveOnStage(uint16_t depth, double dx, double dy, bool finished);
+    [[nodiscard]] bool SketchMove(uint16_t depth, double dx, double dy, bool finished);
     void ReshapeOnStage(uint16_t depth, double scale_x, double scale_y, double turn, bool finished);
     void MoveSpanInTime(uint16_t depth, uint32_t frame, int64_t by);
     void MoveSpanToDepth(uint16_t depth, uint32_t frame);
@@ -352,6 +353,14 @@ private:
     bool preview_scheduled_ = false;
     bool previewed_ = false;
     QString last_error_;
+    struct Sketch {
+        uint16_t depth = 0;
+        uint32_t pressed = 0;
+        Document::StageOffset latest;
+        Document::SketchedOffsets offsets;
+    };
+    std::optional<Sketch> sketch_;
+    QAction* sketch_action_ = nullptr;
 };
 
 }

@@ -723,3 +723,33 @@ TEST_CASE("Fitting a depth to the stage scales it about its anchor and centres i
     REQUIRE_FALSE(sprite.isEmpty());
     CHECK(sprite.front().contains("no stage of its own"));
 }
+
+TEST_CASE("Flipping a depth mirrors its scale and flipping again puts it back") {
+    Opened opened;
+    Open(opened, true);
+    auto* timeline = opened.window.findChild<Editor::Timeline*>();
+    REQUIRE(timeline != nullptr);
+    const auto flip = [&](uint32_t depth, const QString& text) {
+        emit timeline->FrameChosen(0);
+        emit timeline->DepthChosen(depth);
+        QAction* action = nullptr;
+        for (QAction* one : opened.window.findChildren<QAction*>()) {
+            if (one->text() == text) action = one;
+        }
+        REQUIRE(action != nullptr);
+        Script run({});
+        action->trigger();
+        QApplication::processEvents();
+        CHECK(run.Problems().isEmpty());
+        return RowValue(*opened.inspector, "Scale");
+    };
+    emit timeline->FrameChosen(0);
+    emit timeline->DepthChosen(2);
+    const std::string before = RowValue(*opened.inspector, "Scale");
+    CHECK(flip(2, "Flip horizontally") == "-1024, 1024");
+    CHECK(flip(2, "Flip horizontally") == before);
+    CHECK(flip(2, "Flip vertically") == "1024, -1024");
+
+    OwnDroppedDot(opened);
+    CHECK(flip(3, "Flip vertically") == "1024, -1024");
+}

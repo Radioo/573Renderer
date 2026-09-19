@@ -554,3 +554,71 @@ TEST_CASE("Wiggling an owned depth's keyframes adds jittered keyframes between t
         CHECK(std::abs(x_on(frame) - before[frame]) <= 20);
     }
 }
+
+TEST_CASE("A motion sketch records the drag on every frame played and keys it on release") {
+    Opened opened;
+    Open(opened, true);
+    auto* timeline = opened.window.findChild<Editor::Timeline*>();
+    auto* viewport = opened.window.findChild<Editor::Viewport*>();
+    REQUIRE(timeline != nullptr);
+    REQUIRE(viewport != nullptr);
+    OwnDroppedDot(opened);
+    const auto action = [&](const QString& text) -> QAction* {
+        for (QAction* one : opened.window.findChildren<QAction*>()) {
+            if (one->text() == text) return one;
+        }
+        return nullptr;
+    };
+    QAction* sketch = action("Motion &sketch while dragging");
+    REQUIRE(sketch != nullptr);
+    const auto x_on = [&](uint32_t depth, uint32_t frame) {
+        emit timeline->FrameChosen(frame);
+        emit timeline->DepthChosen(depth);
+        const QString text = QString::fromStdString(RowValue(*opened.inspector, "Translation"));
+        return text.section(',', 0, 0).trimmed().toInt();
+    };
+    const std::vector<int> before{x_on(3, 0), x_on(3, 1), x_on(3, 2)};
+    const int baked_before = x_on(2, 0);
+
+    sketch->setChecked(true);
+    x_on(3, 0);
+    {
+        Script run({});
+        emit viewport->Dragged(3, 1, 0, false);
+        emit timeline->FrameChosen(1);
+        emit viewport->Dragged(3, 2, 0, false);
+        emit timeline->FrameChosen(2);
+        emit viewport->Dragged(3, 3, 0, true);
+        QApplication::processEvents();
+        CHECK(run.Problems().isEmpty());
+        CHECK(
+            RowValue(*opened.inspector, "Translation").starts_with(std::to_string(before[0] + 20)));
+    }
+    CHECK(x_on(3, 0) == before[0] + 20);
+    CHECK(x_on(3, 1) == before[0] + 40);
+    CHECK(x_on(3, 2) == before[0] + 60);
+
+    x_on(2, 0);
+    {
+        Script run({});
+        emit viewport->Dragged(2, 1, 0, true);
+        QApplication::processEvents();
+        CHECK(run.Problems().isEmpty());
+    }
+    CHECK(x_on(2, 0) == baked_before + 20);
+
+    sketch->setChecked(false);
+    const int sketched_one = x_on(3, 1);
+    const int sketched_two = x_on(3, 2);
+    x_on(3, 1);
+    {
+        Script run({});
+        emit viewport->Dragged(3, 1, 0, false);
+        emit timeline->FrameChosen(2);
+        emit viewport->Dragged(3, 1, 0, true);
+        QApplication::processEvents();
+        CHECK(run.Problems().isEmpty());
+    }
+    CHECK(x_on(3, 1) == sketched_one);
+    CHECK(x_on(3, 2) == sketched_two + 20);
+}

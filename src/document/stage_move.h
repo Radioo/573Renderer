@@ -7,6 +7,7 @@
 #include "support/expected.h"
 
 #include <cstdint>
+#include <map>
 #include <string>
 
 namespace Document {
@@ -19,6 +20,13 @@ struct StageOffset {
 [[nodiscard]] Support::Expected<void, std::string>
 MoveBakedDepth(AfpAnimation::Animation& animation, ClipId clip, uint16_t depth, uint32_t frame,
                StageOffset offset);
+
+using SketchedOffsets = std::map<uint32_t, StageOffset>;
+
+[[nodiscard]] Support::Expected<void, std::string> SketchOwnedDepth(AuthoredDepth& authored,
+                                                                    const BakedDepth& baked,
+                                                                    uint32_t pressed,
+                                                                    const SketchedOffsets& offsets);
 
 [[nodiscard]] Support::Expected<void, std::string> MoveOwnedDepth(AuthoredDepth& authored,
                                                                   const BakedDepth& baked,

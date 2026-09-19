@@ -9,6 +9,7 @@
 #include "document/document.h"
 #include "document/outline.h"
 #include "document/stage_bounds.h"
+#include "document/timeline.h"
 #include "document/frame_edit.h"
 #include "document/place_image.h"
 #include "document/tags.h"
@@ -460,4 +461,104 @@ TEST_CASE("Onion skin shows the neighbouring frames and leaves the host on the p
     REQUIRE(Settle([&] { return viewport->grab().toImage() == plain; }));
     QSettings().remove("stage/onion");
     CHECK(opening.Problems().isEmpty());
+}
+
+TEST_CASE("A motion sketch plays the animation while the drag is held and keys what it played") {
+    const QString game = qEnvironmentVariable("R573_IIDX_DIR");
+    if (game.isEmpty()) SKIP("R573_IIDX_DIR not set");
+    const QString title = game + "/data/graphic/1/title.ifs";
+    QSettings().setValue("game/directory", game);
+    Editor::Window window;
+    QSettings().remove("game/directory");
+    window.resize(1600, 900);
+    window.show();
+    Script opening({});
+    window.OpenDocument(title);
+    REQUIRE(opening.Problems().isEmpty());
+    const std::optional<uint16_t> widest = WidestTitleDepth(title);
+    REQUIRE(widest.has_value());
+    if (!widest) return;
+    auto* timeline = window.findChild<Editor::Timeline*>();
+    auto* viewport = window.findChild<Editor::Viewport*>();
+    auto* inspector = window.findChild<QTableWidget*>();
+    REQUIRE(timeline != nullptr);
+    REQUIRE(viewport != nullptr);
+    REQUIRE(inspector != nullptr);
+    const auto action = [&window](const QString& text) -> QAction* {
+        for (QAction* one : window.findChildren<QAction*>()) {
+            if (one->text() == text) return one;
+        }
+        return nullptr;
+    };
+    QTemporaryDir dir;
+    REQUIRE(dir.isValid());
+    QAction* project = action("&New project...");
+    REQUIRE(project != nullptr);
+    {
+        Script made({PickFile(dir.path())});
+        project->trigger();
+        REQUIRE(Settle([&made] { return made.Finished(); }));
+        CHECK(made.Problems().isEmpty());
+    }
+    emit timeline->FrameChosen(kPreviewFrame);
+    emit timeline->DepthChosen(*widest);
+    {
+        Script owned({Choose(QString("Let the project own depth %1 from here").arg(*widest))});
+        emit timeline->MenuRequested(QPoint(4, 4), kPreviewFrame, QString());
+        REQUIRE(Settle([&owned] { return owned.Finished(); }));
+        CHECK(owned.Problems().isEmpty());
+    }
+    const auto x_on = [&](uint32_t frame) {
+        emit timeline->FrameChosen(frame);
+        emit timeline->DepthChosen(*widest);
+        QApplication::processEvents();
+        const QString text = QString::fromStdString(RowValue(*inspector, "Translation"));
+        return text.section(',', 0, 0).trimmed().toInt();
+    };
+    const int pressed_x = x_on(kPreviewFrame);
+    QAction* sketch = action("Motion &sketch while dragging");
+    REQUIRE(sketch != nullptr);
+    sketch->setChecked(true);
+    {
+        Script sketching({});
+        emit viewport->Dragged(*widest, 10, 0, false);
+        CHECK(action("&Pause") != nullptr);
+        QElapsedTimer played;
+        played.start();
+        while (played.elapsed() < kPlayForMs)
+            QApplication::processEvents();
+        emit viewport->Dragged(*widest, 20, 0, true);
+        QApplication::processEvents();
+        CHECK(sketching.Problems().isEmpty());
+        CHECK(action("&Pause") == nullptr);
+    }
+    CHECK(x_on(kPreviewFrame) == pressed_x + 200);
+    CHECK(x_on(kPreviewFrame + 2) == pressed_x + 200);
+
+    const std::optional<TitleFile> read = ReadTitle(title);
+    REQUIRE(read.has_value());
+    if (!read) return;
+    const auto animation = read->file.ReadAnimation(read->path);
+    REQUIRE(animation.has_value());
+    if (!animation) return;
+    std::optional<uint32_t> outside;
+    for (const Document::DepthRow& row : Document::DepthRows(animation->root)) {
+        if (row.depth != *widest) continue;
+        for (const Document::Span& span : row.spans) {
+            if (span.first_frame > kPreviewFrame || span.last_frame < kPreviewFrame) continue;
+            if (span.last_frame + 1 < animation->root.frames.size()) {
+                outside = span.last_frame + 1;
+            } else if (span.first_frame > 0) {
+                outside = span.first_frame - 1;
+            }
+        }
+    }
+    REQUIRE(outside.has_value());
+    x_on(kPreviewFrame);
+    emit viewport->Dragged(*widest, 10, 0, false);
+    emit timeline->FrameChosen(outside.value_or(0));
+    emit viewport->Dragged(*widest, 10, 0, true);
+    REQUIRE(Settle([&opening] { return !opening.Problems().isEmpty(); }));
+    CHECK(opening.Problems().front().contains("outside"));
+    CHECK(action("&Pause") == nullptr);
 }

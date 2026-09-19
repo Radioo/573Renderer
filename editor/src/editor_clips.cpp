@@ -494,6 +494,7 @@ void Window::SetWorkArea(std::optional<Document::WorkArea> area) {
 
 void Window::SeekTo(uint32_t frame) {
     frame_ = frame;
+    if (sketch_) sketch_->offsets[frame] = sketch_->latest;
     timeline_->SetFrame(frame);
     if (!clip_.sprite || symbol_shown_) SeekViewport(frame);
     if (!Playing()) ShowFrame();

@@ -393,6 +393,43 @@ translation, undoing in between, is refused on depth 1 (no box), fits an owned
 depth to the width and sees it scaled and moved, and is refused inside a new
 sprite. Dropping the sprite check, either move, or a shortcut's mode fails it.
 
+`Playback > Motion sketch while dragging` is After Effects' Motion Sketch.
+While it is on, dragging a depth the project owns on the stage starts playback
+(`Window::SketchMove`, which `Window::MoveOnStage` asks first), and every frame
+the playhead shows while the button is held records the pointer's offset from
+where it was pressed: `Window::SeekTo` records the latest offset for each frame
+it moves to, and each drag event records it for the frame on screen. Releasing
+stops playback, puts the playhead back on the frame the sketch started from,
+and keys the recording through `Document::SketchOwnedDepth` as one undo step.
+The outline follows the pointer as in any drag; the edit is not previewed
+through the host during the sketch, since reloading the clip on every move
+would fight the playback for the frame. Baked depths move as usual with the
+sketch on. Without a preview host there is no playback, so a sketch records
+only the frames the playhead is moved to, which is what the host-less window
+test does: it sketches the owned dot over three frames by choosing each one,
+reads every keyed translation and that the playhead went back, sees a baked
+depth moved normally, and sees a normal move with the sketch off. The live
+test owns the widest depth of `title.ifs`, starts a sketch at frame 400, sees
+playback running, lets it play for 0.7 seconds and releases, then sees it
+stopped and reads frame 402, which only per-frame recording keys at the
+pressed offset (interpolating between the press and the release would not).
+It then sketches from frame 400 onto the frame just outside the owned span and
+sees the sketch refused with playback stopped, which is why the release stops
+playback itself rather than leaving it to the edit: a refused edit never
+reaches the edit loop that would stop it.
+Dropping the per-frame recording, the playback start or stop, the return to the
+start frame, the owned check, the mode check or the recording of the drag's
+own frame fails them.
+
+`Edit > Flip horizontally` and `Flip vertically` (Flash's Flip Horizontal and
+Flip Vertical, no shortcut) mirror the chosen depth along its own x or y axis
+about its anchor on the playhead's frame, the way a -100% scale does in After
+Effects, as one undo step. Each is `Window::ReshapeOnStage` with a scale of
+-1 on that axis, so owned and baked depths go through the same reshape edits as
+a drag, and a turned depth flips across its own axis, not the screen's. The
+window test flips the dot horizontally, back, and vertically, reading the
+scale each time, then flips an owned depth; swapping the two axes fails it.
+
 Dragging the anchor cross of the selection moves the anchor without moving
 the object (After Effects' Pan Behind, done here with the selection itself
 rather than a separate tool). The cross follows the pointer while dragging, and

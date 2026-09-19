@@ -188,3 +188,90 @@ TEST_CASE("Reshaping an owned depth keys its scale and rotation on that frame") 
     CHECK(turned->matrix == std::array<double, 6>{-1.0, 0.0, 0.0, -1.0, 100.0, 40.0});
     CHECK(held->matrix == std::array<double, 6>{2.0, 0.0, 0.0, 1.0, 100.0, 40.0});
 }
+
+TEST_CASE("A scale of -1 flips a depth along its own axis about its anchor, and again undoes it") {
+    AfpAnimation::Animation animation = Placed(0);
+    const AfpAnimation::Animation before = animation;
+    REQUIRE(Document::ReshapeBakedDepth(animation, kRoot, kDepth, 0,
+                                        {.scale_x = -1, .scale_y = 1, .turn = 0})
+                .has_value());
+    const auto flipped = StateOn(animation, 0);
+    REQUIRE(flipped.has_value());
+    if (!flipped) return;
+    CHECK(flipped->matrix == std::array<double, 6>{-2.0, 0.0, 0.0, 1.0, 100.0, 40.0});
+    REQUIRE(Document::ReshapeBakedDepth(animation, kRoot, kDepth, 0,
+                                        {.scale_x = -1, .scale_y = 1, .turn = 0})
+                .has_value());
+    CHECK(animation == before);
+
+    auto& create = std::get<AfpAnimation::Placement>(animation.root.tags[0].body);
+    create.scale.reset();
+    create.short_scale = std::array<int16_t, 2>{16384, 16384};
+    REQUIRE(Document::ReshapeBakedDepth(animation, kRoot, kDepth, 0,
+                                        {.scale_x = 1, .scale_y = -1, .turn = 0})
+                .has_value());
+    CHECK(std::get<AfpAnimation::Placement>(animation.root.tags[0].body).short_scale ==
+          std::array<int16_t, 2>{16384, -16384});
+}
+
+TEST_CASE("Flipping an owned depth keys the mirrored scale on that frame") {
+    const AfpAnimation::Animation animation = Placed(0);
+    auto owned = Document::OwnDepth(animation, kRoot, "afp/a", kDepth, 0);
+    REQUIRE(owned.has_value());
+    if (!owned) return;
+    REQUIRE(Document::ReshapeOwnedDepth(owned->authored, owned->baked, 1,
+                                        {.scale_x = 1, .scale_y = -1, .turn = 0})
+                .has_value());
+    AfpAnimation::Animation written = animation;
+    REQUIRE(Document::WriteAuthored(written, owned->authored, owned->baked).has_value());
+    const auto flipped = StateOn(written, 1);
+    REQUIRE(flipped.has_value());
+    if (!flipped) return;
+    CHECK(flipped->matrix == std::array<double, 6>{2.0, 0.0, 0.0, -1.0, 100.0, 40.0});
+}
+
+TEST_CASE("A motion sketch keys the translation on every sketched frame from the pressed one") {
+    const AfpAnimation::Animation animation = Placed(0);
+    auto owned = Document::OwnDepth(animation, kRoot, "afp/a", kDepth, 0);
+    REQUIRE(owned.has_value());
+    if (!owned) return;
+    const Document::SketchedOffsets offsets{
+        {1, {.x = 1, .y = 0}}, {2, {.x = 2, .y = -1}}, {3, {.x = 3, .y = 0}}};
+    REQUIRE(Document::SketchOwnedDepth(owned->authored, owned->baked, 1, offsets).has_value());
+    AfpAnimation::Animation written = animation;
+    REQUIRE(Document::WriteAuthored(written, owned->authored, owned->baked).has_value());
+    const std::array<std::array<double, 2>, 4> expected{
+        {{100.0, 40.0}, {120.0, 40.0}, {140.0, 20.0}, {160.0, 40.0}}};
+    for (uint32_t frame = 0; frame < kFrames; frame++) {
+        INFO(frame);
+        const auto state = StateOn(written, frame);
+        REQUIRE(state.has_value());
+        if (!state) return;
+        CHECK(state->matrix[4] == expected.at(frame)[0]);
+        CHECK(state->matrix[5] == expected.at(frame)[1]);
+    }
+}
+
+TEST_CASE("A motion sketch is refused when there is nothing, a frame outside or a 3D depth") {
+    const AfpAnimation::Animation animation = Placed(0);
+    auto owned = Document::OwnDepth(animation, kRoot, "afp/a", kDepth, 0);
+    REQUIRE(owned.has_value());
+    if (!owned) return;
+    const Document::AuthoredDepth before = owned->authored;
+    const auto refusal = [&owned](const Document::SketchedOffsets& offsets) {
+        const auto result = Document::SketchOwnedDepth(owned->authored, owned->baked, 0, offsets);
+        return result.has_value() ? std::string() : result.error();
+    };
+    CHECK(refusal({}).find("nothing") != std::string::npos);
+    CHECK(refusal({{0, {.x = 1, .y = 0}}, {9, {.x = 1, .y = 0}}}).find("frame 9") !=
+          std::string::npos);
+    CHECK(owned->authored == before);
+    const AfpAnimation::Animation deep = Placed(kThreeD);
+    auto three_d = Document::OwnDepth(deep, kRoot, "afp/a", kDepth, 0);
+    REQUIRE(three_d.has_value());
+    if (!three_d) return;
+    const auto refused =
+        Document::SketchOwnedDepth(three_d->authored, three_d->baked, 0, {{0, {.x = 1, .y = 0}}});
+    REQUIRE_FALSE(refused.has_value());
+    CHECK(refused.error().find("3D") != std::string::npos);
+}

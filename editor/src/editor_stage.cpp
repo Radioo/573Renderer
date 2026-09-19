@@ -428,7 +428,30 @@ void Window::RunStagePreview() {
     SeekViewport(symbol_shown_ ? frame_ : root_frame_);
 }
 
+bool Window::SketchMove(uint16_t depth, double dx, double dy, bool finished) {
+    if (!sketch_action_->isChecked()) return false;
+    if (!sketch_ && !AuthoredIndexAt(depth, frame_)) return false;
+    const Document::StageOffset offset{.x = dx, .y = dy};
+    if (!sketch_) {
+        sketch_ = Sketch{.depth = depth, .pressed = frame_, .latest = offset, .offsets = {}};
+        if (!Playing()) TogglePlay();
+    }
+    sketch_->latest = offset;
+    sketch_->offsets[frame_] = offset;
+    if (!finished) return true;
+    const Sketch sketched = *std::exchange(sketch_, std::nullopt);
+    StopPlayback();
+    SeekTo(sketched.pressed);
+    EditOwned(tr("Sketch the motion of depth %1").arg(sketched.depth),
+              [&sketched](Document::AuthoredDepth& authored, const Document::BakedDepth& baked) {
+                  return Document::SketchOwnedDepth(authored, baked, sketched.pressed,
+                                                    sketched.offsets);
+              });
+    return true;
+}
+
 void Window::MoveOnStage(uint16_t depth, double dx, double dy, bool finished) {
+    if (SketchMove(depth, dx, dy, finished)) return;
     const Document::StageOffset offset{.x = dx, .y = dy};
     const std::vector<uint16_t> group = SelectedDepths();
     if (group.size() > 1 && std::ranges::find(group, depth) != group.end()) {

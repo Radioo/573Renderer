@@ -275,6 +275,8 @@ void Window::BuildMenus() {
     loop_action_->setChecked(QSettings().value(kLoopKey, true).toBool());
     connect(loop_action_, &QAction::toggled, this,
             [this](bool on) { QSettings().setValue(kLoopKey, on); });
+    sketch_action_ = play->addAction(tr("Motion &sketch while dragging"));
+    sketch_action_->setCheckable(true);
     background_action_ = play->addAction(tr("Draw the &background colour"));
     background_action_->setCheckable(true);
     background_action_->setChecked(QSettings().value(kBackgroundKey, false).toBool());
@@ -325,6 +327,14 @@ void Window::BuildMenus() {
         action->setShortcut(keys);
         connect(action, &QAction::triggered, this, [this, fit] { FitChosenToStage(fit); });
     }
+    QAction* flip_across = edit->addAction(tr("Flip horizontally"));
+    connect(flip_across, &QAction::triggered, this, [this] {
+        if (depth_) ReshapeOnStage(static_cast<uint16_t>(*depth_), -1, 1, 0, true);
+    });
+    QAction* flip_over = edit->addAction(tr("Flip vertically"));
+    connect(flip_over, &QAction::triggered, this, [this] {
+        if (depth_) ReshapeOnStage(static_cast<uint16_t>(*depth_), 1, -1, 0, true);
+    });
 }
 
 void Window::ChooseGameDirectory() {

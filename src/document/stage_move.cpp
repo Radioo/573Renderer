@@ -272,4 +272,44 @@ Support::Expected<void, std::string> MoveOwnedDepth(AuthoredDepth& authored,
     return {};
 }
 
+Support::Expected<void, std::string> SketchOwnedDepth(AuthoredDepth& authored,
+                                                      const BakedDepth& baked, uint32_t pressed,
+                                                      const SketchedOffsets& offsets) {
+    if ((baked.create.flags & kThreeD) != 0)
+        return Support::Unexpected("depth " + std::to_string(authored.depth) + " is placed in 3D");
+    if (offsets.empty()) return Support::Unexpected(std::string("nothing was sketched"));
+    for (const auto& [frame, offset] : offsets) {
+        if (frame < authored.first_frame || frame > authored.last_frame) {
+            return Support::Unexpected("frame " + std::to_string(frame) +
+                                       " is outside the frames this depth was owned over");
+        }
+    }
+    AuthoredDepth edited = authored;
+    auto track = KeyedTrack(edited, baked, kTranslation, pressed);
+    if (!track) return Support::Unexpected(track.error());
+    const std::optional<Keyframe> base = KeyAt(edited, kTranslation, pressed);
+    if (!base || base->value.size() != 2)
+        return Support::Unexpected(std::string("the translation track has no key to sketch from"));
+    const uint32_t first = offsets.begin()->first;
+    const uint32_t last = offsets.rbegin()->first;
+    std::erase_if((*track)->keys, [first, last](const Keyframe& key) {
+        return key.frame >= first && key.frame <= last;
+    });
+    for (const auto& [frame, offset] : offsets) {
+        AfpAnimation::Placement moved;
+        moved.translation = std::array<int32_t, 2>{static_cast<int32_t>(base->value[0]),
+                                                   static_cast<int32_t>(base->value[1])};
+        auto shifted = Shift(moved, offset);
+        if (!shifted) return Support::Unexpected(shifted.error());
+        auto added = AddKeyframe(
+            **track, Keyframe{.frame = frame,
+                              .value = {(*moved.translation)[0], (*moved.translation)[1]},
+                              .ease = Ease::Linear,
+                              .bezier = {}});
+        if (!added) return Support::Unexpected(added.error());
+    }
+    authored = std::move(edited);
+    return {};
+}
+
 }

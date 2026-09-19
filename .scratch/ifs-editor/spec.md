@@ -339,3 +339,5 @@ captured. This milestone is the editing itself.
 - `issues/131-simplify-keyframes.md` (milestone 8)
 - `issues/132-fit-to-stage.md` (milestone 8)
 - `issues/133-wiggle-keyframes.md` (milestone 8)
+- `issues/134-flip.md` (milestone 8)
+- `issues/135-motion-sketch.md` (milestone 8)

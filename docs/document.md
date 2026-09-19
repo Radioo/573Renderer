@@ -1301,6 +1301,27 @@ to the pointer in the object's own coordinates, so a dragged corner follows the
 pointer exactly; `TurnToReach` takes the angle swept around the anchor.
 `ReshapedOutline` applies either to an outline for a live preview.
 
+`SketchOwnedDepth(authored, baked, pressed, offsets)` is the document half of
+After Effects' Motion Sketch: `offsets` maps frames to the stage offset the
+pointer had from where it was pressed, and every one becomes a linear
+Translation keyframe holding the translation the depth had on `pressed` plus
+that offset, so the depth follows the drag, grab point and all. Keyframes
+already on the sketched frames, from the first to the last, are replaced, and
+the track is started on `pressed` if the depth had none (`KeyedTrack`, as a
+move starts it). The last sketched keyframe eases linearly into the next
+keyframe after the sketch, if any, as it does in After Effects. An empty
+sketch, a frame outside the owned range and a 3D depth are refused, and a
+refusal changes nothing. `stage_move_tests.cpp` sketches three frames and
+reads the written translation on each, and on the frame before, and checks
+the refusals.
+
+A scale of -1 on one axis is a flip, and nothing about the reshape changes for
+it: `Reshaped` multiplies the sign into the matrix like any other scale, the
+long and short scale forms are signed, and flipping twice writes back the
+placement it started from, since `-1 * -1024` round-trips exactly.
+`stage_move_tests.cpp` flips a baked depth along its own x axis and back, keeps
+a short scale short with a negative value, and keys a flip on an owned depth.
+
 `SnapMove` (`document/stage_snap.h`) adjusts a move so the object lines up.
 On each axis it takes the moving outline's lowest, middle and highest
 coordinate after the offset, and the lines it may land on: the stage's edges
