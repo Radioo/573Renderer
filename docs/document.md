@@ -378,6 +378,19 @@ controller, the shape files and listing, and the nested sprite refusal.
 Dropping the export, the recursion, the grid controller, the file removal, the
 listing filter or the nested check each fails them.
 
+### Aligning and spreading (`document/stage_align.h`)
+
+`AlignOffsets(chosen, how)` gives each chosen outline the offset that puts its
+left edge, horizontal centre, right edge, top, vertical centre or bottom on the
+same line of the whole selection's bounds, as After Effects' Align panel does
+when aligning to the selection. An outline's edges and middle are those of its
+corners' bounding box, so a turned object aligns by the box it covers.
+`SpreadOffsets(chosen, how)` keeps the outermost centres on one axis where they
+are and spaces the rest evenly between them in the order their centres already
+have; with fewer than three outlines there is nothing between to spread.
+`stage_align_tests` checks every line and both axes, and fails when the target
+is always the low edge or the step is counted wrong.
+
 ### Placing at a stage point (`document/stage_move.h`)
 
 `PlaceAtPoint(animation, clip, depth, character, first, last, point)` is

@@ -18,6 +18,7 @@
 #include "support/expected.h"
 #include "document/outline.h"
 #include "document/place_image.h"
+#include "document/stage_align.h"
 #include "document/stage_bounds.h"
 #include "document/stage_move.h"
 #include "document/timeline.h"
@@ -163,8 +164,13 @@ private:
     void SaveFramesAs();
     [[nodiscard]] std::vector<uint16_t> SelectedDepths() const;
     void ChooseDepths(std::vector<uint16_t> depths);
-    void MoveGroupOnStage(const std::vector<uint16_t>& group, Document::StageOffset offset,
-                          bool finished);
+    void MoveDepthsOnStage(const std::vector<Document::DepthOffset>& moves, const QString& name,
+                           bool finished);
+    void ArrangeChosen(const QString& name,
+                       const std::function<std::vector<Document::DepthOffset>(
+                           const std::vector<Document::StageOutline>&)>& offsets,
+                       std::size_t fewest);
+    void AddAlignMenu(QMenu* edit);
     void ShowGhostsAround(uint32_t frame);
     void SaveImageAs(const QString& name);
     void AddImageFromFile();

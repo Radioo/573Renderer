@@ -266,6 +266,8 @@ void Window::BuildMenus() {
     redo_action_ = edit->addAction(tr("&Redo"));
     redo_action_->setShortcut(QKeySequence::Redo);
     connect(redo_action_, &QAction::triggered, this, &Window::Redo);
+    edit->addSeparator();
+    AddAlignMenu(edit);
 }
 
 void Window::ChooseGameDirectory() {

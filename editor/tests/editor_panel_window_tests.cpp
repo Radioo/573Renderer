@@ -359,6 +359,91 @@ TEST_CASE("Depths chosen together move together, owned or not, as one undo step"
     CHECK(x_of(2) == baked_before);
 }
 
+TEST_CASE("The Align menu lines chosen depths up as one undo step") {
+    Opened opened;
+    Open(opened, true);
+    auto* library = opened.window.findChild<QTreeWidget*>("library");
+    auto* viewport = opened.window.findChild<Editor::Viewport*>();
+    auto* timeline = opened.window.findChild<Editor::Timeline*>();
+    REQUIRE(library != nullptr);
+    REQUIRE(viewport != nullptr);
+    REQUIRE(timeline != nullptr);
+    std::optional<uint16_t> dot;
+    for (int at = 0; at < library->topLevelItemCount(); at++) {
+        if (library->topLevelItem(at)->text(0).contains("dot"))
+            dot = static_cast<uint16_t>(library->topLevelItem(at)->data(0, Qt::UserRole).toUInt());
+    }
+    REQUIRE(dot.has_value());
+    if (!dot) return;
+    {
+        Script placed({});
+        emit viewport->CharacterDropped(*dot, 500, 300);
+        QApplication::processEvents();
+        CHECK(placed.Problems().isEmpty());
+    }
+    const auto action = [&](const QString& text) {
+        for (QAction* one : opened.window.findChildren<QAction*>()) {
+            if (one->text() == text) return one;
+        }
+        return static_cast<QAction*>(nullptr);
+    };
+    QAction* left = action("&Left edges");
+    QAction* spread = action("Spread centres &across");
+    REQUIRE(left != nullptr);
+    REQUIRE(spread != nullptr);
+    const auto x_of = [&](uint16_t depth) {
+        emit timeline->DepthChosen(depth);
+        const QString text = QString::fromStdString(RowValue(*opened.inspector, "Translation"));
+        return text.section(',', 0, 0).trimmed().toInt();
+    };
+    const int first = x_of(2);
+    CHECK(x_of(3) == 10000);
+    REQUIRE(first != 10000);
+
+    emit timeline->DepthChosen(3);
+    {
+        Script refused({});
+        left->trigger();
+        REQUIRE(Settle([&refused] { return !refused.Problems().isEmpty(); }));
+        CHECK(refused.Problems().front().contains("at least 2"));
+    }
+    emit timeline->DepthsChosen({2, 3});
+    {
+        Script refused({});
+        spread->trigger();
+        REQUIRE(Settle([&refused] { return !refused.Problems().isEmpty(); }));
+        CHECK(refused.Problems().front().contains("at least 3"));
+    }
+    emit timeline->DepthsChosen({2, 3});
+    {
+        Script aligned({});
+        left->trigger();
+        QApplication::processEvents();
+        CHECK(aligned.Problems().isEmpty());
+    }
+    CHECK(x_of(3) == x_of(2));
+    CHECK(x_of(2) == first);
+
+    QAction* undo = ShortcutAction(opened.window, QKeySequence(QKeySequence::Undo));
+    REQUIRE(undo != nullptr);
+    undo->trigger();
+    CHECK(x_of(3) == 10000);
+    CHECK(x_of(2) == first);
+
+    QAction* centres = action("&Horizontal centres");
+    REQUIRE(centres != nullptr);
+    emit timeline->DepthsChosen({2, 3});
+    {
+        Script aligned({});
+        centres->trigger();
+        QApplication::processEvents();
+        CHECK(aligned.Problems().isEmpty());
+    }
+    CHECK(x_of(3) == x_of(2));
+    CHECK(x_of(2) != first);
+    CHECK(x_of(3) != 10000);
+}
+
 TEST_CASE("A closed panel comes back from the View menu") {
     Opened opened;
     Open(opened);

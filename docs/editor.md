@@ -409,6 +409,19 @@ the owned depth starts from where the group left it, and that undo puts both
 back. Leaving out the group move, the kept pick, storing the owned depth, the
 group outlines, the snap filter, the Ctrl toggle or the unseeking number click
 fails them.
+
+`Edit > Align` lines the chosen depths up by their left edges, horizontal
+centres, right edges, tops, vertical centres or bottoms, and spreads their
+centres evenly across or down (`Window::ArrangeChosen`, through
+`Document::AlignOffsets` and `Document::SpreadOffsets`). It works on the chosen
+depths that have an outline on the stage, needs at least two of them to align
+and three to spread, and says so otherwise; when nothing would move it says the
+depths are already lined up. The offsets differ per depth, so the group move
+takes a list of depth and offset pairs (`Window::MoveDepthsOnStage`), which a
+drag fills with one offset for all; either way owned and baked depths move in
+one undo step. The window test drops a second depth, aligns the pair by their
+left edges and by their centres, undoes, and checks the refusals; giving every
+depth the same offset, or dropping the minimum, fails it.
 With a sprite picked in the clip box, the menu also names that sprite's export
 (`Window::NameShownSpriteExport`, through `Document::NameSpriteExport`): the box
 starts on the current name and an empty answer removes it. It is an undoable

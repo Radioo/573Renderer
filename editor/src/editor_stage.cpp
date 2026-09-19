@@ -5,6 +5,7 @@
 
 #include "document/authored.h"
 #include "document/document.h"
+#include "document/stage_align.h"
 #include "document/stage_bounds.h"
 #include "document/stage_move.h"
 #include "formats/afp_animation.h"
@@ -19,10 +20,13 @@
 #include <QMenu>
 #include <QMenuBar>
 #include <QSettings>
+#include <QStatusBar>
 #include <QString>
 #include <QTimer>
 
 #include <algorithm>
+#include <array>
+#include <functional>
 #include <cstddef>
 #include <cstdint>
 #include <optional>
@@ -170,8 +174,8 @@ std::vector<uint16_t> Window::SelectedDepths() const {
     return {primary};
 }
 
-void Window::MoveGroupOnStage(const std::vector<uint16_t>& group, Document::StageOffset offset,
-                              bool finished) {
+void Window::MoveDepthsOnStage(const std::vector<Document::DepthOffset>& moves, const QString& name,
+                               bool finished) {
     if (!file_ || animation_path_.empty()) return;
     const auto animation = file_->ReadAnimation(animation_path_);
     if (!animation) {
@@ -181,11 +185,12 @@ void Window::MoveGroupOnStage(const std::vector<uint16_t>& group, Document::Stag
     const uint32_t frame = frame_;
     const Document::ClipId clip = clip_;
     std::vector<std::pair<std::size_t, Document::AuthoredDepth>> owned;
-    std::vector<uint16_t> baked;
-    for (const uint16_t depth : group) {
-        const std::optional<std::size_t> index = AuthoredIndexAt(depth, frame);
+    std::vector<Document::DepthOffset> baked;
+    for (const Document::DepthOffset& move : moves) {
+        const Document::StageOffset offset{.x = move.offset[0], .y = move.offset[1]};
+        const std::optional<std::size_t> index = AuthoredIndexAt(move.depth, frame);
         if (!index) {
-            baked.push_back(depth);
+            baked.push_back(move);
             continue;
         }
         Document::AuthoredDepth moved = authored_[*index];
@@ -199,8 +204,7 @@ void Window::MoveGroupOnStage(const std::vector<uint16_t>& group, Document::Stag
         }
         owned.emplace_back(*index, std::move(moved));
     }
-    const AnimationChange change = [owned, baked, clip, frame,
-                                    offset](AfpAnimation::Animation& edited) {
+    const AnimationChange change = [owned, baked, clip, frame](AfpAnimation::Animation& edited) {
         using Changed = Support::Expected<void, std::string>;
         for (const auto& [index, moved] : owned) {
             const auto state = Document::BakedFor(edited, moved);
@@ -208,8 +212,10 @@ void Window::MoveGroupOnStage(const std::vector<uint16_t>& group, Document::Stag
             auto written = Document::WriteAuthored(edited, moved, *state);
             if (!written) return written;
         }
-        for (const uint16_t depth : baked) {
-            auto shifted = Document::MoveBakedDepth(edited, clip, depth, frame, offset);
+        for (const Document::DepthOffset& move : baked) {
+            auto shifted = Document::MoveBakedDepth(
+                edited, clip, move.depth, frame,
+                Document::StageOffset{.x = move.offset[0], .y = move.offset[1]});
             if (!shifted) return shifted;
         }
         return Changed();
@@ -219,8 +225,7 @@ void Window::MoveGroupOnStage(const std::vector<uint16_t>& group, Document::Stag
         return;
     }
     pending_preview_.reset();
-    const bool changed =
-        EditAnimation(tr("Move %n depths", nullptr, static_cast<int>(group.size())), change);
+    const bool changed = EditAnimation(name, change);
     if (!changed && previewed_) Reload();
     previewed_ = false;
     if (!changed) return;
@@ -228,6 +233,73 @@ void Window::MoveGroupOnStage(const std::vector<uint16_t>& group, Document::Stag
         authored_[index] = std::move(moved);
     if (!owned.empty()) SaveProject();
     ShowFrame();
+}
+
+void Window::ArrangeChosen(const QString& name,
+                           const std::function<std::vector<Document::DepthOffset>(
+                               const std::vector<Document::StageOutline>&)>& offsets,
+                           std::size_t fewest) {
+    if (!file_ || animation_path_.empty()) return;
+    const auto animation = file_->ReadAnimation(animation_path_);
+    if (!animation) {
+        ReportProblem(QString::fromStdString(animation.error()));
+        return;
+    }
+    const std::vector<uint16_t> group = SelectedDepths();
+    std::vector<Document::StageOutline> chosen;
+    for (const Document::StageOutline& outline : VisibleOutlines(*animation)) {
+        if (std::ranges::find(group, outline.depth) != group.end()) chosen.push_back(outline);
+    }
+    if (!OutlinesMatchView() || chosen.size() < fewest) {
+        ReportProblem(tr("Choose at least %1 depths shown on the stage first").arg(fewest));
+        return;
+    }
+    std::vector<Document::DepthOffset> moves;
+    for (const Document::DepthOffset& move : offsets(chosen)) {
+        if (move.offset[0] != 0 || move.offset[1] != 0) moves.push_back(move);
+    }
+    if (moves.empty()) {
+        statusBar()->showMessage(tr("The chosen depths are already lined up"));
+        return;
+    }
+    MoveDepthsOnStage(moves, name, true);
+}
+
+void Window::AddAlignMenu(QMenu* edit) {
+    QMenu* align = edit->addMenu(tr("&Align"));
+    const std::array<std::pair<QString, Document::AlignTo>, 6> lines{{
+        {tr("&Left edges"), Document::AlignTo::Left},
+        {tr("&Horizontal centres"), Document::AlignTo::HorizontalCentre},
+        {tr("&Right edges"), Document::AlignTo::Right},
+        {tr("&Top edges"), Document::AlignTo::Top},
+        {tr("&Vertical centres"), Document::AlignTo::VerticalCentre},
+        {tr("&Bottom edges"), Document::AlignTo::Bottom},
+    }};
+    for (const auto& [text, how] : lines) {
+        connect(align->addAction(text), &QAction::triggered, this, [this, text, how] {
+            ArrangeChosen(
+                tr("Align %1").arg(QString(text).remove('&').toLower()),
+                [how](const std::vector<Document::StageOutline>& chosen) {
+                    return Document::AlignOffsets(chosen, how);
+                },
+                2);
+        });
+    }
+    align->addSeparator();
+    const std::array<std::pair<QString, Document::Spread>, 2> spreads{{
+        {tr("Spread centres &across"), Document::Spread::Across},
+        {tr("Spread centres &down"), Document::Spread::Down},
+    }};
+    for (const auto& [text, how] : spreads) {
+        connect(align->addAction(text), &QAction::triggered, this, [this, text, how] {
+            ArrangeChosen(
+                QString(text).remove('&'),
+                [how](const std::vector<Document::StageOutline>& chosen) {
+                    return Document::SpreadOffsets(chosen, how);
+                },
+                3);
+        });
+    }
 }
 
 void Window::PreviewOnStage(AnimationChange change) {
@@ -256,7 +328,11 @@ void Window::MoveOnStage(uint16_t depth, double dx, double dy, bool finished) {
     const Document::StageOffset offset{.x = dx, .y = dy};
     const std::vector<uint16_t> group = SelectedDepths();
     if (group.size() > 1 && std::ranges::find(group, depth) != group.end()) {
-        MoveGroupOnStage(group, offset, finished);
+        std::vector<Document::DepthOffset> moves;
+        for (const uint16_t member : group)
+            moves.push_back(Document::DepthOffset{.depth = member, .offset = {dx, dy}});
+        MoveDepthsOnStage(moves, tr("Move %n depths", nullptr, static_cast<int>(group.size())),
+                          finished);
         return;
     }
     const uint32_t frame = frame_;
