@@ -295,3 +295,5 @@ captured. This milestone is the editing itself.
 - `issues/87-replace-images-with-pictures.md` (milestone 8)
 - `issues/88-zoom-and-pan-the-stage.md` (milestone 8)
 - `issues/89-duplicate-animations.md` (milestone 8)
+- `issues/90-paste-grid-controllers.md` (milestone 8)
+- `issues/91-window-tests-under-load.md` (milestone 8)

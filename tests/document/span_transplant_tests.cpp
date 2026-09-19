@@ -12,6 +12,7 @@
 #include "formats/ifs_names.h"
 
 #include <cstddef>
+#include <algorithm>
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -29,6 +30,8 @@ constexpr uint16_t kLibrary = 3;
 constexpr uint16_t kShape = 5;
 constexpr uint16_t kMask = 6;
 constexpr uint16_t kCard = 12;
+constexpr uint16_t kGridShape = 20;
+constexpr uint16_t kInnerGridShape = 21;
 const std::vector<uint8_t> kShapeBytes{1, 2, 3, 4};
 
 AfpAnimation::Tag Placed(uint16_t depth, uint16_t character) {
@@ -46,7 +49,13 @@ AfpAnimation::Sprite OneFrameSprite(uint16_t id, AfpAnimation::Tag placed) {
     return sprite;
 }
 
-std::optional<Document::File> Package() {
+void Grid(AfpAnimation::Tag& tag, uint16_t shape) {
+    auto& placement = std::get<AfpAnimation::Placement>(tag.body);
+    placement.extended_flags = 0;
+    placement.grid_controller = AfpAnimation::GridController{.tag = shape, .first = 0, .second = 0};
+}
+
+AfpAnimation::Animation Intro(bool gridded) {
     AfpAnimation::Animation intro = SamplePackage::SampleAnimation();
     intro.flags = 0xC3;
     intro.strings = {"",          "intro", "aeplib", "__Packages.aeplib", "aep_mask_dummy",
@@ -60,18 +69,34 @@ std::optional<Document::File> Package() {
     intro.root.labels.clear();
     AfpAnimation::Sprite card = OneFrameSprite(kCard, Placed(1, kShape));
     card.container.labels = {AfpAnimation::Label{.frame = 0, .name = 6}};
+    AfpAnimation::Tag carded = Placed(5, kCard);
+    if (gridded) {
+        Grid(carded, kGridShape);
+        Grid(card.container.tags[0], kInnerGridShape);
+    }
     intro.root.tags = {AfpAnimation::Tag{OneFrameSprite(kLibrary, Placed(0, kImported))},
                        AfpAnimation::Tag{AfpAnimation::Shape{.unread_word = 0, .id = kShape}},
                        AfpAnimation::Tag{OneFrameSprite(kMask, Placed(1, kShape))},
                        AfpAnimation::Tag{card},
-                       Placed(5, kCard),
+                       carded,
                        Placed(7, kLibrary)};
-    intro.root.frames = {AfpAnimation::Frame{.first_tag = 0, .tag_count = 6},
-                         AfpAnimation::Frame{.first_tag = 6, .tag_count = 0},
-                         AfpAnimation::Frame{.first_tag = 6, .tag_count = 0}};
+    if (gridded) {
+        for (const uint16_t shape : {kGridShape, kInnerGridShape}) {
+            intro.root.tags.insert(intro.root.tags.begin(), AfpAnimation::Tag{AfpAnimation::Shape{
+                                                                .unread_word = 0, .id = shape}});
+        }
+    }
+    const auto defined = static_cast<uint32_t>(intro.root.tags.size());
+    intro.root.frames = {AfpAnimation::Frame{.first_tag = 0, .tag_count = defined},
+                         AfpAnimation::Frame{.first_tag = defined, .tag_count = 0},
+                         AfpAnimation::Frame{.first_tag = defined, .tag_count = 0}};
     intro.exports = {AfpAnimation::Export{.tag = kMask, .name = 4},
                      AfpAnimation::Export{.tag = kLibrary, .name = 5}};
-    const auto stored = AfpAnimation::WriteStored(intro);
+    return intro;
+}
+
+std::optional<Document::File> Package(bool gridded = false) {
+    const auto stored = AfpAnimation::WriteStored(Intro(gridded));
     REQUIRE(stored.has_value());
     Ifs::Archive archive = SamplePackage::SampleArchive();
     for (Ifs::Entry& directory : archive.entries) {
@@ -156,6 +181,61 @@ TEST_CASE("A depth pasted into another animation brings its sprites and shapes a
     CHECK(file->ShapeFile(*other, *shape) == kShapeBytes);
     CHECK(file->ShapeFile(*other, kShape).has_value());
     CHECK(file->ShapeFile(intro, kShape) == kShapeBytes);
+}
+
+TEST_CASE("A grid controller pasted into another animation names a definition it brought along") {
+    auto file = Package(true);
+    if (!file) return;
+    const std::string intro = "afp/" + HashPath("intro");
+    const auto other = file->AddAnimation("other", *file, intro, 3);
+    REQUIRE(other.has_value());
+    if (!other) return;
+    const auto before = file->ReadAnimation(*other);
+    REQUIRE(before.has_value());
+    if (!before) return;
+
+    const auto copied = Document::CopySpanFrom(*file, intro, {}, 5, 0);
+    REQUIRE(copied.has_value());
+    if (!copied) return;
+    const auto pasted = Document::PasteSpanInto(*file, *other, {}, *copied, 4, 0);
+    INFO(Error(pasted));
+    REQUIRE(pasted.has_value());
+
+    const auto after = file->ReadAnimation(*other);
+    REQUIRE(after.has_value());
+    if (!after) return;
+    const auto grid_at = [](const AfpAnimation::Container& clip,
+                            uint16_t depth) -> std::optional<uint16_t> {
+        for (const AfpAnimation::Tag& tag : clip.tags) {
+            const auto* placement = std::get_if<AfpAnimation::Placement>(&tag.body);
+            if (placement != nullptr && placement->depth == depth && placement->grid_controller)
+                return placement->grid_controller->tag;
+        }
+        return std::nullopt;
+    };
+    const std::optional<uint16_t> grid = grid_at(after->root, 4);
+    REQUIRE(grid.has_value());
+    if (!grid) return;
+    const auto defines_shape = [](const AfpAnimation::Animation& animation, uint16_t id) {
+        return std::ranges::any_of(animation.root.tags, [id](const AfpAnimation::Tag& tag) {
+            const auto* shape = std::get_if<AfpAnimation::Shape>(&tag.body);
+            return shape != nullptr && shape->id == id;
+        });
+    };
+    CHECK(defines_shape(*after, *grid));
+    CHECK(*grid >= Document::NextCharacterId(*before).value_or(0));
+    const std::optional<uint16_t> card = PlacedAt(after->root, 4);
+    REQUIRE(card.has_value());
+    if (!card) return;
+    const AfpAnimation::Sprite* sprite = SpriteWith(*after, *card);
+    REQUIRE(sprite != nullptr);
+    if (sprite == nullptr) return;
+    const std::optional<uint16_t> inner = grid_at(sprite->container, 1);
+    REQUIRE(inner.has_value());
+    if (!inner) return;
+    CHECK(defines_shape(*after, *inner));
+    CHECK(*inner != *grid);
+    CHECK(*inner >= Document::NextCharacterId(*before).value_or(0));
 }
 
 TEST_CASE("A depth that needs an imported character is not pasted into another animation") {

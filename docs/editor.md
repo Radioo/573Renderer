@@ -84,10 +84,17 @@ check what was reported. The cases cover opening an animation without a host,
 editing and undoing an animation setting, making and removing an animation from
 the package menu, refusing a taken name, and the background option. Putting back
 the old early return for a missing host was seen to fail four assertions.
-Every wait is bounded: `Settle` gives up after ten seconds, and a `Script` still
+Every wait is bounded: `Settle` gives up after a minute, and a `Script` still
 running after that closes whatever dialog or menu is open and records a timeout,
 so a step that never matches fails the case instead of hanging the gate (seen by
-giving the duplicate case a step that cannot match). A case that needs a second
+giving the duplicate case a step that cannot match). The bound is only a guard
+against hanging, and every wait expects something to happen, so a longer one
+slows only a case that is failing anyway. It was ten seconds, which a busy
+machine outlasts: with every core kept busy by other processes, a script that
+opens a `QFileDialog` and reloads the host, or renders twice through it, ran
+past ten seconds and failed on every one of four runs, which is how the suite
+came to fail now and then right after a build. With a minute, the same four
+loaded runs all passed. A case that needs a second
 script closes the first one first, because a live script also takes the warning
 boxes.
 

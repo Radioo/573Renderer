@@ -313,7 +313,12 @@ copied, depth, frame)` pastes straight through `PasteSpan` when the target is
 the animation the span came from. Otherwise it collects every character the
 copied placements reach, following the placements inside copied sprites, and
 defines each one again in the target under a new id counted up from
-`NextCharacterId`, children before the sprites that place them. Sprite
+`NextCharacterId`, children before the sprites that place them. A placement
+reaches a character through its character field and through its grid
+controller's tag (the extended `0x20` controller, which afp-core resolves as a
+definition and reads the name of; the notes repo's `Core/afp_format.md`,
+section 9.7), and both are followed and renumbered (`Referenced`,
+`RenumberPlacement`). Sprite
 placements are renumbered to the new ids, and every string a definition or a
 placement names (labels, instance names, call text) is interned again in the
 target, since string ids are per animation. Each copied shape file is added
@@ -328,7 +333,13 @@ defining a sprite inside itself. The package is only changed when every step
 succeeds. `span_transplant_tests` covers the carried sprite, shape, label and
 shape file, the import refusal and the same-animation paste. Leaving out the
 string carry, the renumbering inside sprites or of the pasted placements, the
-shape files, the import check or the same-animation path each fails them.
+shape files, the import check or the same-animation path each fails them. A
+grid controller on the pasted placement and another on a placement inside the
+pasted sprite, each naming its own shape, must both name a shape the paste
+defined in the target; the test failed before grid controllers were followed,
+with the pasted placement still naming an id the target never defined, and
+dropping the grid id from `Referenced`, from `RenumberPlacement` or from the
+walk inside sprites each fails it again.
 
 ### Removing unused definitions (`document/unused_definitions.h`)
 

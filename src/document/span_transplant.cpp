@@ -47,6 +47,24 @@ bool Imported(const AfpAnimation::Animation& animation, uint16_t id) {
     });
 }
 
+std::vector<uint16_t> Referenced(const AfpAnimation::Placement& placement) {
+    std::vector<uint16_t> ids;
+    if (placement.character) ids.push_back(*placement.character);
+    if (placement.grid_controller) ids.push_back(placement.grid_controller->tag);
+    return ids;
+}
+
+void RenumberPlacement(AfpAnimation::Placement& placement,
+                       const std::map<uint16_t, uint16_t>& moved) {
+    const auto renumbered = [&moved](uint16_t id) {
+        const auto found = moved.find(id);
+        return found != moved.end() ? found->second : id;
+    };
+    if (placement.character) placement.character = renumbered(*placement.character);
+    if (placement.grid_controller)
+        placement.grid_controller->tag = renumbered(placement.grid_controller->tag);
+}
+
 class Closure {
 public:
     explicit Closure(const AfpAnimation::Animation& source) : source_(&source) {}
@@ -93,9 +111,11 @@ private:
                     std::string("a copied sprite defines another sprite inside itself"));
             }
             const auto* placement = std::get_if<AfpAnimation::Placement>(&tag.body);
-            if (placement == nullptr || !placement->character) continue;
-            auto added = Add(*placement->character);
-            if (!added) return added;
+            if (placement == nullptr) continue;
+            for (const uint16_t id : Referenced(*placement)) {
+                auto added = Add(id);
+                if (!added) return added;
+            }
         }
         return {};
     }
@@ -108,9 +128,7 @@ private:
 void Renumber(AfpAnimation::Container& clip, const std::map<uint16_t, uint16_t>& moved) {
     for (AfpAnimation::Tag& tag : clip.tags) {
         auto* placement = std::get_if<AfpAnimation::Placement>(&tag.body);
-        if (placement == nullptr || !placement->character) continue;
-        const auto found = moved.find(*placement->character);
-        if (found != moved.end()) placement->character = found->second;
+        if (placement != nullptr) RenumberPlacement(*placement, moved);
     }
 }
 
@@ -156,10 +174,7 @@ CopiedSpan Carried(const CopiedSpan& copied, std::string_view animation_path,
     CopiedSpan carried = copied;
     carried.animation = std::string(animation_path);
     for (auto& [offset, placement] : carried.placements) {
-        if (placement.character) {
-            const auto found = moved.find(*placement.character);
-            if (found != moved.end()) placement.character = found->second;
-        }
+        RenumberPlacement(placement, moved);
         AfpAnimation::Tag wrapped{placement};
         CarryStrings(wrapped, copied.source, target);
         placement = std::get<AfpAnimation::Placement>(std::move(wrapped.body));
@@ -202,9 +217,10 @@ Support::Expected<Span, std::string> PasteSpanInto(File& file, std::string_view 
 
     Closure closure(copied.source);
     for (const auto& [offset, placement] : copied.placements) {
-        if (!placement.character) continue;
-        auto added = closure.Add(*placement.character);
-        if (!added) return Support::Unexpected(added.error());
+        for (const uint16_t id : Referenced(placement)) {
+            auto added = closure.Add(id);
+            if (!added) return Support::Unexpected(added.error());
+        }
     }
     auto moved = NewIds(*target, closure.Order());
     if (!moved) return Support::Unexpected(moved.error());

@@ -67,7 +67,7 @@
 namespace WindowTest {
 
 inline constexpr int kStepMs = 5;
-inline constexpr qint64 kLongestWaitMs = 10000;
+inline constexpr qint64 kLongestWaitMs = 60000;
 inline constexpr uint32_t kPreviewFrame = 400;
 inline constexpr qint64 kPlayForMs = 700;
 inline constexpr std::array<uint8_t, 74> kTinyPng{
