@@ -11,6 +11,7 @@
 #include <QApplication>
 #include <QKeySequence>
 #include <QPoint>
+#include <QStatusBar>
 #include <QString>
 #include <QTableWidget>
 #include <QWidget>
@@ -426,4 +427,70 @@ TEST_CASE("Time-stretching an owned depth's keyframes spreads them from the firs
     emit timeline->KeysStretched(Document::KeyStretch{.anchor = 0, .scale = 2, .over = 1});
     CHECK(x_on(2) == second);
     CHECK(x_on(1) == first);
+}
+
+TEST_CASE("Simplifying an owned depth's keyframes keeps the ends of a straight run") {
+    Opened opened;
+    Open(opened, true);
+    auto* timeline = opened.window.findChild<Editor::Timeline*>();
+    auto* viewport = opened.window.findChild<Editor::Viewport*>();
+    REQUIRE(timeline != nullptr);
+    REQUIRE(viewport != nullptr);
+    {
+        Script inserted({Choose("Insert a frame at 2")});
+        emit timeline->MenuRequested(QPoint(4, 4), 2, QString());
+        REQUIRE(Settle([&inserted] { return inserted.Finished(); }));
+        CHECK(inserted.Problems().isEmpty());
+    }
+    OwnDroppedDot(opened);
+    const auto move_on = [&](uint32_t frame, double dx) {
+        emit timeline->FrameChosen(frame);
+        emit timeline->DepthChosen(3);
+        Script moved({});
+        emit viewport->Dragged(3, dx, 0, true);
+        QApplication::processEvents();
+        CHECK(moved.Problems().isEmpty());
+    };
+    const auto x_on = [&](uint32_t frame) {
+        emit timeline->FrameChosen(frame);
+        const QString text = QString::fromStdString(RowValue(*opened.inspector, "Translation"));
+        return text.section(',', 0, 0).trimmed().toInt();
+    };
+    move_on(0, 10);
+    move_on(1, 20);
+    move_on(2, 20);
+    move_on(3, 20);
+    const std::vector<int> before{x_on(0), x_on(1), x_on(2), x_on(3)};
+    REQUIRE(before[1] - before[0] == before[2] - before[1]);
+    REQUIRE(before[3] - before[2] == before[2] - before[1]);
+
+    const auto ref = [](uint32_t frame) {
+        return Document::KeyRef{.property = "Translation", .frame = frame};
+    };
+    const auto simplify = [&](std::vector<Document::KeyRef> keys, std::vector<Script::Step> steps) {
+        emit timeline->FrameChosen(1);
+        emit timeline->KeyChosen("Translation", 1);
+        timeline->SelectKeys(std::move(keys));
+        Script run(std::move(steps));
+        emit timeline->KeyMenuRequested(QPoint(4, 4), "Translation", 1, true);
+        REQUIRE(Settle([&run] { return run.Finished(); }));
+        QApplication::processEvents();
+        return run.Problems();
+    };
+    bool offered = true;
+    CHECK(simplify({ref(0), ref(1)}, {Look("Simplify 2 keyframe(s)...", offered)}).isEmpty());
+    CHECK_FALSE(offered);
+    CHECK(simplify({ref(0), ref(1), ref(2), ref(3)},
+                   {Choose("Simplify 4 keyframe(s)..."), RejectInput()})
+              .isEmpty());
+    CHECK(timeline->SelectedKeys().size() == 4);
+    CHECK(simplify({ref(0), ref(1), ref(2), ref(3)},
+                   {Choose("Simplify 4 keyframe(s)..."), AnswerNumber(0)})
+              .isEmpty());
+    std::vector<Document::KeyRef> selected = timeline->SelectedKeys();
+    std::ranges::sort(selected);
+    CHECK(selected == std::vector<Document::KeyRef>{ref(0), ref(3)});
+    CHECK(opened.window.statusBar()->currentMessage().contains("2 keyframe(s) removed"));
+    CHECK(RowValue(*opened.inspector, "Keyframe") != "Translation on frame 1");
+    CHECK(std::vector<int>{x_on(0), x_on(1), x_on(2), x_on(3)} == before);
 }

@@ -4,6 +4,7 @@
 
 #include "document/authored.h"
 #include "document/key_selection.h"
+#include "document/key_simplify.h"
 #include "support/expected.h"
 
 #include <QAction>
@@ -207,6 +208,30 @@ void Window::StretchSelectedKeysBy(const Document::KeyStretch& stretch) {
         return;
     }
     SelectMovedKeys(chosen, std::move(stretched));
+}
+
+void Window::SimplifySelectedKeys() {
+    const std::vector<Document::KeyRef> chosen = timeline_->SelectedKeys();
+    bool accepted = false;
+    const int tolerance =
+        QInputDialog::getInt(this, tr("Simplify keyframes"),
+                             tr("Largest change allowed on any frame, in the property's own units"),
+                             0, 0, 1000000, 1, &accepted);
+    if (!accepted) return;
+    std::vector<Document::KeyRef> remaining;
+    if (!EditAuthored(tr("Simplify %n keyframe(s)", nullptr, static_cast<int>(chosen.size())),
+                      [&chosen, tolerance, &remaining](Document::AuthoredDepth& authored) {
+                          using Changed = Support::Expected<void, std::string>;
+                          auto kept = Document::SimplifyKeys(authored, chosen, tolerance);
+                          if (!kept) return Changed(Support::Unexpected(kept.error()));
+                          remaining = std::move(*kept);
+                          return Changed();
+                      })) {
+        return;
+    }
+    const std::size_t removed = chosen.size() - remaining.size();
+    statusBar()->showMessage(tr("%n keyframe(s) removed", nullptr, static_cast<int>(removed)));
+    ShowFrame();
 }
 
 void Window::SelectMovedKeys(const std::vector<Document::KeyRef>& chosen,

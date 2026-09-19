@@ -865,6 +865,20 @@ dragging it, reverses the three from the menu, and reads the values on every
 frame, the new selection (frames 0, 2 and 3), the focused keyframe on frame 3,
 and the undo. Dropping the menu entry, the selection or the focus fails it.
 
+The lane menu offers `Simplify N keyframe(s)...` for three or more selected
+keyframes (`Window::SimplifySelectedKeys`, through `Document::SimplifyKeys`).
+It asks for the largest change allowed on any frame, in the property's own
+units, 0 meaning nothing drawn may change, and removes every keyframe a line
+can stand in for, as one undo step. The status bar says how many went.
+`EditAuthored` already restores the selection without the keyframes an edit
+removed, so the survivors stay selected, and a focus on a removed keyframe
+shows no keyframe row, since the inspector finds no keyframe there. The window
+test drags the dot's owned depth into a straight run on four frames, sees the
+entry missing for two keyframes, cancels once and sees nothing change,
+simplifies at 0, and reads the two ends selected, the message, no keyframe row
+and every frame's translation unchanged. Dropping the menu entry or its count,
+the cancel check or the message fails it.
+
 The lane menu also offers `Time-stretch N keyframe(s)...` for two or more
 selected keyframes (`Window::StretchSelectedKeys`, through
 `Document::StretchKeys`). It asks for the stretch factor as a percentage, as

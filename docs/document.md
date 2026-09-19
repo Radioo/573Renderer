@@ -1799,6 +1799,51 @@ paste or a move that fails halfway leaves nothing behind.
   keeps that decision from reading past the track; `SetKeysEase` is what
   refuses it, so the check has no visible effect of its own.
 
+## Simplifying keyframes (`document/key_simplify.h`)
+
+`SimplifyKeys(authored, keys, tolerance)` is After Effects' keyframe reducer
+(the Smoother keyframe assistant): it thins a dense run of keyframes into the
+few that a line can carry. `OwnDepth` keys every frame a property is set on,
+and a shipped tween is baked one update per frame, so an owned depth usually
+arrives with a keyframe on every frame of its motion, each holding. That is
+exact and useless to edit; this is how it becomes a handful of keys.
+
+In each property with selected keyframes, the first and last selected stay.
+From the first, the reach is pushed along the run while a straight line from
+the current keyframe to the next candidate samples, on every frame between
+them, within `tolerance` of what the track sampled before, in every value of
+the property. The furthest candidate that still fits is kept and becomes the
+next start. A kept keyframe whose stretch was merged this way gets a linear
+ease; one whose stretch could not be merged (its neighbour already fails the
+line, such as a hold across a gap) keeps its own ease, so that stretch draws
+as before. The last selected keyframe keeps its ease, since the stretch after
+it is not touched. The check samples the candidate with `SampleTrack`, the
+function export uses, so the tolerance is a bound on what is written, rounding
+included: at `tolerance` 0 every frame is drawn exactly as before. It is in the
+property's own units (twentieths of a pixel for a translation, 1024ths for a
+scale).
+
+Stepped properties (character, clip depth, blend, filters, curves) jump from
+key to key and have no line to fit, so their selected keyframes are left as
+they are and stay selected. A missing keyframe, an unselected keyframe between
+selected ones of the same property, a selected keyframe of a property the
+depth does not animate, a negative tolerance and a selection where every
+keyframe is needed are refused, and a refusal changes nothing. It returns the
+selected keyframes that remain, in track order.
+
+The size check in the per-frame comparison only guards the indexing: the line
+and the track it came from are the same property with the same arity, and the
+properties whose keyframes can hold different numbers of values (filters,
+curves) are stepped and never reach it, so changing that check is an
+equivalent mutant.
+
+`key_simplify_tests.cpp` reduces a baked straight run to its ends with every
+frame exact, keeps the keyframe where a line bends, keeps a quadratic within a
+tolerance of 12 with fewer keyframes and some rounding used, refuses a bowed
+run a line misses by one at tolerance 0 and simplifies it at 1, keeps a hold
+across a gap as a hold next to a merged run, and checks stepped properties are
+left alone along with every refusal.
+
 ## Export drift (`document/project_drift.h`)
 
 A project stores only the authored half, so the baked spans in the IFS are the

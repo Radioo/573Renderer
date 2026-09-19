@@ -881,6 +881,7 @@ add_executable(document_tests
     tests/document/clip_trim_tests.cpp
     tests/document/clip_extract_tests.cpp
     tests/document/anchor_edit_tests.cpp
+    tests/document/key_simplify_tests.cpp
     tests/document/span_sequence_tests.cpp
     tests/document/timeline_snap_tests.cpp
     tests/document/motion_path_tests.cpp
