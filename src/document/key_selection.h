@@ -20,6 +20,12 @@ struct KeyRef {
 
 enum class EasySide : uint8_t { Both, In, Out };
 
+struct KeyStretch {
+    uint32_t anchor = 0;
+    int64_t scale = 1;
+    int64_t over = 1;
+};
+
 struct KeyClip {
     std::vector<Track> tracks;
 
@@ -47,7 +53,9 @@ ShiftKeys(AuthoredDepth& authored, const std::vector<KeyRef>& keys, int64_t by);
 ReverseKeys(AuthoredDepth& authored, const std::vector<KeyRef>& keys);
 
 [[nodiscard]] Support::Expected<std::vector<KeyRef>, std::string>
-StretchKeys(AuthoredDepth& authored, const std::vector<KeyRef>& keys, uint32_t percent);
+StretchKeys(AuthoredDepth& authored, const std::vector<KeyRef>& keys, const KeyStretch& stretch);
+
+[[nodiscard]] int64_t StretchedFrame(const KeyStretch& stretch, uint32_t frame);
 
 [[nodiscard]] Support::Expected<void, std::string>
 EasyEaseKeys(AuthoredDepth& authored, const std::vector<KeyRef>& keys, EasySide side);

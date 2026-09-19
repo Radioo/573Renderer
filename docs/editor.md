@@ -841,13 +841,31 @@ The lane menu also offers `Time-stretch N keyframe(s)...` for two or more
 selected keyframes (`Window::StretchSelectedKeys`, through
 `Document::StretchKeys`). It asks for the stretch factor as a percentage, as
 After Effects' Time Stretch does, and spreads the selection from its earliest
-keyframe, as one undo step. Like the reverse, it keeps the moved keyframes
+keyframe (a `KeyStretch` of that frame and `percent / 100`), as one undo step. Like the reverse, it keeps the moved keyframes
 selected and the focused one focused where it went (`Window::SelectMovedKeys`
 does both for the two). The window test owns the dot's depth, keys frames 0
 and 1, cancels the dialog and sees nothing change, stretches them to 200% and
 reads the values on frames 0, 2 and 3, the selection and the focus, undoes,
 and is refused at 400% because frame 4 is outside the owned range. Dropping
 the menu entry, the cancel check, the new selection or the focus fails it.
+
+Alt-dragging the first or last selected keyframe on the timeline stretches the
+selection with the other end fixed, as Alt-dragging does in After Effects. The
+timeline works out the fixed end on the press (`Timeline::FixedEnd`: only the
+earliest or latest selected frame, and only when they differ), shows every
+selected keyframe where the stretch will put it while dragging, and on release
+sends `KeysStretched` with the fixed end as the anchor and the ratio of the new
+distance to the old one; `Window::StretchSelectedKeysBy` applies it, the same
+edit the menu makes. The preview goes through `Document::StretchedFrame`, the
+function the edit uses, so what the drag shows is what the edit does. An
+Alt-drag of any other keyframe, or of a lone one, moves the selection as a
+plain drag does. The widget test selects the keyframes on 0, 4 and 8,
+Alt-drags the last to 4 and sees the preview's mark on frame 2 and the stretch
+sent, Alt-drags the first the other way, and sees a middle keyframe, an
+Alt-click that did not drag followed by a plain drag, and a lone keyframe all
+shift instead. The window test sends a stretch and reads the values it moved.
+Dropping the fixed end, either end's case, the lone-keyframe check, the stretch
+preview, the press reset or the window's connection fails them.
 
 Ctrl+Alt+H, or `Toggle hold` in the lane menu, toggles hold on the selected
 keyframes (`Window::ToggleHoldSelectedKeys`, through `Document::ToggleHoldKeys`),

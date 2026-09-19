@@ -4,6 +4,7 @@
 #include "editor_timeline.h"
 #include "widget_test_support.h"
 
+#include "document/key_selection.h"
 #include "document/outline.h"
 #include "document/timeline.h"
 
@@ -207,4 +208,57 @@ TEST_CASE("A character dropped on the timeline is reported at its frame and row"
     CHECK(drops[0].depth == uint16_t{1});
     CHECK(drops[1].frame == 7);
     CHECK_FALSE(drops[1].depth.has_value());
+}
+
+TEST_CASE("Alt-dragging the first or last selected keyframe stretches the selection") {
+    Editor::Timeline timeline;
+    ShowScene(timeline);
+    std::vector<Document::KeyStretch> stretches;
+    std::vector<int64_t> shifts;
+    QObject::connect(
+        &timeline, &Editor::Timeline::KeysStretched,
+        [&stretches](const Document::KeyStretch& stretch) { stretches.push_back(stretch); });
+    QObject::connect(&timeline, &Editor::Timeline::KeysShifted,
+                     [&shifts](int64_t by) { shifts.push_back(by); });
+    const auto is_selected_key = [&timeline](uint32_t frame) {
+        const QColor drawn =
+            timeline.grab().toImage().pixelColor(QPointF(FrameX(frame), kFirstPropertyY).toPoint());
+        return drawn.red() > 200 && drawn.blue() < 150;
+    };
+    Click(timeline, {FrameX(0), kFirstPropertyY});
+    Click(timeline, {FrameX(4), kFirstPropertyY}, Qt::ControlModifier);
+    Click(timeline, {FrameX(8), kFirstPropertyY}, Qt::ControlModifier);
+
+    Send(timeline, QEvent::MouseButtonPress, {FrameX(8), kFirstPropertyY}, Qt::LeftButton,
+         Qt::AltModifier);
+    Send(timeline, QEvent::MouseMove, {FrameX(4), kFirstPropertyY}, Qt::LeftButton,
+         Qt::AltModifier);
+    CHECK(is_selected_key(2));
+    CHECK(is_selected_key(0));
+    Send(timeline, QEvent::MouseButtonRelease, {FrameX(4), kFirstPropertyY}, Qt::NoButton,
+         Qt::AltModifier);
+    REQUIRE(stretches.size() == 1);
+    CHECK(stretches[0].anchor == 0);
+    CHECK(stretches[0].scale == 4);
+    CHECK(stretches[0].over == 8);
+
+    Drag(timeline, {FrameX(0), kFirstPropertyY}, {FrameX(2), kFirstPropertyY}, Qt::AltModifier);
+    REQUIRE(stretches.size() == 2);
+    CHECK(stretches[1].anchor == 8);
+    CHECK(stretches[1].scale == -6);
+    CHECK(stretches[1].over == -8);
+
+    Drag(timeline, {FrameX(4), kFirstPropertyY}, {FrameX(5), kFirstPropertyY}, Qt::AltModifier);
+    CHECK(stretches.size() == 2);
+    CHECK(shifts == std::vector<int64_t>{1});
+    Click(timeline, {FrameX(8), kFirstPropertyY}, Qt::AltModifier);
+    Drag(timeline, {FrameX(8), kFirstPropertyY}, {FrameX(9), kFirstPropertyY});
+    CHECK(stretches.size() == 2);
+    CHECK(shifts == std::vector<int64_t>{1, 1});
+    Click(timeline, {FrameX(6), kFirstPropertyY});
+    Click(timeline, {FrameX(4), kFirstPropertyY});
+    REQUIRE(timeline.SelectedKeys().size() == 1);
+    Drag(timeline, {FrameX(4), kFirstPropertyY}, {FrameX(6), kFirstPropertyY}, Qt::AltModifier);
+    CHECK(stretches.size() == 2);
+    CHECK(shifts == std::vector<int64_t>{1, 1, 2});
 }

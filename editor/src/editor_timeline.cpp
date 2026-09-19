@@ -2,6 +2,7 @@
 
 #include "editor_mime.h"
 
+#include "document/key_selection.h"
 #include "document/keyframes.h"
 #include "document/outline.h"
 #include "document/timeline.h"
@@ -349,7 +350,30 @@ void Timeline::contextMenuEvent(QContextMenuEvent* event) {
     emit MenuRequested(event->globalPos(), XToFrame(x), LabelNear(x, kLabelReach));
 }
 
-void Timeline::PressKeys(const Lane& lane, QPoint at, bool toggle) {
+std::optional<uint32_t> Timeline::FixedEnd(uint32_t pressed) const {
+    if (selected_keys_.empty()) return std::nullopt;
+    const auto [first, last] = std::ranges::minmax(selected_keys_, {}, &Document::KeyRef::frame);
+    if (first.frame == last.frame) return std::nullopt;
+    if (pressed == first.frame) return last.frame;
+    if (pressed == last.frame) return first.frame;
+    return std::nullopt;
+}
+
+int64_t Timeline::ShownFrame(uint32_t frame) const {
+    if (!drag_from_) return frame;
+    if (!stretch_fixed_) {
+        return static_cast<int64_t>(frame) + static_cast<int64_t>(drag_to_) -
+               static_cast<int64_t>(*drag_from_);
+    }
+    return Document::StretchedFrame(
+        Document::KeyStretch{
+            .anchor = *stretch_fixed_,
+            .scale = static_cast<int64_t>(drag_to_) - static_cast<int64_t>(*stretch_fixed_),
+            .over = static_cast<int64_t>(*drag_from_) - static_cast<int64_t>(*stretch_fixed_)},
+        frame);
+}
+
+void Timeline::PressKeys(const Lane& lane, QPoint at, bool toggle, bool stretching) {
     const std::optional<uint32_t> key = KeyNear(lane.track, at.x());
     if (!key) {
         band_kept_ = toggle ? selected_keys_ : std::vector<Document::KeyRef>{};
@@ -369,6 +393,7 @@ void Timeline::PressKeys(const Lane& lane, QPoint at, bool toggle) {
     if (!IsSelected(pressed)) selected_keys_.push_back(pressed);
     drag_from_ = *key;
     drag_to_ = *key;
+    if (stretching) stretch_fixed_ = FixedEnd(*key);
     update();
     emit KeyChosen(QString::fromStdString(pressed.property), pressed.frame);
 }
@@ -597,6 +622,7 @@ bool Timeline::PressLabel(QPoint at) {
 
 void Timeline::mousePressEvent(QMouseEvent* event) {
     drag_from_.reset();
+    stretch_fixed_.reset();
     band_from_.reset();
     span_depth_.reset();
     span_dragging_ = false;
@@ -611,7 +637,8 @@ void Timeline::mousePressEvent(QMouseEvent* event) {
         if (PressSwitch(lanes[*lane], event->pos())) return;
         if (PressDepthNumber(lanes[*lane], event->pos(), event->modifiers())) return;
         if (lanes[*lane].is_property) {
-            PressKeys(lanes[*lane], event->pos(), toggle);
+            PressKeys(lanes[*lane], event->pos(), toggle,
+                      (event->modifiers() & Qt::AltModifier) != 0);
         } else {
             PressSpan(lanes[*lane], event->pos());
         }
@@ -704,9 +731,16 @@ void Timeline::mouseReleaseEvent(QMouseEvent* event) {
         return;
     }
     if (!from) return;
-    const int64_t by =
-        static_cast<int64_t>(XToFrame(event->pos().x())) - static_cast<int64_t>(*from);
-    if (by != 0) emit KeysShifted(by);
+    const uint32_t released = XToFrame(event->pos().x());
+    if (released == *from) return;
+    if (const std::optional<uint32_t> fixed = std::exchange(stretch_fixed_, std::nullopt)) {
+        emit KeysStretched(Document::KeyStretch{
+            .anchor = *fixed,
+            .scale = static_cast<int64_t>(released) - static_cast<int64_t>(*fixed),
+            .over = static_cast<int64_t>(*from) - static_cast<int64_t>(*fixed)});
+        return;
+    }
+    emit KeysShifted(static_cast<int64_t>(released) - static_cast<int64_t>(*from));
 }
 
 void Timeline::DrawSpanGhost(QPainter& painter, const Document::Span& span, int y) const {
@@ -720,12 +754,10 @@ void Timeline::DrawSpanGhost(QPainter& painter, const Document::Span& span, int 
 }
 
 void Timeline::DrawKeys(QPainter& painter, const Document::Track& track, int y) const {
-    const int64_t shift =
-        drag_from_ ? static_cast<int64_t>(drag_to_) - static_cast<int64_t>(*drag_from_) : 0;
     const int middle = y + kRowHeight / 2;
     for (const Document::Keyframe& key : track.keys) {
         const bool selected = IsSelected({.property = track.property, .frame = key.frame});
-        const int64_t shown = static_cast<int64_t>(key.frame) + (selected ? shift : 0);
+        const int64_t shown = selected ? ShownFrame(key.frame) : static_cast<int64_t>(key.frame);
         const int x = FrameToX(static_cast<uint32_t>(std::clamp<int64_t>(
             shown, 0, frame_count_ > 0 ? static_cast<int64_t>(frame_count_ - 1) : 0)));
         painter.setPen(Qt::NoPen);

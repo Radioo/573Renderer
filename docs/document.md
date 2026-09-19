@@ -1678,11 +1678,17 @@ paste or a move that fails halfway leaves nothing behind.
   among the reversed ones, so the reverse is refused and names it. It returns
   where each selected keyframe went, in the order they were given.
 - `StretchKeys` is After Effects' keyframe time stretch (Alt-dragging the end
-  of a keyframe selection). Every selected keyframe moves away from the
-  earliest selected frame, of any property, by `percent` of its distance: from
-  `f` to `anchor + (f - anchor) * percent / 100`, rounded to the nearest frame
-  with a half frame going up, in whole numbers so the result is exact. Values
-  and eases stay with their keyframes. An ease is how the animation leaves a
+  of a keyframe selection). A `KeyStretch` is an anchor frame and a ratio
+  `scale / over` of whole numbers, and every selected keyframe, of any
+  property, moves from `f` to `StretchedFrame`, `anchor + (f - anchor) * scale
+  / over` rounded to the nearest frame with a half frame going up (towards
+  later frames, so -1.5 rounds to -1). The rounding is done in whole numbers,
+  with a floor division for offsets before the anchor, so the result is exact.
+  The ratio is a fraction rather than a percentage so that a drag can land the
+  dragged keyframe exactly where the pointer is: dragging the last keyframe
+  from 8 frames after the anchor to 4 is `4 / 8`, which a whole percentage
+  cannot always say. A ratio of zero or below would put keyframes onto or past
+  the anchor, which is refused. Values and eases stay with their keyframes. An ease is how the animation leaves a
   keyframe, and a bezier's control points are fractions of the stretch it
   describes, so a stretch keeps each curve's shape at its new length, and with
   linear and bezier eases frame `anchor + (f - anchor) * percent / 100` shows
@@ -1690,7 +1696,7 @@ paste or a move that fails halfway leaves nothing behind.
   Unselected keyframes stay where they are. The stretch is refused when a
   keyframe would leave the owned range, or would land on or pass another
   keyframe of its property (a shrink can round two onto one frame), and it is
-  refused at 0% and when no keyframe moves. It returns where each selected
+  refused when no keyframe moves. It returns where each selected
   keyframe went, in the order they were given. Only authored keyframes are
   stretched: a captured span holds an update on every frame and the format has
   no interpolation between them, so spreading them out would only make the

@@ -129,6 +129,7 @@ private:
     void ShiftSelectedKeys(int64_t by);
     void ReverseSelectedKeys();
     void StretchSelectedKeys();
+    void StretchSelectedKeysBy(const Document::KeyStretch& stretch);
     void SelectMovedKeys(const std::vector<Document::KeyRef>& chosen,
                          std::vector<Document::KeyRef> moved);
     void EasyEaseSelectedKeys(Document::EasySide side);

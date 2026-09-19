@@ -172,6 +172,7 @@ void Window::BuildPanels() {
     connect(timeline_, &Timeline::MenuRequested, this, &Window::ShowTimelineMenu);
     connect(timeline_, &Timeline::KeyChosen, this, &Window::FocusKey);
     connect(timeline_, &Timeline::KeysShifted, this, &Window::ShiftSelectedKeys);
+    connect(timeline_, &Timeline::KeysStretched, this, &Window::StretchSelectedKeysBy);
     connect(timeline_, &Timeline::SpanMoved, this, &Window::MoveSpanInTime);
     connect(timeline_, &Timeline::SpanTrimmed, this, &Window::TrimSpanOnTimeline);
     connect(timeline_, &Timeline::VisibilityToggled, this, &Window::ToggleHidden);

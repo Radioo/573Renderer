@@ -113,8 +113,8 @@ Support::Expected<void, std::string> CheckHeld(const AuthoredDepth& authored,
 }
 
 Support::Expected<void, std::string> StretchTrack(const AuthoredDepth& authored, Track& track,
-                                                  const std::vector<KeyRef>& keys, uint32_t anchor,
-                                                  uint32_t percent,
+                                                  const std::vector<KeyRef>& keys,
+                                                  const KeyStretch& stretch,
                                                   std::map<KeyRef, uint32_t>& moved) {
     std::vector<uint32_t> frames;
     frames.reserve(track.keys.size());
@@ -124,9 +124,7 @@ Support::Expected<void, std::string> StretchTrack(const AuthoredDepth& authored,
             frames.push_back(key.frame);
             continue;
         }
-        const uint64_t offset = key.frame - anchor;
-        auto at =
-            FrameWithin(authored, static_cast<int64_t>(anchor + ((offset * percent + 50) / 100)));
+        auto at = FrameWithin(authored, StretchedFrame(stretch, key.frame));
         if (!at) return Support::Unexpected(at.error());
         moved[ref] = *at;
         frames.push_back(*at);
@@ -343,19 +341,18 @@ Support::Expected<std::vector<KeyRef>, std::string> ReverseKeys(AuthoredDepth& a
 }
 
 Support::Expected<std::vector<KeyRef>, std::string>
-StretchKeys(AuthoredDepth& authored, const std::vector<KeyRef>& keys, uint32_t percent) {
+StretchKeys(AuthoredDepth& authored, const std::vector<KeyRef>& keys, const KeyStretch& stretch) {
     if (keys.empty()) return Support::Unexpected(std::string("no keyframes are selected"));
-    if (percent == 0) {
-        return Support::Unexpected(
-            std::string("a stretch of 0% would put every keyframe on one frame"));
+    if (stretch.scale == 0 || stretch.over == 0 || (stretch.scale < 0) != (stretch.over < 0)) {
+        return Support::Unexpected("keyframes can only be stretched away from or towards frame " +
+                                   std::to_string(stretch.anchor) + ", not onto or past it");
     }
     auto held = CheckHeld(authored, keys);
     if (!held) return Support::Unexpected(held.error());
-    const uint32_t anchor = std::ranges::min(keys, {}, &KeyRef::frame).frame;
     AuthoredDepth edited = authored;
     std::map<KeyRef, uint32_t> moved;
     for (Track& track : edited.tracks) {
-        auto stretched = StretchTrack(authored, track, keys, anchor, percent, moved);
+        auto stretched = StretchTrack(authored, track, keys, stretch, moved);
         if (!stretched) return Support::Unexpected(stretched.error());
     }
     if (std::ranges::all_of(moved,
@@ -367,6 +364,15 @@ StretchKeys(AuthoredDepth& authored, const std::vector<KeyRef>& keys, uint32_t p
         placed.push_back(KeyRef{.property = key.property, .frame = moved.at(key)});
     authored = std::move(edited);
     return placed;
+}
+
+int64_t StretchedFrame(const KeyStretch& stretch, uint32_t frame) {
+    const int64_t over = stretch.over < 0 ? -stretch.over : stretch.over;
+    const int64_t scale = stretch.over < 0 ? -stretch.scale : stretch.scale;
+    const int64_t twice = (2 * (static_cast<int64_t>(frame) - stretch.anchor) * scale) + over;
+    const int64_t whole = twice / (2 * over);
+    const bool below = twice % (2 * over) != 0 && twice < 0;
+    return static_cast<int64_t>(stretch.anchor) + whole - (below ? 1 : 0);
 }
 
 Support::Expected<void, std::string> EasyEaseKeys(AuthoredDepth& authored,

@@ -420,4 +420,10 @@ TEST_CASE("Time-stretching an owned depth's keyframes spreads them from the firs
     REQUIRE_FALSE(refused.isEmpty());
     CHECK(refused.front().contains("outside"));
     CHECK(x_on(1) == second);
+
+    emit timeline->FrameChosen(1);
+    timeline->SelectKeys({ref(0), ref(1)});
+    emit timeline->KeysStretched(Document::KeyStretch{.anchor = 0, .scale = 2, .over = 1});
+    CHECK(x_on(2) == second);
+    CHECK(x_on(1) == first);
 }

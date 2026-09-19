@@ -182,16 +182,24 @@ void Window::ReverseSelectedKeys() {
 
 void Window::StretchSelectedKeys() {
     const std::vector<Document::KeyRef> chosen = timeline_->SelectedKeys();
+    if (chosen.empty()) return;
     bool accepted = false;
     const int percent = QInputDialog::getInt(this, tr("Time-stretch keyframes"),
                                              tr("Stretch factor (%)"), 100, 1, 10000, 1, &accepted);
     if (!accepted) return;
+    StretchSelectedKeysBy(
+        Document::KeyStretch{.anchor = std::ranges::min(chosen, {}, &Document::KeyRef::frame).frame,
+                             .scale = percent,
+                             .over = 100});
+}
+
+void Window::StretchSelectedKeysBy(const Document::KeyStretch& stretch) {
+    const std::vector<Document::KeyRef> chosen = timeline_->SelectedKeys();
     std::vector<Document::KeyRef> stretched;
     if (!EditAuthored(tr("Time-stretch %n keyframe(s)", nullptr, static_cast<int>(chosen.size())),
-                      [&chosen, percent, &stretched](Document::AuthoredDepth& authored) {
+                      [&chosen, &stretch, &stretched](Document::AuthoredDepth& authored) {
                           using Changed = Support::Expected<void, std::string>;
-                          auto placed = Document::StretchKeys(authored, chosen,
-                                                              static_cast<uint32_t>(percent));
+                          auto placed = Document::StretchKeys(authored, chosen, stretch);
                           if (!placed) return Changed(Support::Unexpected(placed.error()));
                           stretched = std::move(*placed);
                           return Changed();

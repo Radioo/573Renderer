@@ -333,3 +333,4 @@ captured. This milestone is the editing itself.
 - `issues/125-extract-work-area.md` (milestone 8)
 - `issues/126-lift-work-area.md` (milestone 8)
 - `issues/127-time-stretch-keyframes.md` (milestone 8)
+- `issues/128-alt-drag-stretch-keyframes.md` (milestone 8)

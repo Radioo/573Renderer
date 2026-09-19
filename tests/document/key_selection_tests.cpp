@@ -358,7 +358,8 @@ TEST_CASE("Stretching keyframes slows their stretch down frame by frame") {
     depth.tracks[0].keys[0].bezier = {.x1 = 0.5, .y1 = 0.0, .x2 = 0.75, .y2 = 0.25};
     const Document::Track before = depth.tracks[0];
     const auto stretched = Document::StretchKeys(
-        depth, {Ref("Translation", 8), Ref("Translation", 0), Ref("Translation", 4)}, 150);
+        depth, {Ref("Translation", 8), Ref("Translation", 0), Ref("Translation", 4)},
+        Document::KeyStretch{.anchor = 0, .scale = 150, .over = 100});
     INFO(Error(stretched));
     REQUIRE(stretched.has_value());
     CHECK(*stretched == std::vector<KeyRef>{Ref("Translation", 12), Ref("Translation", 0),
@@ -376,10 +377,11 @@ TEST_CASE("Stretching keyframes slows their stretch down frame by frame") {
     CHECK(depth.tracks[1] == Depth().tracks[1]);
 }
 
-TEST_CASE("Stretching keyframes counts from the earliest selected one of any property") {
+TEST_CASE("Stretching keyframes counts from the anchor for every property") {
     Document::AuthoredDepth depth = Depth();
     const auto stretched = Document::StretchKeys(
-        depth, {Ref("Multiply colour", 6), Ref("Translation", 8), Ref("Translation", 4)}, 50);
+        depth, {Ref("Multiply colour", 6), Ref("Translation", 8), Ref("Translation", 4)},
+        Document::KeyStretch{.anchor = 4, .scale = 1, .over = 2});
     INFO(Error(stretched));
     REQUIRE(stretched.has_value());
     CHECK(*stretched == std::vector<KeyRef>{Ref("Multiply colour", 5), Ref("Translation", 6),
@@ -392,7 +394,8 @@ TEST_CASE("Stretching keyframes counts from the earliest selected one of any pro
 TEST_CASE("Stretching puts a keyframe on the nearest frame, rounding a half frame up") {
     Document::AuthoredDepth depth = Depth();
     const auto stretched =
-        Document::StretchKeys(depth, {Ref("Translation", 4), Ref("Multiply colour", 6)}, 125);
+        Document::StretchKeys(depth, {Ref("Translation", 4), Ref("Multiply colour", 6)},
+                              Document::KeyStretch{.anchor = 4, .scale = 5, .over = 4});
     INFO(Error(stretched));
     REQUIRE(stretched.has_value());
     CHECK(Frames(depth, "Multiply colour") == std::vector<uint32_t>{0, 7});
@@ -402,11 +405,14 @@ TEST_CASE("Stretching puts a keyframe on the nearest frame, rounding a half fram
 TEST_CASE("Stretching is refused, leaving the depth alone, when the keys cannot all move") {
     Document::AuthoredDepth depth = Depth();
     const Document::AuthoredDepth before = depth;
-    const auto refusal = [&depth](const std::vector<KeyRef>& keys, uint32_t percent) {
-        return Error(Document::StretchKeys(depth, keys, percent));
+    const auto refusal = [&depth](const std::vector<KeyRef>& keys, int64_t percent) {
+        return Error(Document::StretchKeys(
+            depth, keys, Document::KeyStretch{.anchor = 0, .scale = percent, .over = 100}));
     };
     CHECK(refusal({}, 150).find("no keyframes") != std::string::npos);
-    CHECK(refusal({Ref("Translation", 0), Ref("Translation", 4)}, 0).find("0%") !=
+    CHECK(refusal({Ref("Translation", 0), Ref("Translation", 4)}, 0).find("onto or past") !=
+          std::string::npos);
+    CHECK(refusal({Ref("Translation", 0), Ref("Translation", 4)}, -100).find("onto or past") !=
           std::string::npos);
     CHECK(refusal({Ref("Translation", 0), Ref("Translation", 5)}, 150).find("frame 5") !=
           std::string::npos);
@@ -414,9 +420,25 @@ TEST_CASE("Stretching is refused, leaving the depth alone, when the keys cannot 
           std::string::npos);
     CHECK(refusal({Ref("Translation", 0), Ref("Translation", 4)}, 250).find("frame 8") !=
           std::string::npos);
-    CHECK(refusal({Ref("Translation", 4), Ref("Translation", 8)}, 10).find("frame 4") !=
-          std::string::npos);
+    CHECK(Error(Document::StretchKeys(depth, {Ref("Translation", 4), Ref("Translation", 8)},
+                                      Document::KeyStretch{.anchor = 4, .scale = 1, .over = 10}))
+              .find("frame 4") != std::string::npos);
     CHECK(refusal({Ref("Translation", 0), Ref("Translation", 4)}, 100).find("moves no") !=
           std::string::npos);
     CHECK(depth == before);
+}
+
+TEST_CASE("Stretching towards a later anchor pulls earlier keyframes in, rounding to the nearest") {
+    Document::AuthoredDepth depth = Depth();
+    const auto stretched =
+        Document::StretchKeys(depth, {Ref("Translation", 4), Ref("Translation", 8)},
+                              Document::KeyStretch{.anchor = 8, .scale = -5, .over = -16});
+    INFO(Error(stretched));
+    REQUIRE(stretched.has_value());
+    CHECK(*stretched == std::vector<KeyRef>{Ref("Translation", 7), Ref("Translation", 8)});
+    CHECK(Frames(depth, "Translation") == std::vector<uint32_t>{0, 7, 8});
+    CHECK(Document::StretchedFrame(Document::KeyStretch{.anchor = 8, .scale = 3, .over = 8}, 4) ==
+          7);
+    CHECK(Document::StretchedFrame(Document::KeyStretch{.anchor = 8, .scale = 5, .over = 8}, 4) ==
+          6);
 }

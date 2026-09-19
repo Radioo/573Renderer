@@ -65,6 +65,7 @@ signals:
     void DepthsChosen(std::vector<uint16_t> depths);
     void KeyChosen(const QString& property, uint32_t frame);
     void KeysShifted(int64_t by);
+    void KeysStretched(const Document::KeyStretch& stretch);
     void SpanMoved(uint16_t depth, uint32_t frame, int64_t by);
     void SpanTrimmed(uint16_t depth, uint32_t frame, uint32_t first, uint32_t last);
     void VisibilityToggled(uint16_t depth);
@@ -108,7 +109,9 @@ private:
     [[nodiscard]] uint32_t XToFrame(int x) const;
     [[nodiscard]] std::optional<uint32_t> KeyNear(std::size_t track, int x) const;
     void ChooseAt(int x, int y);
-    void PressKeys(const Lane& lane, QPoint at, bool toggle);
+    void PressKeys(const Lane& lane, QPoint at, bool toggle, bool stretching);
+    [[nodiscard]] std::optional<uint32_t> FixedEnd(uint32_t pressed) const;
+    [[nodiscard]] int64_t ShownFrame(uint32_t frame) const;
     void PressSpan(const Lane& lane, QPoint at);
     [[nodiscard]] std::optional<Document::Span> SpanAt(uint16_t depth, int x) const;
     [[nodiscard]] SpanDrag DragAt(const Document::Span& span, int x) const;
@@ -143,6 +146,7 @@ private:
     std::vector<Document::KeyRef> selected_keys_;
     std::optional<uint32_t> drag_from_;
     uint32_t drag_to_ = 0;
+    std::optional<uint32_t> stretch_fixed_;
     std::optional<QPoint> band_from_;
     std::optional<uint16_t> span_depth_;
     std::optional<Document::Span> span_grabbed_;
