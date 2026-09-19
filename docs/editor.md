@@ -196,6 +196,13 @@ item while its own double-click signal is still being delivered. Its menu places
 the character on a new depth from the playhead, asking for the depth (the first
 free one is suggested) and the last frame the way the timeline's add depth does
 (`Window::AskForLastFrame`, `Window::AddCharacterDepth`, both shared with it).
+On a sprite it also offers `Duplicate this sprite` (`Document::DuplicateSprite`,
+one undo step, refilling the clip box so the copy can be edited on its own), and
+with a depth selected, `Use on depth N from frame F`, which sets the character
+of the placement live on that frame through the same field edit the inspector's
+Character row uses, as After Effects replaces a layer's source. Duplicating a
+sprite and using the copy on a depth is how a variant is made without touching
+the other places the original is shown.
 The package tree and the library are named (`package`, `library`) so a test can
 tell the two trees apart.
 

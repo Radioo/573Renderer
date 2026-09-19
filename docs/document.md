@@ -1183,6 +1183,18 @@ grouping makes:
 Shipped sprites are usually placed with a matrix, so for now this mostly undoes
 the editor's own groups.
 
+`DuplicateSprite(animation, sprite)` copies a root sprite definition, its whole
+timeline, under the next free character id (`NextCharacterId`) and defines the
+copy on the same root frame as the original, so anything that can place the
+original can place the copy. Strings are shared within the animation, so
+nothing needs carrying; exports are not copied, so the copy has no linkage name
+until one is given. It refuses an id that is not a root sprite.
+`group_sprite_tests` checks the id, the timeline and the frame, and fails when
+the id or the frame is left as it was. A live test (`sprite_duplicate_live_tests`,
+`local_dll`) finds a root depth showing a sprite on frame 400 of IIDX 33's
+`title`, points it at a duplicate of that sprite, and requires the host to draw
+the frame exactly as before; emptying the copy's timeline fails it.
+
 ### Hiding depths in the view (`document/hidden_depths.h`)
 
 `HideDepths(animation, clip, depths)` drops every placement and remove of those

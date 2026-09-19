@@ -732,6 +732,7 @@ add_executable(local_dll_tests
     tests/local/group_sprite_live_tests.cpp
     tests/local/animation_rename_live_tests.cpp
     tests/local/animation_duplicate_live_tests.cpp
+    tests/local/sprite_duplicate_live_tests.cpp
     tests/local/live_stage.cpp
     src/qpro/qpro_dll.cpp
     src/gc2d/gc_package.cpp

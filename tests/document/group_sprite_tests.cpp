@@ -87,6 +87,37 @@ std::string Error(const auto& result) {
 
 }
 
+TEST_CASE("A duplicated sprite is a copy under the next free id, defined where the original is") {
+    AfpAnimation::Animation animation = Clip(3);
+    AfpAnimation::Sprite card{.id = 4, .container = {}};
+    card.container.frames = {AfpAnimation::Frame{.first_tag = 0, .tag_count = 1},
+                             AfpAnimation::Frame{.first_tag = 1, .tag_count = 0}};
+    AfpAnimation::Placement inside;
+    inside.depth = 1;
+    inside.character = kCharacter;
+    card.container.tags = {AfpAnimation::Tag{inside}};
+    Document::InsertTag(animation.root, 1, AfpAnimation::Tag{card});
+    animation.exports = {AfpAnimation::Export{.tag = 4, .name = 0}};
+
+    const auto copied = Document::DuplicateSprite(animation, 4);
+    INFO((copied.has_value() ? std::string() : copied.error()));
+    REQUIRE(copied.has_value());
+    if (!copied) return;
+    CHECK(*copied == 5);
+    const AfpAnimation::Sprite* original = SpriteWith(animation, 4);
+    const AfpAnimation::Sprite* copy = SpriteWith(animation, 5);
+    REQUIRE(original != nullptr);
+    REQUIRE(copy != nullptr);
+    CHECK(copy->container == original->container);
+    CHECK(KindsOnFrame(animation.root, 1) == std::vector<std::string>{"sprite", "sprite"});
+    CHECK(animation.exports.size() == 1);
+
+    const AfpAnimation::Animation before = animation;
+    CHECK_FALSE(Document::DuplicateSprite(animation, 99).has_value());
+    CHECK_FALSE(Document::DuplicateSprite(animation, kCharacter).has_value());
+    CHECK(animation == before);
+}
+
 TEST_CASE("Grouping depths moves their spans into a new sprite placed where they were") {
     AfpAnimation::Animation animation = Clip(12);
     Add(animation, 1, 0, 11);

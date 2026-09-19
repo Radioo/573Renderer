@@ -198,6 +198,8 @@ private:
     [[nodiscard]] std::optional<uint16_t> NextFreeDepth(uint16_t fallback);
     [[nodiscard]] std::optional<uint16_t> AskForFreeDepth(const QString& title, uint16_t fallback);
     void PlaceDroppedCharacter(uint16_t character, double x, double y);
+    void DuplicateLibrarySprite(uint16_t sprite);
+    void UseCharacterOnDepth(uint16_t character, uint16_t depth);
     [[nodiscard]] std::optional<uint32_t> AskForLastFrame(uint32_t first);
     void AddCharacterDepth(uint16_t depth, uint16_t character, uint32_t first, uint32_t last);
     [[nodiscard]] QTreeWidget* BuildLibrary();

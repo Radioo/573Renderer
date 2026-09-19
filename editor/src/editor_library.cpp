@@ -3,10 +3,13 @@
 #include "editor_mime.h"
 
 #include "document/characters.h"
+#include "document/clip_edit.h"
 #include "document/document.h"
 #include "document/frame_edit.h"
+#include "document/group_sprite.h"
 #include "document/stage_move.h"
 #include "formats/afp_animation.h"
+#include "support/expected.h"
 
 #include <QAction>
 #include <QAbstractItemView>
@@ -19,6 +22,7 @@
 #include <QMenu>
 #include <QPalette>
 #include <QPoint>
+#include <QStatusBar>
 #include <QString>
 #include <QTimer>
 #include <QTreeWidget>
@@ -30,6 +34,7 @@
 #include <cstdint>
 #include <map>
 #include <optional>
+#include <string>
 #include <vector>
 
 namespace Editor {
@@ -108,8 +113,20 @@ void Window::ShowLibraryMenu(const QPoint& where) {
     QMenu menu(this);
     QAction* place = menu.addAction(tr("Place on a new depth from frame %1...").arg(frame_));
     QAction* show = sprite ? menu.addAction(tr("Show this sprite on its own")) : nullptr;
+    QAction* duplicate = sprite ? menu.addAction(tr("Duplicate this sprite")) : nullptr;
+    QAction* use =
+        depth_ ? menu.addAction(tr("Use on depth %1 from frame %2").arg(*depth_).arg(frame_))
+               : nullptr;
     const QAction* chosen = menu.exec(where);
     if (chosen == nullptr) return;
+    if (chosen == duplicate && sprite) {
+        DuplicateLibrarySprite(*sprite);
+        return;
+    }
+    if (chosen == use && depth_) {
+        UseCharacterOnDepth(character, static_cast<uint16_t>(*depth_));
+        return;
+    }
     if (chosen == show && sprite) {
         ShowLibrarySprite(*sprite);
         return;
@@ -130,6 +147,34 @@ std::optional<uint32_t> Window::AskForLastFrame(uint32_t first) {
         std::max(clip_frames - 1, static_cast<int>(first)), 1, &answered);
     if (!answered) return std::nullopt;
     return static_cast<uint32_t>(last);
+}
+
+void Window::DuplicateLibrarySprite(uint16_t sprite) {
+    std::optional<uint16_t> copy;
+    if (!EditAnimation(tr("Duplicate sprite %1").arg(sprite),
+                       [sprite, &copy](AfpAnimation::Animation& edited) {
+                           using Duplicated = Support::Expected<void, std::string>;
+                           auto made = Document::DuplicateSprite(edited, sprite);
+                           if (!made) return Duplicated(Support::Unexpected(made.error()));
+                           copy = *made;
+                           return Duplicated();
+                       })) {
+        return;
+    }
+    RefillClipsKeepingChoice();
+    if (copy)
+        statusBar()->showMessage(tr("Sprite %1 is a copy of sprite %2").arg(*copy).arg(sprite));
+}
+
+void Window::UseCharacterOnDepth(uint16_t character, uint16_t depth) {
+    const Document::ClipId clip = clip_;
+    const uint32_t frame = frame_;
+    const std::string value = std::to_string(character);
+    EditAnimation(tr("Use character %1 on depth %2").arg(character).arg(depth),
+                  [clip, depth, frame, value](AfpAnimation::Animation& edited) {
+                      return Document::EditPlacementField(edited, clip, depth, frame, "Character",
+                                                          value);
+                  });
 }
 
 void Window::PlaceDroppedCharacter(uint16_t character, double x, double y) {

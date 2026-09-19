@@ -394,6 +394,64 @@ TEST_CASE("A character dragged from the library lands on a new depth where it is
     CHECK(refused.Problems().front().contains("on its own"));
 }
 
+TEST_CASE("A sprite duplicated in the library can be put on a depth in place of the original") {
+    Opened opened;
+    Open(opened, true);
+    auto* library = opened.window.findChild<QTreeWidget*>("library");
+    auto* timeline = opened.window.findChild<Editor::Timeline*>();
+    auto* clips = opened.window.findChild<QComboBox*>();
+    REQUIRE(library != nullptr);
+    REQUIRE(timeline != nullptr);
+    REQUIRE(clips != nullptr);
+    emit timeline->DepthChosen(2);
+    {
+        Script grouped({Choose("Group depth 2 and up here into a sprite..."), AcceptInput(),
+                        AcceptInput(), AcceptInput()});
+        emit timeline->MenuRequested(QPoint(4, 4), 0, QString());
+        REQUIRE(Settle([&grouped] { return grouped.Finished(); }));
+        CHECK(grouped.Problems().isEmpty());
+    }
+    const auto sprites = [&] {
+        std::vector<QTreeWidgetItem*> found;
+        for (int at = 0; at < library->topLevelItemCount(); at++) {
+            if (library->topLevelItem(at)->text(0).startsWith("Sprite"))
+                found.push_back(library->topLevelItem(at));
+        }
+        return found;
+    };
+    REQUIRE(sprites().size() == 1);
+    const QString original = sprites()[0]->data(0, Qt::UserRole).toString();
+    const int clip_count = clips->count();
+    library->setCurrentItem(sprites()[0]);
+    {
+        Script duplicated({Choose("Duplicate this sprite")});
+        emit library->customContextMenuRequested(QPoint(4, 4));
+        REQUIRE(Settle([&duplicated] { return duplicated.Finished(); }));
+        CHECK(duplicated.Problems().isEmpty());
+    }
+    REQUIRE(sprites().size() == 2);
+    CHECK(clips->count() == clip_count + 1);
+    QTreeWidgetItem* copy =
+        sprites()[0]->data(0, Qt::UserRole).toString() == original ? sprites()[1] : sprites()[0];
+    const QString copied = copy->data(0, Qt::UserRole).toString();
+    CHECK(copy->text(1) == "0");
+
+    emit timeline->DepthChosen(2);
+    library->setCurrentItem(copy);
+    {
+        Script used({Choose("Use on depth 2 from frame 0")});
+        emit library->customContextMenuRequested(QPoint(4, 4));
+        REQUIRE(Settle([&used] { return used.Finished(); }));
+        INFO(used.Problems().join("|").toStdString());
+        CHECK(used.Problems().isEmpty());
+    }
+    CHECK(RowValue(*opened.inspector, "Character") == copied.toStdString());
+    for (QTreeWidgetItem* one : sprites()) {
+        const bool is_copy = one->data(0, Qt::UserRole).toString() == copied;
+        CHECK(one->text(1) == (is_copy ? "1" : "0"));
+    }
+}
+
 TEST_CASE("A closed panel comes back from the View menu") {
     Opened opened;
     Open(opened);

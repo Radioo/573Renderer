@@ -353,4 +353,33 @@ Support::Expected<void, std::string> UngroupSprite(AfpAnimation::Animation& anim
     return {};
 }
 
+Support::Expected<uint16_t, std::string> DuplicateSprite(AfpAnimation::Animation& animation,
+                                                         uint16_t sprite) {
+    const auto defined =
+        std::ranges::find_if(animation.root.tags, [sprite](const AfpAnimation::Tag& tag) {
+            const auto* found = std::get_if<AfpAnimation::Sprite>(&tag.body);
+            return found != nullptr && found->id == sprite;
+        });
+    if (defined == animation.root.tags.end()) {
+        return Support::Unexpected("sprite " + std::to_string(sprite) +
+                                   " is not defined in the root");
+    }
+    const auto index = static_cast<std::size_t>(defined - animation.root.tags.begin());
+    const auto frame =
+        std::ranges::find_if(animation.root.frames, [index](const AfpAnimation::Frame& one) {
+            return index >= one.first_tag && index < one.first_tag + one.tag_count;
+        });
+    if (frame == animation.root.frames.end()) {
+        return Support::Unexpected("sprite " + std::to_string(sprite) +
+                                   " is on no frame of the root");
+    }
+    const auto id = NextCharacterId(animation);
+    if (!id) return Support::Unexpected(id.error());
+    AfpAnimation::Tag copy = *defined;
+    std::get<AfpAnimation::Sprite>(copy.body).id = *id;
+    InsertTag(animation.root, static_cast<uint32_t>(frame - animation.root.frames.begin()),
+              std::move(copy));
+    return *id;
+}
+
 }
