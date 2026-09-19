@@ -68,6 +68,7 @@ constexpr int kEdgeReach = 3;
 constexpr double kSnapPixels = 8.0;
 constexpr double kZoomStep = 1.25;
 constexpr double kMostPixelsPerFrame = 48.0;
+constexpr double kZoomSlack = 1e-9;
 constexpr int kTickSpacing = 60;
 constexpr int kTickHeight = 6;
 constexpr std::array<uint32_t, 10> kTickSteps{1, 2, 5, 10, 20, 50, 100, 200, 500, 1000};
@@ -224,16 +225,28 @@ void Timeline::wheelEvent(QWheelEvent* event) {
         return;
     }
     event->accept();
+    ZoomAround(static_cast<int>(event->position().x()),
+               event->angleDelta().y() > 0 ? kZoomStep : 1.0 / kZoomStep);
+}
+
+void Timeline::ZoomIn() {
+    ZoomAround(FrameToX(frame_), kZoomStep);
+}
+
+void Timeline::ZoomOut() {
+    ZoomAround(FrameToX(frame_), 1.0 / kZoomStep);
+}
+
+void Timeline::ZoomAround(int cursor, double factor) {
+    if (frame_count_ <= 1) return;
     QScrollArea* area = ScrollArea();
-    const int cursor = static_cast<int>(event->position().x());
     const int scrolled = area != nullptr ? area->horizontalScrollBar()->value() : 0;
     const uint32_t anchor = XToFrame(cursor);
-    const double factor = event->angleDelta().y() > 0 ? kZoomStep : 1.0 / kZoomStep;
-    const double wanted = std::min(PixelsPerFrame() * factor, kMostPixelsPerFrame);
     const int visible = area != nullptr ? area->viewport()->width() : width();
     const double fits =
         static_cast<double>(visible - kGutterWidth - 1) / static_cast<double>(frame_count_ - 1);
-    if (wanted <= fits) {
+    const double wanted = std::min(zoom_.value_or(fits) * factor, kMostPixelsPerFrame);
+    if (wanted <= fits * (1.0 + kZoomSlack)) {
         zoom_.reset();
     } else {
         zoom_ = wanted;

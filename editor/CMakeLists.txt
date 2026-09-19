@@ -117,6 +117,7 @@ r573_deploy_qt_plugin(ifs_editor Qt6::QJpegPlugin)
 add_executable(editor_widget_tests
     tests/editor_widget_tests.cpp
     tests/editor_graph_widget_tests.cpp
+    tests/editor_timeline_widget_tests.cpp
     src/editor_filter.cpp
     src/editor_graph.cpp
     src/editor_timeline.cpp

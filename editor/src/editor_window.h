@@ -190,6 +190,7 @@ private:
     void SeekTo(uint32_t frame);
     [[nodiscard]] uint32_t ClipFrameCount() const;
     void JumpToFrame(int64_t frame);
+    void GoToFrame();
     void StepToMark(Document::Direction direction);
     void AddStepActions(QMenu* menu);
     void SetWorkArea(std::optional<Document::WorkArea> area);

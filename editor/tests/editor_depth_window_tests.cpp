@@ -550,3 +550,54 @@ TEST_CASE("A label dragged on the ruler is moved in the saved package") {
     REQUIRE(animation->root.labels.size() == 1);
     CHECK(animation->root.labels.front().frame == 1);
 }
+
+TEST_CASE("Go to frame asks for a frame and moves the playhead there") {
+    {
+        Opened empty;
+        QAction* go = ShortcutAction(empty.window, QKeySequence(Qt::ALT | Qt::SHIFT | Qt::Key_J));
+        REQUIRE(go != nullptr);
+        Script nothing({});
+        go->trigger();
+        QApplication::processEvents();
+        CHECK(nothing.Problems().isEmpty());
+    }
+    Opened opened;
+    Open(opened, true);
+    auto* timeline = opened.window.findChild<Editor::Timeline*>();
+    REQUIRE(timeline != nullptr);
+    emit timeline->FrameChosen(2);
+    emit timeline->DepthChosen(2);
+    const std::string at_two = RowValue(*opened.inspector, "Translation");
+    emit timeline->FrameChosen(0);
+    REQUIRE(RowValue(*opened.inspector, "Translation") != at_two);
+    QAction* go = ShortcutAction(opened.window, QKeySequence(Qt::ALT | Qt::SHIFT | Qt::Key_J));
+    REQUIRE(go != nullptr);
+    {
+        Script asked({AnswerNumber(2)});
+        go->trigger();
+        REQUIRE(Settle([&asked] { return asked.Finished(); }));
+        CHECK(asked.Problems().isEmpty());
+    }
+    CHECK(RowValue(*opened.inspector, "Translation") == at_two);
+}
+
+TEST_CASE("The timeline zoom keys zoom the timeline") {
+    Opened opened;
+    Open(opened, true);
+    auto* timeline = opened.window.findChild<Editor::Timeline*>();
+    REQUIRE(timeline != nullptr);
+    {
+        Script added({Choose("New animation..."), Answer("long"), AnswerNumber(600)});
+        RunMenu(added, *opened.tree);
+        CHECK(added.Problems().isEmpty());
+    }
+    QAction* zoom_in = ShortcutAction(opened.window, QKeySequence(Qt::Key_Equal));
+    QAction* zoom_out = ShortcutAction(opened.window, QKeySequence(Qt::Key_Minus));
+    REQUIRE(zoom_in != nullptr);
+    REQUIRE(zoom_out != nullptr);
+    const int fitted = timeline->minimumWidth();
+    zoom_in->trigger();
+    CHECK(timeline->minimumWidth() > fitted);
+    zoom_out->trigger();
+    CHECK(timeline->minimumWidth() == fitted);
+}

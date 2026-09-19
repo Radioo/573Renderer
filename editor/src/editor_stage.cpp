@@ -1,6 +1,7 @@
 #include "editor_window.h"
 
 #include "editor_files.h"
+#include "editor_timeline.h"
 #include "editor_viewport.h"
 
 #include "document/authored.h"
@@ -77,6 +78,12 @@ void Window::AddViewMenu() {
         QSettings().setValue(kPathKey, on);
         ShowFrame();
     });
+    QAction* zoom_in = view->addAction(tr("Zoom the timeline &in"));
+    zoom_in->setShortcut(QKeySequence(Qt::Key_Equal));
+    connect(zoom_in, &QAction::triggered, timeline_, &Timeline::ZoomIn);
+    QAction* zoom_out = view->addAction(tr("Zoom the timeline ou&t"));
+    zoom_out->setShortcut(QKeySequence(Qt::Key_Minus));
+    connect(zoom_out, &QAction::triggered, timeline_, &Timeline::ZoomOut);
     QMenu* panels = view->addMenu(tr("&Panels"));
     for (ads::CDockWidget* dock : docks_->dockWidgetsMap())
         panels->addAction(dock->toggleViewAction());

@@ -323,6 +323,16 @@ void Window::JumpToFrame(int64_t frame) {
     SeekTo(static_cast<uint32_t>(std::clamp<int64_t>(frame, 0, count - 1)));
 }
 
+void Window::GoToFrame() {
+    const uint32_t count = ClipFrameCount();
+    if (count == 0) return;
+    bool answered = false;
+    const int frame =
+        QInputDialog::getInt(this, tr("Go to frame"), tr("Frame"), static_cast<int>(frame_), 0,
+                             static_cast<int>(count - 1), 1, &answered);
+    if (answered) JumpToFrame(frame);
+}
+
 void Window::StepToMark(Document::Direction direction) {
     if (!file_ || animation_path_.empty() || !depth_) return;
     const auto depth = static_cast<uint16_t>(*depth_);
@@ -359,6 +369,8 @@ void Window::AddStepActions(QMenu* menu) {
         {tr("&First frame"), QKeySequence(Qt::Key_Home), [this] { JumpToFrame(0); }},
         {tr("L&ast frame"), QKeySequence(Qt::Key_End),
          [this] { JumpToFrame(static_cast<int64_t>(ClipFrameCount()) - 1); }},
+        {tr("&Go to frame..."), QKeySequence(Qt::ALT | Qt::SHIFT | Qt::Key_J),
+         [this] { GoToFrame(); }},
         {tr("Previous &change on the depth"), QKeySequence(Qt::Key_J),
          [this] { StepToMark(Document::Direction::Back); }},
         {tr("Next c&hange on the depth"), QKeySequence(Qt::Key_K),

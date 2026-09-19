@@ -56,6 +56,8 @@ public:
     void SetWorkArea(std::optional<Document::WorkArea> area);
     void Clear();
     void SetFrame(uint32_t frame);
+    void ZoomIn();
+    void ZoomOut();
 
 signals:
     void FrameChosen(uint32_t frame);
@@ -100,6 +102,7 @@ private:
     [[nodiscard]] int FrameToX(uint32_t frame) const;
     [[nodiscard]] double PixelsPerFrame() const;
     void ApplyZoom();
+    void ZoomAround(int cursor, double factor);
     [[nodiscard]] QScrollArea* ScrollArea() const;
     void DrawTicks(QPainter& painter) const;
     [[nodiscard]] uint32_t XToFrame(int x) const;

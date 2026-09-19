@@ -57,9 +57,11 @@ exists to prevent.
 
 `build-editor/editor_widget_tests.exe` drives the timeline, the viewport, the
 graph and the ease curve with synthetic mouse events, with no window shown and
-no host. Its cases live in `editor/tests/editor_widget_tests.cpp` and, for the
-graph panel, `editor/tests/editor_graph_widget_tests.cpp`, with the mouse
-helpers (`Send`, `Click`, `Drag`) shared from
+no host. Its cases live in `editor/tests/editor_widget_tests.cpp`,
+`editor/tests/editor_timeline_widget_tests.cpp` (dragging, snapping and dropping
+on the timeline, labels and zoom) and `editor/tests/editor_graph_widget_tests.cpp`
+(the graph panel), with the mouse helpers (`Send`, `Click`, `Drag`, `Wheel`),
+the timeline geometry and the sample scene shared from
 `editor/tests/widget_test_support.h`;
 its `main` sets `QT_QPA_PLATFORM=minimal` before creating the `QApplication`,
 and the minimal platform plugin is deployed next to it. The cases cover
@@ -687,6 +689,23 @@ reload that follows an edit. The ruler marks every 1, 2, 5, 10, 20, 50, 100,
 200, 500 or 1000 frames, whichever first puts the marks 60 pixels apart, and
 while zoomed the playhead is kept in view.
 
+`View > Zoom the timeline in` (=) and `out` (-), After Effects' keys, zoom the
+same way around the playhead (`Timeline::ZoomIn`, `ZoomOut`). Both routes go
+through `Timeline::ZoomAround`, which does nothing on a timeline with no
+animation, so a key pressed before one is shown leaves no stale zoom. A zoom
+step starts from the zoom the timeline is at, or from the fitting scale when
+it is not zoomed, rather than from the widget's current width: the width is a
+whole number of pixels, and before the panel is laid out it is not the panel's
+width at all, so reading the scale back from it left a zoom in followed by a
+zoom out short of fitting. The comparison with the fitting scale allows for
+the rounding of multiplying and dividing by the step. The widget test, inside
+a scroll area, zooms an empty timeline first, then zooms in and out with the
+keys and the wheel (and sees a wheel without Ctrl do nothing) and the scroll
+follow the playhead; the window test makes a 600 frame animation and zooms in
+and back to fitting with the keys, which is how the old read-back was seen to
+fail. Dropping the empty guard, either direction, the stored scale, the
+rounding allowance, the scroll or either connection fails them.
+
 Right-clicking the timeline offers the label edits: add one at the frame under
 the cursor, and rename, move or remove the label the cursor is near. Below the
 labels it offers the structure edits: insert or remove a frame at that point,
@@ -935,6 +954,13 @@ the window test moves the sample's label and reads its frame from the saved
 IFS. Dropping the ruler rule, the tight reach, the drag threshold, the
 same-frame guard, the seek on a click, the live drawing, the connection or the
 frame fails them.
+
+`Playback > Go to frame...` (Alt+Shift+J, After Effects' Go To Time) asks for a
+frame of the clip on screen, suggesting the playhead, and seeks there through
+`JumpToFrame` (`Window::GoToFrame`). With nothing open it asks nothing. The
+window test answers 2 and reads the translation frame 2 shows, and triggers it
+on a window with no package to see no dialog; dropping the empty-clip check,
+the answer or the shortcut fails it.
 
 B and N start and end the work area at the playhead and `Clear the work area`
 drops it (`Window::SetWorkArea`). Playback then stays inside it, and the ruler
