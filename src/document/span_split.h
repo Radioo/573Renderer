@@ -19,4 +19,8 @@ namespace Document {
 [[nodiscard]] Support::Expected<void, std::string>
 SplitSpan(AfpAnimation::Animation& animation, ClipId clip, uint16_t depth, uint32_t frame);
 
+[[nodiscard]] Support::Expected<void, std::string>
+SplitSpanRestarting(AfpAnimation::Animation& animation, ClipId clip, uint16_t depth,
+                    const Span& span, uint32_t frame);
+
 }

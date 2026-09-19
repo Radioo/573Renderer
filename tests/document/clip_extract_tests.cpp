@@ -179,3 +179,84 @@ TEST_CASE("Extracting frames keeps labels and refuses what it cannot cut") {
         frames[animation.strings.at(label.name)] = label.frame;
     CHECK(frames == std::map<std::string, uint16_t>{{"after", uint16_t{4}}, {"in", uint16_t{3}}});
 }
+
+TEST_CASE("Lifting frames empties them and keeps every other frame as it was") {
+    AfpAnimation::Animation animation = Scene();
+    const auto first_before = States(animation, 1, 0, 2);
+    const auto first_after = States(animation, 1, 7, 9);
+    const auto third_before = States(animation, 3, 0, 2);
+    const auto fourth_after = States(animation, 4, 7, 9);
+    const auto lifted =
+        Document::LiftFrames(animation, kRoot, Document::Span{.first_frame = 3, .last_frame = 6});
+    INFO(Error(lifted));
+    REQUIRE(lifted.has_value());
+    CHECK(*lifted == 0);
+    CHECK(animation.root.frames.size() == 10);
+    CHECK(Spans(animation) ==
+          Layout{{1, {{0, 2}, {7, 9}}}, {3, {{0, 2}}}, {4, {{7, 9}}}, {5, {{0, 2}}}});
+    CHECK(States(animation, 1, 0, 2) == first_before);
+    CHECK(States(animation, 1, 7, 9) == first_after);
+    CHECK(States(animation, 3, 0, 2) == third_before);
+    CHECK(States(animation, 4, 7, 9) == fourth_after);
+    CHECK(std::ranges::none_of(animation.root.tags, [](const AfpAnimation::Tag& tag) {
+        return Document::IsRemoveOf(tag, 2) || Document::IsPlacementOf(tag, 2);
+    }));
+}
+
+TEST_CASE("Lifting frames counts the sprites that start again after them") {
+    AfpAnimation::Animation animation = Clip(10);
+    Add(animation, 1, kSprite, 0, 9);
+    Add(animation, 2, kSprite, 5, 9);
+    Add(animation, 3, kSprite, 0, 4);
+    Add(animation, 4, kShape, 0, 9);
+    Add(animation, 5, kSprite, 7, 9);
+    const auto lifted =
+        Document::LiftFrames(animation, kRoot, Document::Span{.first_frame = 3, .last_frame = 6});
+    INFO(Error(lifted));
+    REQUIRE(lifted.has_value());
+    CHECK(*lifted == 2);
+    CHECK(Spans(animation) == Layout{{1, {{0, 2}, {7, 9}}},
+                                     {2, {{7, 9}}},
+                                     {3, {{0, 2}}},
+                                     {4, {{0, 2}, {7, 9}}},
+                                     {5, {{7, 9}}}});
+}
+
+TEST_CASE("Lifting every frame leaves the frames and the labels, and nothing on them") {
+    AfpAnimation::Animation animation = Scene();
+    REQUIRE(Document::AddLabel(animation, kRoot, "in", 4).has_value());
+    const auto lifted =
+        Document::LiftFrames(animation, kRoot, Document::Span{.first_frame = 0, .last_frame = 9});
+    INFO(Error(lifted));
+    REQUIRE(lifted.has_value());
+    CHECK(animation.root.frames.size() == 10);
+    CHECK(Spans(animation).empty());
+    REQUIRE(animation.root.labels.size() == 1);
+    CHECK(animation.root.labels[0].frame == 4);
+}
+
+TEST_CASE("Lifting frames refuses a range outside the clip and frames that show nothing") {
+    AfpAnimation::Animation animation = Clip(10);
+    Add(animation, 1, kShape, 0, 2);
+    const AfpAnimation::Animation before = animation;
+    const auto outside =
+        Document::LiftFrames(animation, kRoot, Document::Span{.first_frame = 8, .last_frame = 10});
+    REQUIRE_FALSE(outside.has_value());
+    CHECK(outside.error().find("not frames of the clip") != std::string::npos);
+    const auto empty =
+        Document::LiftFrames(animation, kRoot, Document::Span{.first_frame = 3, .last_frame = 9});
+    REQUIRE_FALSE(empty.has_value());
+    CHECK(empty.error().find("nothing is shown") != std::string::npos);
+    CHECK(animation == before);
+}
+
+TEST_CASE("Lifting frames takes the spans that end on the first of them or start on the last") {
+    AfpAnimation::Animation animation = Clip(10);
+    Add(animation, 1, kShape, 0, 3);
+    Add(animation, 2, kShape, 6, 9);
+    const auto lifted =
+        Document::LiftFrames(animation, kRoot, Document::Span{.first_frame = 3, .last_frame = 6});
+    INFO(Error(lifted));
+    REQUIRE(lifted.has_value());
+    CHECK(Spans(animation) == Layout{{1, {{0, 2}}}, {2, {{7, 9}}}});
+}

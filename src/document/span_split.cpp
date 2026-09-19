@@ -87,11 +87,19 @@ Support::Expected<void, std::string> SplitSpan(AfpAnimation::Animation& animatio
     }
     auto splittable = CheckSplittable(animation, target, depth, frame, *span);
     if (!splittable) return Support::Unexpected(splittable.error());
-    const std::optional<uint16_t> scratch = UnusedDepth(target);
+    return SplitSpanRestarting(animation, clip, depth, *span, frame);
+}
+
+Support::Expected<void, std::string> SplitSpanRestarting(AfpAnimation::Animation& animation,
+                                                         ClipId clip, uint16_t depth,
+                                                         const Span& span, uint32_t frame) {
+    auto found = RequireClip(animation, clip);
+    if (!found) return Support::Unexpected(found.error());
+    const std::optional<uint16_t> scratch = UnusedDepth(**found);
     if (!scratch) return Support::Unexpected(std::string("every depth of the clip is in use"));
 
-    const Span before{.first_frame = span->first_frame, .last_frame = frame - 1};
-    const Span after{.first_frame = frame, .last_frame = span->last_frame};
+    const Span before{.first_frame = span.first_frame, .last_frame = frame - 1};
+    const Span after{.first_frame = frame, .last_frame = span.last_frame};
     AfpAnimation::Animation edited = animation;
     auto copied = DuplicateSpan(edited, clip, depth, frame, *scratch);
     if (!copied) return Support::Unexpected(copied.error());

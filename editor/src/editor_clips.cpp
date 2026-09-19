@@ -437,6 +437,27 @@ void Window::ExtractWorkArea() {
                                 nullptr, static_cast<int>(moving)));
 }
 
+void Window::LiftWorkArea() {
+    const std::optional<Document::Span> cut = WorkAreaToEdit();
+    if (!cut) return;
+    const Document::ClipId clip = clip_;
+    std::size_t restarting = 0;
+    if (!EditAnimation(tr("Lift frames %1 to %2").arg(cut->first_frame).arg(cut->last_frame),
+                       [clip, &cut, &restarting](AfpAnimation::Animation& edited)
+                           -> Support::Expected<void, std::string> {
+                           auto lifted = Document::LiftFrames(edited, clip, *cut);
+                           if (!lifted) return Support::Unexpected(lifted.error());
+                           restarting = *lifted;
+                           return {};
+                       })) {
+        return;
+    }
+    if (restarting == 0) return;
+    statusBar()->showMessage(tr("%n depth(s) showing a sprite or another clip start again after "
+                                "the lifted frames",
+                                nullptr, static_cast<int>(restarting)));
+}
+
 void Window::TrimClipToWorkArea() {
     const std::optional<Document::Span> work = WorkAreaToEdit();
     if (!work) return;

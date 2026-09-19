@@ -371,6 +371,10 @@ before it. Whatever `TrimSpan` refuses (a span mixing 2D and 3D, curves that no
 longer fit) is refused too. The work is done on a copy, so a refusal leaves the
 clip as it was.
 
+`SplitSpanRestarting(animation, clip, depth, span, frame)` is the split without
+the character check, for callers that have decided a restart is acceptable and
+report it themselves. Lifting frames (below) uses it.
+
 `span_split_tests.cpp` checks that the halves replay exactly as the span did,
 with updates before, on and after the split frame. It covers a span running to
 the clip's last frame, one right before another span of its depth, an image,
@@ -476,6 +480,27 @@ the cut, one crossing it, one running in, one running out and one ending on the
 frame before it, and checks the new spans, the replayed states on both sides,
 that nothing of the inner depth is left, the carried matrix and colour, the
 sprite count, the labels and the refusals.
+
+`LiftFrames(animation, clip, cut)` is After Effects' Lift Work Area: the frames
+in `cut` stay, but nothing is shown on them, and every other frame shows what
+it showed. No frame moves, so labels, actions and the frame count are left
+alone. A span inside the cut is removed, and one running into it or out of it
+is trimmed to end on the frame before it or to start on the frame after it. A
+span that crosses the whole cut becomes two: `SplitSpanRestarting` splits it on
+the frame after the cut, and the first half is trimmed to end before the cut.
+Every span that goes on after the cut now starts with a new object there, so
+one showing a sprite or another clip starts its timeline again; those are
+counted and returned, the way the trim and the extract count theirs. Lifting
+every frame is allowed and leaves an empty clip of the same length. A range
+that is not frames of the clip, or frames on which nothing is shown, is
+refused, and a refusal changes nothing.
+
+The lift tests in `clip_extract_tests.cpp` lift the extract's scene and check
+the new spans, the replayed states on both sides, the frame count and that
+nothing of the inner depth is left; they count the sprites that start again
+(a crossing one and one running out, but not one running in, a shape, or one
+starting after the cut), lift every frame, lift spans that end on the cut's
+first frame or start on its last, and check both refusals.
 
 ### Copying a span between clips (`document/span_clipboard.h`)
 

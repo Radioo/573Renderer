@@ -199,6 +199,7 @@ private:
     void SetWorkArea(std::optional<Document::WorkArea> area);
     void TrimClipToWorkArea();
     void ExtractWorkArea();
+    void LiftWorkArea();
     [[nodiscard]] std::optional<Document::Span> WorkAreaToEdit();
     void SeekViewport(uint32_t frame);
     QWidget* BuildTimelinePanel(QScrollArea* timeline_area);

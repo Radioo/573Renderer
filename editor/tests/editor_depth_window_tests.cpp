@@ -742,3 +742,52 @@ TEST_CASE("Extracting the work area closes the gap and keeps the playhead on its
     mark(1, 1);
     CHECK(refusal().contains("owns depths"));
 }
+
+TEST_CASE("Lifting the work area empties its frames and keeps every frame where it was") {
+    Opened opened;
+    Open(opened, true);
+    auto* timeline = opened.window.findChild<Editor::Timeline*>();
+    REQUIRE(timeline != nullptr);
+    for (int inserted = 0; inserted < 3; inserted++) {
+        Script more({Choose("Insert a frame at 2")});
+        emit timeline->MenuRequested(QPoint(4, 4), 2, QString());
+        REQUIRE(Settle([&more] { return more.Finished(); }));
+    }
+    QAction* lift = nullptr;
+    for (QAction* action : opened.window.findChildren<QAction*>()) {
+        if (action->text() == "&Lift the work area") lift = action;
+    }
+    QAction* start = ShortcutAction(opened.window, QKeySequence(Qt::Key_B));
+    QAction* end = ShortcutAction(opened.window, QKeySequence(Qt::Key_N));
+    REQUIRE(lift != nullptr);
+    REQUIRE(start != nullptr);
+    REQUIRE(end != nullptr);
+    const auto translation_on = [&](uint32_t frame) {
+        emit timeline->FrameChosen(frame);
+        emit timeline->DepthChosen(2);
+        return RowValue(*opened.inspector, "Translation");
+    };
+    const std::string first = translation_on(0);
+    const std::string last = translation_on(5);
+    REQUIRE(first != last);
+    emit timeline->FrameChosen(2);
+    start->trigger();
+    emit timeline->FrameChosen(3);
+    end->trigger();
+    {
+        Script lifted({});
+        lift->trigger();
+        QApplication::processEvents();
+        CHECK(lifted.Problems().isEmpty());
+    }
+    CHECK(opened.window.statusBar()->currentMessage().contains("start again"));
+    CHECK(translation_on(0) == first);
+    CHECK(translation_on(1) == first);
+    CHECK(translation_on(3) == "no Translation row");
+    CHECK(translation_on(5) == last);
+
+    Script refused({});
+    lift->trigger();
+    REQUIRE(Settle([&refused] { return !refused.Problems().isEmpty(); }));
+    CHECK(refused.Problems().front().contains("nothing is shown on frames 2 to 3"));
+}

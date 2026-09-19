@@ -303,6 +303,8 @@ void Window::BuildMenus() {
     connect(trim, &QAction::triggered, this, &Window::TrimClipToWorkArea);
     QAction* extract = edit->addAction(tr("E&xtract the work area"));
     connect(extract, &QAction::triggered, this, &Window::ExtractWorkArea);
+    QAction* lift = edit->addAction(tr("&Lift the work area"));
+    connect(lift, &QAction::triggered, this, &Window::LiftWorkArea);
 }
 
 void Window::ChooseGameDirectory() {

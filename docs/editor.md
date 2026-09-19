@@ -1026,6 +1026,18 @@ sees the status message, the cleared work area, the whole clip refused and the
 owned refusal; dropping the playhead's branch, the clearing or either
 refusal fails it.
 
+`Edit > Lift the work area` (After Effects' Lift Work Area, no shortcut)
+empties the work area's frames and leaves every other frame where it was
+(`Window::LiftWorkArea`, through `Document::LiftFrames`), as one undo step.
+The playhead and the work area stay, so the same frames can be looked at
+straight away. When sprites or other clips start again after the lifted
+frames, the status bar says how many. It shares the trim's refusals, and is
+refused when nothing is shown on the work area. The window test gives the
+dot's intro six frames, lifts frames 2 and 3, reads the translation on either
+side and nothing on frame 3, sees the status message, and lifts again to be
+refused with the same work area; dropping the menu action or the quiet case
+fails it.
+
 `Playback > Play` (the space bar) plays the animation and pauses it, and
 `Playback > Loop` decides whether it wraps at the end; the choice is remembered
 between runs. The timer's interval is `Document::FrameIntervalMs` of the
