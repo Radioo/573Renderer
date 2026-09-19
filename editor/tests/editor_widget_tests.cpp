@@ -5,9 +5,9 @@
 #include "editor_ease_dialog.h"
 #include "editor_timeline.h"
 #include "editor_filter.h"
-#include "editor_graph.h"
 #include "editor_mime.h"
 #include "editor_viewport.h"
+#include "widget_test_support.h"
 
 #include "document/key_selection.h"
 #include "document/keyframes.h"
@@ -40,6 +40,8 @@
 #include <utility>
 #include <vector>
 
+using namespace WidgetTest;
+
 namespace {
 
 using Catch::Matchers::WithinAbs;
@@ -48,26 +50,6 @@ constexpr int kTimelineWidth = 657;
 constexpr int kDepthRowY = 34;
 constexpr int kFirstPropertyY = 50;
 constexpr int kSecondPropertyY = 66;
-
-void Send(QWidget& widget, QEvent::Type type, QPointF at, Qt::MouseButtons held,
-          Qt::KeyboardModifiers modifiers = Qt::NoModifier) {
-    QMouseEvent event(type, at, widget.mapToGlobal(at),
-                      type == QEvent::MouseMove ? Qt::NoButton : Qt::LeftButton, held, modifiers);
-    QApplication::sendEvent(&widget, &event);
-}
-
-void Click(QWidget& widget, QPointF at, Qt::KeyboardModifiers modifiers = Qt::NoModifier) {
-    Send(widget, QEvent::MouseButtonPress, at, Qt::LeftButton, modifiers);
-    Send(widget, QEvent::MouseButtonRelease, at, Qt::NoButton, modifiers);
-}
-
-void Drag(QWidget& widget, QPointF from, QPointF to,
-          Qt::KeyboardModifiers modifiers = Qt::NoModifier) {
-    Send(widget, QEvent::MouseButtonPress, from, Qt::LeftButton, modifiers);
-    Send(widget, QEvent::MouseMove, (from + to) / 2, Qt::LeftButton, modifiers);
-    Send(widget, QEvent::MouseMove, to, Qt::LeftButton, modifiers);
-    Send(widget, QEvent::MouseButtonRelease, to, Qt::NoButton, modifiers);
-}
 
 double FrameX(uint32_t frame) {
     return 56.0 + (60.0 * frame);
@@ -446,84 +428,6 @@ TEST_CASE("Ctrl and Shift clicks on depth numbers choose several depths without 
     Click(timeline, row(0), Qt::ShiftModifier);
     CHECK(groups.back() == std::vector<uint16_t>{4, 3, 2});
     CHECK(seeks == 0);
-}
-
-namespace {
-
-Document::Track Moving() {
-    return Document::Track{
-        .property = "Translation",
-        .keys = {
-            Document::Keyframe{
-                .frame = 0, .value = {0, 0}, .ease = Document::Ease::Linear, .bezier = {}},
-            Document::Keyframe{
-                .frame = 10, .value = {100, -100}, .ease = Document::Ease::Linear, .bezier = {}}}};
-}
-
-}
-
-TEST_CASE("The graph draws each value of a track apart, and nothing without one") {
-    Editor::GraphEditor graph;
-    graph.resize(400, 200);
-    graph.ShowTrack(std::nullopt, 0, 10, 0);
-    CHECK_FALSE(graph.KeyPoint(0, 0).has_value());
-    graph.ShowTrack(Moving(), 0, 10, 5);
-    const std::optional<QPointF> first_up = graph.KeyPoint(10, 0);
-    const std::optional<QPointF> second_down = graph.KeyPoint(10, 1);
-    REQUIRE(first_up.has_value());
-    REQUIRE(second_down.has_value());
-    CHECK(first_up->y() < second_down->y());
-    CHECK(first_up->x() > graph.KeyPoint(0, 0).value_or(QPointF()).x());
-    CHECK_FALSE(graph.KeyPoint(5, 0).has_value());
-    const QColor boxed = graph.grab().toImage().pixelColor((*first_up + QPointF(3, 0)).toPoint());
-    CHECK(boxed.red() > 150);
-    CHECK(boxed.green() < 150);
-    const QPointF middle = (*first_up + graph.KeyPoint(0, 0).value_or(QPointF())) / 2;
-    const QColor lined = graph.grab().toImage().pixelColor(middle.toPoint());
-    CHECK(lined.red() > 150);
-    CHECK(lined.green() < 150);
-}
-
-TEST_CASE("Dragging a key in the graph sets that one value of it") {
-    Editor::GraphEditor graph;
-    graph.resize(400, 200);
-    graph.ShowTrack(Moving(), 0, 10, 0);
-    std::vector<uint32_t> chosen;
-    std::vector<std::vector<int64_t>> changed;
-    std::vector<uint32_t> sought;
-    QObject::connect(&graph, &Editor::GraphEditor::KeyChosen,
-                     [&chosen](const QString& property, uint32_t frame) {
-                         CHECK(property == "Translation");
-                         chosen.push_back(frame);
-                     });
-    QObject::connect(&graph, &Editor::GraphEditor::KeyValueChanged,
-                     [&changed](const QString&, uint32_t frame, std::vector<int64_t> value) {
-                         CHECK(frame == 10);
-                         changed.push_back(std::move(value));
-                     });
-    QObject::connect(&graph, &Editor::GraphEditor::FrameChosen,
-                     [&sought](uint32_t frame) { sought.push_back(frame); });
-    const QPointF key = graph.KeyPoint(10, 0).value_or(QPointF());
-    Send(graph, QEvent::MouseButtonPress, key, Qt::LeftButton, Qt::NoModifier);
-    Send(graph, QEvent::MouseMove, key - QPointF(0, 30), Qt::LeftButton, Qt::NoModifier);
-    CHECK(graph.KeyPoint(10, 0).value_or(QPointF()).y() < key.y() - 20);
-    Send(graph, QEvent::MouseButtonRelease, key - QPointF(0, 30), Qt::NoButton, Qt::NoModifier);
-    CHECK(chosen == std::vector<uint32_t>{10});
-    REQUIRE(changed.size() == 1);
-    CHECK(changed.front().at(0) > 100);
-    CHECK(changed.front().at(1) == -100);
-
-    const QPointF second = graph.KeyPoint(10, 1).value_or(QPointF());
-    Drag(graph, second, second + QPointF(0, 20));
-    REQUIRE(changed.size() == 2);
-    CHECK(changed.back().at(0) == 100);
-    CHECK(changed.back().at(1) < -100);
-
-    Click(graph, graph.KeyPoint(0, 1).value_or(QPointF()));
-    CHECK(chosen == std::vector<uint32_t>{10, 10, 0});
-    CHECK(changed.size() == 2);
-    Click(graph, QPointF(185, 4));
-    CHECK(sought == std::vector<uint32_t>{5});
 }
 
 TEST_CASE("A search keeps what matches, the folders around it and what a matching folder holds") {

@@ -28,7 +28,8 @@ public:
 
 signals:
     void KeyChosen(const QString& property, uint32_t frame);
-    void KeyValueChanged(const QString& property, uint32_t frame, std::vector<int64_t> value);
+    void KeyMoved(const QString& property, uint32_t frame, uint32_t to_frame,
+                  std::vector<int64_t> value);
     void FrameChosen(uint32_t frame);
 
 protected:
@@ -49,6 +50,7 @@ private:
     [[nodiscard]] double ValueAt(double y) const;
     [[nodiscard]] uint32_t FrameAt(double x) const;
     [[nodiscard]] std::optional<Grab> KeyNear(QPointF widget) const;
+    [[nodiscard]] uint32_t FrameBetweenNeighbours(uint32_t frame) const;
 
     std::optional<Document::Track> track_;
     uint32_t first_frame_ = 0;
@@ -58,6 +60,8 @@ private:
     double highest_ = 1.0;
     std::optional<Grab> grabbed_;
     std::optional<std::vector<int64_t>> dragged_;
+    std::optional<uint32_t> dragged_frame_;
+    QPointF pressed_at_;
 };
 
 }

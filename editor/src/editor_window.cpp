@@ -181,7 +181,7 @@ void Window::BuildPanels() {
     graph_ = new GraphEditor;
     connect(graph_, &GraphEditor::FrameChosen, this, &Window::SeekTo);
     connect(graph_, &GraphEditor::KeyChosen, this, &Window::ChooseKey);
-    connect(graph_, &GraphEditor::KeyValueChanged, this, &Window::ApplyGraphValue);
+    connect(graph_, &GraphEditor::KeyMoved, this, &Window::ApplyGraphMove);
     auto* timeline_area = new QScrollArea;
     timeline_area->setWidget(timeline_);
     timeline_area->setWidgetResizable(true);

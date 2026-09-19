@@ -55,8 +55,12 @@ exists to prevent.
 
 ## Widget tests
 
-`build-editor/editor_widget_tests.exe` drives the timeline, the viewport and
-the ease curve with synthetic mouse events, with no window shown and no host:
+`build-editor/editor_widget_tests.exe` drives the timeline, the viewport, the
+graph and the ease curve with synthetic mouse events, with no window shown and
+no host. Its cases live in `editor/tests/editor_widget_tests.cpp` and, for the
+graph panel, `editor/tests/editor_graph_widget_tests.cpp`, with the mouse
+helpers (`Send`, `Click`, `Drag`) shared from
+`editor/tests/widget_test_support.h`;
 its `main` sets `QT_QPA_PLATFORM=minimal` before creating the `QApplication`,
 and the minimal platform plugin is deployed next to it. The cases cover
 clicking, Ctrl-clicking and box-selecting keyframes, dragging a selection by
@@ -760,17 +764,31 @@ the depth animates it and it eases between keyframes, so a character, blend,
 clip depth, filter list or curve set, which only hold, is not graphed. The
 vertical range is the values' range with a tenth of headroom, measured when the
 track is shown and kept while dragging. Dragging a box up or down changes that
-one value of that keyframe, drawn live, and on release the graph asks the
-window to focus the keyframe and, when the value changed, to set it
-(`Window::ApplyGraphValue`, `Document::SetKeyValuesAt`) as one undo step.
+one value of that keyframe, and dragging it sideways moves the keyframe to
+another frame, both drawn live. A keyframe moves only between its neighbours,
+so the track stays in frame order while it is dragged, and not outside the
+owned frames. Holding Shift keeps the drag to whichever way the mouse has moved
+further from where it was pressed, so a keyframe can be retimed without
+touching its value or the other way round, as in After Effects' graph editor.
+On release the graph asks the window to focus the keyframe and, when its frame
+or value changed, to move it (`Window::ApplyGraphMove`: `Document::ShiftKeys`
+for the frame, then `Document::SetKeyValuesAt`) as one undo step, after which
+the keyframe is focused on its new frame. A move the document refuses, onto
+another keyframe for one, changes nothing.
 Clicking elsewhere seeks to the nearest frame. Its signals are sent on release,
 because focusing a keyframe refills the graph, which would end a drag begun on
 the press. The widget tests read where each value is drawn (`KeyPoint`), the
 colours of a box and of the line between two keyframes, the live drag, which
-value a drag changes, a click on a keyframe changing nothing, and the seek. The
+value a drag changes, a click on a keyframe changing nothing, the seek, a
+keyframe retimed live and held between its neighbours at both ends, and Shift
+keeping a drag across or up while a free diagonal drag changes both. The
 window test focuses a keyframe of the dot's owned depth, sets a value from the
-graph, focuses another and seeks from it, undoes, and sees the graph empty for
-a depth the project does not own. Dropping the axis flip, the reach, the
+graph, focuses another and seeks from it, undoes, retimes a keyframe and sees
+it focused on its new frame, sees a move onto another keyframe refused, and
+sees the graph empty for a depth the project does not own. Dropping either
+neighbour bound, the live frame, either Shift rule, the frame check on release,
+the bound itself, the refocus, the retime or the new frame of the value also
+fails them. Dropping the axis flip, the reach, the
 component, the change check, the focus, the rounding, the keyframe boxes, the
 line, the live value, the empty graph, the value edit, either connection or
 the dock fails one of them. Whether a keyframe is drawn as a box or a dot is

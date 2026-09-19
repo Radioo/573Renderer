@@ -113,8 +113,8 @@ private:
     bool EditAuthored(const QString& name, const AuthoredChange& change);
     void ChooseKey(const QString& property, uint32_t frame);
     void FocusKey(const QString& property, uint32_t frame);
-    void ApplyGraphValue(const QString& property, uint32_t frame,
-                         const std::vector<int64_t>& value);
+    void ApplyGraphMove(const QString& property, uint32_t frame, uint32_t to_frame,
+                        const std::vector<int64_t>& value);
     bool EditOwned(const QString& name, const OwnedChange& change);
     void AddKeyActions();
     void CopySelectedKeys();

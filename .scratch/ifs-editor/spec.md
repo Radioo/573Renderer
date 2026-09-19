@@ -319,3 +319,4 @@ captured. This milestone is the editing itself.
 - `issues/111-graph-editor.md` (milestone 8)
 - `issues/112-sequence-depths.md` (milestone 8)
 - `issues/113-timeline-snapping.md` (milestone 8)
+- `issues/114-graph-retime.md` (milestone 8)

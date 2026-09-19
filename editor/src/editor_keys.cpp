@@ -45,13 +45,27 @@ void Window::ShowKeysForDepth(const Document::AuthoredDepth* owned) {
                       owned->first_frame, owned->last_frame, frame_);
 }
 
-void Window::ApplyGraphValue(const QString& property, uint32_t frame,
-                             const std::vector<int64_t>& value) {
+void Window::ApplyGraphMove(const QString& property, uint32_t frame, uint32_t to_frame,
+                            const std::vector<int64_t>& value) {
     const std::string name = property.toStdString();
-    EditAuthored(tr("%1 on frame %2").arg(property).arg(frame),
-                 [&name, frame, &value](Document::AuthoredDepth& owned) {
-                     return Document::SetKeyValuesAt(owned, name, frame, value);
-                 });
+    const QString undo =
+        to_frame == frame
+            ? tr("%1 on frame %2").arg(property).arg(frame)
+            : tr("%1 keyframe from frame %2 to %3").arg(property).arg(frame).arg(to_frame);
+    if (!EditAuthored(undo, [&name, frame, to_frame, &value](Document::AuthoredDepth& owned) {
+            if (to_frame != frame) {
+                const auto shifted = Document::ShiftKeys(
+                    owned, {Document::KeyRef{.property = name, .frame = frame}},
+                    static_cast<int64_t>(to_frame) - static_cast<int64_t>(frame));
+                if (!shifted)
+                    return Support::Expected<void, std::string>(
+                        Support::Unexpected(shifted.error()));
+            }
+            return Document::SetKeyValuesAt(owned, name, to_frame, value);
+        })) {
+        return;
+    }
+    if (to_frame != frame) ChooseKey(property, to_frame);
 }
 
 std::optional<std::size_t> Window::AuthoredIndexAt(uint16_t depth, uint32_t frame) const {

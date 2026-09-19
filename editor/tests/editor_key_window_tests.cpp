@@ -210,7 +210,7 @@ TEST_CASE("The graph shows the focused property and edits its keyframes") {
 
     {
         Script edited({});
-        emit graph->KeyValueChanged("Translation", 2, {12345, 6000});
+        emit graph->KeyMoved("Translation", 2, 2, {12345, 6000});
         QApplication::processEvents();
         CHECK(edited.Problems().isEmpty());
     }
@@ -226,6 +226,23 @@ TEST_CASE("The graph shows the focused property and edits its keyframes") {
     undo->trigger();
     emit timeline->FrameChosen(2);
     CHECK(RowValue(*opened.inspector, "Translation") == "11000, 6000");
+
+    {
+        Script retimed({});
+        emit graph->KeyMoved("Translation", 2, 1, {11000, 6000});
+        QApplication::processEvents();
+        CHECK(retimed.Problems().isEmpty());
+    }
+    CHECK(RowValue(*opened.inspector, "Keyframe") == "Translation on frame 1");
+    emit timeline->FrameChosen(1);
+    CHECK(RowValue(*opened.inspector, "Translation") == "11000, 6000");
+    {
+        Script refused({});
+        emit graph->KeyMoved("Translation", 1, 0, {11000, 6000});
+        REQUIRE(Settle([&refused] { return !refused.Problems().isEmpty(); }));
+    }
+    emit timeline->FrameChosen(0);
+    CHECK(RowValue(*opened.inspector, "Translation") == "10200, 6000");
 
     emit timeline->DepthChosen(2);
     CHECK_FALSE(graph->KeyPoint(0, 0).has_value());

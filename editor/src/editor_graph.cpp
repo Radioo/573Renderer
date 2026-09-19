@@ -52,6 +52,7 @@ void GraphEditor::ShowTrack(std::optional<Document::Track> track, uint32_t first
     playhead_ = playhead;
     grabbed_.reset();
     dragged_.reset();
+    dragged_frame_.reset();
     Measure();
     update();
 }
@@ -84,7 +85,9 @@ void GraphEditor::Measure() {
 
 Document::Track GraphEditor::Shown() const {
     Document::Track shown = *track_;
-    if (grabbed_ && dragged_) shown.keys.at(grabbed_->key).value = *dragged_;
+    if (!grabbed_ || !dragged_ || !dragged_frame_) return shown;
+    shown.keys.at(grabbed_->key).value = *dragged_;
+    shown.keys.at(grabbed_->key).frame = *dragged_frame_;
     return shown;
 }
 
@@ -107,6 +110,14 @@ uint32_t GraphEditor::FrameAt(double x) const {
     const double at = first_frame_ + std::round((x - kMargin) / across * frames);
     return static_cast<uint32_t>(
         std::clamp(at, static_cast<double>(first_frame_), static_cast<double>(last_frame_)));
+}
+
+uint32_t GraphEditor::FrameBetweenNeighbours(uint32_t frame) const {
+    const std::size_t key = grabbed_->key;
+    const uint32_t lowest = key > 0 ? track_->keys[key - 1].frame + 1 : first_frame_;
+    const uint32_t highest =
+        key + 1 < track_->keys.size() ? track_->keys[key + 1].frame - 1 : last_frame_;
+    return std::clamp(frame, lowest, std::max(lowest, highest));
 }
 
 std::optional<QPointF> GraphEditor::KeyPoint(uint32_t frame, std::size_t component) const {
@@ -178,26 +189,38 @@ void GraphEditor::mousePressEvent(QMouseEvent* event) {
         return;
     }
     dragged_ = track_->keys.at(grabbed_->key).value;
+    dragged_frame_ = track_->keys.at(grabbed_->key).frame;
+    pressed_at_ = event->position();
 }
 
 void GraphEditor::mouseMoveEvent(QMouseEvent* event) {
-    if (!grabbed_ || !dragged_) return;
-    dragged_->at(grabbed_->component) = std::llround(ValueAt(event->position().y()));
+    if (!grabbed_ || !dragged_ || !dragged_frame_) return;
+    const Document::Keyframe& key = track_->keys.at(grabbed_->key);
+    const QPointF at = event->position();
+    const QPointF moved = at - pressed_at_;
+    const bool constrained = (event->modifiers() & Qt::ShiftModifier) != 0;
+    const bool across = std::abs(moved.x()) > std::abs(moved.y());
+    dragged_->at(grabbed_->component) =
+        constrained && across ? key.value.at(grabbed_->component) : std::llround(ValueAt(at.y()));
+    dragged_frame_ = constrained && !across ? key.frame : FrameBetweenNeighbours(FrameAt(at.x()));
     update();
 }
 
 void GraphEditor::mouseReleaseEvent(QMouseEvent* event) {
-    if (event->button() != Qt::LeftButton || !grabbed_ || !dragged_ || !track_) return;
+    if (event->button() != Qt::LeftButton || !grabbed_ || !dragged_ || !dragged_frame_ || !track_)
+        return;
     const Document::Keyframe& key = track_->keys.at(grabbed_->key);
     const QString property = QString::fromStdString(track_->property);
     const uint32_t frame = key.frame;
+    const uint32_t to_frame = *dragged_frame_;
     std::vector<int64_t> value = *dragged_;
-    const bool changed = value != key.value;
+    const bool changed = value != key.value || to_frame != frame;
     grabbed_.reset();
     dragged_.reset();
+    dragged_frame_.reset();
     update();
     emit KeyChosen(property, frame);
-    if (changed) emit KeyValueChanged(property, frame, std::move(value));
+    if (changed) emit KeyMoved(property, frame, to_frame, std::move(value));
 }
 
 }
