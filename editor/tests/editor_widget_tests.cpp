@@ -483,6 +483,27 @@ TEST_CASE("Ghosts are drawn faintly over the frame until the next frame arrives"
     CHECK(viewport.grab().toImage() == plain);
 }
 
+TEST_CASE("The motion path joins the frames' positions and boxes the keyed ones") {
+    Editor::Viewport viewport;
+    ShowStage(viewport);
+    const auto lit = [&viewport](QPoint at) {
+        const QColor colour = viewport.grab().toImage().pixelColor(at);
+        return std::max({colour.red(), colour.green(), colour.blue()}) > 40;
+    };
+    const QPoint between(600, 300);
+    const QPoint beside_keyed(703, 500);
+    const QPoint beside_plain(703, 300);
+    CHECK_FALSE(lit(between));
+    viewport.ShowPath({{.frame = 0, .at = {1000, 600}, .keyed = true},
+                       {.frame = 1, .at = {1400, 600}, .keyed = false},
+                       {.frame = 2, .at = {1400, 1000}, .keyed = true}});
+    CHECK(lit(between));
+    CHECK(lit(beside_keyed));
+    CHECK_FALSE(lit(beside_plain));
+    viewport.ShowPath({});
+    CHECK_FALSE(lit(between));
+}
+
 TEST_CASE("Every depth in the selection is outlined") {
     Editor::Viewport viewport;
     ShowStage(viewport);

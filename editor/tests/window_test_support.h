@@ -8,12 +8,15 @@
 #include "sample_package.h"
 
 #include "document/animation_strings.h"
+#include "document/clip.h"
 #include "document/document.h"
 #include "document/outline.h"
 #include "document/stage_bounds.h"
 #include "document/frame_edit.h"
 #include "document/place_image.h"
 #include "document/tags.h"
+#include "document/timeline.h"
+#include "formats/afp_animation.h"
 #include "formats/ifs_archive.h"
 
 #include <QAction>
@@ -312,11 +315,16 @@ inline void RunMenu(Script& script, QTreeWidget& tree) {
     REQUIRE(Settle([&script] { return script.Finished(); }));
 }
 
-inline std::optional<uint16_t> WidestTitleDepth(const QString& title) {
+struct TitleFile {
+    Document::File file;
+    std::string path;
+};
+
+inline std::optional<TitleFile> ReadTitle(const QString& title) {
     QFile read(title);
     REQUIRE(read.open(QIODevice::ReadOnly));
     const QByteArray bytes = read.readAll();
-    const auto file = Document::File::Open(
+    auto file = Document::File::Open(
         std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(bytes.constData()),
                                  static_cast<std::size_t>(bytes.size())));
     REQUIRE(file.has_value());
@@ -327,16 +335,38 @@ inline std::optional<uint16_t> WidestTitleDepth(const QString& title) {
             if (child.role == Document::Role::Animation && child.name == "title") path = child.path;
         }
     }
-    const auto animation = file->ReadAnimation(path);
+    return TitleFile{.file = std::move(*file), .path = path};
+}
+
+inline std::optional<uint16_t> WidestTitleDepth(const QString& title) {
+    const std::optional<TitleFile> read = ReadTitle(title);
+    if (!read) return std::nullopt;
+    const auto animation = read->file.ReadAnimation(read->path);
     REQUIRE(animation.has_value());
     if (!animation) return std::nullopt;
     const auto outlines =
-        Document::StageOutlines(*animation, {}, kPreviewFrame, file->ShapeBounds(path));
+        Document::StageOutlines(*animation, {}, kPreviewFrame, read->file.ShapeBounds(read->path));
     REQUIRE(!outlines.empty());
     const auto widest = std::ranges::max_element(outlines, {}, [](const auto& outline) {
         return std::abs(outline.corners[1][0] - outline.corners[0][0]);
     });
     return widest->depth;
+}
+
+inline std::optional<uint16_t> FirstSpriteDepth(const QString& title) {
+    const std::optional<TitleFile> read = ReadTitle(title);
+    if (!read) return std::nullopt;
+    const auto animation = read->file.ReadAnimation(read->path);
+    REQUIRE(animation.has_value());
+    if (!animation) return std::nullopt;
+    const std::vector<Document::ClipSummary> clips = Document::Clips(*animation);
+    REQUIRE(clips.size() > 1);
+    const AfpAnimation::Container* sprite = Document::FindClip(*animation, clips.at(1).id);
+    REQUIRE(sprite != nullptr);
+    for (const Document::DepthRow& row : Document::DepthRows(*sprite)) {
+        if (!row.spans.empty() && row.spans.front().first_frame == 0) return row.depth;
+    }
+    return std::nullopt;
 }
 
 }

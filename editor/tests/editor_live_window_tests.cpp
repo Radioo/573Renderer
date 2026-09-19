@@ -313,6 +313,74 @@ TEST_CASE("The work area saves as one PNG per frame, each as the frame saves on 
     CHECK(opening.Problems().isEmpty());
 }
 
+TEST_CASE(
+    "The chosen depth's motion path is drawn, in a sprite too, until switched off or hidden") {
+    const QString game = qEnvironmentVariable("R573_IIDX_DIR");
+    if (game.isEmpty()) SKIP("R573_IIDX_DIR not set");
+    const QString title = game + "/data/graphic/1/title.ifs";
+    const std::optional<uint16_t> chosen = WidestTitleDepth(title);
+    REQUIRE(chosen.has_value());
+    if (!chosen) return;
+    QSettings().setValue("game/directory", game);
+    QSettings().remove("stage/path");
+    Editor::Window window;
+    QSettings().remove("game/directory");
+    window.resize(1600, 900);
+    window.show();
+    Script opening({});
+    window.OpenDocument(title);
+    REQUIRE(opening.Problems().isEmpty());
+    auto* timeline = window.findChild<Editor::Timeline*>();
+    auto* viewport = window.findChild<Editor::Viewport*>();
+    REQUIRE(timeline != nullptr);
+    REQUIRE(viewport != nullptr);
+    QAction* path = nullptr;
+    for (QAction* action : window.findChildren<QAction*>()) {
+        if (action->text() == "Motion &path") path = action;
+    }
+    REQUIRE(path != nullptr);
+    CHECK(path->isChecked());
+    const auto grab = [&] {
+        QApplication::processEvents();
+        return viewport->grab().toImage();
+    };
+    emit timeline->FrameChosen(kPreviewFrame);
+    emit timeline->DepthChosen(*chosen);
+    const QImage drawn = grab();
+    path->trigger();
+    const QImage plain = grab();
+    CHECK(plain != drawn);
+    CHECK_FALSE(QSettings().value("stage/path", true).toBool());
+    path->trigger();
+    CHECK(grab() == drawn);
+
+    {
+        Script hidden({Choose("Hide depth " + QString::number(*chosen) + " in the view")});
+        emit timeline->MenuRequested(QPoint(4, 4), kPreviewFrame, QString());
+        REQUIRE(Settle([&hidden] { return hidden.Finished(); }));
+        CHECK(hidden.Problems().isEmpty());
+    }
+    const QImage hidden_on = grab();
+    path->trigger();
+    CHECK(grab() == hidden_on);
+    path->trigger();
+
+    const std::optional<uint16_t> sprite_depth = FirstSpriteDepth(title);
+    REQUIRE(sprite_depth.has_value());
+    auto* clips = window.findChild<QComboBox*>();
+    REQUIRE(clips != nullptr);
+    clips->setCurrentIndex(1);
+    emit timeline->DepthChosen(*sprite_depth);
+    REQUIRE(window.statusBar()->currentMessage().endsWith("on its own"));
+    const QImage sprite_on = grab();
+    path->trigger();
+    CHECK(grab() != sprite_on);
+    path->trigger();
+    CHECK(grab() == sprite_on);
+    QSettings().remove("stage/path");
+    CHECK(opening.Problems().isEmpty());
+}
+
 TEST_CASE("Onion skin shows the neighbouring frames and leaves the host on the playhead") {
     const QString game = qEnvironmentVariable("R573_IIDX_DIR");
     if (game.isEmpty()) SKIP("R573_IIDX_DIR not set");

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "document/motion_path.h"
 #include "document/stage_bounds.h"
 #include "document/stage_snap.h"
 
@@ -36,6 +37,7 @@ public:
     void ShowFrame(const QImage& frame, QSize stage);
     void ShowMessage(const QString& message);
     void ShowGhosts(std::vector<QImage> ghosts);
+    void ShowPath(std::vector<Document::PathPoint> path);
     void ShowOutlines(std::vector<Document::StageOutline> outlines,
                       std::optional<uint16_t> selected, std::vector<uint16_t> group = {});
     [[nodiscard]] QSize FittedSize(QSize available) const;
@@ -83,11 +85,13 @@ private:
     void DrawGroup(QPainter& painter, const Document::StageOutline& primary) const;
     [[nodiscard]] bool InGroup(uint16_t depth) const;
     void DrawRulers(QPainter& painter) const;
+    void DrawPath(QPainter& painter) const;
     [[nodiscard]] bool PressGuide(QPointF at);
     [[nodiscard]] std::optional<std::size_t> GuideNear(QPointF at) const;
 
     QImage frame_;
     std::vector<QImage> ghosts_;
+    std::vector<Document::PathPoint> path_;
     std::vector<Document::SnapGuide> guides_;
     std::optional<std::size_t> dragged_guide_;
     bool rulers_ = false;

@@ -12,6 +12,7 @@
 #include "document/history.h"
 #include "document/inspector.h"
 #include "document/key_selection.h"
+#include "document/motion_path.h"
 #include "document/playback.h"
 #include "document/project.h"
 #include "formats/afp_animation.h"
@@ -202,6 +203,8 @@ private:
     void ChooseDepth(uint32_t depth);
     [[nodiscard]] bool OutlinesMatchView() const;
     void UpdateOutlines(const AfpAnimation::Animation& animation);
+    [[nodiscard]] std::vector<Document::PathPoint>
+    PathOfDepth(const AfpAnimation::Animation& animation) const;
     void PickOnStage(double x, double y);
     void EditOnStage(uint16_t depth, const QString& name, const OwnedChange& owned,
                      const AnimationChange& baked, bool finished);
@@ -260,6 +263,7 @@ private:
     QLineEdit* package_filter_ = nullptr;
     QLineEdit* library_filter_ = nullptr;
     QAction* onion_action_ = nullptr;
+    QAction* path_action_ = nullptr;
     std::vector<uint16_t> selected_depths_;
     QListWidget* history_list_ = nullptr;
     QTableWidget* inspector_ = nullptr;

@@ -282,6 +282,25 @@ that does not seek still shows frame 401; it also sees the picture come back
 when onion skin is turned off. Leaving out the seek back, the ghost renders,
 the ghost painting or the clearing on a new frame fails the tests.
 
+`View > Motion path` (remembered, on by default) draws the selected depth's
+motion path over the stage, as After Effects draws a selected layer's position
+path: a line through the anchor's place on every frame of the span under the
+playhead, a dot per frame, and a box on each frame where the project keeps a
+`Translation` keyframe (`Window::PathOfDepth`, `Document::MotionPath`,
+`Viewport::ShowPath`). It is refreshed with the outlines on every
+`ShowFrame`, so it follows edits, seeks and the selection. There is no path for
+a depth hidden in the view, or when the viewport is not showing the clip being
+edited (a sprite the host could not show on its own), since its points would
+be in the sprite's space. The widget test draws a path and checks the line, the
+box on a keyed point and none on a plain one. The live window test picks the
+widest depth of `title` at frame 400 and sees the picture change when the path
+is switched off and come back when it is switched on, sees no change once that
+depth is hidden, and sees the path drawn in a sprite shown on its own. Removing
+the drawing, the line, the keyed check, the refresh on toggling, the setting's
+default, the hidden check or the clip being edited fails them. The guard for a
+sprite not shown on its own is not covered, because the live host always shows
+a picked sprite on its own and there is no picture without the host.
+
 Clicking the viewport maps the point to stage pixels through that rectangle
 and selects the highest depth whose `Document::StageOutlines` outline
 holds it, or clears the selection; the selected depth is outlined. Dragging

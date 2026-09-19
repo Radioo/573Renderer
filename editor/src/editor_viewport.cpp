@@ -49,6 +49,9 @@ constexpr double kAnchorSize = 6.0;
 constexpr int kOutlineWidth = 2;
 const QColor kSelectedColour(80, 200, 255);
 const QColor kGuideColour(255, 80, 200);
+const QColor kPathColour(255, 200, 80);
+constexpr double kPathDot = 1.5;
+constexpr double kPathKeySize = 7.0;
 constexpr double kSnapReach = 6.0;
 constexpr double kNudge = 1.0;
 constexpr double kShiftNudge = 10.0;
@@ -150,6 +153,31 @@ void Viewport::DrawGroup(QPainter& painter, const Document::StageOutline& primar
             polygon << ToWidget({corner[0] + offset[0], corner[1] + offset[1]});
         painter.drawPolygon(polygon);
     }
+}
+
+void Viewport::ShowPath(std::vector<Document::PathPoint> path) {
+    path_ = std::move(path);
+    update();
+}
+
+void Viewport::DrawPath(QPainter& painter) const {
+    if (path_.empty() || stage_.isEmpty()) return;
+    painter.setRenderHint(QPainter::Antialiasing);
+    painter.setPen(QPen(kPathColour, 1));
+    painter.setBrush(Qt::NoBrush);
+    QPolygonF line;
+    for (const Document::PathPoint& point : path_)
+        line << ToWidget(point.at);
+    painter.drawPolyline(line);
+    for (const Document::PathPoint& point : path_) {
+        if (!point.keyed) continue;
+        const QPointF at = ToWidget(point.at);
+        painter.drawRect(QRectF(at.x() - (kPathKeySize / 2), at.y() - (kPathKeySize / 2),
+                                kPathKeySize, kPathKeySize));
+    }
+    painter.setBrush(kPathColour);
+    for (const QPointF& at : line)
+        painter.drawEllipse(at, kPathDot, kPathDot);
 }
 
 void Viewport::ShowGhosts(std::vector<QImage> ghosts) {
@@ -444,6 +472,7 @@ void Viewport::paintEvent(QPaintEvent* event) {
         DrawSelection(painter, Preview(*selected));
         DrawGroup(painter, *selected);
     }
+    DrawPath(painter);
     if (rulers_) DrawRulers(painter);
 }
 

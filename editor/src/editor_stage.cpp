@@ -5,6 +5,8 @@
 
 #include "document/authored.h"
 #include "document/document.h"
+#include "document/keyframes.h"
+#include "document/motion_path.h"
 #include "document/stage_align.h"
 #include "document/stage_bounds.h"
 #include "document/stage_move.h"
@@ -68,6 +70,13 @@ void Window::AddViewMenu() {
         }
         if (host_.Running() && !animation_name_.empty()) RenderFrame();
     });
+    path_action_ = view->addAction(tr("Motion &path"));
+    path_action_->setCheckable(true);
+    path_action_->setChecked(QSettings().value(kPathKey, true).toBool());
+    connect(path_action_, &QAction::toggled, this, [this](bool on) {
+        QSettings().setValue(kPathKey, on);
+        ShowFrame();
+    });
     QMenu* panels = view->addMenu(tr("&Panels"));
     for (ads::CDockWidget* dock : docks_->dockWidgetsMap())
         panels->addAction(dock->toggleViewAction());
@@ -95,6 +104,7 @@ bool Window::OutlinesMatchView() const {
 }
 
 void Window::UpdateOutlines(const AfpAnimation::Animation& animation) {
+    viewport_->ShowPath(PathOfDepth(animation));
     if (!file_ || !OutlinesMatchView()) {
         viewport_->ShowOutlines({}, std::nullopt);
         return;
@@ -107,6 +117,21 @@ void Window::UpdateOutlines(const AfpAnimation::Animation& animation) {
                             depth_ ? std::optional<uint16_t>(static_cast<uint16_t>(*depth_))
                                    : std::nullopt,
                             SelectedDepths());
+}
+
+std::vector<Document::PathPoint>
+Window::PathOfDepth(const AfpAnimation::Animation& animation) const {
+    const AfpAnimation::Container* shown = Document::FindClip(animation, clip_);
+    if (!depth_ || shown == nullptr || !OutlinesMatchView() || path_action_ == nullptr ||
+        !path_action_->isChecked()) {
+        return {};
+    }
+    const auto depth = static_cast<uint16_t>(*depth_);
+    const std::vector<uint16_t> hidden = HiddenHere();
+    if (std::ranges::find(hidden, depth) != hidden.end()) return {};
+    const Document::AuthoredDepth* owned = AuthoredAt(depth, frame_);
+    return Document::MotionPath(*shown, depth, frame_,
+                                owned != nullptr ? owned->tracks : std::vector<Document::Track>{});
 }
 
 void Window::PickOnStage(double x, double y) {

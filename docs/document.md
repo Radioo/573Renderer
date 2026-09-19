@@ -1078,6 +1078,21 @@ The sprite rule is an editor choice, the way After Effects boxes a precomposed
 layer by its whole composition: a sprite's current frame depends on its own
 playhead and scripts, which the document does not run.
 
+## Motion path (`document/motion_path.h`)
+
+`MotionPath(clip, depth, frame, tracks)` is where the depth's anchor sits on
+every frame of the span under `frame`: `ReplayDepth` gives the placement state
+per frame and the point is its matrix translation in stage pixels (a twentieth
+of a unit, as `StageOutlines` places the anchor). A frame the depth shows
+nothing on, or another span of the same depth, is not part of the path. A point
+is keyed when `tracks` has a `Translation` track with a keyframe on that frame,
+which is how the editor passes an owned depth's keyframes; baked data has no
+keyframes, so its points are never keyed. A span with any 3D placement has no
+path, because the flat stage does not show where a 3D object is, which is also
+why `StageOutlines` skips it. `motion_path_tests.cpp` checks the points and
+their pixels, the keyed frames coming only from `Translation`, the path
+stopping at the span's ends, and the 3D refusal.
+
 ## Moving a depth on stage (`document/stage_move.h`)
 
 `MoveBakedDepth` moves a depth by a stage offset from the placement that is
