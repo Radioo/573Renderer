@@ -605,3 +605,41 @@ TEST_CASE("A closed panel comes back from the View menu") {
     toggle->trigger();
     CHECK_FALSE(library->isClosed());
 }
+
+TEST_CASE("Centring a depth's anchor moves it onto the content without moving the content") {
+    Opened opened;
+    Open(opened, true);
+    auto* timeline = opened.window.findChild<Editor::Timeline*>();
+    REQUIRE(timeline != nullptr);
+    QAction* centre =
+        ShortcutAction(opened.window, QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_Home));
+    REQUIRE(centre != nullptr);
+    const auto choose = [&](uint32_t depth) {
+        emit timeline->FrameChosen(0);
+        emit timeline->DepthChosen(depth);
+    };
+    const auto centred = [&] {
+        Script run({});
+        centre->trigger();
+        QApplication::processEvents();
+        return run.Problems();
+    };
+    choose(2);
+    const std::string moved_from = RowValue(*opened.inspector, "Translation");
+    CHECK(centred().isEmpty());
+    CHECK(RowValue(*opened.inspector, "Origin") == "20, 10");
+    CHECK(RowValue(*opened.inspector, "Translation") != moved_from);
+    const QStringList again = centred();
+    REQUIRE_FALSE(again.isEmpty());
+    CHECK(again.front().contains("already"));
+    QAction* undo = ShortcutAction(opened.window, QKeySequence(QKeySequence::Undo));
+    REQUIRE(undo != nullptr);
+    undo->trigger();
+    CHECK(RowValue(*opened.inspector, "Translation") == moved_from);
+
+    OwnDroppedDot(opened);
+    choose(3);
+    const QStringList owned = centred();
+    REQUIRE_FALSE(owned.isEmpty());
+    CHECK(owned.front().contains("owns depth 3"));
+}

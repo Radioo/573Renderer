@@ -62,6 +62,7 @@ set(R573_EDITOR_DOCUMENT_SOURCES
     src/document/span_split.cpp
     src/document/clip_trim.cpp
     src/document/clip_extract.cpp
+    src/document/anchor_edit.cpp
     src/document/span_sequence.cpp
     src/document/timeline_snap.cpp
     src/document/motion_path.cpp

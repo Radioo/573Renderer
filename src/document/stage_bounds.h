@@ -44,6 +44,10 @@ struct StageOutline {
                                                       ClipId clip, uint32_t frame,
                                                       const std::map<uint16_t, Box>& shape_bounds);
 
+[[nodiscard]] std::optional<Box> CharacterBox(const AfpAnimation::Animation& animation,
+                                              uint16_t character,
+                                              const std::map<uint16_t, Box>& shape_bounds);
+
 struct Reshape {
     double scale_x = 1;
     double scale_y = 1;

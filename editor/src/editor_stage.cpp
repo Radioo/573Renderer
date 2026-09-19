@@ -4,6 +4,7 @@
 #include "editor_timeline.h"
 #include "editor_viewport.h"
 
+#include "document/anchor_edit.h"
 #include "document/authored.h"
 #include "document/document.h"
 #include "document/keyframes.h"
@@ -181,6 +182,24 @@ AnimationChange OwnedAsAnimation(Document::AuthoredDepth authored, OwnedChange o
     };
 }
 
+}
+
+void Window::CentreChosenAnchor() {
+    if (!file_ || animation_path_.empty() || !depth_) return;
+    const auto depth = static_cast<uint16_t>(*depth_);
+    if (AuthoredIndexAt(depth, frame_)) {
+        ReportProblem(tr("The project owns depth %1 and draws it from keyframes, which keep no "
+                         "anchor. Detach it before moving its anchor.")
+                          .arg(depth));
+        return;
+    }
+    const std::map<uint16_t, Document::Box> shapes = file_->ShapeBounds(animation_path_);
+    const Document::ClipId clip = clip_;
+    const uint32_t frame = frame_;
+    EditAnimation(tr("Centre the anchor of depth %1").arg(depth),
+                  [clip, depth, frame, &shapes](AfpAnimation::Animation& edited) {
+                      return Document::CentreAnchor(edited, clip, depth, frame, shapes);
+                  });
 }
 
 void Window::EditOnStage(uint16_t depth, const QString& name, const OwnedChange& owned,

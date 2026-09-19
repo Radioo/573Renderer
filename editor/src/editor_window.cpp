@@ -306,6 +306,9 @@ void Window::BuildMenus() {
     connect(extract, &QAction::triggered, this, &Window::ExtractWorkArea);
     QAction* lift = edit->addAction(tr("&Lift the work area"));
     connect(lift, &QAction::triggered, this, &Window::LiftWorkArea);
+    QAction* centre = edit->addAction(tr("&Centre the anchor in the content"));
+    centre->setShortcut(QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_Home));
+    connect(centre, &QAction::triggered, this, &Window::CentreChosenAnchor);
 }
 
 void Window::ChooseGameDirectory() {

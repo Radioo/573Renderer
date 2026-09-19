@@ -1320,6 +1320,65 @@ out, which the matrix bit reads as the identity. `ReshapeOwnedDepth` keys Scale
 and Rotate skew on the frame (or their short twins when the depth tracks those),
 starting either track when it is missing.
 
+## Moving the anchor (`document/anchor_edit.h`)
+
+`CentreAnchor(animation, clip, depth, frame, shape_bounds)` is After Effects'
+Center Anchor Point in Layer Content: the anchor, the point the object turns
+and scales about, moves to the centre of what the depth shows, and nothing on
+screen moves. The anchor is where the translation puts the placement's origin
+(see "Stage outlines" above): afp-core maps a point through
+`(point - origin) * M + translation`, with origin and translation in twentieths
+of a pixel. Moving the origin by `d` in the object's own space therefore keeps
+every point in place exactly when the translation moves by `d * M`, the same
+shift carried through the object's own matrix.
+
+A span's matrix changes from placement to placement, so the shift is applied
+per placement, not once. Every placement of the span that carries an origin
+gets `d` added to it, and the create gets an origin of `d` when it had none (a
+new object starts without one, which the game treats as zero). Every placement
+that sets the matrix gets `d * M` added to its translation, with `M` that
+placement's own 2x2, since a matrix placement replaces the whole matrix. A
+colour-only update sets no matrix and keeps the one already shifted. A create
+without the matrix bit shows the identity matrix, so it gains the bit and a
+translation of `d`, which draws the same. An origin that changes during the
+span keeps its changes, each moved by the same `d`, so the anchor moves by the
+same amount in the object's space on every frame.
+
+`d` is worked out on `frame`: the centre of the box the character shown there
+has (`CharacterBox`, the same box `StageOutlines` draws: a shape's GE2D rect or
+vertices, a sprite's box around everything it shows), minus the origin live on
+that frame. Shapes the editor places from an image are the image inset by one
+pixel on each side (see the texture list section), so their box, and so their
+centre, is that inset quad. A character with no known box (an image, an
+import), a span placed in 3D, and one carrying geometry, which the game draws
+without an origin, are refused, and so is an anchor already at the centre.
+Most shapes KONAMI ships already have their anchor there: of the first thirty
+scaled or turned spans in `title.ifs`'s sprites, twenty-six are refused as
+already centred.
+
+The translation is whole twentieths, so `d * M` is rounded to the nearest one.
+That is exact when `M` is a whole scale and puts a point at most half a
+twentieth of a pixel (1/40) away otherwise. No edit can do better, since the
+format cannot store the exact value. On screen that changes the coverage of an
+edge pixel by at most 255/40, about 6.4 levels.
+
+`anchor_edit_tests.cpp` centres an anchor across a scaled create, a turned
+update, a colour-only update and an update that changes the origin, and
+requires every frame's outline to stay within the rounding; it checks the
+origins written, an object placed without a matrix, and the refusals (nothing
+on the frame, no known box, 3D, geometry, already centred). The proof that the
+game agrees is `anchor_live_tests` (`local_dll`): it centres the anchor of the
+first scaled or turned span in a sprite of IIDX 33's `title.ifs` that is not
+centred yet (sprite 90, depth 4, scaled by fractions such as 1155/1024) and
+renders twelve frames spread over the root animation. Every one must differ
+from the original by at most 7 levels in any channel, removing the depth must
+change at least one of them, and moving the depth by one pixel must change
+each frame it shows by more than 7, so the allowance cannot hide a real
+misplacement. Measured, eleven frames are byte-identical and the frame showing
+the scaled object differs by at most 3 levels. Ignoring `M` (adding `d` to the
+translation, as if the origin were taken off after the matrix) was seen to
+fail it.
+
 ## Clips (`document/clip.h`, `document/clip_edit.h`)
 
 A clip is the root of an animation or one of its sprites, named by a `ClipId`

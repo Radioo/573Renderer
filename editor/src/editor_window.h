@@ -223,6 +223,7 @@ private:
     void ChooseDepth(uint32_t depth);
     [[nodiscard]] bool OutlinesMatchView() const;
     void UpdateOutlines(const AfpAnimation::Animation& animation);
+    void CentreChosenAnchor();
     [[nodiscard]] std::vector<Document::PathPoint>
     PathOfDepth(const AfpAnimation::Animation& animation) const;
     void PickOnStage(double x, double y);

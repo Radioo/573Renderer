@@ -729,6 +729,7 @@ add_executable(local_dll_tests
     tests/local/image_shape_live_tests.cpp
     tests/local/animation_settings_live_tests.cpp
     tests/local/span_trim_live_tests.cpp
+    tests/local/anchor_live_tests.cpp
     tests/local/group_sprite_live_tests.cpp
     tests/local/animation_rename_live_tests.cpp
     tests/local/animation_duplicate_live_tests.cpp
@@ -879,6 +880,7 @@ add_executable(document_tests
     tests/document/span_split_tests.cpp
     tests/document/clip_trim_tests.cpp
     tests/document/clip_extract_tests.cpp
+    tests/document/anchor_edit_tests.cpp
     tests/document/span_sequence_tests.cpp
     tests/document/timeline_snap_tests.cpp
     tests/document/motion_path_tests.cpp

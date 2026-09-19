@@ -206,6 +206,11 @@ bool Touches(const StageOutline& outline, const Box& box) {
 
 }
 
+std::optional<Box> CharacterBox(const AfpAnimation::Animation& animation, uint16_t character,
+                                const std::map<uint16_t, Box>& shape_bounds) {
+    return CharacterBounds(animation, shape_bounds).Of(character);
+}
+
 std::vector<StageOutline> StageOutlines(const AfpAnimation::Animation& animation, ClipId clip,
                                         uint32_t frame,
                                         const std::map<uint16_t, Box>& shape_bounds) {

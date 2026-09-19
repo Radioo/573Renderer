@@ -368,6 +368,18 @@ applied on release through `Document::ReshapeOwnedDepth` or
 the handle lies outside the outline. The timeline shades the selected depth's
 row.
 
+`Edit > Centre the anchor in the content` (Ctrl+Alt+Home, After Effects' Center
+Anchor Point in Layer Content) moves the chosen depth's anchor to the centre of
+what it shows on the playhead's frame, over the whole span, without moving it
+on screen (`Window::CentreChosenAnchor`, through `Document::CentreAnchor`), as
+one undo step. It reads the shape boxes from the file each time rather than
+from the outline cache, which is only refreshed while outlines are shown. A
+depth the project owns is refused: its keyframes have no origin track, so the
+next export would write the old anchor back. The window test centres the dot's
+anchor, reads the new origin (the centre of its 2x1 quad) and the changed
+translation, is refused a second time, undoes, and is refused on an owned
+depth; dropping the owned check or the menu entry fails it.
+
 `View > Rulers` (Ctrl+R, remembered, off by default as in After Effects) draws
 a ruler along the top and left of the viewport in stage pixels, its ticks
 spaced by the first of 1, 5, 10, 25, 50, 100, 250, 500 or 1000 stage pixels
