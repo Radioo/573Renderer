@@ -21,6 +21,10 @@ class QPainter;
 #include <vector>
 
 class QContextMenuEvent;
+class QDragEnterEvent;
+class QDragMoveEvent;
+class QDropEvent;
+class QMimeData;
 class QMouseEvent;
 class QPaintEvent;
 class QPainter;
@@ -66,6 +70,7 @@ signals:
     void MenuRequested(const QPoint& where, uint32_t frame, const QString& label);
     void KeyMenuRequested(const QPoint& where, const QString& property, uint32_t frame,
                           bool on_key);
+    void CharacterDropped(uint16_t character, uint32_t frame, std::optional<uint16_t> depth);
 
 protected:
     bool event(QEvent* event) override;
@@ -75,6 +80,9 @@ protected:
     void mouseReleaseEvent(QMouseEvent* event) override;
     void contextMenuEvent(QContextMenuEvent* event) override;
     void wheelEvent(QWheelEvent* event) override;
+    void dragEnterEvent(QDragEnterEvent* event) override;
+    void dragMoveEvent(QDragMoveEvent* event) override;
+    void dropEvent(QDropEvent* event) override;
 
 private:
     enum class SpanDrag : uint8_t { Move, TrimStart, TrimEnd };
@@ -87,6 +95,7 @@ private:
 
     [[nodiscard]] std::vector<Lane> Lanes() const;
     [[nodiscard]] std::optional<std::size_t> LaneAt(int y) const;
+    [[nodiscard]] bool TakesDrop(const QMimeData* data, QPointF at) const;
     [[nodiscard]] int FrameToX(uint32_t frame) const;
     [[nodiscard]] double PixelsPerFrame() const;
     void ApplyZoom();

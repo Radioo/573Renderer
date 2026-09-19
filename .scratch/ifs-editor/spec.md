@@ -320,3 +320,4 @@ captured. This milestone is the editing itself.
 - `issues/112-sequence-depths.md` (milestone 8)
 - `issues/113-timeline-snapping.md` (milestone 8)
 - `issues/114-graph-retime.md` (milestone 8)
+- `issues/115-drop-characters-on-the-timeline.md` (milestone 8)

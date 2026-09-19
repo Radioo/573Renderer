@@ -797,6 +797,51 @@ TEST_CASE("Chosen depths are sequenced one after another, owned records moving w
     CHECK(project->content.front().first_frame == 3);
 }
 
+TEST_CASE("A character dropped on the timeline starts a depth on the dropped frame") {
+    Opened opened;
+    Open(opened, true);
+    auto* timeline = opened.window.findChild<Editor::Timeline*>();
+    auto* library = opened.window.findChild<QTreeWidget*>("library");
+    REQUIRE(timeline != nullptr);
+    REQUIRE(library != nullptr);
+    std::optional<uint16_t> dot;
+    for (int at = 0; at < library->topLevelItemCount(); at++) {
+        if (library->topLevelItem(at)->text(0).contains("dot"))
+            dot = static_cast<uint16_t>(library->topLevelItem(at)->data(0, Qt::UserRole).toUInt());
+    }
+    REQUIRE(dot.has_value());
+    const auto shows = [&](uint16_t depth, uint32_t frame) {
+        emit timeline->FrameChosen(frame);
+        emit timeline->DepthChosen(depth);
+        return RowValue(*opened.inspector, "Character");
+    };
+    const std::string dot_text = std::to_string(dot.value_or(0));
+    {
+        Script dropped({});
+        emit timeline->CharacterDropped(dot.value_or(0), 1, uint16_t{2});
+        QApplication::processEvents();
+        CHECK(dropped.Problems().isEmpty());
+    }
+    CHECK(shows(3, 1) == dot_text);
+    CHECK(shows(3, 2) == dot_text);
+    CHECK(shows(3, 0) == "no Character row");
+    {
+        Script trimmed({});
+        emit timeline->SpanTrimmed(1, 0, 0, 0);
+        QApplication::processEvents();
+        CHECK(trimmed.Problems().isEmpty());
+    }
+    {
+        Script dropped({});
+        emit timeline->CharacterDropped(dot.value_or(0), 2, uint16_t{1});
+        QApplication::processEvents();
+        CHECK(dropped.Problems().isEmpty());
+    }
+    CHECK(shows(1, 2) == dot_text);
+    CHECK(shows(1, 0) == "7");
+    CHECK(shows(4, 2) == "no Character row");
+}
+
 TEST_CASE("The package and library searches hide what does not match, across refills") {
     Opened opened;
     Open(opened, true);

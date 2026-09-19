@@ -1,11 +1,17 @@
 #include "editor_timeline.h"
 
+#include "editor_mime.h"
+
 #include "document/keyframes.h"
 #include "document/outline.h"
 #include "document/timeline.h"
 #include "document/timeline_snap.h"
 
 #include <QColor>
+#include <QMimeData>
+#include <QDropEvent>
+#include <QDragMoveEvent>
+#include <QDragEnterEvent>
 #include <QContextMenuEvent>
 #include <QEvent>
 #include <QFont>
@@ -30,6 +36,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <map>
 #include <optional>
 #include <utility>
@@ -86,6 +93,7 @@ Timeline::Timeline(QWidget* parent) : QWidget(parent) {
     setMinimumHeight(kEmptyHeight);
     setFocusPolicy(Qt::ClickFocus);
     setMouseTracking(true);
+    setAcceptDrops(true);
 }
 
 void Timeline::ShowAnimation(uint32_t frame_count, std::vector<Document::DepthRow> rows,
@@ -506,9 +514,7 @@ uint32_t Timeline::SnappedTo(uint16_t depth, uint32_t to) const {
         marks.push_back(label.frame);
     const std::vector<uint32_t> targets =
         Document::SnapTargets(rows_, depth, *span_grabbed_, marks);
-    const double frames_per_pixel =
-        static_cast<double>(frame_count_ - 1) / static_cast<double>(width() - kGutterWidth - 1);
-    const auto reach = static_cast<uint32_t>(kSnapPixels * frames_per_pixel);
+    const auto reach = static_cast<uint32_t>(kSnapPixels / PixelsPerFrame());
     switch (span_drag_) {
     case SpanDrag::TrimStart:
         return Document::SnapEdge(to, targets, reach);
@@ -779,6 +785,33 @@ void Timeline::paintEvent(QPaintEvent* event) {
         painter.setBrush(Qt::NoBrush);
         painter.drawRect(QRect(*band_from_, band_to_).normalized());
     }
+}
+
+bool Timeline::TakesDrop(const QMimeData* data, QPointF at) const {
+    return data->hasFormat(kCharacterMime) && frame_count_ > 0 && at.x() >= kGutterWidth;
+}
+
+void Timeline::dragEnterEvent(QDragEnterEvent* event) {
+    if (TakesDrop(event->mimeData(), event->position())) event->acceptProposedAction();
+}
+
+void Timeline::dragMoveEvent(QDragMoveEvent* event) {
+    if (TakesDrop(event->mimeData(), event->position())) event->acceptProposedAction();
+}
+
+void Timeline::dropEvent(QDropEvent* event) {
+    if (!TakesDrop(event->mimeData(), event->position())) return;
+    bool read = false;
+    const uint32_t character = event->mimeData()->data(kCharacterMime).toUInt(&read);
+    if (!read || character > std::numeric_limits<uint16_t>::max()) return;
+    event->acceptProposedAction();
+    const QPoint at = event->position().toPoint();
+    std::optional<uint16_t> depth;
+    if (const std::optional<std::size_t> lane = LaneAt(at.y())) {
+        const Lane found = Lanes()[*lane];
+        if (!found.is_property) depth = found.depth;
+    }
+    emit CharacterDropped(static_cast<uint16_t>(character), XToFrame(at.x()), depth);
 }
 
 }

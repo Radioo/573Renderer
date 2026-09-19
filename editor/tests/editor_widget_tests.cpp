@@ -655,6 +655,49 @@ TEST_CASE("Dragging with the middle button pans the stage") {
     CHECK(PickedAt(viewport, {{300, 250}}) == std::vector<QPointF>{{600, 500}});
 }
 
+TEST_CASE("A character dropped on the timeline is reported at its frame and row") {
+    Editor::Timeline timeline;
+    ShowScene(timeline);
+    struct Dropped {
+        uint16_t character = 0;
+        uint32_t frame = 0;
+        std::optional<uint16_t> depth;
+    };
+    std::vector<Dropped> drops;
+    QObject::connect(&timeline, &Editor::Timeline::CharacterDropped,
+                     [&drops](uint16_t character, uint32_t frame, std::optional<uint16_t> depth) {
+                         drops.push_back({.character = character, .frame = frame, .depth = depth});
+                     });
+    const auto drop = [](Editor::Timeline& target, const QString& format, QPointF at,
+                         const QByteArray& bytes = "12") {
+        QMimeData data;
+        data.setData(format, bytes);
+        QDragEnterEvent enter(at.toPoint(), Qt::CopyAction, &data, Qt::LeftButton, Qt::NoModifier);
+        QApplication::sendEvent(&target, &enter);
+        QDropEvent dropped_on(at, Qt::CopyAction, &data, Qt::LeftButton, Qt::NoModifier);
+        QApplication::sendEvent(&target, &dropped_on);
+        return enter.isAccepted();
+    };
+    CHECK(drop(timeline, Editor::kCharacterMime, {FrameX(4), kDepthRowY}));
+    CHECK(drop(timeline, Editor::kCharacterMime, {FrameX(7), kFirstPropertyY}));
+    CHECK_FALSE(drop(timeline, Editor::kCharacterMime, {10, kDepthRowY}));
+    CHECK_FALSE(drop(timeline, "text/plain", {FrameX(4), kDepthRowY}));
+    drop(timeline, Editor::kCharacterMime, {FrameX(4), kDepthRowY}, "dot");
+    Editor::Timeline empty;
+    empty.resize(kTimelineWidth, 200);
+    QObject::connect(&empty, &Editor::Timeline::CharacterDropped,
+                     [&drops](uint16_t character, uint32_t frame, std::optional<uint16_t> depth) {
+                         drops.push_back({.character = character, .frame = frame, .depth = depth});
+                     });
+    CHECK_FALSE(drop(empty, Editor::kCharacterMime, {FrameX(4), kDepthRowY}));
+    REQUIRE(drops.size() == 2);
+    CHECK(drops[0].character == 12);
+    CHECK(drops[0].frame == 4);
+    CHECK(drops[0].depth == uint16_t{1});
+    CHECK(drops[1].frame == 7);
+    CHECK_FALSE(drops[1].depth.has_value());
+}
+
 TEST_CASE("A character dropped on the stage is reported at its stage point") {
     Editor::Viewport viewport;
     ShowStage(viewport);

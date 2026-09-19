@@ -240,6 +240,24 @@ and selects the new depth. While a sprite is edited over the root view the
 stage shows the root, so a drop there has no place in the sprite and is refused
 with a message saying to show the sprite on its own first.
 
+A character can be dropped on the timeline too, as footage is dropped into an
+After Effects timeline at a time. The timeline takes the same format over its
+frame area (not the gutter, and not before an animation is shown) and reports
+the character, the frame under the cursor and, when it lands on a depth row,
+that depth (`Timeline::CharacterDropped`). The window starts a depth showing
+the character from that frame to the clip's last
+(`Window::DropCharacterOnTimeline`, through `AddCharacterDepth`, one undo
+step), on the row's own depth when that depth is free for the whole stretch
+(`Document::CheckFree`) and on the first depth above every depth the clip uses
+otherwise. Unlike a stage drop it places the character at the stage origin,
+since the drop says when and not where. The widget test drops on a depth row,
+on a property lane, on the gutter, with another format, with a payload that is
+not a number, and on a timeline with nothing shown; the window test drops on a
+taken row and sees a new depth start on the dropped frame, then frees a row
+and sees the drop land on it. Dropping the frame, the gutter or empty-timeline
+rule, the number check, the lane rule, the free-row check, the fallback or the
+connection fails them.
+
 **History.** Every step the undo stack holds, under a first row, `Start`, which
 is the oldest document the stack can still reach (32 steps back at most), then
 each edit by the name the Edit menu gives it. The row for where the document is

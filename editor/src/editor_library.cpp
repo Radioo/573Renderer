@@ -4,10 +4,12 @@
 #include "editor_mime.h"
 
 #include "document/characters.h"
+#include "document/clip.h"
 #include "document/clip_edit.h"
 #include "document/document.h"
 #include "document/frame_edit.h"
 #include "document/group_sprite.h"
+#include "document/span_tags.h"
 #include "document/stage_move.h"
 #include "formats/afp_animation.h"
 #include "support/expected.h"
@@ -203,6 +205,24 @@ void Window::PlaceDroppedCharacter(uint16_t character, double x, double y) {
     }
     depth_ = *depth;
     ShowFrame();
+}
+
+void Window::DropCharacterOnTimeline(uint16_t character, uint32_t frame,
+                                     std::optional<uint16_t> row) {
+    if (!file_ || animation_path_.empty()) return;
+    const uint32_t frames = ClipFrameCount();
+    if (frames == 0) return;
+    const auto animation = file_->ReadAnimation(animation_path_);
+    if (!animation) {
+        ReportProblem(QString::fromStdString(animation.error()));
+        return;
+    }
+    const AfpAnimation::Container* shown = Document::FindClip(*animation, clip_);
+    const bool row_free =
+        row && shown != nullptr && Document::CheckFree(*shown, *row, frame, frames - 1).has_value();
+    const std::optional<uint16_t> depth = row_free ? row : NextFreeDepth(0);
+    if (!depth) return;
+    AddCharacterDepth(*depth, character, frame, frames - 1);
 }
 
 void Window::AddCharacterDepth(uint16_t depth, uint16_t character, uint32_t first, uint32_t last) {
