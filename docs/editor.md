@@ -341,7 +341,19 @@ a picked sprite on its own and there is no picture without the host.
 
 Clicking the viewport maps the point to stage pixels through that rectangle
 and selects the highest depth whose `Document::StageOutlines` outline
-holds it, or clears the selection; the selected depth is outlined. Dragging
+holds it, or clears the selection; the selected depth is outlined. A drag that
+starts where no outline is, and so not on the selection, draws a dashed marquee
+instead, and letting go chooses every depth whose outline it touches
+(`Viewport::DepthsBanded`, `Document::DepthsTouching`, then
+`Window::ChooseDepths`, as choosing several depths on the timeline does), so
+they move, align and arrange together. Hidden and locked depths have no outline
+on the stage, so a marquee cannot catch them. A press and release without a
+drag stays a click. The widget test draws marquees over one outline and over
+both, sees the dashed band drawn while dragging, a tiny drag reporting nothing,
+and a drag from inside the selection moving it; the window test sees a marquee
+choose two depths. Starting a band where there is a selection, dropping the
+drag threshold, the band following the pointer, the drawing, or the connection
+fails them. Dragging
 inside that outline moves the outline with the pointer, and letting go moves
 the depth by the offset: `Document::MoveOwnedDepth` through `EditAuthored` for
 an owned depth, `Document::MoveBakedDepth` through `EditAnimation` otherwise,

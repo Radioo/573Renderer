@@ -598,6 +598,52 @@ TEST_CASE("Every depth in the selection is outlined") {
     CHECK_THAT(moves.back().by.x(), WithinAbs(500, 1e-9));
 }
 
+TEST_CASE("Dragging across empty stage reports every depth the band touches") {
+    Editor::Viewport viewport;
+    ShowStage(viewport);
+    const Document::StageOutline first{
+        .depth = 5,
+        .corners = {Document::Point{100, 100}, Document::Point{500, 100}, Document::Point{500, 300},
+                    Document::Point{100, 300}},
+        .anchor = {100, 100},
+        .linear = {}};
+    const Document::StageOutline second{
+        .depth = 6,
+        .corners = {Document::Point{1000, 600}, Document::Point{1400, 600},
+                    Document::Point{1400, 800}, Document::Point{1000, 800}},
+        .anchor = {1000, 600},
+        .linear = {}};
+    viewport.ShowOutlines({first, second}, uint16_t{5});
+    std::vector<std::vector<uint16_t>> banded;
+    QObject::connect(
+        &viewport, &Editor::Viewport::DepthsBanded,
+        [&banded](std::vector<uint16_t> depths) { banded.push_back(std::move(depths)); });
+    std::vector<Move> moves;
+    QObject::connect(&viewport, &Editor::Viewport::Dragged,
+                     [&moves](uint16_t, double dx, double dy, bool finished) {
+                         moves.push_back({.by = QPointF(dx, dy), .finished = finished});
+                     });
+    Send(viewport, QEvent::MouseButtonPress, {450, 250}, Qt::LeftButton);
+    Send(viewport, QEvent::MouseMove, {550, 350}, Qt::LeftButton);
+    bool dashed = false;
+    const QImage drawn = viewport.grab().toImage();
+    for (int x = 455; x < 545; x++) {
+        for (int y = 249; y <= 250; y++) {
+            const QColor colour = drawn.pixelColor(x, y);
+            dashed = dashed || (colour.blue() > 100 && colour.red() < colour.blue());
+        }
+    }
+    CHECK(dashed);
+    Send(viewport, QEvent::MouseButtonRelease, {550, 350}, Qt::NoButton);
+    Drag(viewport, {25, 25}, {750, 450});
+    Drag(viewport, {600, 200}, {601, 201});
+    Drag(viewport, {150, 100}, {250, 120});
+    REQUIRE(banded.size() == 2);
+    CHECK(banded[0] == std::vector<uint16_t>{6});
+    CHECK(banded[1] == std::vector<uint16_t>{5, 6});
+    CHECK_FALSE(moves.empty());
+}
+
 TEST_CASE("Clicking the stage reports where in stage pixels") {
     Editor::Viewport viewport;
     ShowStage(viewport);

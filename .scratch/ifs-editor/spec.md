@@ -322,3 +322,4 @@ captured. This milestone is the editing itself.
 - `issues/114-graph-retime.md` (milestone 8)
 - `issues/115-drop-characters-on-the-timeline.md` (milestone 8)
 - `issues/116-new-empty-sprite.md` (milestone 8)
+- `issues/117-stage-marquee.md` (milestone 8)

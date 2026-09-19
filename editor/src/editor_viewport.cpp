@@ -155,6 +155,13 @@ void Viewport::DrawGroup(QPainter& painter, const Document::StageOutline& primar
     }
 }
 
+void Viewport::DrawBand(QPainter& painter) const {
+    if (!band_from_) return;
+    painter.setPen(QPen(kSelectedColour, 1, Qt::DashLine));
+    painter.setBrush(Qt::NoBrush);
+    painter.drawRect(QRectF(ToWidget(*band_from_), ToWidget(band_to_)).normalized());
+}
+
 void Viewport::ShowPath(std::vector<Document::PathPoint> path) {
     path_ = std::move(path);
     update();
@@ -473,6 +480,7 @@ void Viewport::paintEvent(QPaintEvent* event) {
         DrawGroup(painter, *selected);
     }
     DrawPath(painter);
+    DrawBand(painter);
     if (rulers_) DrawRulers(painter);
 }
 
@@ -509,6 +517,11 @@ void Viewport::mousePressEvent(QMouseEvent* event) {
     press_ = event->position();
     grab_ = point;
     pointer_ = point;
+    band_from_.reset();
+    if (gesture == Gesture::None) {
+        band_from_ = point;
+        band_to_ = point;
+    }
 }
 
 void Viewport::mouseMoveEvent(QMouseEvent* event) {
@@ -522,6 +535,12 @@ void Viewport::mouseMoveEvent(QMouseEvent* event) {
         const std::optional<QPointF> stage = ToStage(event->position());
         Document::SnapGuide& guide = guides_[*dragged_guide_];
         if (stage) guide.at = guide.vertical ? stage->x() : stage->y();
+        update();
+        return;
+    }
+    if (band_from_ && (event->buttons() & Qt::LeftButton) != 0) {
+        const std::optional<QPointF> stage = ToStage(event->position());
+        if (stage) band_to_ = {stage->x(), stage->y()};
         update();
         return;
     }
@@ -573,6 +592,18 @@ void Viewport::mouseReleaseEvent(QMouseEvent* event) {
             guides_.erase(guides_.begin() + static_cast<std::ptrdiff_t>(*dragged_guide_));
         dragged_guide_.reset();
         update();
+        return;
+    }
+    if (band_from_) {
+        const Document::Point from = *band_from_;
+        band_from_.reset();
+        update();
+        if (QLineF(press_, event->position()).length() < kDragThreshold) return;
+        emit DepthsBanded(Document::DepthsTouching(
+            outlines_, Document::Box{.left = std::min(from[0], band_to_[0]),
+                                     .right = std::max(from[0], band_to_[0]),
+                                     .top = std::min(from[1], band_to_[1]),
+                                     .bottom = std::max(from[1], band_to_[1])}));
         return;
     }
     const Gesture gesture = dragging_ ? gesture_ : Gesture::None;

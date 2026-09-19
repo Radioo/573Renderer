@@ -441,3 +441,21 @@ TEST_CASE("A new empty sprite from the library opens in the clip box ready to fi
     }
     CHECK(offered);
 }
+
+TEST_CASE("A marquee on the stage chooses the depths it touches") {
+    Opened opened;
+    Open(opened, true);
+    auto* timeline = opened.window.findChild<Editor::Timeline*>();
+    auto* viewport = opened.window.findChild<Editor::Viewport*>();
+    REQUIRE(timeline != nullptr);
+    REQUIRE(viewport != nullptr);
+    emit viewport->DepthsBanded({1, 2});
+    CHECK(RowValue(*opened.inspector, "Depth") == "2");
+    bool offered = false;
+    {
+        Script looked({Look("Remove 2 depths here", offered)});
+        emit timeline->MenuRequested(QPoint(4, 4), 0, QString());
+        REQUIRE(Settle([&looked] { return looked.Finished(); }));
+    }
+    CHECK(offered);
+}

@@ -1167,6 +1167,18 @@ A sprite shown on its own is outlined in its own space, which is the stage
 space the host draws it in. `DepthAt` returns the highest depth whose outline
 holds a point, which is the object drawn on top.
 
+`DepthsTouching(outlines, box)` returns, in depth order, every depth whose
+outline overlaps an axis-aligned box, however little, which is what a marquee
+drawn on the stage selects. Outlines are parallelograms, so it is a separating
+axis test: the box and an outline miss each other exactly when their
+projections onto one of the box's two axes or one of the outline's four edge
+normals do not overlap. A turned outline whose bounding box meets the marquee
+but whose body does not is therefore not touched. `stage_bounds_tests` covers a
+marquee over two outlines, one inside an outline, one in the gap between them,
+one inside a diamond's bounding box but outside the diamond, one inside the
+diamond, and a thin one just above the diamond's point, which only the box's
+own vertical axis separates.
+
 The sprite rule is an editor choice, the way After Effects boxes a precomposed
 layer by its whole composition: a sprite's current frame depends on its own
 playhead and scripts, which the document does not run.

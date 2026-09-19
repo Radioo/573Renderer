@@ -8,6 +8,8 @@
 #include <array>
 #include <cmath>
 #include <cstddef>
+#include <limits>
+#include <utility>
 #include <cstdint>
 #include <functional>
 #include <map>
@@ -173,6 +175,35 @@ bool Inside(const StageOutline& outline, Point point) {
     return !(below && above);
 }
 
+bool Separated(const std::array<Point, 4>& first, const std::array<Point, 4>& second, Point axis) {
+    const auto project = [axis](const std::array<Point, 4>& corners) {
+        double lowest = std::numeric_limits<double>::max();
+        double highest = std::numeric_limits<double>::lowest();
+        for (const Point& corner : corners) {
+            const double along = (corner[0] * axis[0]) + (corner[1] * axis[1]);
+            lowest = std::min(lowest, along);
+            highest = std::max(highest, along);
+        }
+        return std::pair{lowest, highest};
+    };
+    const auto [first_low, first_high] = project(first);
+    const auto [second_low, second_high] = project(second);
+    return first_high < second_low || second_high < first_low;
+}
+
+bool Touches(const StageOutline& outline, const Box& box) {
+    const std::array<Point, 4> marquee{Point{box.left, box.top}, Point{box.right, box.top},
+                                       Point{box.right, box.bottom}, Point{box.left, box.bottom}};
+    std::vector<Point> axes{Point{1, 0}, Point{0, 1}};
+    for (std::size_t i = 0; i < outline.corners.size(); i++) {
+        const Point& from = outline.corners.at(i);
+        const Point& to = outline.corners.at((i + 1) % outline.corners.size());
+        axes.push_back(Point{from[1] - to[1], to[0] - from[0]});
+    }
+    return std::ranges::none_of(
+        axes, [&](const Point& axis) { return Separated(outline.corners, marquee, axis); });
+}
+
 }
 
 std::vector<StageOutline> StageOutlines(const AfpAnimation::Animation& animation, ClipId clip,
@@ -246,6 +277,15 @@ std::optional<uint16_t> DepthAt(const std::vector<StageOutline>& outlines, Point
         if (Inside(outline, point)) return outline.depth;
     }
     return std::nullopt;
+}
+
+std::vector<uint16_t> DepthsTouching(const std::vector<StageOutline>& outlines, const Box& box) {
+    std::vector<uint16_t> touched;
+    for (const StageOutline& outline : outlines) {
+        if (Touches(outline, box)) touched.push_back(outline.depth);
+    }
+    std::ranges::sort(touched);
+    return touched;
 }
 
 }

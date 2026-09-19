@@ -218,3 +218,36 @@ TEST_CASE("A flat object cannot be scaled from a drag") {
     CHECK(reshape.scale_x == 1);
     CHECK(reshape.scale_y == 1);
 }
+
+TEST_CASE("A marquee touches every outline it overlaps, however little, and no other") {
+    const auto square = [](uint16_t depth, double left, double top, double side) {
+        return Document::StageOutline{.depth = depth,
+                                      .corners = {Document::Point{left, top},
+                                                  Document::Point{left + side, top},
+                                                  Document::Point{left + side, top + side},
+                                                  Document::Point{left, top + side}},
+                                      .anchor = {left, top},
+                                      .linear = {}};
+    };
+    const Document::StageOutline diamond{
+        .depth = 9,
+        .corners = {Document::Point{300, 200}, Document::Point{400, 300}, Document::Point{300, 400},
+                    Document::Point{200, 300}},
+        .anchor = {300, 300},
+        .linear = {}};
+    const std::vector<Document::StageOutline> outlines{square(4, 0, 0, 100), square(2, 150, 0, 50),
+                                                       diamond};
+    CHECK(Document::DepthsTouching(outlines, {.left = 90, .right = 160, .top = 40, .bottom = 60}) ==
+          std::vector<uint16_t>{2, 4});
+    CHECK(Document::DepthsTouching(outlines, {.left = 10, .right = 20, .top = 10, .bottom = 20}) ==
+          std::vector<uint16_t>{4});
+    CHECK(Document::DepthsTouching(outlines, {.left = 110, .right = 140, .top = 10, .bottom = 90})
+              .empty());
+    CHECK(Document::DepthsTouching(outlines, {.left = 200, .right = 240, .top = 200, .bottom = 240})
+              .empty());
+    CHECK(Document::DepthsTouching(outlines,
+                                   {.left = 200, .right = 260, .top = 200, .bottom = 260}) ==
+          std::vector<uint16_t>{9});
+    CHECK(Document::DepthsTouching(outlines, {.left = 0, .right = 600, .top = 180, .bottom = 195})
+              .empty());
+}

@@ -61,4 +61,7 @@ struct Reshape {
 [[nodiscard]] std::optional<uint16_t> DepthAt(const std::vector<StageOutline>& outlines,
                                               Point point);
 
+[[nodiscard]] std::vector<uint16_t> DepthsTouching(const std::vector<StageOutline>& outlines,
+                                                   const Box& box);
+
 }
