@@ -28,6 +28,7 @@
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace Editor {
@@ -62,6 +63,7 @@ bool Window::EditAuthored(const QString& name, const AuthoredChange& change) {
         ReportProblem(QString::fromStdString(changed.error()));
         return false;
     }
+    std::vector<Document::KeyRef> kept = timeline_->SelectedKeys();
     if (!EditAnimation(name, [&edited](AfpAnimation::Animation& animation) {
             using Written = Support::Expected<void, std::string>;
             auto baked = Document::BakedFor(animation, edited);
@@ -72,6 +74,7 @@ bool Window::EditAuthored(const QString& name, const AuthoredChange& change) {
     }
     authored_[*at] = std::move(edited);
     SaveProject();
+    timeline_->SelectKeys(std::move(kept));
     ShowFrame();
     return true;
 }
@@ -225,6 +228,10 @@ void Window::ShowKeyMenu(const QPoint& where, const QString& property, uint32_t 
         selected > 0
             ? menu.addAction(tr("Delete %n keyframe(s)", nullptr, static_cast<int>(selected)))
             : nullptr;
+    QMenu* easy = selected > 0 ? menu.addMenu(tr("Easy ease")) : nullptr;
+    QAction* easy_both = easy != nullptr ? easy->addAction(tr("Both sides")) : nullptr;
+    QAction* easy_in = easy != nullptr ? easy->addAction(tr("In")) : nullptr;
+    QAction* easy_out = easy != nullptr ? easy->addAction(tr("Out")) : nullptr;
     QAction* reverse =
         selected > 1
             ? menu.addAction(tr("Time-reverse %n keyframe(s)", nullptr, static_cast<int>(selected)))
@@ -254,6 +261,12 @@ void Window::ShowKeyMenu(const QPoint& where, const QString& property, uint32_t 
     }
     if (chosen == reverse) {
         ReverseSelectedKeys();
+        return;
+    }
+    if (chosen == easy_both || chosen == easy_in || chosen == easy_out) {
+        EasyEaseSelectedKeys(chosen == easy_both ? Document::EasySide::Both
+                             : chosen == easy_in ? Document::EasySide::In
+                                                 : Document::EasySide::Out);
         return;
     }
     if (chosen == add) {

@@ -112,6 +112,31 @@ Support::Expected<void, std::string> CheckHeld(const AuthoredDepth& authored,
     return {};
 }
 
+constexpr double kEasyInfluence = 1.0 / 3.0;
+constexpr double kEasyEnd = 2.0 / 3.0;
+
+Bezier Leaving(const Keyframe& key) {
+    if (key.ease == Ease::Bezier) return key.bezier;
+    return Bezier{.x1 = kEasyInfluence, .y1 = kEasyInfluence, .x2 = kEasyEnd, .y2 = kEasyEnd};
+}
+
+bool EaseSegment(Track& track, std::size_t from, bool slow_start, bool slow_end) {
+    if (from + 1 >= track.keys.size()) return false;
+    Keyframe& key = track.keys[from];
+    Bezier curve = Leaving(key);
+    if (slow_start) {
+        curve.x1 = kEasyInfluence;
+        curve.y1 = 0.0;
+    }
+    if (slow_end) {
+        curve.x2 = kEasyEnd;
+        curve.y2 = 1.0;
+    }
+    key.ease = Ease::Bezier;
+    key.bezier = curve;
+    return true;
+}
+
 Bezier Mirrored(const Bezier& curve) {
     return Bezier{
         .x1 = 1.0 - curve.x2, .y1 = 1.0 - curve.y2, .x2 = 1.0 - curve.x1, .y2 = 1.0 - curve.y1};
@@ -283,6 +308,33 @@ Support::Expected<std::vector<KeyRef>, std::string> ReverseKeys(AuthoredDepth& a
     }
     authored = std::move(edited);
     return reversed;
+}
+
+Support::Expected<void, std::string> EasyEaseKeys(AuthoredDepth& authored,
+                                                  const std::vector<KeyRef>& keys, EasySide side) {
+    if (keys.empty()) return Support::Unexpected(std::string("no keyframes are selected"));
+    auto held = CheckHeld(authored, keys);
+    if (!held) return Support::Unexpected(held.error());
+    AuthoredDepth edited = authored;
+    bool eased = false;
+    for (const KeyRef& ref : keys) {
+        Track& track = *TrackNamed(edited, ref.property);
+        if (PropertyIsStepped(track.property)) {
+            return Support::Unexpected(track.property +
+                                       " jumps from one keyframe to the next and only holds");
+        }
+        const auto at = static_cast<std::size_t>(
+            std::ranges::find(track.keys, ref.frame, &Keyframe::frame) - track.keys.begin());
+        if (side != EasySide::In) eased = EaseSegment(track, at, true, false) || eased;
+        if (side != EasySide::Out && at > 0)
+            eased = EaseSegment(track, at - 1, false, true) || eased;
+    }
+    if (!eased) {
+        return Support::Unexpected(
+            std::string("no selected keyframe has a neighbour on that side to ease towards"));
+    }
+    authored = std::move(edited);
+    return {};
 }
 
 }

@@ -1507,6 +1507,16 @@ paste or a move that fails halfway leaves nothing behind.
   of its stretch. An unselected keyframe between `first` and `last` would land
   among the reversed ones, so the reverse is refused and names it. It returns
   where each selected keyframe went, in the order they were given.
+- `EasyEaseKeys` is After Effects' Easy Ease. A keyframe's ease describes the
+  stretch leaving it, so easing the way out of a keyframe sets the first
+  control point of its own curve to `(1/3, 0)`, and easing the way into it sets
+  the second control point of the previous keyframe's curve to `(2/3, 1)`.
+  `EasySide::Both` does both for each selected keyframe. A stretch that was not
+  a bezier becomes one, with its untouched side at the straight control point
+  (`(1/3, 1/3)` or `(2/3, 2/3)`), so easing both ends of a stretch gives exactly
+  the `Ease` preset, and a bezier keeps the side that is not eased. A property
+  that only holds is refused, as `SetKeysEase` refuses it, and so is a
+  selection where no keyframe has a neighbour on the eased side.
 
 ## Export drift (`document/project_drift.h`)
 

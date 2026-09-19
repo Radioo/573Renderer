@@ -54,6 +54,12 @@ void Window::AddKeyActions() {
     add(tr("Paste keyframes"), QKeySequence::Paste, &Window::PasteCopiedKeys);
     add(tr("Delete keyframes"), QKeySequence::Delete, &Window::RemoveSelectedKeys);
     add(tr("Select every keyframe"), QKeySequence::SelectAll, &Window::SelectAllKeys);
+    add(tr("Easy ease"), QKeySequence(Qt::Key_F9),
+        [this] { EasyEaseSelectedKeys(Document::EasySide::Both); });
+    add(tr("Easy ease in"), QKeySequence(Qt::SHIFT | Qt::Key_F9),
+        [this] { EasyEaseSelectedKeys(Document::EasySide::In); });
+    add(tr("Easy ease out"), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_F9),
+        [this] { EasyEaseSelectedKeys(Document::EasySide::Out); });
 }
 
 void Window::CopySelectedKeys() {
@@ -110,6 +116,14 @@ void Window::SelectAllKeys() {
     if (!depth_) return;
     const Document::AuthoredDepth* owned = AuthoredAt(static_cast<uint16_t>(*depth_), frame_);
     if (owned != nullptr) timeline_->SelectKeys(Document::AllKeys(*owned));
+}
+
+void Window::EasyEaseSelectedKeys(Document::EasySide side) {
+    const std::vector<Document::KeyRef> chosen = timeline_->SelectedKeys();
+    EditAuthored(tr("Easy ease %n keyframe(s)", nullptr, static_cast<int>(chosen.size())),
+                 [&chosen, side](Document::AuthoredDepth& authored) {
+                     return Document::EasyEaseKeys(authored, chosen, side);
+                 });
 }
 
 void Window::ReverseSelectedKeys() {

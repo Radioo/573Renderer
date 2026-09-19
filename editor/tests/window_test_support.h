@@ -338,6 +338,49 @@ inline std::optional<TitleFile> ReadTitle(const QString& title) {
     return TitleFile{.file = std::move(*file), .path = path};
 }
 
+inline QString OwnDroppedDot(Opened& opened) {
+    auto* timeline = opened.window.findChild<Editor::Timeline*>();
+    auto* viewport = opened.window.findChild<Editor::Viewport*>();
+    auto* library = opened.window.findChild<QTreeWidget*>("library");
+    REQUIRE(timeline != nullptr);
+    REQUIRE(viewport != nullptr);
+    REQUIRE(library != nullptr);
+    std::optional<uint16_t> dot;
+    for (int at = 0; at < library->topLevelItemCount(); at++) {
+        if (library->topLevelItem(at)->text(0).contains("dot"))
+            dot = static_cast<uint16_t>(library->topLevelItem(at)->data(0, Qt::UserRole).toUInt());
+    }
+    REQUIRE(dot.has_value());
+    emit timeline->FrameChosen(0);
+    {
+        Script placed({});
+        emit viewport->CharacterDropped(dot.value_or(0), 500, 300);
+        QApplication::processEvents();
+        CHECK(placed.Problems().isEmpty());
+    }
+    QAction* project = nullptr;
+    for (QAction* action : opened.window.findChildren<QAction*>()) {
+        if (action->text() == "&New project...") project = action;
+    }
+    REQUIRE(project != nullptr);
+    const QString folder = opened.dir.filePath("project");
+    REQUIRE(QDir().mkpath(folder));
+    {
+        Script made({PickFile(folder)});
+        project->trigger();
+        REQUIRE(Settle([&made] { return made.Finished(); }));
+        CHECK(made.Problems().isEmpty());
+    }
+    emit timeline->DepthChosen(3);
+    {
+        Script owned({Choose("Let the project own depth 3 from here")});
+        emit timeline->MenuRequested(QPoint(4, 4), 0, QString());
+        REQUIRE(Settle([&owned] { return owned.Finished(); }));
+        CHECK(owned.Problems().isEmpty());
+    }
+    return folder;
+}
+
 inline std::optional<uint16_t> WidestTitleDepth(const QString& title) {
     const std::optional<TitleFile> read = ReadTitle(title);
     if (!read) return std::nullopt;

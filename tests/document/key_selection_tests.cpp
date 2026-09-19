@@ -274,3 +274,53 @@ TEST_CASE("The keyframe that ends up last keeps the ease it leaves the stretch w
           Document::Bezier{.x1 = 0.5, .y1 = 0.0, .x2 = 0.75, .y2 = 0.25});
     CHECK(depth.tracks[0].keys[0].ease == Document::Ease::Linear);
 }
+
+TEST_CASE("Easy ease on both sides of a stretch gives it the Ease preset") {
+    Document::AuthoredDepth depth = Depth();
+    depth.tracks[0].keys[0].ease = Document::Ease::Hold;
+    REQUIRE(Document::EasyEaseKeys(depth, {Ref("Translation", 0), Ref("Translation", 4)},
+                                   Document::EasySide::Both)
+                .has_value());
+    CHECK(depth.tracks[0].keys[0].ease == Document::Ease::Bezier);
+    CHECK(depth.tracks[0].keys[0].bezier == Document::EasePresets().front().bezier);
+    CHECK(depth.tracks[0].keys[1].ease == Document::Ease::Bezier);
+    CHECK(depth.tracks[0].keys[1].bezier ==
+          Document::Bezier{.x1 = 1.0 / 3.0, .y1 = 0.0, .x2 = 2.0 / 3.0, .y2 = 2.0 / 3.0});
+    CHECK(depth.tracks[0].keys[2].ease == Document::Ease::Linear);
+    CHECK(depth.tracks[1] == Depth().tracks[1]);
+}
+
+TEST_CASE("Easy ease in and out touch only their side and keep the other") {
+    Document::AuthoredDepth depth = Depth();
+    depth.tracks[0].keys[0].ease = Document::Ease::Bezier;
+    depth.tracks[0].keys[0].bezier = {.x1 = 0.25, .y1 = 0.5, .x2 = 0.75, .y2 = 0.5};
+    REQUIRE(
+        Document::EasyEaseKeys(depth, {Ref("Translation", 4)}, Document::EasySide::In).has_value());
+    CHECK(depth.tracks[0].keys[0].bezier ==
+          Document::Bezier{.x1 = 0.25, .y1 = 0.5, .x2 = 2.0 / 3.0, .y2 = 1.0});
+    CHECK(depth.tracks[0].keys[1].ease == Document::Ease::Linear);
+    REQUIRE(Document::EasyEaseKeys(depth, {Ref("Translation", 4)}, Document::EasySide::Out)
+                .has_value());
+    CHECK(depth.tracks[0].keys[1].bezier ==
+          Document::Bezier{.x1 = 1.0 / 3.0, .y1 = 0.0, .x2 = 2.0 / 3.0, .y2 = 2.0 / 3.0});
+    CHECK(depth.tracks[0].keys[0].bezier ==
+          Document::Bezier{.x1 = 0.25, .y1 = 0.5, .x2 = 2.0 / 3.0, .y2 = 1.0});
+}
+
+TEST_CASE("Easy ease is refused, leaving the depth alone, when there is nothing to ease") {
+    Document::AuthoredDepth depth = Depth();
+    depth.tracks.push_back(Document::Track{
+        .property = "Blend", .keys = {Key(0, {1}, Document::Ease::Hold), Key(4, {2})}});
+    const Document::AuthoredDepth before = depth;
+    CHECK_FALSE(Document::EasyEaseKeys(depth, {}, Document::EasySide::Both).has_value());
+    CHECK_FALSE(Document::EasyEaseKeys(depth, {Ref("Translation", 8)}, Document::EasySide::Out)
+                    .has_value());
+    CHECK_FALSE(
+        Document::EasyEaseKeys(depth, {Ref("Translation", 0)}, Document::EasySide::In).has_value());
+    CHECK_FALSE(Document::EasyEaseKeys(depth, {Ref("Translation", 5)}, Document::EasySide::Both)
+                    .has_value());
+    const auto stepped = Document::EasyEaseKeys(depth, {Ref("Blend", 0)}, Document::EasySide::Out);
+    REQUIRE_FALSE(stepped.has_value());
+    CHECK(stepped.error().find("only holds") != std::string::npos);
+    CHECK(depth == before);
+}

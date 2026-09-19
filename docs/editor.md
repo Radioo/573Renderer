@@ -67,12 +67,16 @@ runs them. Two mutations (moving the turn handle, clearing the selection on a
 Ctrl press) were each seen to fail a case before the tests were trusted.
 
 `build-editor/editor_window_tests.exe` builds the whole `Editor::Window` from the
-same sources, with no host, and drives it the way a user would. Its cases live
-in two files: `editor/tests/editor_window_tests.cpp` for the ones that need no
-game install and `editor/tests/editor_live_window_tests.cpp` for the ones that
-start the preview host (they skip without `R573_IIDX_DIR`), with the `Script`,
-its steps and the package helpers shared from
-`editor/tests/window_test_support.h`. Its `main` points
+same sources, with no host, and drives it the way a user would. The cases that
+need no game install live in `editor/tests/editor_window_tests.cpp`,
+`editor/tests/editor_panel_window_tests.cpp` (the panels and the depth edits)
+and `editor/tests/editor_key_window_tests.cpp` (the keyframe edits), and the
+ones that start the preview host live in
+`editor/tests/editor_live_window_tests.cpp` (they skip without
+`R573_IIDX_DIR`). The `Script`, its steps and the package helpers are shared
+from `editor/tests/window_test_support.h`, including `OwnDroppedDot`, which
+drops the dot shape on depth 3 at frame 0, makes a project and lets it own that
+depth, the start of every test that edits an owned depth. Its `main` points
 `QSettings` at a temporary INI directory under its own organisation name, so it
 never reads the user's game install or layout. Each case writes a small package
 to a temporary directory and opens it. Context menus are raised by emitting the
@@ -697,7 +701,24 @@ focused one focused where it went. The window test inserts a frame so the
 dropped dot spans four, owns it, sets keyframes on frames 0, 1 and 3 by
 dragging it, reverses the three from the menu, and reads the values on every
 frame, the new selection (frames 0, 2 and 3), the focused keyframe on frame 3,
-and the undo. Dropping the menu entry, the selection or the focus fails it. How a keyframe leaves its frame applies to the whole
+and the undo. Dropping the menu entry, the selection or the focus fails it.
+
+Easy ease is After Effects' F9 (`Window::EasyEaseSelectedKeys`, through
+`Document::EasyEaseKeys`): F9 eases both sides of each selected keyframe,
+Shift+F9 only the way into it and Ctrl+Shift+F9 only the way out of it, and
+the lane menu's `Easy ease` submenu offers the same three. It is refused, with
+the reason in the status bar, when no selected keyframe has a neighbour on that
+side. Any edit of an owned depth keeps the keyframe selection: rebuilding the
+timeline after the edit used to drop it, so after easing from the menu nothing
+was selected any more. `Window::EditAuthored` puts the selection back, and the
+timeline drops any keyframe the edit removed, while the edits that choose their
+own selection (moving, time-reversing, pasting, deleting) still set it after.
+The window test gives the dot's depth keyframes on frames 0 and 3, presses F9
+and reads the eased values between them, eases the first from the lane menu to
+`Linear` and sees both keyframes still selected, eases the way into the last
+from the submenu, and sees Ctrl+Shift+F9 on the last and Shift+F9 on the first
+refused. Dropping the selection restore, the F9 shortcut or the submenu's `In`
+fails it. How a keyframe leaves its frame applies to the whole
 selection when the right-clicked keyframe is part of it, and to that keyframe
 alone otherwise. Bezier opens `Editor::EaseDialog`: the curve drawn with
 `Document::EaseProgress` over a unit square that has room above and below for

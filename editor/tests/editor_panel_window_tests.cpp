@@ -526,44 +526,8 @@ TEST_CASE("Arranging swaps depths in the stacking order and carries what the pro
     Opened opened;
     Open(opened, true);
     auto* timeline = opened.window.findChild<Editor::Timeline*>();
-    auto* viewport = opened.window.findChild<Editor::Viewport*>();
-    auto* library = opened.window.findChild<QTreeWidget*>("library");
     REQUIRE(timeline != nullptr);
-    REQUIRE(viewport != nullptr);
-    REQUIRE(library != nullptr);
-    std::optional<uint16_t> dot;
-    for (int at = 0; at < library->topLevelItemCount(); at++) {
-        if (library->topLevelItem(at)->text(0).contains("dot"))
-            dot = static_cast<uint16_t>(library->topLevelItem(at)->data(0, Qt::UserRole).toUInt());
-    }
-    REQUIRE(dot.has_value());
-    if (!dot) return;
-    {
-        Script placed({});
-        emit viewport->CharacterDropped(*dot, 500, 300);
-        QApplication::processEvents();
-        CHECK(placed.Problems().isEmpty());
-    }
-    QAction* project = nullptr;
-    for (QAction* action : opened.window.findChildren<QAction*>()) {
-        if (action->text() == "&New project...") project = action;
-    }
-    REQUIRE(project != nullptr);
-    const QString folder = opened.dir.filePath("project");
-    REQUIRE(QDir().mkpath(folder));
-    {
-        Script made({PickFile(folder)});
-        project->trigger();
-        REQUIRE(Settle([&made] { return made.Finished(); }));
-        CHECK(made.Problems().isEmpty());
-    }
-    emit timeline->DepthChosen(3);
-    {
-        Script owned({Choose("Let the project own depth 3 from here")});
-        emit timeline->MenuRequested(QPoint(4, 4), 0, QString());
-        REQUIRE(Settle([&owned] { return owned.Finished(); }));
-        CHECK(owned.Problems().isEmpty());
-    }
+    const QString folder = OwnDroppedDot(opened);
     const auto x_of = [&](uint16_t depth) {
         emit timeline->DepthChosen(depth);
         const QString text = QString::fromStdString(RowValue(*opened.inspector, "Translation"));
@@ -643,11 +607,7 @@ TEST_CASE("Splitting a depth at the playhead keeps what it shows and refuses wha
     Opened opened;
     Open(opened, true);
     auto* timeline = opened.window.findChild<Editor::Timeline*>();
-    auto* viewport = opened.window.findChild<Editor::Viewport*>();
-    auto* library = opened.window.findChild<QTreeWidget*>("library");
     REQUIRE(timeline != nullptr);
-    REQUIRE(viewport != nullptr);
-    REQUIRE(library != nullptr);
     QAction* split = ShortcutAction(opened.window, QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_D));
     QAction* undo = ShortcutAction(opened.window, QKeySequence(QKeySequence::Undo));
     REQUIRE(split != nullptr);
@@ -692,138 +652,9 @@ TEST_CASE("Splitting a depth at the playhead keeps what it shows and refuses wha
     CHECK(refusal().contains("starts on frame 1"));
     undo->trigger();
 
-    std::optional<uint16_t> dot;
-    for (int at = 0; at < library->topLevelItemCount(); at++) {
-        if (library->topLevelItem(at)->text(0).contains("dot"))
-            dot = static_cast<uint16_t>(library->topLevelItem(at)->data(0, Qt::UserRole).toUInt());
-    }
-    REQUIRE(dot.has_value());
-    if (!dot) return;
-    choose(0, 2);
-    {
-        Script placed({});
-        emit viewport->CharacterDropped(*dot, 500, 300);
-        QApplication::processEvents();
-        CHECK(placed.Problems().isEmpty());
-    }
-    QAction* project = nullptr;
-    for (QAction* action : opened.window.findChildren<QAction*>()) {
-        if (action->text() == "&New project...") project = action;
-    }
-    REQUIRE(project != nullptr);
-    const QString folder = opened.dir.filePath("project");
-    REQUIRE(QDir().mkpath(folder));
-    {
-        Script made({PickFile(folder)});
-        project->trigger();
-        REQUIRE(Settle([&made] { return made.Finished(); }));
-        CHECK(made.Problems().isEmpty());
-    }
-    emit timeline->DepthChosen(3);
-    {
-        Script owned({Choose("Let the project own depth 3 from here")});
-        emit timeline->MenuRequested(QPoint(4, 4), 0, QString());
-        REQUIRE(Settle([&owned] { return owned.Finished(); }));
-        CHECK(owned.Problems().isEmpty());
-    }
+    OwnDroppedDot(opened);
     choose(1, 3);
     CHECK(refusal().contains("owns depth 3"));
-}
-
-TEST_CASE("Time-reversing an owned depth's keyframes plays its move backwards") {
-    Opened opened;
-    Open(opened, true);
-    auto* timeline = opened.window.findChild<Editor::Timeline*>();
-    auto* viewport = opened.window.findChild<Editor::Viewport*>();
-    auto* library = opened.window.findChild<QTreeWidget*>("library");
-    REQUIRE(timeline != nullptr);
-    REQUIRE(viewport != nullptr);
-    REQUIRE(library != nullptr);
-    {
-        Script inserted({Choose("Insert a frame at 2")});
-        emit timeline->MenuRequested(QPoint(4, 4), 2, QString());
-        REQUIRE(Settle([&inserted] { return inserted.Finished(); }));
-        CHECK(inserted.Problems().isEmpty());
-    }
-    std::optional<uint16_t> dot;
-    for (int at = 0; at < library->topLevelItemCount(); at++) {
-        if (library->topLevelItem(at)->text(0).contains("dot"))
-            dot = static_cast<uint16_t>(library->topLevelItem(at)->data(0, Qt::UserRole).toUInt());
-    }
-    REQUIRE(dot.has_value());
-    if (!dot) return;
-    {
-        Script placed({});
-        emit viewport->CharacterDropped(*dot, 500, 300);
-        QApplication::processEvents();
-        CHECK(placed.Problems().isEmpty());
-    }
-    QAction* project = nullptr;
-    for (QAction* action : opened.window.findChildren<QAction*>()) {
-        if (action->text() == "&New project...") project = action;
-    }
-    REQUIRE(project != nullptr);
-    const QString folder = opened.dir.filePath("project");
-    REQUIRE(QDir().mkpath(folder));
-    {
-        Script made({PickFile(folder)});
-        project->trigger();
-        REQUIRE(Settle([&made] { return made.Finished(); }));
-        CHECK(made.Problems().isEmpty());
-    }
-    emit timeline->DepthChosen(3);
-    {
-        Script owned({Choose("Let the project own depth 3 from here")});
-        emit timeline->MenuRequested(QPoint(4, 4), 0, QString());
-        REQUIRE(Settle([&owned] { return owned.Finished(); }));
-        CHECK(owned.Problems().isEmpty());
-    }
-    const auto move_on = [&](uint32_t frame, double dx) {
-        emit timeline->FrameChosen(frame);
-        emit timeline->DepthChosen(3);
-        Script moved({});
-        emit viewport->Dragged(3, dx, 0, true);
-        QApplication::processEvents();
-        CHECK(moved.Problems().isEmpty());
-    };
-    const auto x_on = [&](uint32_t frame) {
-        emit timeline->FrameChosen(frame);
-        const QString text = QString::fromStdString(RowValue(*opened.inspector, "Translation"));
-        return text.section(',', 0, 0).trimmed().toInt();
-    };
-    move_on(0, 10);
-    move_on(1, 20);
-    move_on(3, 40);
-    CHECK(x_on(0) == 10200);
-    CHECK(x_on(1) == 10600);
-    CHECK(x_on(2) == 10600);
-    CHECK(x_on(3) == 11400);
-
-    const auto ref = [](uint32_t frame) {
-        return Document::KeyRef{.property = "Translation", .frame = frame};
-    };
-    emit timeline->FrameChosen(0);
-    emit timeline->KeyChosen("Translation", 0);
-    timeline->SelectKeys({ref(0), ref(1), ref(3)});
-    {
-        Script reversed({Choose("Time-reverse 3 keyframe(s)")});
-        emit timeline->KeyMenuRequested(QPoint(4, 4), "Translation", 0, true);
-        REQUIRE(Settle([&reversed] { return reversed.Finished(); }));
-        CHECK(reversed.Problems().isEmpty());
-    }
-    CHECK(RowValue(*opened.inspector, "Keyframe") == "Translation on frame 3");
-    std::vector<Document::KeyRef> selected = timeline->SelectedKeys();
-    std::ranges::sort(selected);
-    CHECK(selected == std::vector<Document::KeyRef>{ref(0), ref(2), ref(3)});
-    CHECK(x_on(0) == 11400);
-    CHECK(x_on(1) == 11400);
-    CHECK(x_on(2) == 10600);
-    CHECK(x_on(3) == 10200);
-    QAction* undo = ShortcutAction(opened.window, QKeySequence(QKeySequence::Undo));
-    REQUIRE(undo != nullptr);
-    undo->trigger();
-    CHECK(x_on(0) == 10200);
-    CHECK(x_on(3) == 11400);
 }
 
 TEST_CASE("The package and library searches hide what does not match, across refills") {

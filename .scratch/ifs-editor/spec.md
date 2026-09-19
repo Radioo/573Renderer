@@ -314,3 +314,4 @@ captured. This milestone is the editing itself.
 - `issues/106-motion-path.md` (milestone 8)
 - `issues/107-split-spans.md` (milestone 8)
 - `issues/108-time-reverse-keyframes.md` (milestone 8)
+- `issues/109-easy-ease.md` (milestone 8)
