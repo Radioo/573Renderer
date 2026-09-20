@@ -1,5 +1,6 @@
 #include "editor_window.h"
 
+#include "editor_hover.h"
 #include "editor_theme.h"
 #include "editor_timeline.h"
 
@@ -7,6 +8,8 @@
 #include <QByteArray>
 #include <QDir>
 #include <QElapsedTimer>
+#include <QEvent>
+#include <QWidget>
 #include <QImage>
 #include <QSettings>
 #include <QSize>
@@ -79,6 +82,10 @@ int main(int argc, char** argv) {
             emit timeline->DepthChosen(depth.toInt());
         }
         QApplication::processEvents();
+    }
+    const QString hovered = Taken("--hover", arguments, QString());
+    if (!hovered.isEmpty()) {
+        if (QWidget* under = window.findChild<QWidget*>(hovered)) Editor::Hover(*under);
     }
     QImage shot;
     for (int pass = 0; pass < 8; pass++) {

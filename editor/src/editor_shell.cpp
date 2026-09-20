@@ -17,6 +17,7 @@
 
 #include <QAction>
 #include <QDesktopServices>
+#include <QEvent>
 #include <QDir>
 #include <QFont>
 #include <QHBoxLayout>
@@ -99,6 +100,31 @@ void AddAnimations(const std::vector<Document::Node>& nodes, std::vector<Documen
     }
 }
 
+constexpr int kGlassSide = 14;
+
+class SearchHover : public QObject {
+public:
+    SearchHover(QLabel* glass, QLabel* said, QObject* parent)
+        : QObject(parent), glass_(glass), said_(said) {
+        Paint(Theme::kFaint);
+    }
+
+    bool eventFilter(QObject* watched, QEvent* event) override {
+        if (event->type() == QEvent::Enter) Paint(Theme::kSoft);
+        if (event->type() == QEvent::Leave) Paint(Theme::kFaint);
+        return QObject::eventFilter(watched, event);
+    }
+
+private:
+    void Paint(const QColor& ink) {
+        glass_->setPixmap(Icons::Drawn(Icons::Glyph::Search, ink, kGlassSide));
+        said_->setStyleSheet(QString("color: %1;").arg(ink.name()));
+    }
+
+    QLabel* glass_;
+    QLabel* said_;
+};
+
 constexpr int kDotSide = 7;
 constexpr int kStatusGap = 12;
 
@@ -122,9 +148,10 @@ QWidget* Window::BuildSearchField() {
     line->setContentsMargins(10, 0, 10, 0);
     line->setSpacing(8);
     auto* glass = new QLabel;
-    glass->setPixmap(Icons::Drawn(Icons::Glyph::Search, Theme::kFaint, 14));
+    glass->setObjectName("search_glass");
     auto* said = new QLabel(tr("Search commands, depths and animations"));
     said->setObjectName("search_text");
+    field->installEventFilter(new SearchHover(glass, said, field));
     auto* chip = new QLabel(
         QKeySequence(Qt::CTRL | Qt::Key_K).toString(QKeySequence::NativeText).replace("+", " "));
     chip->setObjectName("search_chip");

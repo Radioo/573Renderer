@@ -299,8 +299,7 @@ QToolButton#menu_button::menu-indicator { image: none; width: 0px; }
 QToolButton#menu_button:hover { background: %field; color: %text; }
 QToolButton#bar_icon { padding: 0px; }
 QPushButton#search { background: %field; border: 1px solid %edge; padding: 0px; }
-QPushButton#search:hover { border-color: %soft; }
-QLabel#search_text { color: %faint; }
+QPushButton#search:hover { background: %line; }
 QLabel#search_chip { color: %soft; border: 1px solid %edge; padding: 1px 5px; }
 QLabel#document_state { color: %text; }
 QLabel#document_edits { color: %amber; }

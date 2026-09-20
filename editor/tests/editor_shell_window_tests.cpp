@@ -3,6 +3,7 @@
 #include <DockAreaWidget.h>
 #include <DockWidget.h>
 
+#include "editor_hover.h"
 #include "editor_timeline.h"
 #include "editor_window.h"
 
@@ -287,4 +288,32 @@ TEST_CASE("The start screen lists recent files until one is open, and a drop ope
     CHECK(rows().at(0)->findChild<QLabel*>("recent_name")->text() == "sample.ifs");
     CHECK(rows().at(0)->findChild<QLabel*>("recent_detail")->text().contains("1 animation"));
     QSettings().remove("recent/files");
+}
+
+TEST_CASE("Hovering the command search lifts it without clashing with the shortcut chip") {
+    Opened opened;
+    ShowOffScreen(opened.window);
+    auto* field = opened.window.findChild<QPushButton*>("search");
+    auto* chip = opened.window.findChild<QLabel*>("search_chip");
+    auto* glass = opened.window.findChild<QLabel*>("search_glass");
+    REQUIRE(field != nullptr);
+    REQUIRE(chip != nullptr);
+    REQUIRE(glass != nullptr);
+
+    const QImage quiet = field->grab().toImage();
+    const QImage quiet_glass = glass->grab().toImage();
+    Editor::Hover(*field);
+    const QImage lifted = field->grab().toImage();
+    CHECK(lifted != quiet);
+
+    CHECK(glass->grab().toImage() != quiet_glass);
+
+    const QPoint chip_at = chip->mapTo(field, QPoint(0, 0));
+    const QRgb edge = lifted.pixel(0, lifted.height() / 2);
+    const QRgb chip_edge = lifted.pixel(chip_at.x(), chip_at.y() + chip->height() / 2);
+    CHECK(QColor(edge).name().toStdString() == QColor(chip_edge).name().toStdString());
+
+    Editor::Unhover(*field);
+    CHECK(field->grab().toImage() == quiet);
+    CHECK(glass->grab().toImage() == quiet_glass);
 }

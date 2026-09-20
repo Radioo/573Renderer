@@ -245,8 +245,19 @@ moved to -32000, so it never takes focus or interrupts anything on screen, and
 it clears its own `QSettings` first so the shot is the same every time.
 Options: `--ifs <file>` opens a package, `--depth N` and `--frame N` choose one
 (so the inspector, the selection bar and the timeline have something to show),
-`--game <dir>` points at an install, `--size WxH` (default 1600x1000, the
-artboard's size), `--platform <name>` and `--keep-settings`.
+`--game <dir>` points at an install, `--hover <objectName>` puts the named
+widget under the pointer, `--size WxH` (default 1600x1000, the artboard's
+size), `--platform <name>` and `--keep-settings`.
+
+`--hover` goes through `Editor::Hover` (`editor_hover.h`), which the window
+tests use too. Faking a hover needs more than `WA_UnderMouse`: a `QPushButton`
+only keeps `State_MouseOver` when `QPushButtonPrivate::hovering` agrees, and
+that flag is set solely by `QPushButton::mouseMoveEvent` with `WA_Hover` on
+(`qpushbutton.cpp`, `styleButtonState`). So `Hover` sets `WA_Hover` and
+`WA_UnderMouse`, sends `Enter`, then sends a `MouseMove` at the widget's
+middle; `Unhover` clears the attribute and sends `Leave`. Setting the
+attribute alone leaves the button painting its resting rule and a shot that
+proves nothing.
 
 Colours are not left to the eye either: `Theme::Contrast` is the WCAG
 relative-luminance ratio, `Theme::kLeastContrast` is 4.5:1, and the cases in
@@ -362,6 +373,20 @@ right: the `IFS` logo chip, the menu buttons, a divider, undo, redo and the
 history button (SVG icons from the design), then the command search field
 (`search`: a button with the search glyph, the placeholder and a `Ctrl K` chip,
 centred in what the bar has left), then the document group and the Save button.
+
+Under the pointer the search field lifts its background from `kField` to
+`kLine` and `SearchHover` (`editor_shell.cpp`) repaints the glyph and the
+placeholder from `kFaint` to `kSoft`. The border stays `kEdge` on both the
+field and the chip: brightening only the field's border left two borders of
+different colours a few pixels apart at the right end, which is what the
+design never shows. The glyph and the placeholder are not stylable from the
+hover rule, because a Qt style sheet does not track an ancestor's
+pseudo-state: `QPushButton#search:hover QLabel#search_text` paints the label
+whether or not the field is hovered, so both live in the event filter
+instead. `Hovering the command search...` in
+`editor/tests/editor_shell_window_tests.cpp` grabs the field quiet, hovers it,
+and checks that the picture changed, that the field's border matches the
+chip's, and that leaving puts both back.
 
 The document group (`trailing`) holds the file glyph, the open file's name
 (`document_state`) and how far it is from its saved state (`document_edits`:

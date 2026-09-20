@@ -183,6 +183,8 @@ TEST_CASE("Every colour the panels paint their own text with is readable on its 
         {"row detail", Theme::kFaint, Theme::kPanel},
         {"row detail under the pointer", Theme::kFaint, Theme::kField},
         {"chosen row detail", Theme::kSoft, Theme::Chosen()},
+        {"search placeholder", Theme::kFaint, Theme::kField},
+        {"search placeholder under the pointer", Theme::kSoft, Theme::kLine},
         {"panel tab", Theme::kText, Theme::kPanel},
         {"other panel tab", Theme::kFaint, Theme::kPanel},
         {"frame number", kRulerText, kRuler},
