@@ -3,9 +3,19 @@
 #include "editor_files.h"
 #include "editor_filter.h"
 #include "editor_graph.h"
+#include "editor_commands.h"
 #include "editor_host.h"
+#include "editor_inspector.h"
+#include "editor_notices.h"
+#include "editor_popover.h"
+#include "editor_selection_bar.h"
+#include "editor_stage_bar.h"
+#include "editor_start_screen.h"
+#include "editor_tool_strip.h"
+
 #include "editor_layout.h"
 #include "editor_timeline.h"
+#include "editor_timeline_bar.h"
 #include "editor_viewport.h"
 
 #include "document/animation_settings.h"
@@ -27,9 +37,15 @@
 #include <QAction>
 #include <QApplication>
 #include <QCloseEvent>
+#include <QComboBox>
 #include <QDir>
+#include <QElapsedTimer>
 #include <QFileDialog>
 #include <QFileInfo>
+#include <QUrl>
+#include <QMimeData>
+#include <QDropEvent>
+#include <QDragEnterEvent>
 #include <QHeaderView>
 #include <QImage>
 #include <QKeySequence>
@@ -41,14 +57,20 @@
 #include <QScrollArea>
 #include <QSettings>
 #include <QSize>
+#include <QStackedWidget>
 #include <QStatusBar>
 #include <QString>
 #include <QTableWidget>
 #include <QTableWidgetItem>
 #include <QTimer>
 #include <QTreeWidget>
+#include <QPixmap>
+#include <QIcon>
+#include <QTabWidget>
 #include <QTreeWidgetItem>
 #include <QTreeWidgetItemIterator>
+#include <QHBoxLayout>
+#include <QVBoxLayout>
 #include <QVariant>
 
 #include <array>
@@ -69,8 +91,14 @@ namespace Editor {
 namespace {
 
 constexpr int kPathRole = Qt::UserRole;
+constexpr int kNameRole = Qt::UserRole + 2;
+constexpr int kThumbnailSide = 24;
 constexpr int kEditsRole = Qt::UserRole + 1;
 constexpr int kResizeDelayMs = 120;
+constexpr int kStageShare = 620;
+constexpr int kTimelineShare = 340;
+constexpr int kPackageShare = 300;
+constexpr int kLibraryShare = 300;
 
 ads::CDockWidget* MakePanel(const QString& title, QWidget* content) {
     auto* dock = new ads::CDockWidget(title);
@@ -132,21 +160,31 @@ QTreeWidgetItem* ItemForPath(QTreeWidget* tree, const QString& path) {
 Window::Window() {
     BuildPanels();
     BuildMenus();
+    stage_bar_->Build();
+    tool_strip_->Build();
+    timeline_bar_->Build();
+    BuildTopBar();
+    BuildStatusBar();
     RefreshState();
+    setAcceptDrops(true);
     resize(1600, 900);
     RestoreLayout(*this, *docks_);
     const QString game_dir = QSettings().value(kGameDirKey).toString();
     if (game_dir.isEmpty()) {
         statusBar()->showMessage(tr("No preview host running"));
+        RefreshStartScreen();
         return;
     }
     StartHost(game_dir);
+    RefreshStatus();
+    RefreshStartScreen();
 }
 
 Window::~Window() = default;
 
 void Window::BuildPanels() {
     docks_ = new ads::CDockManager(this);
+    commands_ = new Commands(this);
 
     viewport_ = new Viewport;
     package_tree_ = new QTreeWidget;
@@ -157,11 +195,23 @@ void Window::BuildPanels() {
     connect(package_tree_, &QTreeWidget::customContextMenuRequested, this,
             [this](const QPoint& at) { ShowPackageMenu(package_tree_->mapToGlobal(at)); });
 
-    inspector_ = new QTableWidget(0, 2);
-    inspector_->setHorizontalHeaderLabels({tr("Field"), tr("Value")});
-    inspector_->verticalHeader()->setVisible(false);
-    inspector_->horizontalHeader()->setStretchLastSection(true);
-    inspector_->setSelectionBehavior(QAbstractItemView::SelectRows);
+    inspector_panel_ = new Inspector;
+    inspector_ = inspector_panel_->Raw();
+    connect(inspector_panel_, &Inspector::ValueEdited, this, &Window::ApplyViewEdit);
+    connect(inspector_panel_, &Inspector::KeyingToggled, this, &Window::ToggleViewKeying);
+    connect(inspector_panel_, &Inspector::ColourPicked, this, &Window::PickViewColour);
+    connect(inspector_panel_, &Inspector::EaseChosen, this, &Window::ApplySelectedKeysEase);
+    connect(inspector_panel_, &Inspector::CharacterReplaceAsked, this,
+            &Window::ReplaceCharacterOnDepth);
+    connect(inspector_panel_, &Inspector::CharacterDropped, this, [this](uint16_t character) {
+        if (depth_) UseCharacterOnDepth(character, static_cast<uint16_t>(*depth_));
+    });
+    connect(inspector_panel_, &Inspector::BlendChosen, this,
+            [this](int value) { EditPlacementFieldOnDepth("Blend", QString::number(value)); });
+    connect(inspector_panel_, &Inspector::ClipDepthEdited, this,
+            [this](int value) { EditPlacementFieldOnDepth("Clip depth", QString::number(value)); });
+    connect(inspector_panel_, &Inspector::FilterAdded, this, &Window::AddFilterOnDepth);
+    connect(inspector_panel_, &Inspector::FilterRemoved, this, &Window::RemoveFilterOnDepth);
     connect(inspector_, &QTableWidget::itemChanged, this, &Window::ApplyFieldEdit);
     inspector_->setContextMenuPolicy(Qt::CustomContextMenu);
     connect(inspector_, &QTableWidget::customContextMenuRequested, this,
@@ -173,13 +223,28 @@ void Window::BuildPanels() {
     connect(timeline_, &Timeline::DepthsChosen, this, &Window::ChooseDepths);
     connect(timeline_, &Timeline::MenuRequested, this, &Window::ShowTimelineMenu);
     connect(timeline_, &Timeline::KeyChosen, this, &Window::FocusKey);
+    connect(timeline_, &Timeline::CameraAsked, this, [this] { commands_->Run("clip.camera"); });
+    connect(timeline_, &Timeline::SpriteEntered, this, &Window::EnterSprite);
+    connect(timeline_, &Timeline::LabelAsked, this, &Window::AddLabelAt);
+    connect(timeline_, &Timeline::ZoomChanged, this, &Window::RefreshTimelineBar);
+    connect(timeline_, &Timeline::ShowAllAsked, this, [this] { commands_->Run("depth.show_all"); });
+    connect(timeline_, &Timeline::UnlockAllAsked, this,
+            [this] { commands_->Run("depth.unlock_all"); });
+    connect(timeline_, &Timeline::LabelRenameAsked, this, &Window::RenameLabel);
+    connect(timeline_, &Timeline::KeysSelected, this, [this] {
+        RefreshSelectionBar();
+        RefreshStatus();
+        RefreshEaseSection();
+    });
     connect(timeline_, &Timeline::KeysShifted, this, &Window::ShiftSelectedKeys);
     connect(timeline_, &Timeline::KeysStretched, this, &Window::StretchSelectedKeysBy);
     connect(timeline_, &Timeline::SpanMoved, this, &Window::MoveSpanInTime);
     connect(timeline_, &Timeline::SpanTrimmed, this, &Window::TrimSpanOnTimeline);
     connect(timeline_, &Timeline::VisibilityToggled, this, &Window::ToggleHidden);
     connect(timeline_, &Timeline::LockToggled, this, &Window::ToggleLocked);
-    AddKeyActions();
+    connect(timeline_, &Timeline::SoloToggled, this, &Window::SoloDepth);
+    connect(timeline_, &Timeline::DepthDragged, this,
+            [this](uint16_t depth, uint16_t onto) { MoveSpanOntoDepth(depth, frame_, onto); });
     connect(timeline_, &Timeline::KeyMenuRequested, this, &Window::ShowKeyMenu);
     connect(timeline_, &Timeline::CharacterDropped, this, &Window::DropCharacterOnTimeline);
     connect(timeline_, &Timeline::LabelMoved, this, &Window::MoveLabelTo);
@@ -187,6 +252,7 @@ void Window::BuildPanels() {
     connect(graph_, &GraphEditor::FrameChosen, this, &Window::SeekTo);
     connect(graph_, &GraphEditor::KeyChosen, this, &Window::ChooseKey);
     connect(graph_, &GraphEditor::KeyMoved, this, &Window::ApplyGraphMove);
+    connect(graph_, &GraphEditor::EaseEdited, this, &Window::ApplyGraphEase);
     auto* timeline_area = new QScrollArea;
     timeline_area->setWidget(timeline_);
     timeline_area->setWidgetResizable(true);
@@ -200,141 +266,99 @@ void Window::BuildPanels() {
     resize_timer_->setInterval(kResizeDelayMs);
     connect(resize_timer_, &QTimer::timeout, this, &Window::ResizeViewport);
     connect(viewport_, &Viewport::Resized, this, [this](int, int) { resize_timer_->start(); });
-    connect(viewport_, &Viewport::ZoomChanged, this, [this] { resize_timer_->start(); });
+    connect(viewport_, &Viewport::ZoomChanged, this, [this] {
+        resize_timer_->start();
+        RefreshStatus();
+    });
     connect(viewport_, &Viewport::Picked, this, &Window::PickOnStage);
     connect(viewport_, &Viewport::Dragged, this, &Window::MoveOnStage);
     connect(viewport_, &Viewport::Reshaped, this, &Window::ReshapeOnStage);
     connect(viewport_, &Viewport::AnchorMoved, this, &Window::MoveAnchorOnStage);
     connect(viewport_, &Viewport::CharacterDropped, this, &Window::PlaceDroppedCharacter);
     connect(viewport_, &Viewport::DepthsBanded, this, &Window::ChooseDepths);
+    connect(viewport_, &Viewport::EnterAsked, this, &Window::EnterSpriteAt);
+    connect(viewport_, &Viewport::PlayAsked, this, [this] { commands_->Run("play.toggle"); });
 
-    ads::CDockAreaWidget* centre = docks_->setCentralWidget(MakePanel(tr("Viewport"), viewport_));
+    selection_bar_ = new SelectionBar(*commands_);
+    popover_ = new Popover(this);
+    notices_ = new Notices;
+    stage_bar_ = new StageBar(*commands_);
+    tool_strip_ = new ToolStrip(*commands_);
+    connect(stage_bar_, &StageBar::ClipAsked, this, &Window::ChooseClip);
+    connect(notices_, &Notices::UndoAsked, this, [this] { commands_->Run("edit.undo"); });
+    start_ = new StartScreen(*commands_);
+    connect(start_, &StartScreen::FileAsked, this, [this](const QString& path) {
+        if (path.endsWith(".ifs", Qt::CaseInsensitive)) {
+            if (OfferToSave()) OpenDocument(path);
+            return;
+        }
+        OpenProject(path);
+    });
+    auto* stage = new QWidget;
+    auto* stage_layout = new QVBoxLayout(stage);
+    stage_layout->setContentsMargins(0, 0, 0, 0);
+    stage_layout->setSpacing(0);
+    stage_layout->addWidget(stage_bar_);
+    auto* under_bar = new QHBoxLayout;
+    under_bar->setContentsMargins(0, 0, 0, 0);
+    under_bar->setSpacing(0);
+    under_bar->addWidget(tool_strip_);
+    under_bar->addWidget(viewport_, 1);
+    stage_layout->addLayout(under_bar, 1);
+    stage_layout->addWidget(notices_);
+    stage_layout->addWidget(selection_bar_);
+    centre_ = new QStackedWidget;
+    centre_->setObjectName("centre_stack");
+    centre_->addWidget(start_);
+    centre_->addWidget(stage);
+    ads::CDockAreaWidget* centre = docks_->setCentralWidget(MakePanel(tr("Stage"), centre_));
+    ads::CDockWidget* inspector_dock = MakePanel(tr("Inspector"), inspector_panel_);
+    ads::CDockAreaWidget* inspector_area =
+        docks_->addDockWidget(ads::RightDockWidgetArea, inspector_dock);
+    history_dock_ = MakePanel(tr("History"), BuildHistory());
+    docks_->addDockWidget(ads::CenterDockWidgetArea, history_dock_, inspector_area);
+    inspector_dock->setAsCurrentTab();
+    timeline_dock_ = MakePanel(tr("Timeline"), timeline_panel);
+    ads::CDockAreaWidget* timing_area =
+        docks_->addDockWidget(ads::BottomDockWidgetArea, timeline_dock_, centre);
+    graph_dock_ = MakePanel(tr("Graph"), BuildGraphPanel());
+    docks_->addDockWidget(ads::CenterDockWidgetArea, graph_dock_, timing_area);
+    timeline_dock_->setAsCurrentTab();
     ads::CDockAreaWidget* package_area = docks_->addDockWidget(
-        ads::LeftDockWidgetArea,
-        MakePanel(tr("Package"), WithFilter(package_tree_, package_filter_ = new QLineEdit)),
-        centre);
-    QTreeWidget* library = BuildLibrary();
-    docks_->addDockWidget(
-        ads::BottomDockWidgetArea,
-        MakePanel(tr("Library"), WithFilter(library, library_filter_ = new QLineEdit)),
-        package_area);
-    ads::CDockAreaWidget* inspector_area = docks_->addDockWidget(
-        ads::RightDockWidgetArea, MakePanel(tr("Inspector"), inspector_), centre);
-    docks_->addDockWidget(ads::BottomDockWidgetArea, MakePanel(tr("History"), BuildHistory()),
-                          inspector_area);
+        ads::LeftDockWidgetArea, MakePanel(tr("Package"), BuildPackageTabs()), centre);
+    docks_->addDockWidget(ads::BottomDockWidgetArea, MakePanel(tr("Library"), BuildLibraryPanel()),
+                          package_area);
     package_filter_->setObjectName("package_filter");
     library_filter_->setObjectName("library_filter");
-    ads::CDockWidget* timeline_dock = MakePanel(tr("Timeline"), timeline_panel);
-    ads::CDockAreaWidget* timing_area =
-        docks_->addDockWidget(ads::BottomDockWidgetArea, timeline_dock, centre);
-    docks_->addDockWidget(ads::CenterDockWidgetArea, MakePanel(tr("Graph"), graph_), timing_area);
-    timeline_dock->setAsCurrentTab();
+    docks_->setSplitterSizes(timing_area, {kStageShare, kTimelineShare});
+    docks_->setSplitterSizes(package_area, {kPackageShare, kLibraryShare});
 }
 
-void Window::BuildMenus() {
-    QMenu* file = menuBar()->addMenu(tr("&File"));
-    QAction* open = file->addAction(tr("&Open IFS..."));
-    open->setShortcut(QKeySequence::Open);
-    connect(open, &QAction::triggered, this, &Window::ChooseDocument);
-    QAction* save = file->addAction(tr("&Save"));
-    save->setShortcut(QKeySequence::Save);
-    connect(save, &QAction::triggered, this, [this] { Save(); });
-    QAction* save_as = file->addAction(tr("Save &as..."));
-    save_as->setShortcut(QKeySequence::SaveAs);
-    connect(save_as, &QAction::triggered, this, [this] { SaveAs(); });
-    QAction* save_frame = file->addAction(tr("Save the &frame as PNG..."));
-    save_frame->setShortcut(QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_S));
-    connect(save_frame, &QAction::triggered, this, &Window::SaveFrameAs);
-    QAction* save_frames = file->addAction(tr("Save the work area as PNG f&rames..."));
-    save_frames->setShortcut(QKeySequence(Qt::CTRL | Qt::ALT | Qt::SHIFT | Qt::Key_S));
-    connect(save_frames, &QAction::triggered, this, &Window::SaveFramesAs);
-    file->addSeparator();
-    create_project_action_ = file->addAction(tr("&New project..."));
-    connect(create_project_action_, &QAction::triggered, this, &Window::CreateProject);
-    QAction* open_project = file->addAction(tr("Open &project..."));
-    connect(open_project, &QAction::triggered, this, &Window::ChooseProject);
-    close_project_action_ = file->addAction(tr("&Close project"));
-    connect(close_project_action_, &QAction::triggered, this, &Window::CloseProject);
-    export_action_ = file->addAction(tr("&Export into the IFS"));
-    export_action_->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_E));
-    connect(export_action_, &QAction::triggered, this, &Window::ExportToPackage);
-    file->addSeparator();
-    QAction* choose = file->addAction(tr("Choose &game install..."));
-    connect(choose, &QAction::triggered, this, &Window::ChooseGameDirectory);
-    file->addSeparator();
-    QAction* quit = file->addAction(tr("&Quit"));
-    connect(quit, &QAction::triggered, this, &QWidget::close);
-
-    QMenu* play = menuBar()->addMenu(tr("&Playback"));
-    play_action_ = play->addAction(tr("&Play"));
-    play_action_->setShortcut(QKeySequence(Qt::Key_Space));
-    play_action_->setShortcutContext(Qt::ApplicationShortcut);
-    connect(play_action_, &QAction::triggered, this, &Window::TogglePlay);
-    loop_action_ = play->addAction(tr("&Loop"));
-    loop_action_->setCheckable(true);
-    loop_action_->setChecked(QSettings().value(kLoopKey, true).toBool());
-    connect(loop_action_, &QAction::toggled, this,
-            [this](bool on) { QSettings().setValue(kLoopKey, on); });
-    sketch_action_ = play->addAction(tr("Motion &sketch while dragging"));
-    sketch_action_->setCheckable(true);
-    background_action_ = play->addAction(tr("Draw the &background colour"));
-    background_action_->setCheckable(true);
-    background_action_->setChecked(QSettings().value(kBackgroundKey, false).toBool());
-    connect(background_action_, &QAction::toggled, this, &Window::DrawBackground);
-    AddStepActions(play);
-
-    AddViewMenu();
-
-    QMenu* edit = menuBar()->addMenu(tr("&Edit"));
-    undo_action_ = edit->addAction(tr("&Undo"));
-    undo_action_->setShortcut(QKeySequence::Undo);
-    connect(undo_action_, &QAction::triggered, this, &Window::Undo);
-    redo_action_ = edit->addAction(tr("&Redo"));
-    redo_action_->setShortcut(QKeySequence::Redo);
-    connect(redo_action_, &QAction::triggered, this, &Window::Redo);
-    edit->addSeparator();
-    AddAlignMenu(edit);
-    AddArrangeMenu(edit);
-    AddPlayheadMenu(edit);
-    QAction* split = edit->addAction(tr("&Split depth at the playhead"));
-    split->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_D));
-    connect(split, &QAction::triggered, this, [this] {
-        if (depth_) SplitDepthAt(static_cast<uint16_t>(*depth_), frame_);
-    });
-    QAction* duplicate = edit->addAction(tr("&Duplicate depth"));
-    duplicate->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_D));
-    connect(duplicate, &QAction::triggered, this, &Window::DuplicateChosenDepth);
-    QAction* trim = edit->addAction(tr("&Trim the clip to the work area"));
-    trim->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_X));
-    connect(trim, &QAction::triggered, this, &Window::TrimClipToWorkArea);
-    QAction* extract = edit->addAction(tr("E&xtract the work area"));
-    connect(extract, &QAction::triggered, this, &Window::ExtractWorkArea);
-    QAction* lift = edit->addAction(tr("&Lift the work area"));
-    connect(lift, &QAction::triggered, this, &Window::LiftWorkArea);
-    QAction* centre = edit->addAction(tr("&Centre the anchor in the content"));
-    centre->setShortcut(QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_Home));
-    connect(centre, &QAction::triggered, this, &Window::CentreChosenAnchor);
-    const std::array<std::tuple<QString, QKeySequence, Document::StageFit>, 3> fits{{
-        {tr("&Fit to the stage"), QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_F),
-         Document::StageFit::Both},
-        {tr("Fit to the stage's &width"), QKeySequence(Qt::CTRL | Qt::ALT | Qt::SHIFT | Qt::Key_H),
-         Document::StageFit::Width},
-        {tr("Fit to the stage's &height"), QKeySequence(Qt::CTRL | Qt::ALT | Qt::SHIFT | Qt::Key_G),
-         Document::StageFit::Height},
-    }};
-    for (const auto& [text, keys, fit] : fits) {
-        QAction* action = edit->addAction(text);
-        action->setShortcut(keys);
-        connect(action, &QAction::triggered, this, [this, fit] { FitChosenToStage(fit); });
+void Window::OpenDropped(const QString& path) {
+    if (path.isEmpty()) {
+        ReportProblem(tr("Only a file or a folder can be dropped here"));
+        return;
     }
-    QAction* flip_across = edit->addAction(tr("Flip horizontally"));
-    connect(flip_across, &QAction::triggered, this, [this] {
-        if (depth_) ReshapeOnStage(static_cast<uint16_t>(*depth_), -1, 1, 0, true);
-    });
-    QAction* flip_over = edit->addAction(tr("Flip vertically"));
-    connect(flip_over, &QAction::triggered, this, [this] {
-        if (depth_) ReshapeOnStage(static_cast<uint16_t>(*depth_), 1, -1, 0, true);
-    });
+    if (path.endsWith(".ifs", Qt::CaseInsensitive)) {
+        if (OfferToSave()) OpenDocument(path);
+        return;
+    }
+    if (QFileInfo(path).isDir()) {
+        OpenProject(path);
+        return;
+    }
+    ReportProblem(tr("%1 is neither an IFS nor a project folder").arg(path));
+}
+
+void Window::dragEnterEvent(QDragEnterEvent* event) {
+    if (event->mimeData()->hasUrls()) event->acceptProposedAction();
+}
+
+void Window::dropEvent(QDropEvent* event) {
+    const QList<QUrl> urls = event->mimeData()->urls();
+    if (urls.isEmpty()) return;
+    event->acceptProposedAction();
+    OpenDropped(urls.front().toLocalFile());
 }
 
 void Window::ChooseGameDirectory() {
@@ -345,6 +369,7 @@ void Window::ChooseGameDirectory() {
     if (dir.isEmpty()) return;
     settings.setValue(kGameDirKey, dir);
     StartHost(dir);
+    RefreshStartScreen();
 }
 
 void Window::StartHost(const QString& game_dir) {
@@ -401,6 +426,7 @@ void Window::OpenDocument(const QString& path) {
     locked_.clear();
     document_path_ = path;
     package_name_ = QFileInfo(path).completeBaseName().toStdString();
+    RememberRecent(path);
     CloseAnimation();
     FillTree();
     if (const Document::Node* first = FirstAnimation(file_->Nodes()); first != nullptr)
@@ -416,11 +442,15 @@ void Window::OpenDocument(const QString& path) {
 }
 
 void Window::FillTree() {
+    filling_tree_ = true;
     package_tree_->clear();
     AddNodes(file_->Nodes(), package_tree_, nullptr);
     for (int column = 0; column < package_tree_->columnCount(); column++)
         package_tree_->resizeColumnToContents(column);
     ApplyFilter(*package_tree_, package_filter_->text());
+    FillAnimationRows();
+    FillImageRows();
+    filling_tree_ = false;
 }
 
 void Window::FillInspector(const std::vector<Document::InspectedRow>& rows) {
@@ -498,6 +528,10 @@ void Window::ShowFrame() {
         depth_ ? AuthoredAt(static_cast<uint16_t>(*depth_), frame_) : nullptr;
     ShowKeysForDepth(owned);
     timeline_->SelectDepths(SelectedDepths());
+    RefreshStatus();
+    RefreshSelectionBar();
+    ShowStageStatus(*animation);
+    ShowInspectorSubject(*animation);
     FillInspector(Document::InspectFrame(
         *animation, Document::Selection{
                         .depth = depth_ ? std::optional<uint16_t>(static_cast<uint16_t>(*depth_))
@@ -756,7 +790,10 @@ void Window::ResizeViewport() {
 }
 
 void Window::RenderFrame() {
+    QElapsedTimer rendering;
+    rendering.start();
     auto read = ReadFrame();
+    render_ms_ = rendering.elapsed();
     if (!read) {
         ReportOnce(QString::fromStdString(read.error()));
         return;
@@ -768,7 +805,7 @@ void Window::RenderFrame() {
     const QSize shown(static_cast<int>(frame->width), static_cast<int>(frame->height));
     if (shown != viewport_->FittedSize(viewport_->size())) resize_timer_->start();
     timeline_->SetFrame(frame->frame);
-    statusBar()->showMessage(tr("Frame %1 of %2").arg(frame->frame).arg(frame_count_));
+    RefreshStatus();
     last_error_.clear();
     if (onion_action_ != nullptr && onion_action_->isChecked() && !Playing())
         ShowGhostsAround(frame->frame);
@@ -814,10 +851,6 @@ bool Window::OfferToSave() {
 
 void Window::RefreshState() {
     shape_bounds_path_.clear();
-    create_project_action_->setEnabled(file_.has_value() && !project_);
-    close_project_action_->setEnabled(project_.has_value());
-    export_action_->setEnabled(project_.has_value() &&
-                               (!authored_.empty() || (project_ && !project_->images.empty())));
     undo_action_->setEnabled(history_.CanUndo());
     redo_action_->setEnabled(history_.CanRedo());
     undo_action_->setText(history_.CanUndo()
@@ -827,6 +860,8 @@ void Window::RefreshState() {
                               ? tr("&Redo %1").arg(QString::fromStdString(history_.RedoName()))
                               : tr("&Redo"));
     FillHistory();
+    RefreshTopBar();
+    RefreshStatus();
     if (!file_) {
         setWindowTitle(tr("IFS Editor"));
         return;

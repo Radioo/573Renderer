@@ -19,6 +19,15 @@
 #include <QBrush>
 #include <QByteArray>
 #include <QList>
+#include <QHBoxLayout>
+#include <QVBoxLayout>
+#include <QToolButton>
+#include <QIcon>
+#include <QPixmap>
+#include <QImage>
+#include <QKeyEvent>
+#include <QSize>
+#include <QLineEdit>
 #include <QMimeData>
 #include <QComboBox>
 #include <QInputDialog>
@@ -37,6 +46,8 @@
 #include <cstdint>
 #include <map>
 #include <limits>
+#include <tuple>
+#include <functional>
 #include <optional>
 #include <string>
 #include <vector>
@@ -56,7 +67,21 @@ public:
         data->setData(kCharacterMime, QByteArray::number(items.front()->data(0, kIdRole).toUInt()));
         return data;
     }
+
+    std::function<void(const QTreeWidgetItem*)> on_return;
+
+protected:
+    void keyPressEvent(QKeyEvent* event) override {
+        const bool entered = event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter;
+        if (!entered || currentItem() == nullptr || !on_return) {
+            QTreeWidget::keyPressEvent(event);
+            return;
+        }
+        on_return(currentItem());
+    }
 };
+
+constexpr int kTileSide = 32;
 
 std::optional<uint16_t> SpriteOf(const QTreeWidgetItem* item) {
     if (item == nullptr) return std::nullopt;
@@ -67,8 +92,49 @@ std::optional<uint16_t> SpriteOf(const QTreeWidgetItem* item) {
 
 }
 
+QWidget* Window::BuildLibraryPanel() {
+    QTreeWidget* library = BuildLibrary();
+    library_kinds_ = {Document::CharacterKind::Sprite, Document::CharacterKind::Image,
+                      Document::CharacterKind::Shape, Document::CharacterKind::Imported};
+    auto* kinds = new QWidget;
+    auto* row = new QHBoxLayout(kinds);
+    row->setContentsMargins(4, 2, 4, 2);
+    row->setSpacing(4);
+    for (const auto& [name, text, kind] :
+         {std::tuple{QStringLiteral("library_sprites"), tr("Sprites"),
+                     Document::CharacterKind::Sprite},
+          std::tuple{QStringLiteral("library_images"), tr("Images"),
+                     Document::CharacterKind::Image},
+          std::tuple{QStringLiteral("library_shapes"), tr("Shapes"),
+                     Document::CharacterKind::Shape},
+          std::tuple{QStringLiteral("library_imported"), tr("Imported"),
+                     Document::CharacterKind::Imported}}) {
+        auto* button = new QToolButton;
+        button->setObjectName(name);
+        button->setText(text);
+        button->setCheckable(true);
+        button->setChecked(true);
+        connect(button, &QToolButton::toggled, this, [this, kind](bool on) {
+            std::erase(library_kinds_, kind);
+            if (on) library_kinds_.push_back(kind);
+            ShowLibraryKinds();
+        });
+        row->addWidget(button);
+    }
+    row->addStretch();
+
+    auto* panel = new QWidget;
+    auto* layout = new QVBoxLayout(panel);
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(0);
+    layout->addWidget(kinds);
+    layout->addWidget(WithFilter(library, library_filter_ = new QLineEdit), 1);
+    return panel;
+}
+
 QTreeWidget* Window::BuildLibrary() {
-    library_ = new LibraryTree;
+    auto* tree = new LibraryTree;
+    library_ = tree;
     library_->setObjectName("library");
     library_->setHeaderLabels({tr("Character"), tr("Uses")});
     library_->setRootIsDecorated(false);
@@ -81,12 +147,45 @@ QTreeWidget* Window::BuildLibrary() {
     });
     connect(library_, &QTreeWidget::customContextMenuRequested, this,
             [this](const QPoint& at) { ShowLibraryMenu(library_->mapToGlobal(at)); });
+    tree->on_return = [this](const QTreeWidgetItem* item) {
+        PlaceLibraryCharacter(static_cast<uint16_t>(item->data(0, kIdRole).toUInt()));
+    };
+    library_->setIconSize(QSize(kTileSide, kTileSide));
     return library_;
+}
+
+void Window::PlaceLibraryCharacter(uint16_t character) {
+    if (!file_ || animation_path_.empty()) return;
+    const uint32_t frames = ClipFrameCount();
+    if (frames == 0) return;
+    const std::optional<uint16_t> depth = NextFreeDepth(0);
+    if (!depth) return;
+    AddCharacterDepth(*depth, character, frame_, frames - 1);
+}
+
+QIcon Window::LibraryTile(const std::map<uint16_t, std::string>& images, uint16_t character) {
+    const auto known = library_tiles_.find(character);
+    if (known != library_tiles_.end()) return known->second;
+    const auto named = images.find(character);
+    if (named == images.end()) return {};
+    const auto pixels = file_->ReadImage(named->second);
+    if (!pixels) return {};
+    const QImage picture(pixels->bgra.data(), static_cast<int>(pixels->width),
+                         static_cast<int>(pixels->height), QImage::Format_ARGB32);
+    const QIcon tile(QPixmap::fromImage(
+        picture.scaled(kTileSide, kTileSide, Qt::KeepAspectRatio, Qt::SmoothTransformation)));
+    library_tiles_.emplace(character, tile);
+    return tile;
 }
 
 void Window::FillLibrary(const AfpAnimation::Animation& animation,
                          const std::vector<Document::CharacterSummary>& characters) {
     library_->clear();
+    if (library_tiles_path_ != animation_path_) {
+        library_tiles_.clear();
+        library_tiles_path_ = animation_path_;
+    }
+    const std::map<uint16_t, std::string> images = file_->ShapeImages(animation_path_);
     const std::map<uint16_t, std::size_t> uses = Document::CharacterUses(animation);
     const QBrush unused = library_->palette().brush(QPalette::Disabled, QPalette::Text);
     for (const Document::CharacterSummary& one : characters) {
@@ -96,18 +195,27 @@ void Window::FillLibrary(const AfpAnimation::Animation& animation,
             library_, {QString::fromStdString(one.label), QString::number(count)});
         item->setData(0, kIdRole, one.id);
         item->setData(0, kKindRole, static_cast<int>(one.kind));
+        item->setIcon(0, LibraryTile(images, one.id));
         if (count == 0) {
             item->setForeground(0, unused);
             item->setForeground(1, unused);
         }
     }
     library_->resizeColumnToContents(0);
+    ShowLibraryKinds();
+}
+
+void Window::ShowLibraryKinds() {
     ApplyFilter(*library_, library_filter_->text());
+    for (int at = 0; at < library_->topLevelItemCount(); at++) {
+        QTreeWidgetItem* item = library_->topLevelItem(at);
+        const auto kind = static_cast<Document::CharacterKind>(item->data(0, kKindRole).toInt());
+        if (std::ranges::find(library_kinds_, kind) == library_kinds_.end()) item->setHidden(true);
+    }
 }
 
 void Window::ShowLibrarySprite(uint16_t sprite) {
-    const int index = clip_box_->findData(QVariant(static_cast<int>(sprite)));
-    if (index >= 0) clip_box_->setCurrentIndex(index);
+    ChooseClip(ClipIndexOf(Document::ClipId{.sprite = sprite}));
 }
 
 void Window::ShowLibraryMenu(const QPoint& where) {
@@ -127,7 +235,7 @@ void Window::ShowLibraryMenu(const QPoint& where) {
             ? menu.addAction(tr("Use on depth %1 from frame %2").arg(*depth_).arg(frame_))
             : nullptr;
     menu.addSeparator();
-    QAction* fresh = menu.addAction(tr("New empty sprite..."));
+    QAction* fresh = menu.addAction(tr("New empty sprite"));
     const QAction* chosen = menu.exec(where);
     if (chosen == nullptr) return;
     if (chosen == fresh) {
@@ -182,11 +290,7 @@ void Window::DuplicateLibrarySprite(uint16_t sprite) {
 }
 
 void Window::NewEmptySprite() {
-    bool answered = false;
-    const int frames = QInputDialog::getInt(this, tr("New empty sprite"), tr("Frames"),
-                                            std::max(1, static_cast<int>(ClipFrameCount())), 1,
-                                            std::numeric_limits<uint16_t>::max(), 1, &answered);
-    if (!answered) return;
+    const int frames = std::max(1, static_cast<int>(ClipFrameCount()));
     std::optional<uint16_t> made;
     if (!EditAnimation(tr("New sprite of %n frame(s)", nullptr, frames),
                        [frames, &made](AfpAnimation::Animation& edited) {
@@ -201,6 +305,31 @@ void Window::NewEmptySprite() {
     }
     FillClips();
     ShowLibrarySprite(*made);
+}
+
+void Window::ReplaceCharacterOnDepth() {
+    if (!file_ || !depth_ || animation_path_.empty()) return;
+    const auto animation = file_->ReadAnimation(animation_path_);
+    if (!animation) {
+        ReportProblem(QString::fromStdString(animation.error()));
+        return;
+    }
+    const std::vector<Document::CharacterSummary> characters =
+        Document::Characters(*animation, file_->ShapeImages(animation_path_));
+    if (characters.empty()) {
+        ReportProblem(tr("This animation has nothing to place"));
+        return;
+    }
+    QStringList labels;
+    for (const Document::CharacterSummary& one : characters)
+        labels.append(QString::fromStdString(one.label));
+    bool answered = false;
+    const QString picked = QInputDialog::getItem(this, tr("Replace the character"), tr("Place"),
+                                                 labels, 0, false, &answered);
+    const auto index = labels.indexOf(picked);
+    if (!answered || index < 0) return;
+    UseCharacterOnDepth(characters[static_cast<std::size_t>(index)].id,
+                        static_cast<uint16_t>(*depth_));
 }
 
 void Window::UseCharacterOnDepth(uint16_t character, uint16_t depth) {

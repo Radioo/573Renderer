@@ -238,6 +238,11 @@ std::vector<StageOutline> StageOutlines(const AfpAnimation::Animation& animation
     return outlines;
 }
 
+Linear LinearOf(const AppliedState& state) {
+    return Linear{
+        .a = state.matrix[0], .b = state.matrix[1], .c = state.matrix[2], .d = state.matrix[3]};
+}
+
 Linear Reshaped(const Linear& linear, const Reshape& reshape) {
     const double a = reshape.scale_x * linear.a;
     const double b = reshape.scale_x * linear.b;
@@ -275,6 +280,28 @@ Reshape TurnToReach(const StageOutline& outline, Point from, Point to) {
     const double before = std::atan2(from[1] - outline.anchor[1], from[0] - outline.anchor[0]);
     const double after = std::atan2(to[1] - outline.anchor[1], to[0] - outline.anchor[0]);
     return {.scale_x = 1, .scale_y = 1, .turn = after - before};
+}
+
+Point ThroughOutline(const StageOutline& through, Point local) {
+    return FromLocal(through, local);
+}
+
+std::optional<Point> UnderOutline(const StageOutline& through, Point stage) {
+    return ToLocal(through, stage);
+}
+
+StageOutline OutlineThrough(const StageOutline& outline, const StageOutline& through) {
+    StageOutline mapped = outline;
+    for (std::size_t at = 0; at < mapped.corners.size(); at++)
+        mapped.corners.at(at) = FromLocal(through, outline.corners.at(at));
+    mapped.anchor = FromLocal(through, outline.anchor);
+    const Linear& inner = outline.linear;
+    const Linear& outer = through.linear;
+    mapped.linear = Linear{.a = (outer.a * inner.a) + (outer.c * inner.b),
+                           .b = (outer.b * inner.a) + (outer.d * inner.b),
+                           .c = (outer.a * inner.c) + (outer.c * inner.d),
+                           .d = (outer.b * inner.c) + (outer.d * inner.d)};
+    return mapped;
 }
 
 std::optional<uint16_t> DepthAt(const std::vector<StageOutline>& outlines, Point point) {

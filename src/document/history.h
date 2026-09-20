@@ -47,6 +47,8 @@ public:
 
     [[nodiscard]] bool Saved() const;
 
+    [[nodiscard]] std::optional<std::size_t> StepsFromSaved() const;
+
 private:
     struct Step {
         std::string name;

@@ -90,4 +90,10 @@ bool History::Saved() const {
     return clean_depth_.has_value() && *clean_depth_ == undo_.size();
 }
 
+std::optional<std::size_t> History::StepsFromSaved() const {
+    if (!clean_depth_) return std::nullopt;
+    return *clean_depth_ > undo_.size() ? *clean_depth_ - undo_.size()
+                                        : undo_.size() - *clean_depth_;
+}
+
 }

@@ -186,3 +186,21 @@ TEST_CASE("An exported list the editor cannot read is refused") {
     CHECK_FALSE(Document::ReadProject(bytes(head + R"([{"digest":"a"}]})")).has_value());
     CHECK(Document::ReadProject(bytes(head + R"([{"path":"a","digest":"b"}]})")).has_value());
 }
+
+TEST_CASE("What the project writes and the last export did not record is awaiting export") {
+    Document::File file = Package();
+    Document::Project project = Owning(file);
+    CHECK(Document::AwaitingExport(file, project) == 2);
+    REQUIRE(Document::ExportProject(file, project, NoImages()).has_value());
+    CHECK(Document::AwaitingExport(file, project) == 0);
+
+    auto animation = file.ReadAnimation(Path());
+    REQUIRE(animation.has_value());
+    animation->root.frames.push_back(AfpAnimation::Frame{});
+    REQUIRE(file.WriteAnimation(Path(), *animation).has_value());
+    CHECK(Document::AwaitingExport(file, project) == 2);
+
+    REQUIRE(Document::ExportProject(file, project, NoImages()).has_value());
+    project.images.push_back(Document::SourceImage{.name = "glow", .file = "sources/glow.png"});
+    CHECK(Document::AwaitingExport(file, project) == 2);
+}

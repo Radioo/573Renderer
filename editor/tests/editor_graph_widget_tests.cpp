@@ -147,3 +147,84 @@ TEST_CASE("Dragging a key in the graph sets that one value of it") {
     Click(graph, QPointF(185, 4));
     CHECK(sought == std::vector<uint32_t>{5});
 }
+
+TEST_CASE("The graph draws every shown track in its own colour and hides the rest") {
+    Editor::GraphEditor graph;
+    graph.resize(400, 200);
+    Document::Track scale{
+        .property = "Scale",
+        .keys = {Document::Keyframe{
+                     .frame = 0, .value = {1024}, .ease = Document::Ease::Linear, .bezier = {}},
+                 Document::Keyframe{
+                     .frame = 10, .value = {2048}, .ease = Document::Ease::Linear, .bezier = {}}}};
+    graph.ShowTracks({Moving(), scale}, {"Translation", "Scale"}, 0, 10, 0);
+    const QImage both = graph.grab().toImage();
+    const auto counted = [&both](QColor colour) {
+        int seen = 0;
+        for (int y = 0; y < both.height(); y++) {
+            for (int x = 0; x < both.width(); x++) {
+                if (both.pixelColor(x, y) == colour) seen++;
+            }
+        }
+        return seen;
+    };
+    CHECK(counted(Editor::GraphEditor::ColourOf(0)) > 0);
+    CHECK(counted(Editor::GraphEditor::ColourOf(1)) > 0);
+
+    graph.ShowTracks({Moving(), scale}, {"Translation"}, 0, 10, 0);
+    const QImage alone = graph.grab().toImage();
+    CHECK(alone != both);
+    bool second_colour = false;
+    for (int y = 0; y < alone.height() && !second_colour; y++) {
+        for (int x = 0; x < alone.width() && !second_colour; x++)
+            second_colour = alone.pixelColor(x, y) == Editor::GraphEditor::ColourOf(1);
+    }
+    CHECK_FALSE(second_colour);
+}
+
+TEST_CASE("Fitting the graph to the keyframes leaves out the overshoot between them") {
+    Editor::GraphEditor graph;
+    graph.resize(400, 200);
+    const Document::Track overshooting{
+        .property = "Translation",
+        .keys = {Document::Keyframe{.frame = 0,
+                                    .value = {0},
+                                    .ease = Document::Ease::Bezier,
+                                    .bezier = {.x1 = 0.3, .y1 = -1.5, .x2 = 0.7, .y2 = 2.5}},
+                 Document::Keyframe{
+                     .frame = 10, .value = {100}, .ease = Document::Ease::Linear, .bezier = {}}}};
+    graph.ShowTracks({overshooting}, {"Translation"}, 0, 10, 0);
+    graph.Fit(false);
+    const double loose = graph.KeyPoint(10, 0).value_or(QPointF()).y();
+    graph.Fit(true);
+    const double tight = graph.KeyPoint(10, 0).value_or(QPointF()).y();
+    CHECK(tight != loose);
+    CHECK(tight < loose);
+}
+
+TEST_CASE("Dragging a bezier handle in the graph reports the curve it was let go on") {
+    Editor::GraphEditor graph;
+    graph.resize(400, 200);
+    const Document::Track eased{
+        .property = "Translation",
+        .keys = {Document::Keyframe{.frame = 0,
+                                    .value = {0},
+                                    .ease = Document::Ease::Bezier,
+                                    .bezier = {.x1 = 0.25, .y1 = 0.0, .x2 = 0.75, .y2 = 1.0}},
+                 Document::Keyframe{
+                     .frame = 10, .value = {100}, .ease = Document::Ease::Linear, .bezier = {}}}};
+    graph.ShowTracks({eased}, {"Translation"}, 0, 10, 0);
+    std::vector<Document::Bezier> curves;
+    QObject::connect(&graph, &Editor::GraphEditor::EaseEdited,
+                     [&curves](const QString&, uint32_t, const Document::Bezier& bezier) {
+                         curves.push_back(bezier);
+                     });
+    const QPointF first = graph.KeyPoint(0, 0).value_or(QPointF());
+    const QPointF last = graph.KeyPoint(10, 0).value_or(QPointF());
+    const QPointF handle(first.x() + ((last.x() - first.x()) * 0.25), first.y());
+    Drag(graph, handle, QPointF(first.x() + ((last.x() - first.x()) * 0.5), last.y()));
+    REQUIRE(curves.size() == 1);
+    CHECK(curves.front().x1 > 0.3);
+    CHECK(curves.front().y1 > 0.5);
+    CHECK(curves.front().x2 == 0.75);
+}

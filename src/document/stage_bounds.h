@@ -1,6 +1,7 @@
 #pragma once
 
 #include "document/clip.h"
+#include "document/placement_effect.h"
 #include "formats/afp_animation.h"
 
 #include <array>
@@ -54,6 +55,8 @@ struct Reshape {
     double turn = 0;
 };
 
+[[nodiscard]] Linear LinearOf(const AppliedState& state);
+
 [[nodiscard]] Linear Reshaped(const Linear& linear, const Reshape& reshape);
 
 [[nodiscard]] StageOutline ReshapedOutline(const StageOutline& outline, const Reshape& reshape);
@@ -61,6 +64,12 @@ struct Reshape {
 [[nodiscard]] Reshape ScaleToReach(const StageOutline& outline, Point from, Point to);
 
 [[nodiscard]] Reshape TurnToReach(const StageOutline& outline, Point from, Point to);
+
+[[nodiscard]] Point ThroughOutline(const StageOutline& through, Point local);
+
+[[nodiscard]] std::optional<Point> UnderOutline(const StageOutline& through, Point stage);
+
+[[nodiscard]] StageOutline OutlineThrough(const StageOutline& outline, const StageOutline& through);
 
 [[nodiscard]] std::optional<uint16_t> DepthAt(const std::vector<StageOutline>& outlines,
                                               Point point);

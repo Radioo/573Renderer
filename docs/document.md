@@ -167,6 +167,10 @@ marks it saved. Two cases the `ci` tests pin down:
   document is unsaved from then on however far it is undone. This is the
   freshly opened document after enough edits to overflow the stack.
 
+`StepsFromSaved()` says how many undo or redo steps separate the document from
+the saved one, and nothing once the saved one is unreachable, which is what the
+editor's top bar shows as "unsaved, 2 edits".
+
 Recording an edit drops the redo branch, and a saved point that lived in that
 branch becomes unreachable the same way.
 
@@ -795,6 +799,37 @@ written and then ignored. A span whose updates differ in anything else is still
 refused, and a placement carrying a field without its bit is refused too,
 because own could not give that back.
 
+`Document::ControlsNeeded` says which of the two bits a placement's own fields
+ask for, from the members that are set: the five matrix fields (scale, rotate
+skew, translation and the two short forms) want `0x4`, and the four colour
+fields (multiply, add and the two packed forms) want `0x8`. Both the export path
+and the raw field editor read that one rule.
+
+**Writing a field turns its bit on.** `Document::EditPlacementField` writes the
+member the user typed and then, if the placement now carries a field the game
+would not apply, gives it the bit it needs. Without that, typing a scale into a
+placement that carried no matrix stored the number and changed nothing on
+screen, which is what the game does with it: `ApplyPlacement` reads the matrix
+fields only under `0x4` and the colours only under `0x8`.
+
+Turning a bit on cannot be the whole story, because the bit also resets the
+group (below): an update that suddenly claims the matrix would drop the scale
+and the place earlier frames gave the depth. So `Document::CarryApplied` first
+copies the state the depth is already drawn with (`ReplayDepth` up to that
+frame) into the fields the placement does not carry, and only then is the bit
+set. The edited field keeps the value that was typed, the rest of the group
+keeps what the depth had, and a placement that was already carrying the bit is
+left alone. Fields in neither group (blend, character, clip depth, the 3D parts,
+origin and geometry, which the game reads outside those bits) leave both bits as
+they were.
+
+Document tests cover the four cases: a scale typed onto a placement with no
+matrix reaches `StageOutlines`, a colour typed onto one with no colour reaches
+the applied state, a matrix or colour field typed onto an update keeps what the
+create gave the depth, and a field outside both groups leaves the bits alone. A
+window test types `2048, 2048` into the raw Scale cell and reads 200% back in
+the inspector's Transform section.
+
 ### Groups reset what they leave out (`document/placement_effect.h`, `document/property_groups.h`)
 
 The game does not hold a matrix or colour part an update leaves out. With `0x4`
@@ -1065,6 +1100,68 @@ sprites or the grid controllers fails it.
 With no depth chosen on the root timeline, the inspector shows the animation's
 own settings, all editable (`EditTarget::Animation`), which `AnimationSettingFields`
 reads and `SetAnimationSetting` writes into the header:
+
+`StageSizeOf(animation)` is the same width and height as numbers, for callers
+such as the editor's status bar that want the stage size without the field text.
+
+### The inspector's view of a placement (`document/inspector_view.h`, `document/transform_parts.h`)
+
+The raw placement fields say what one tag carries. The inspector's friendly rows
+say what the game draws and where it came from, which is a different question,
+so it is its own model.
+
+`ViewPlacement(clip, depth, frame, owned)` replays the depth to the frame
+(`ReplayDepth`, the game's own rule) and returns the drawn state in the units a
+person reads: Position in stage pixels (the stored twentieths divided by 20),
+Scale in percent, Rotation and Skew in degrees, and the multiply and add colours
+as four channels of 0 to 255. Each row also carries `set_on`, the frame whose
+placement last applied that row's group, from `LastApplied`: the matrix group
+for the transform rows and the colour group for the colours, both following the
+same create-resets-everything and update-carries-its-bit rule the replay does.
+That is why the inspector can say "set on this frame" or "set on frame 0"
+without inventing a per-field carry the format does not have. A 3D placement
+gets only the Position row, since the game applies no 2D matrix there.
+
+`transform_parts.h` is the pure maths between the stored matrix and those rows.
+The four stored numbers are the object's x axis (`a`, `b`) and y axis (`c`, `d`)
+in the row-vector form afp-core uses. `PartsOf` reads the x axis's length as the
+width, its angle as the rotation, the y axis's length as the height and the
+angle between the two as the skew; `LinearOf` builds the matrix back from those
+four. A mirrored matrix (a negative determinant) puts the sign on the width, so
+a horizontal flip reads as a width of -100% with no rotation instead of a turn
+of half a circle. Every case the tests cover round trips exactly.
+
+`SetViewedBaked` and `SetViewedOwned` write a row back. Position becomes a move
+by the difference (`MoveBakedDepth`, `MoveOwnedDepth`), so it goes through the
+same carry the stage drag does. Scale, Rotation and Skew change one part, rebuild
+the matrix and write it with `SetBakedLinear` or `SetOwnedLinear`, which are the
+writers `ReshapeBakedDepth` and `ReshapeOwnedDepth` were split into, so a typed
+angle and a dragged handle land in the same encoding, long or short form as the
+placement or the track already uses. A colour written into a placement that does
+not carry the colour bit first writes the colours the game is showing into it and
+sets the bit, the way `CarryMatrix` does for the matrix, because the bit on its
+own would reset the colour it left out. An owned depth's colour is keyed on its
+own track, packed or plain as the track already is.
+
+`ViewTrack(owned, label)` says which keyframe track a row keys: the one the depth
+already animates, or the one it would start with. The editor's stopwatch and
+diamond buttons use it.
+
+A placement that carries an origin also gets an Anchor row, in stage pixels like
+Position. Writing it goes through `MoveAnchor`, which takes a stage offset and
+keeps the object where it is on screen, so the row's local offset is first
+multiplied by the depth's own matrix; a scaled depth would otherwise move its
+anchor by the wrong amount, which is what the test with a 200% wide placement
+pins down. The row is left out for a depth the project owns, whose keyframes
+keep no anchor.
+
+The colour rows are channels, not a web colour: the format stores them as four
+int16s, so a multiply of 512 (200%) or a negative add is representable. A row
+whose channels all sit between 0 and 255 is marked `ViewUnit::Colour`, which the
+editor draws as a swatch with a hex value and an alpha; anything outside that
+range is marked `ViewUnit::Channels` and drawn as four plain numbers, so a value
+the swatch cannot express is still read and written exactly rather than clamped.
+
 
 - **Stage size**, width and height: the header rect's maximum minus its minimum.
   An edit keeps the minimum and moves the maximum, and has to fit the u16 rect.
@@ -1951,6 +2048,14 @@ about the project's own content rather than about the package.
 Note that one owned animation covers two entries, the animation and its
 byte-order script, because `WriteAnimation` writes both. Changing an animation
 therefore drifts two entries, and the tests assert that rather than one.
+
+`AwaitingExport(file, project)` counts what an export would change: every entry
+`RecordExported` would record whose digest is not the one the last export
+recorded (or that was never recorded), plus every project image the package
+does not hold yet. After an export it is zero. Owning a depth makes it two
+before the first export, the animation and its script, and changing an owned
+animation makes it two again, because those are the entries the drift check
+would report at the next opening.
 
 `KeepIfsVersion(project, path)` is the resolution that gives the package the
 last word: it drops that path from `exported` and drops any authored depth whose

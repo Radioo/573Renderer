@@ -1,5 +1,7 @@
 #pragma once
 
+#include "document/characters.h"
+#include "document/frame_notes.h"
 #include "document/key_selection.h"
 #include "document/keyframes.h"
 #include "document/outline.h"
@@ -26,6 +28,7 @@ class QDragMoveEvent;
 class QDropEvent;
 class QMimeData;
 class QMouseEvent;
+class QColor;
 class QPaintEvent;
 class QPainter;
 class QScrollArea;
@@ -52,12 +55,18 @@ public:
     void SetHiddenDepths(std::vector<uint16_t> depths);
     void SetLockedDepths(std::vector<uint16_t> depths);
     void SetCharacterNames(std::map<uint16_t, QString> names);
+    void SetCharacterKinds(std::map<uint16_t, Document::CharacterKind> kinds);
+    void SetDepthMarks(std::map<uint16_t, std::vector<uint32_t>> marks);
+    void SetFrameNotes(std::vector<Document::FrameNote> notes);
+    void SetKeyedDepths(std::vector<uint16_t> depths);
     [[nodiscard]] QString SpanNameAt(QPoint at) const;
     void SetWorkArea(std::optional<Document::WorkArea> area);
     void Clear();
     void SetFrame(uint32_t frame);
     void ZoomIn();
     void ZoomOut();
+    void SetZoomPixels(double pixels);
+    [[nodiscard]] double ZoomPixels() const;
 
 signals:
     void FrameChosen(uint32_t frame);
@@ -70,16 +79,27 @@ signals:
     void SpanTrimmed(uint16_t depth, uint32_t frame, uint32_t first, uint32_t last);
     void VisibilityToggled(uint16_t depth);
     void LockToggled(uint16_t depth);
+    void SoloToggled(uint16_t depth);
+    void DepthDragged(uint16_t depth, uint16_t onto);
     void MenuRequested(const QPoint& where, uint32_t frame, const QString& label);
     void KeyMenuRequested(const QPoint& where, const QString& property, uint32_t frame,
                           bool on_key);
     void CharacterDropped(uint16_t character, uint32_t frame, std::optional<uint16_t> depth);
     void LabelMoved(const QString& label, uint32_t frame);
+    void KeysSelected();
+    void CameraAsked();
+    void SpriteEntered(uint16_t character);
+    void LabelAsked(uint32_t frame);
+    void LabelRenameAsked(const QString& label);
+    void ShowAllAsked();
+    void UnlockAllAsked();
+    void ZoomChanged();
 
 protected:
     bool event(QEvent* event) override;
     void paintEvent(QPaintEvent* event) override;
     void mousePressEvent(QMouseEvent* event) override;
+    void mouseDoubleClickEvent(QMouseEvent* event) override;
     void mouseMoveEvent(QMouseEvent* event) override;
     void mouseReleaseEvent(QMouseEvent* event) override;
     void contextMenuEvent(QContextMenuEvent* event) override;
@@ -128,8 +148,18 @@ private:
     [[nodiscard]] bool PressSwitch(const Lane& lane, QPoint at);
     [[nodiscard]] bool PressDepthNumber(const Lane& lane, QPoint at,
                                         Qt::KeyboardModifiers modifiers);
+    [[nodiscard]] std::optional<uint16_t> DepthRowAt(int y) const;
     void DrawSwitches(QPainter& painter, uint16_t depth, int y) const;
+    void DrawNotes(QPainter& painter) const;
+    [[nodiscard]] bool PressNotes(QPoint at);
+    [[nodiscard]] std::optional<uint16_t> SpriteAt(QPoint at) const;
+    void DrawColumnHeaders(QPainter& painter) const;
+    [[nodiscard]] bool PressColumnHeaders(QPoint at);
     [[nodiscard]] QString SpanName(const Document::DepthRow& row, const Document::Span& span) const;
+    [[nodiscard]] QColor BarColour(const Document::DepthRow& row, const Document::Span& span,
+                                   bool hidden) const;
+    void DrawSpanMarks(QPainter& painter, uint16_t depth, const Document::Span& span,
+                       const QRect& bar) const;
     void DrawSpanName(QPainter& painter, const QString& name, const QRect& bar) const;
 
     uint32_t frame_count_ = 0;
@@ -141,6 +171,10 @@ private:
     std::vector<uint16_t> hidden_depths_;
     std::vector<uint16_t> locked_depths_;
     std::map<uint16_t, QString> names_;
+    std::map<uint16_t, Document::CharacterKind> kinds_;
+    std::map<uint16_t, std::vector<uint32_t>> marks_;
+    std::vector<Document::FrameNote> notes_;
+    std::vector<uint16_t> keyed_depths_;
     std::optional<Document::WorkArea> work_area_;
     std::vector<Document::Track> tracks_;
     std::vector<Document::KeyRef> selected_keys_;
@@ -149,6 +183,9 @@ private:
     std::optional<uint32_t> stretch_fixed_;
     std::optional<QPoint> band_from_;
     std::optional<uint16_t> span_depth_;
+    std::optional<uint16_t> row_dragged_;
+    std::optional<uint16_t> row_onto_;
+    int row_press_y_ = 0;
     std::optional<Document::Span> span_grabbed_;
     int span_press_x_ = 0;
     uint32_t span_from_ = 0;

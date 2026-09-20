@@ -1,6 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "editor_graph.h"
+#include "editor_ease_editor.h"
 #include "editor_timeline.h"
 #include "editor_viewport.h"
 #include "editor_window.h"
@@ -8,6 +9,10 @@
 #include "document/key_selection.h"
 
 #include <QAction>
+#include <QListWidgetItem>
+#include <QListWidget>
+#include <QToolButton>
+#include <QLabel>
 #include <QApplication>
 #include <QKeySequence>
 #include <QPoint>
@@ -393,19 +398,20 @@ TEST_CASE("Time-stretching an owned depth's keyframes spreads them from the firs
     const auto ref = [](uint32_t frame) {
         return Document::KeyRef{.property = "Translation", .frame = frame};
     };
-    const auto stretch = [&](const Script::Step& answer) {
+    const auto stretch = [&](double percent, bool apply) {
         emit timeline->FrameChosen(1);
         emit timeline->KeyChosen("Translation", 1);
         timeline->SelectKeys({ref(0), ref(1)});
-        Script stretched({Choose("Time-stretch 2 keyframe(s)..."), answer});
-        emit timeline->KeyMenuRequested(QPoint(4, 4), "Translation", 1, true);
-        REQUIRE(Settle([&stretched] { return stretched.Finished(); }));
+        REQUIRE(RunCommand(opened.window, "key.stretch").isEmpty());
+        SetPopoverValue(opened.window, "Stretch to", percent);
+        Script run({});
+        PressPopover(opened.window, apply ? "apply" : "cancel");
         QApplication::processEvents();
-        return stretched.Problems();
+        return run.Problems();
     };
-    CHECK(stretch(RejectInput()).isEmpty());
+    CHECK(stretch(200, false).isEmpty());
     CHECK(x_on(1) == second);
-    CHECK(stretch(AnswerNumber(200)).isEmpty());
+    CHECK(stretch(200, true).isEmpty());
     CHECK(RowValue(*opened.inspector, "Keyframe") == "Translation on frame 2");
     std::vector<Document::KeyRef> selected = timeline->SelectedKeys();
     std::ranges::sort(selected);
@@ -418,7 +424,7 @@ TEST_CASE("Time-stretching an owned depth's keyframes spreads them from the firs
     undo->trigger();
     CHECK(x_on(1) == second);
 
-    const QStringList refused = stretch(AnswerNumber(400));
+    const QStringList refused = stretch(400, true);
     REQUIRE_FALSE(refused.isEmpty());
     CHECK(refused.front().contains("outside"));
     CHECK(x_on(1) == second);
@@ -468,30 +474,27 @@ TEST_CASE("Simplifying an owned depth's keyframes keeps the ends of a straight r
     const auto ref = [](uint32_t frame) {
         return Document::KeyRef{.property = "Translation", .frame = frame};
     };
-    const auto simplify = [&](std::vector<Document::KeyRef> keys, std::vector<Script::Step> steps) {
+    const auto choose = [&](std::vector<Document::KeyRef> keys) {
         emit timeline->FrameChosen(1);
         emit timeline->KeyChosen("Translation", 1);
         timeline->SelectKeys(std::move(keys));
-        Script run(std::move(steps));
-        emit timeline->KeyMenuRequested(QPoint(4, 4), "Translation", 1, true);
-        REQUIRE(Settle([&run] { return run.Finished(); }));
-        QApplication::processEvents();
-        return run.Problems();
     };
-    bool offered = true;
-    CHECK(simplify({ref(0), ref(1)}, {Look("Simplify 2 keyframe(s)...", offered)}).isEmpty());
-    CHECK_FALSE(offered);
-    CHECK(simplify({ref(0), ref(1), ref(2), ref(3)},
-                   {Choose("Simplify 4 keyframe(s)..."), RejectInput()})
-              .isEmpty());
+    choose({ref(0), ref(1)});
+    CHECK(RefusalOf(opened.window, "key.simplify").contains("three or more"));
+    choose({ref(0), ref(1), ref(2), ref(3)});
+    REQUIRE(RunCommand(opened.window, "key.simplify").isEmpty());
+    SetPopoverValue(opened.window, "Largest change allowed", 0);
+    CHECK(PopoverDetail(opened.window) == "2 of 4 keyframes go");
+    PressPopover(opened.window, "cancel");
     CHECK(timeline->SelectedKeys().size() == 4);
-    CHECK(simplify({ref(0), ref(1), ref(2), ref(3)},
-                   {Choose("Simplify 4 keyframe(s)..."), AnswerNumber(0)})
-              .isEmpty());
+    choose({ref(0), ref(1), ref(2), ref(3)});
+    REQUIRE(RunCommand(opened.window, "key.simplify").isEmpty());
+    SetPopoverValue(opened.window, "Largest change allowed", 0);
+    PressPopover(opened.window, "apply");
     std::vector<Document::KeyRef> selected = timeline->SelectedKeys();
     std::ranges::sort(selected);
     CHECK(selected == std::vector<Document::KeyRef>{ref(0), ref(3)});
-    CHECK(opened.window.statusBar()->currentMessage().contains("2 keyframe(s) removed"));
+    CHECK(LastNotice(opened.window).contains("2 keyframe(s) removed"));
     CHECK(RowValue(*opened.inspector, "Keyframe") != "Translation on frame 1");
     CHECK(std::vector<int>{x_on(0), x_on(1), x_on(2), x_on(3)} == before);
 }
@@ -530,20 +533,21 @@ TEST_CASE("Wiggling an owned depth's keyframes adds jittered keyframes between t
     const auto ref = [](uint32_t frame) {
         return Document::KeyRef{.property = "Translation", .frame = frame};
     };
-    const auto wiggle = [&](std::vector<Script::Step> steps) {
+    const auto ask = [&] {
         emit timeline->FrameChosen(0);
         emit timeline->KeyChosen("Translation", 0);
         timeline->SelectKeys({ref(0), ref(3)});
-        Script run(std::move(steps));
-        emit timeline->KeyMenuRequested(QPoint(4, 4), "Translation", 0, true);
-        REQUIRE(Settle([&run] { return run.Finished(); }));
-        QApplication::processEvents();
-        return run.Problems();
+        REQUIRE(RunCommand(opened.window, "key.wiggle").isEmpty());
+        CHECK(PopoverOf(opened.window).isVisible());
+        SetPopoverValue(opened.window, "A keyframe every", 1);
+        SetPopoverValue(opened.window, "Largest change", 20);
     };
-    CHECK(wiggle({Choose("Wiggle 2 keyframe(s)..."), RejectInput()}).isEmpty());
-    CHECK(wiggle({Choose("Wiggle 2 keyframe(s)..."), AnswerNumber(1), RejectInput()}).isEmpty());
+    ask();
+    PressPopover(opened.window, "cancel");
+    CHECK_FALSE(PopoverOf(opened.window).isVisible());
     CHECK(std::vector<int>{x_on(0), x_on(1), x_on(2), x_on(3)} == before);
-    CHECK(wiggle({Choose("Wiggle 2 keyframe(s)..."), AnswerNumber(1), AnswerNumber(20)}).isEmpty());
+    ask();
+    PressPopover(opened.window, "apply");
     std::vector<Document::KeyRef> selected = timeline->SelectedKeys();
     std::ranges::sort(selected);
     CHECK(selected == std::vector<Document::KeyRef>{ref(0), ref(1), ref(2), ref(3)});
@@ -563,14 +567,6 @@ TEST_CASE("A motion sketch records the drag on every frame played and keys it on
     REQUIRE(timeline != nullptr);
     REQUIRE(viewport != nullptr);
     OwnDroppedDot(opened);
-    const auto action = [&](const QString& text) -> QAction* {
-        for (QAction* one : opened.window.findChildren<QAction*>()) {
-            if (one->text() == text) return one;
-        }
-        return nullptr;
-    };
-    QAction* sketch = action("Motion &sketch while dragging");
-    REQUIRE(sketch != nullptr);
     const auto x_on = [&](uint32_t depth, uint32_t frame) {
         emit timeline->FrameChosen(frame);
         emit timeline->DepthChosen(depth);
@@ -580,7 +576,7 @@ TEST_CASE("A motion sketch records the drag on every frame played and keys it on
     const std::vector<int> before{x_on(3, 0), x_on(3, 1), x_on(3, 2)};
     const int baked_before = x_on(2, 0);
 
-    sketch->setChecked(true);
+    RunCommand(opened.window, "tool.sketch");
     x_on(3, 0);
     {
         Script run({});
@@ -607,7 +603,7 @@ TEST_CASE("A motion sketch records the drag on every frame played and keys it on
     }
     CHECK(x_on(2, 0) == baked_before + 20);
 
-    sketch->setChecked(false);
+    RunCommand(opened.window, "tool.select");
     const int sketched_one = x_on(3, 1);
     const int sketched_two = x_on(3, 2);
     x_on(3, 1);
@@ -621,4 +617,233 @@ TEST_CASE("A motion sketch records the drag on every frame played and keys it on
     }
     CHECK(x_on(3, 1) == sketched_one);
     CHECK(x_on(3, 2) == sketched_two + 20);
+}
+
+TEST_CASE("The inspector's Keyframes section eases the chosen keyframes with no dialog") {
+    Opened opened;
+    Open(opened, true);
+    auto* timeline = opened.window.findChild<Editor::Timeline*>();
+    auto* viewport = opened.window.findChild<Editor::Viewport*>();
+    REQUIRE(timeline != nullptr);
+    REQUIRE(viewport != nullptr);
+    OwnDroppedDot(opened);
+    const auto section = [&opened] {
+        auto* found = opened.window.findChild<Editor::EaseEditor*>("ease_editor");
+        REQUIRE(found != nullptr);
+        return found;
+    };
+    const auto button = [&](const QString& name) {
+        auto* found = section()->findChild<QToolButton*>(name);
+        REQUIRE(found != nullptr);
+        return found;
+    };
+    CHECK_FALSE(section()->isVisibleTo(&opened.window));
+
+    emit timeline->FrameChosen(0);
+    emit timeline->DepthChosen(3);
+    {
+        Script moved({});
+        emit viewport->Dragged(3, 10, 0, true);
+        QApplication::processEvents();
+        CHECK(moved.Problems().isEmpty());
+    }
+    timeline->SelectKeys({Document::KeyRef{.property = "Translation", .frame = 0}});
+    emit timeline->KeysSelected();
+    QApplication::processEvents();
+    CHECK(section()->isVisibleTo(&opened.window));
+    auto* count = section()->findChild<QLabel*>("ease_count");
+    REQUIRE(count != nullptr);
+    CHECK(count->text() == "1 keyframe");
+    CHECK(button("ease_hold")->isChecked());
+    auto* curve = section()->findChild<Editor::CurveEditor*>("ease_curve");
+    REQUIRE(curve != nullptr);
+    CHECK_FALSE(curve->isEnabled());
+
+    {
+        Script eased({});
+        button("ease_bezier")->click();
+        QApplication::processEvents();
+        CHECK(eased.Problems().isEmpty());
+    }
+    emit timeline->KeysSelected();
+    QApplication::processEvents();
+    CHECK(button("ease_bezier")->isChecked());
+    CHECK_FALSE(button("ease_hold")->isChecked());
+    CHECK(curve->isEnabled());
+    CHECK(curve->Curve() == Document::EasePresets().front().bezier);
+
+    {
+        Script eased({});
+        auto* preset = section()->findChild<QToolButton*>(
+            "ease_preset_" + QString::fromStdString(Document::EasePresets().back().name));
+        REQUIRE(preset != nullptr);
+        preset->click();
+        QApplication::processEvents();
+        CHECK(eased.Problems().isEmpty());
+    }
+    emit timeline->KeysSelected();
+    QApplication::processEvents();
+    CHECK(curve->Curve() == Document::EasePresets().back().bezier);
+
+    QAction* undo = ShortcutAction(opened.window, QKeySequence(QKeySequence::Undo));
+    REQUIRE(undo != nullptr);
+    undo->trigger();
+    undo->trigger();
+    QApplication::processEvents();
+    CHECK(button("ease_hold")->isChecked());
+
+    timeline->SelectKeys({});
+    emit timeline->KeysSelected();
+    QApplication::processEvents();
+    CHECK_FALSE(section()->isVisibleTo(&opened.window));
+}
+
+TEST_CASE("The graph's property list checks off what it draws and the Fit buttons reach it") {
+    Opened opened;
+    Open(opened, true);
+    auto* timeline = opened.window.findChild<Editor::Timeline*>();
+    auto* viewport = opened.window.findChild<Editor::Viewport*>();
+    QListWidget* properties = nullptr;
+    QToolButton* fit_all = nullptr;
+    QToolButton* fit_keys = nullptr;
+    Editor::GraphEditor* graph = nullptr;
+    for (QWidget* widget : QApplication::allWidgets()) {
+        if (auto* found = qobject_cast<Editor::GraphEditor*>(widget)) graph = found;
+        if (widget->objectName() == "graph_properties")
+            properties = qobject_cast<QListWidget*>(widget);
+        if (widget->objectName() == "graph_graph.fit_all")
+            fit_all = qobject_cast<QToolButton*>(widget);
+        if (widget->objectName() == "graph_graph.fit_keys")
+            fit_keys = qobject_cast<QToolButton*>(widget);
+    }
+    REQUIRE(timeline != nullptr);
+    REQUIRE(viewport != nullptr);
+    REQUIRE(properties != nullptr);
+    REQUIRE(graph != nullptr);
+    CHECK(properties->count() == 0);
+
+    OwnDroppedDot(opened);
+    emit timeline->FrameChosen(0);
+    emit timeline->DepthChosen(3);
+    {
+        Script moved({});
+        emit viewport->Dragged(3, 10, 0, true);
+        QApplication::processEvents();
+        CHECK(moved.Problems().isEmpty());
+    }
+    REQUIRE(properties->count() >= 1);
+    const auto row = [&properties](const QString& property) -> QListWidgetItem* {
+        for (int at = 0; at < properties->count(); at++) {
+            if (properties->item(at)->text() == property) return properties->item(at);
+        }
+        return nullptr;
+    };
+    QListWidgetItem* translation = row("Translation");
+    REQUIRE(translation != nullptr);
+    CHECK(translation->checkState() == Qt::Checked);
+    CHECK(translation->foreground().color() == Editor::GraphEditor::ColourOf(0));
+    CHECK(graph->KeyPoint(0, 0).has_value());
+
+    translation->setCheckState(Qt::Unchecked);
+    QApplication::processEvents();
+    CHECK_FALSE(graph->KeyPoint(0, 0).has_value());
+
+    translation->setCheckState(Qt::Checked);
+    QApplication::processEvents();
+    CHECK(graph->KeyPoint(0, 0).has_value());
+
+    REQUIRE(fit_all != nullptr);
+    REQUIRE(fit_keys != nullptr);
+    const double loose = graph->KeyPoint(0, 0).value().y();
+    fit_keys->click();
+    QApplication::processEvents();
+    fit_all->click();
+    QApplication::processEvents();
+    CHECK(graph->KeyPoint(0, 0).value().y() == loose);
+    CHECK(CommandsOf(opened.window).Action("graph.fit_all") != nullptr);
+}
+
+TEST_CASE("Undoing an edit keeps the chosen depth and the keyframes that were chosen") {
+    Opened opened;
+    Open(opened, true);
+    auto* timeline = opened.window.findChild<Editor::Timeline*>();
+    auto* viewport = opened.window.findChild<Editor::Viewport*>();
+    REQUIRE(timeline != nullptr);
+    REQUIRE(viewport != nullptr);
+    OwnDroppedDot(opened);
+    const auto move_on = [&](uint32_t frame, double dx) {
+        emit timeline->FrameChosen(frame);
+        emit timeline->DepthChosen(3);
+        Script moved({});
+        emit viewport->Dragged(3, dx, 0, true);
+        QApplication::processEvents();
+        CHECK(moved.Problems().isEmpty());
+    };
+    const auto ref = [](uint32_t frame) {
+        return Document::KeyRef{.property = "Translation", .frame = frame};
+    };
+    move_on(0, 10);
+    move_on(2, 40);
+    timeline->SelectKeys({ref(0), ref(2)});
+    emit timeline->KeysSelected();
+    QApplication::processEvents();
+    REQUIRE(timeline->SelectedKeys().size() == 2);
+    CHECK(RowValue(*opened.inspector, "Depth") == "3");
+
+    QAction* ease = ShortcutAction(opened.window, QKeySequence(Qt::Key_F9));
+    REQUIRE(ease != nullptr);
+    {
+        Script eased({});
+        ease->trigger();
+        QApplication::processEvents();
+        CHECK(eased.Problems().isEmpty());
+    }
+    CHECK(timeline->SelectedKeys().size() == 2);
+
+    QAction* undo = ShortcutAction(opened.window, QKeySequence(QKeySequence::Undo));
+    REQUIRE(undo != nullptr);
+    undo->trigger();
+    QApplication::processEvents();
+    CHECK(RowValue(*opened.inspector, "Depth") == "3");
+    CHECK(timeline->SelectedKeys() == std::vector<Document::KeyRef>{ref(0), ref(2)});
+
+    QAction* redo = ShortcutAction(opened.window, QKeySequence(QKeySequence::Redo));
+    REQUIRE(redo != nullptr);
+    redo->trigger();
+    QApplication::processEvents();
+    CHECK(RowValue(*opened.inspector, "Depth") == "3");
+    CHECK(timeline->SelectedKeys() == std::vector<Document::KeyRef>{ref(0), ref(2)});
+}
+
+TEST_CASE("Undoing the edit that made a keyframe drops only that keyframe from the chosen ones") {
+    Opened opened;
+    Open(opened, true);
+    auto* timeline = opened.window.findChild<Editor::Timeline*>();
+    auto* viewport = opened.window.findChild<Editor::Viewport*>();
+    REQUIRE(timeline != nullptr);
+    REQUIRE(viewport != nullptr);
+    OwnDroppedDot(opened);
+    const auto move_on = [&](uint32_t frame, double dx) {
+        emit timeline->FrameChosen(frame);
+        emit timeline->DepthChosen(3);
+        Script moved({});
+        emit viewport->Dragged(3, dx, 0, true);
+        QApplication::processEvents();
+        CHECK(moved.Problems().isEmpty());
+    };
+    const auto ref = [](uint32_t frame) {
+        return Document::KeyRef{.property = "Translation", .frame = frame};
+    };
+    move_on(0, 10);
+    move_on(2, 40);
+    timeline->SelectKeys({ref(0), ref(2)});
+    emit timeline->KeysSelected();
+    QApplication::processEvents();
+    REQUIRE(timeline->SelectedKeys().size() == 2);
+
+    QAction* undo = ShortcutAction(opened.window, QKeySequence(QKeySequence::Undo));
+    REQUIRE(undo != nullptr);
+    undo->trigger();
+    QApplication::processEvents();
+    CHECK(timeline->SelectedKeys() == std::vector<Document::KeyRef>{ref(0)});
 }

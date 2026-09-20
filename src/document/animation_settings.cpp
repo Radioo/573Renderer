@@ -121,16 +121,20 @@ Support::Expected<void, std::string> SetUseBackground(AfpAnimation::Animation& a
 
 }
 
+StageSize StageSizeOf(const AfpAnimation::Animation& animation) {
+    return StageSize{.width = animation.rect[kMaxX] - animation.rect[kMinX],
+                     .height = animation.rect[kMaxY] - animation.rect[kMinY]};
+}
+
 std::vector<Field> AnimationSettingFields(const AfpAnimation::Animation& animation) {
     std::vector<std::string> colour;
     colour.reserve(animation.background_colour.size());
     for (const uint8_t channel : animation.background_colour)
         colour.push_back(std::to_string(channel));
-    const int width = animation.rect[kMaxX] - animation.rect[kMinX];
-    const int height = animation.rect[kMaxY] - animation.rect[kMinY];
+    const StageSize stage = StageSizeOf(animation);
     return {
         Field{.name = std::string(kStageSize),
-              .value = Join({std::to_string(width), std::to_string(height)})},
+              .value = Join({std::to_string(stage.width), std::to_string(stage.height)})},
         Field{.name = std::string(kFrameRate), .value = RateText(animation)},
         Field{.name = std::string(kBackgroundColour), .value = Join(colour)},
         Field{.name = std::string(kUseBackground),

@@ -26,6 +26,7 @@
 #include <QPixmap>
 #include <QtGlobal>
 #include <QApplication>
+#include <QFileInfo>
 #include <QByteArray>
 #include <QColorDialog>
 #include <QColor>
@@ -177,12 +178,7 @@ TEST_CASE("Splitting a depth at the playhead keeps what it shows and refuses wha
         choose(frame, 2);
         return RowValue(*opened.inspector, "Translation");
     };
-    const auto refusal = [&] {
-        Script refused({});
-        split->trigger();
-        REQUIRE(Settle([&refused] { return !refused.Problems().isEmpty(); }));
-        return refused.Problems().front();
-    };
+    const auto refusal = [&] { return RefusalOf(opened.window, "depth.split"); };
     const std::string at_one = translation_on(1);
     const std::string at_two = translation_on(2);
     choose(1, 2);
@@ -238,12 +234,7 @@ TEST_CASE("Trimming the clip to the work area keeps what those frames showed") {
         emit timeline->FrameChosen(last);
         end->trigger();
     };
-    const auto refusal = [&] {
-        Script refused({});
-        trim->trigger();
-        REQUIRE(Settle([&refused] { return !refused.Problems().isEmpty(); }));
-        return refused.Problems().front();
-    };
+    const auto refusal = [&] { return RefusalOf(opened.window, "clip.trim"); };
     CHECK(refusal().contains("work area first"));
     const std::string at_one = translation_on(1);
     const std::string at_two = translation_on(2);
@@ -256,7 +247,7 @@ TEST_CASE("Trimming the clip to the work area keeps what those frames showed") {
         QApplication::processEvents();
         CHECK(trimmed.Problems().isEmpty());
     }
-    CHECK(opened.window.statusBar()->currentMessage().contains("starts again"));
+    CHECK(LastNotice(opened.window).contains("starts again"));
     CHECK(RowValue(*opened.inspector, "Translation") == at_one);
     CHECK(refusal().contains("work area first"));
     CHECK(translation_on(0) == at_one);
@@ -274,7 +265,7 @@ TEST_CASE("Trimming the clip to the work area keeps what those frames showed") {
         QApplication::processEvents();
         CHECK(trimmed.Problems().isEmpty());
     }
-    CHECK_FALSE(opened.window.statusBar()->currentMessage().contains("starts again"));
+    CHECK_FALSE(LastNotice(opened.window).contains("starts again"));
     undo->trigger();
 
     OwnDroppedDot(opened);
@@ -398,44 +389,51 @@ TEST_CASE("A character dropped on the timeline starts a depth on the dropped fra
     CHECK(shows(4, 2) == "no Character row");
 }
 
-TEST_CASE("A new empty sprite from the library opens in the clip box ready to fill") {
+TEST_CASE("A new empty sprite from the library opens ready to fill") {
     Opened opened;
     Open(opened, true);
     auto* timeline = opened.window.findChild<Editor::Timeline*>();
     auto* library = opened.window.findChild<QTreeWidget*>("library");
-    auto* clips = opened.window.findChild<QComboBox*>();
     REQUIRE(timeline != nullptr);
     REQUIRE(library != nullptr);
-    REQUIRE(clips != nullptr);
-    const int before = clips->count();
+    const auto sprites = [&library] {
+        int seen = 0;
+        for (QTreeWidgetItemIterator it(library); *it != nullptr; ++it) {
+            if ((*it)->text(0).contains("Sprite")) seen++;
+        }
+        return seen;
+    };
+    const int before = sprites();
     library->setCurrentItem(nullptr);
     {
-        Script made({Choose("New empty sprite..."), AnswerNumber(5)});
+        Script made({Choose("New empty sprite")});
         emit library->customContextMenuRequested(QPoint(4, 4));
         REQUIRE(Settle([&made] { return made.Finished(); }));
         CHECK(made.Problems().isEmpty());
     }
-    REQUIRE(clips->count() == before + 1);
-    REQUIRE(clips->currentIndex() > 0);
-    const int sprite = clips->currentData().toInt();
+    REQUIRE(sprites() == before + 1);
+    const QString opened_clip = OpenClip(opened.window);
+    REQUIRE_FALSE(opened_clip.isEmpty());
     bool listed = false;
-    for (QTreeWidgetItemIterator it(library); *it != nullptr; ++it)
-        listed = listed || (*it)->data(0, Qt::UserRole).toInt() == sprite;
+    for (QTreeWidgetItemIterator it(library); *it != nullptr; ++it) {
+        listed =
+            listed || opened_clip.contains(QString::number((*it)->data(0, Qt::UserRole).toInt()));
+    }
     CHECK(listed);
     {
         Script dropped({});
-        emit timeline->CharacterDropped(uint16_t{7}, 4, std::nullopt);
+        emit timeline->CharacterDropped(uint16_t{7}, 2, std::nullopt);
         QApplication::processEvents();
         CHECK(dropped.Problems().isEmpty());
     }
-    emit timeline->FrameChosen(4);
+    emit timeline->FrameChosen(2);
     CHECK(RowValue(*opened.inspector, "Character") == "7");
-    CHECK(clips->currentData().toInt() == sprite);
+    CHECK(OpenClip(opened.window) == opened_clip);
 
     library->setCurrentItem(library->topLevelItem(0));
     bool offered = false;
     {
-        Script looked({Look("New empty sprite...", offered)});
+        Script looked({Look("New empty sprite", offered)});
         emit library->customContextMenuRequested(QPoint(4, 4));
         REQUIRE(Settle([&looked] { return looked.Finished(); }));
     }
@@ -549,6 +547,48 @@ TEST_CASE("A label dragged on the ruler is moved in the saved package") {
     REQUIRE(animation.has_value());
     REQUIRE(animation->root.labels.size() == 1);
     CHECK(animation->root.labels.front().frame == 1);
+}
+
+TEST_CASE("Double-clicking the ruler adds a label, and a flag renames the one under it") {
+    Opened opened;
+    Open(opened, true);
+    auto* timeline = opened.window.findChild<Editor::Timeline*>();
+    REQUIRE(timeline != nullptr);
+    {
+        Script renamed({Answer("start")});
+        emit timeline->LabelRenameAsked("loop");
+        REQUIRE(Settle([&renamed] { return renamed.Finished(); }));
+        CHECK(renamed.Problems().isEmpty());
+    }
+    {
+        Script added({Answer("end")});
+        emit timeline->LabelAsked(1);
+        REQUIRE(Settle([&added] { return added.Finished(); }));
+        CHECK(added.Problems().isEmpty());
+    }
+    QAction* save = ShortcutAction(opened.window, QKeySequence(QKeySequence::Save));
+    REQUIRE(save != nullptr);
+    save->trigger();
+    QFile read(opened.dir.filePath("sample.ifs"));
+    REQUIRE(read.open(QIODevice::ReadOnly));
+    const QByteArray bytes = read.readAll();
+    const auto file = Document::File::Open(
+        std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(bytes.constData()),
+                                 static_cast<std::size_t>(bytes.size())));
+    REQUIRE(file.has_value());
+    const auto animation = file->ReadAnimation("afp/" + SamplePackage::HashPath("intro"));
+    REQUIRE(animation.has_value());
+    const std::optional<Document::AnimationDetails> details =
+        Document::DescribeClip(*animation, Document::ClipId{});
+    REQUIRE(details.has_value());
+    const auto named = [&details](const std::string& name) {
+        return std::ranges::any_of(details->labels, [&name](const Document::AnimationLabel& one) {
+            return one.name == name;
+        });
+    };
+    CHECK(named("start"));
+    CHECK(named("end"));
+    CHECK_FALSE(named("loop"));
 }
 
 TEST_CASE("Go to frame asks for a frame and moves the playhead there") {
@@ -707,12 +747,7 @@ TEST_CASE("Extracting the work area closes the gap and keeps the playhead on its
         emit timeline->FrameChosen(last);
         end->trigger();
     };
-    const auto refusal = [&] {
-        Script refused({});
-        extract->trigger();
-        REQUIRE(Settle([&refused] { return !refused.Problems().isEmpty(); }));
-        return refused.Problems().front();
-    };
+    const auto refusal = [&] { return RefusalOf(opened.window, "clip.extract"); };
     const std::string first = translation_on(0);
     const std::string last = translation_on(5);
     REQUIRE(first != last);
@@ -731,7 +766,7 @@ TEST_CASE("Extracting the work area closes the gap and keeps the playhead on its
     CHECK(extract_with_playhead(3) == first);
     undo->trigger();
     CHECK(extract_with_playhead(4) == first);
-    CHECK(opened.window.statusBar()->currentMessage().contains("cross the cut"));
+    CHECK(LastNotice(opened.window).contains("cross the cut"));
     CHECK(refusal().contains("work area first"));
     CHECK(translation_on(0) == first);
     CHECK(translation_on(3) == last);
@@ -780,7 +815,7 @@ TEST_CASE("Lifting the work area empties its frames and keeps every frame where 
         QApplication::processEvents();
         CHECK(lifted.Problems().isEmpty());
     }
-    CHECK(opened.window.statusBar()->currentMessage().contains("start again"));
+    CHECK(LastNotice(opened.window).contains("start again"));
     CHECK(translation_on(0) == first);
     CHECK(translation_on(1) == first);
     CHECK(translation_on(3) == "no Translation row");
@@ -790,4 +825,53 @@ TEST_CASE("Lifting the work area empties its frames and keeps every frame where 
     lift->trigger();
     REQUIRE(Settle([&refused] { return !refused.Problems().isEmpty(); }));
     CHECK(refused.Problems().front().contains("nothing is shown on frames 2 to 3"));
+}
+
+TEST_CASE("Keyframing a depth with no project open makes one beside the IFS") {
+    Opened opened;
+    Open(opened, true);
+    auto* timeline = opened.window.findChild<Editor::Timeline*>();
+    auto* viewport = opened.window.findChild<Editor::Viewport*>();
+    auto* library = opened.window.findChild<QTreeWidget*>("library");
+    REQUIRE(timeline != nullptr);
+    REQUIRE(viewport != nullptr);
+    REQUIRE(library != nullptr);
+    std::optional<uint16_t> dot;
+    for (int at = 0; at < library->topLevelItemCount(); at++) {
+        if (library->topLevelItem(at)->text(0).contains("dot"))
+            dot = static_cast<uint16_t>(library->topLevelItem(at)->data(0, Qt::UserRole).toUInt());
+    }
+    REQUIRE(dot.has_value());
+    emit timeline->FrameChosen(0);
+    {
+        Script placed({});
+        emit viewport->CharacterDropped(dot.value_or(0), 500, 300);
+        QApplication::processEvents();
+        CHECK(placed.Problems().isEmpty());
+    }
+    const QString folder = opened.dir.filePath("sample project");
+    CHECK_FALSE(QFileInfo::exists(folder));
+    {
+        Script owned({});
+        REQUIRE(RunCommand(opened.window, "depth.own").isEmpty());
+        QApplication::processEvents();
+        INFO(owned.Problems().join("|").toStdString());
+        CHECK(owned.Problems().isEmpty());
+    }
+    CHECK(QFileInfo::exists(folder));
+    CHECK(QFileInfo::exists(QDir(folder).filePath("project.json")));
+    CHECK(RefusalOf(opened.window, "depth.own") == "The project already owns this depth here");
+
+    REQUIRE(RunCommand(opened.window, "project.close").isEmpty());
+    QApplication::processEvents();
+    emit timeline->DepthChosen(3);
+    QApplication::processEvents();
+    {
+        Script again({});
+        REQUIRE(RunCommand(opened.window, "depth.own").isEmpty());
+        QApplication::processEvents();
+        INFO(again.Problems().join("|").toStdString());
+        CHECK(again.Problems().isEmpty());
+    }
+    CHECK(RefusalOf(opened.window, "depth.own") == "The project already owns this depth here");
 }

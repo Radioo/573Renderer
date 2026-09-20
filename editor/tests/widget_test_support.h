@@ -6,6 +6,7 @@
 #include "document/timeline.h"
 
 #include <QApplication>
+#include <QKeyEvent>
 #include <QEvent>
 #include <QMouseEvent>
 #include <QPoint>
@@ -37,13 +38,13 @@ inline void Drag(QWidget& widget, QPointF from, QPointF to,
     Send(widget, QEvent::MouseButtonRelease, to, Qt::NoButton, modifiers);
 }
 
-inline constexpr int kTimelineWidth = 657;
-inline constexpr int kDepthRowY = 34;
-inline constexpr int kFirstPropertyY = 50;
-inline constexpr int kSecondPropertyY = 66;
+inline constexpr int kTimelineWidth = 665;
+inline constexpr int kDepthRowY = 48;
+inline constexpr int kFirstPropertyY = 64;
+inline constexpr int kSecondPropertyY = 80;
 
 inline double FrameX(uint32_t frame) {
-    return 56.0 + (60.0 * frame);
+    return 64.0 + (60.0 * frame);
 }
 
 inline Document::Keyframe Key(uint32_t frame) {
@@ -61,6 +62,16 @@ inline void ShowScene(Editor::Timeline& timeline) {
     timeline.ShowKeys(uint16_t{1},
                       {Document::Track{.property = "Translation", .keys = {Key(0), Key(4), Key(8)}},
                        Document::Track{.property = "Multiply colour", .keys = {Key(2)}}});
+}
+
+inline void Hold(QWidget& widget, Qt::Key key) {
+    QKeyEvent pressed(QEvent::KeyPress, key, Qt::NoModifier);
+    QApplication::sendEvent(&widget, &pressed);
+}
+
+inline void Let(QWidget& widget, Qt::Key key) {
+    QKeyEvent released(QEvent::KeyRelease, key, Qt::NoModifier);
+    QApplication::sendEvent(&widget, &released);
 }
 
 inline void Wheel(QWidget& widget, QPointF at, int notches, Qt::KeyboardModifiers modifiers) {

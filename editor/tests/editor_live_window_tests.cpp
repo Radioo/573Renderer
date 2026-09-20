@@ -308,9 +308,10 @@ TEST_CASE("The work area saves as one PNG per frame, each as the frame saves on 
     }
     CHECK(viewport->grab().toImage() == before);
     window.resize(1500, 880);
-    REQUIRE(Settle([&window] { return window.statusBar()->currentMessage().startsWith("Frame"); }));
-    CHECK(window.statusBar()->currentMessage().startsWith(
-        QString("Frame %1 ").arg(kPreviewFrame + 1)));
+    REQUIRE(Settle([&window] {
+        return FrameStatus(window).startsWith(QString("Frame %1 ").arg(kPreviewFrame + 1));
+    }));
+    CHECK(FrameStatus(window).startsWith(QString("Frame %1 ").arg(kPreviewFrame + 1)));
     CHECK(opening.Problems().isEmpty());
 }
 
@@ -324,6 +325,7 @@ TEST_CASE(
     if (!chosen) return;
     QSettings().setValue("game/directory", game);
     QSettings().remove("stage/path");
+    QSettings().remove("clip/in_context");
     Editor::Window window;
     QSettings().remove("game/directory");
     window.resize(1600, 900);
@@ -368,9 +370,8 @@ TEST_CASE(
 
     const std::optional<uint16_t> sprite_depth = FirstSpriteDepth(title);
     REQUIRE(sprite_depth.has_value());
-    auto* clips = window.findChild<QComboBox*>();
-    REQUIRE(clips != nullptr);
-    clips->setCurrentIndex(1);
+    REQUIRE(RunCommand(window, "clip.in_context").isEmpty());
+    REQUIRE(EnterFirstSprite(window));
     emit timeline->DepthChosen(*sprite_depth);
     REQUIRE(window.statusBar()->currentMessage().endsWith("on its own"));
     const QImage sprite_on = grab();
@@ -412,11 +413,9 @@ TEST_CASE("Trimming the title to a work area reloads the host on the kept frames
         QApplication::processEvents();
         CHECK(trimmed.Problems().isEmpty());
     }
-    window.statusBar()->clearMessage();
     window.resize(1500, 880);
-    REQUIRE(Settle([&window] { return window.statusBar()->currentMessage().startsWith("Frame"); }));
-    INFO(window.statusBar()->currentMessage().toStdString());
-    CHECK(window.statusBar()->currentMessage() == "Frame 2 of 6");
+    REQUIRE(Settle([&window] { return FrameStatus(window) == QString("Frame 2 of 6"); }));
+    CHECK(FrameStatus(window) == QString("Frame 2 of 6"));
     CHECK(opening.Problems().isEmpty());
 }
 
@@ -449,17 +448,49 @@ TEST_CASE("Onion skin shows the neighbouring frames and leaves the host on the p
     onion->trigger();
     QApplication::processEvents();
     CHECK(viewport->grab().toImage() != plain);
-    window.statusBar()->clearMessage();
     window.resize(1500, 880);
-    REQUIRE(Settle([&window] { return window.statusBar()->currentMessage().startsWith("Frame"); }));
-    CHECK(window.statusBar()->currentMessage().startsWith(
-        QString("Frame %1 ").arg(kPreviewFrame + 1)));
+    REQUIRE(Settle([&window] {
+        return FrameStatus(window).startsWith(QString("Frame %1 ").arg(kPreviewFrame + 1));
+    }));
+    CHECK(FrameStatus(window).startsWith(QString("Frame %1 ").arg(kPreviewFrame + 1)));
 
     onion->trigger();
     window.resize(1600, 900);
     QApplication::processEvents();
     REQUIRE(Settle([&] { return viewport->grab().toImage() == plain; }));
     QSettings().remove("stage/onion");
+    CHECK(opening.Problems().isEmpty());
+}
+
+TEST_CASE("Double-clicking a sprite on the stage opens it") {
+    const QString game = qEnvironmentVariable("R573_IIDX_DIR");
+    if (game.isEmpty()) SKIP("R573_IIDX_DIR not set");
+    const QString title = game + "/data/graphic/1/title.ifs";
+    QSettings().setValue("game/directory", game);
+    Editor::Window window;
+    QSettings().remove("game/directory");
+    window.resize(1600, 900);
+    window.show();
+    Script opening({});
+    window.OpenDocument(title);
+    REQUIRE(opening.Problems().isEmpty());
+    auto* timeline = window.findChild<Editor::Timeline*>();
+    auto* viewport = window.findChild<Editor::Viewport*>();
+    REQUIRE(timeline != nullptr);
+    REQUIRE(viewport != nullptr);
+    auto* inspector = window.findChild<QTableWidget*>();
+    REQUIRE(inspector != nullptr);
+    const std::optional<uint16_t> sprite_depth = FirstSpriteDepth(title);
+    REQUIRE(sprite_depth.has_value());
+    emit timeline->DepthChosen(*sprite_depth);
+    QApplication::processEvents();
+    const QString where = QString::fromStdString(RowValue(*inspector, "Translation"));
+    const double x = where.section(',', 0, 0).trimmed().toDouble();
+    const double y = where.section(',', 1, 1).trimmed().toDouble();
+    CHECK(OpenClip(window).isEmpty());
+    emit viewport->EnterAsked(x + 1, y + 1);
+    REQUIRE(Settle([&window] { return !OpenClip(window).isEmpty(); }));
+    CHECK(OpenClip(window).contains("Sprite"));
     CHECK(opening.Problems().isEmpty());
 }
 
@@ -516,9 +547,7 @@ TEST_CASE("A motion sketch plays the animation while the drag is held and keys w
         return text.section(',', 0, 0).trimmed().toInt();
     };
     const int pressed_x = x_on(kPreviewFrame);
-    QAction* sketch = action("Motion &sketch while dragging");
-    REQUIRE(sketch != nullptr);
-    sketch->setChecked(true);
+    RunCommand(window, "tool.sketch");
     {
         Script sketching({});
         emit viewport->Dragged(*widest, 10, 0, false);

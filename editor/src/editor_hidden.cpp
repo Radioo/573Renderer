@@ -47,6 +47,12 @@ void Window::ShowEveryDepth() {
     UpdateViewRows();
 }
 
+void Window::UnlockEveryDepth() {
+    locked_.clear();
+    ShowFrame();
+    UpdateViewRows();
+}
+
 void Window::UpdateViewRows() {
     timeline_->SetHiddenDepths(HiddenHere());
     std::vector<uint16_t> locked;

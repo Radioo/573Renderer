@@ -17,6 +17,8 @@
 #include "support/expected.h"
 
 #include <QAction>
+#include "editor_popover.h"
+
 #include <QInputDialog>
 #include <QKeySequence>
 #include <QMenu>
@@ -94,7 +96,11 @@ void Window::MoveSpanToDepth(uint16_t depth, uint32_t frame) {
     const int chosen = QInputDialog::getInt(this, tr("Move to another depth"), tr("Depth"), depth,
                                             0, std::numeric_limits<uint16_t>::max(), 1, &answered);
     if (!answered) return;
-    const auto to = static_cast<uint16_t>(chosen);
+    MoveSpanOntoDepth(depth, frame, static_cast<uint16_t>(chosen));
+}
+
+void Window::MoveSpanOntoDepth(uint16_t depth, uint32_t frame, uint16_t to) {
+    if (!file_ || animation_path_.empty()) return;
     if (to == depth) return;
     const Document::ClipId clip = clip_;
     const std::optional<std::size_t> owned = AuthoredIndexAt(depth, frame);
@@ -142,9 +148,8 @@ void Window::ArrangeDepth(Document::Arrange how, const QString& name) {
 
 void Window::SplitDepthAt(uint16_t depth, uint32_t frame) {
     if (!file_ || animation_path_.empty()) return;
-    if (AuthoredIndexAt(depth, frame)) {
-        ReportProblem(
-            tr("The project owns depth %1 here. Detach it before splitting it.").arg(depth));
+    if (const std::optional<QString> refused = OwnedRefusal(depth, frame, tr("splitting it"))) {
+        ReportProblem(*refused);
         return;
     }
     const Document::ClipId clip = clip_;
@@ -219,44 +224,6 @@ void Window::TrimEdgeToPlayhead(SpanEnd end) {
                        end == SpanEnd::Start ? span->last_frame : frame_);
 }
 
-void Window::AddPlayheadMenu(QMenu* edit) {
-    QMenu* here = edit->addMenu(tr("At the &playhead"));
-    const std::array<std::tuple<QString, QKeySequence, std::function<void()>>, 4> lines{{
-        {tr("Move the depth's &start here"), QKeySequence(Qt::Key_BracketLeft),
-         [this] { MoveEdgeToPlayhead(SpanEnd::Start); }},
-        {tr("Move the depth's &end here"), QKeySequence(Qt::Key_BracketRight),
-         [this] { MoveEdgeToPlayhead(SpanEnd::End); }},
-        {tr("&Trim the depth's start here"), QKeySequence(Qt::ALT | Qt::Key_BracketLeft),
-         [this] { TrimEdgeToPlayhead(SpanEnd::Start); }},
-        {tr("T&rim the depth's end here"), QKeySequence(Qt::ALT | Qt::Key_BracketRight),
-         [this] { TrimEdgeToPlayhead(SpanEnd::End); }},
-    }};
-    for (const auto& [text, keys, run] : lines) {
-        QAction* action = here->addAction(text);
-        action->setShortcut(keys);
-        connect(action, &QAction::triggered, this, run);
-    }
-}
-
-void Window::AddArrangeMenu(QMenu* edit) {
-    QMenu* arrange = edit->addMenu(tr("A&rrange"));
-    const std::array<std::tuple<QString, QKeySequence, Document::Arrange, QString>, 4> lines{{
-        {tr("Bring &forward"), QKeySequence(Qt::CTRL | Qt::Key_BracketRight),
-         Document::Arrange::Forward, tr("Bring depth %1 forward")},
-        {tr("Send &backward"), QKeySequence(Qt::CTRL | Qt::Key_BracketLeft),
-         Document::Arrange::Backward, tr("Send depth %1 backward")},
-        {tr("Bring to f&ront"), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_BracketRight),
-         Document::Arrange::Front, tr("Bring depth %1 to the front")},
-        {tr("Send to bac&k"), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_BracketLeft),
-         Document::Arrange::Back, tr("Send depth %1 to the back")},
-    }};
-    for (const auto& [text, keys, how, name] : lines) {
-        QAction* action = arrange->addAction(text);
-        action->setShortcut(keys);
-        connect(action, &QAction::triggered, this, [this, how, name] { ArrangeDepth(how, name); });
-    }
-}
-
 bool Window::OwnsDepthIn(const Document::GroupRange& range) const {
     return std::ranges::any_of(authored_, [&](const Document::AuthoredDepth& owned) {
         return owned.animation == animation_path_ && owned.clip == range.clip &&
@@ -274,56 +241,77 @@ void Window::GroupDepthsIntoSprite(uint16_t depth, uint32_t frame) {
     }
     const AfpAnimation::Container* shown = Document::FindClip(*animation, clip_);
     if (shown == nullptr || shown->frames.empty()) return;
-    const QString title = tr("Group into a sprite");
-    const int widest = std::numeric_limits<uint16_t>::max();
-    bool answered = false;
-    const int last_depth =
-        QInputDialog::getInt(this, title, tr("Last depth"), depth, depth, widest, 1, &answered);
-    if (!answered) return;
+    uint16_t last_depth = depth;
+    for (const uint16_t chosen : SelectedDepths())
+        last_depth = std::max(last_depth, chosen);
     Document::Span around{.first_frame = frame, .last_frame = frame};
-    for (int at = depth; at <= last_depth; at++) {
-        const auto span = Document::SpanOfDepth(*shown, static_cast<uint16_t>(at), frame);
-        if (!span) continue;
-        around.first_frame = std::min(around.first_frame, span->first_frame);
-        around.last_frame = std::max(around.last_frame, span->last_frame);
+    if (work_area_) {
+        around = Document::Span{.first_frame = work_area_->first_frame,
+                                .last_frame = work_area_->last_frame};
+    } else {
+        for (int at = depth; at <= last_depth; at++) {
+            const auto span = Document::SpanOfDepth(*shown, static_cast<uint16_t>(at), frame);
+            if (!span) continue;
+            around.first_frame = std::min(around.first_frame, span->first_frame);
+            around.last_frame = std::max(around.last_frame, span->last_frame);
+        }
     }
-    const int final_frame = static_cast<int>(shown->frames.size()) - 1;
-    const int first =
-        QInputDialog::getInt(this, title, tr("First frame"), static_cast<int>(around.first_frame),
-                             0, final_frame, 1, &answered);
-    if (!answered) return;
-    const int last = QInputDialog::getInt(this, title, tr("Last frame"),
-                                          std::max(static_cast<int>(around.last_frame), first),
-                                          first, final_frame, 1, &answered);
-    if (!answered) return;
-    const Document::GroupRange range{.clip = clip_,
-                                     .first_depth = depth,
-                                     .last_depth = static_cast<uint16_t>(last_depth),
-                                     .first_frame = static_cast<uint32_t>(first),
-                                     .last_frame = static_cast<uint32_t>(last)};
+    const double final_frame = static_cast<double>(shown->frames.size()) - 1;
+    const double widest = std::numeric_limits<uint16_t>::max();
+    popover_->Ask(
+        PopoverAsk{.title = tr("Group depth %1 and up into a sprite").arg(depth),
+                   .apply = tr("Group"),
+                   .fields = {PopoverField{.label = tr("Last depth"),
+                                           .value = static_cast<double>(last_depth),
+                                           .lowest = static_cast<double>(depth),
+                                           .highest = widest},
+                              PopoverField{.label = tr("First frame"),
+                                           .value = static_cast<double>(around.first_frame),
+                                           .lowest = 0,
+                                           .highest = final_frame},
+                              PopoverField{.label = tr("Last frame"),
+                                           .value = static_cast<double>(around.last_frame),
+                                           .lowest = 0,
+                                           .highest = final_frame}},
+                   .describe = {},
+                   .preview = {},
+                   .run =
+                       [this, depth](const PopoverValues& values) {
+                           GroupIntoSpriteOver(Document::GroupRange{
+                               .clip = clip_,
+                               .first_depth = depth,
+                               .last_depth = static_cast<uint16_t>(values.at(0)),
+                               .first_frame = static_cast<uint32_t>(values.at(1)),
+                               .last_frame = static_cast<uint32_t>(values.at(2))});
+                       },
+                   .cancelled = {}},
+        BarAnchor("depth.group"));
+}
+
+void Window::GroupIntoSpriteOver(const Document::GroupRange& range) {
     if (OwnsDepthIn(range)) {
         ReportProblem(tr("The project owns a depth in that range. Detach it before grouping."));
         return;
     }
-    if (!EditAnimation(tr("Group depths %1 to %2 into a sprite").arg(depth).arg(last_depth),
-                       [range](AfpAnimation::Animation& edited) {
-                           using Grouped = Support::Expected<void, std::string>;
-                           auto sprite = Document::GroupIntoSprite(edited, range);
-                           if (!sprite) return Grouped(Support::Unexpected(sprite.error()));
-                           return Grouped();
-                       })) {
+    if (!EditAnimation(
+            tr("Group depths %1 to %2 into a sprite").arg(range.first_depth).arg(range.last_depth),
+            [range](AfpAnimation::Animation& edited) {
+                using Grouped = Support::Expected<void, std::string>;
+                auto sprite = Document::GroupIntoSprite(edited, range);
+                if (!sprite) return Grouped(Support::Unexpected(sprite.error()));
+                return Grouped();
+            })) {
         return;
     }
-    depth_ = depth;
+    depth_ = range.first_depth;
     RefillClipsKeepingChoice();
     ShowFrame();
 }
 
 void Window::UngroupSpriteAt(uint16_t depth, uint32_t frame) {
     if (!file_ || animation_path_.empty()) return;
-    if (AuthoredIndexAt(depth, frame)) {
-        ReportProblem(
-            tr("The project owns depth %1 here. Detach it before ungrouping.").arg(depth));
+    if (const std::optional<QString> refused = OwnedRefusal(depth, frame, tr("ungrouping it"))) {
+        ReportProblem(*refused);
         return;
     }
     const Document::ClipId clip = clip_;
@@ -403,9 +391,8 @@ void Window::RemoveChosenDepths(uint32_t frame) {
     const std::vector<uint16_t> group = SelectedDepths();
     if (group.empty()) return;
     for (const uint16_t depth : group) {
-        if (AuthoredIndexAt(depth, frame)) {
-            ReportProblem(
-                tr("The project owns depth %1 here. Detach it before removing it.").arg(depth));
+        if (const std::optional<QString> refused = OwnedRefusal(depth, frame, tr("removing it"))) {
+            ReportProblem(*refused);
             return;
         }
     }

@@ -134,15 +134,22 @@ bool Window::ProjectOwnsDepthsIn(const std::string& path) const {
 
 void Window::RenameAnimationEntry(const std::string& path, const QString& name) {
     if (!file_) return;
-    if (ProjectOwnsDepthsIn(path)) {
-        ReportProblem(
-            tr("The project owns depths in %1; detach them before renaming it").arg(name));
-        return;
-    }
     bool answered = false;
     const QString wanted = QInputDialog::getText(this, tr("Rename %1").arg(name), tr("Name"),
                                                  QLineEdit::Normal, name, &answered);
-    if (!answered || wanted == name) return;
+    if (!answered) return;
+    ApplyAnimationRename(path, name, wanted);
+}
+
+void Window::ApplyAnimationRename(const std::string& path, const QString& name,
+                                  const QString& wanted) {
+    if (!file_ || wanted == name || wanted.isEmpty()) return;
+    if (ProjectOwnsDepthsIn(path)) {
+        ReportProblem(
+            tr("The project owns depths in %1; detach them before renaming it").arg(name));
+        FillTree();
+        return;
+    }
     const std::string text = wanted.toStdString();
     std::string renamed;
     const bool open = path == animation_path_;
@@ -155,6 +162,7 @@ void Window::RenameAnimationEntry(const std::string& path, const QString& name) 
                           renamed = std::move(*moved);
                           return Renamed();
                       })) {
+        FillTree();
         if (open) ShowSelectedEntry();
         return;
     }
@@ -218,7 +226,7 @@ void Window::RemoveUnusedDefinitionsFrom(const std::string& path, const QString&
         return;
     }
     if (removed->empty()) {
-        statusBar()->showMessage(tr("Nothing in %1 is unused").arg(name));
+        ShowResult(tr("Nothing in %1 is unused").arg(name), false);
         return;
     }
     if (!EditDocument(tr("Remove unused definitions from %1").arg(name),
@@ -232,9 +240,10 @@ void Window::RemoveUnusedDefinitionsFrom(const std::string& path, const QString&
         RefillClipsKeepingChoice();
         ShowFrame();
     }
-    statusBar()->showMessage(
+    ShowResult(
         tr("Removed %n unused definition(s) from %1", nullptr, static_cast<int>(removed->size()))
-            .arg(name));
+            .arg(name),
+        true);
 }
 
 }

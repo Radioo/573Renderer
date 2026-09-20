@@ -11,6 +11,7 @@
 #include <QString>
 #include <QWidget>
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <optional>
@@ -19,6 +20,7 @@
 class QDragEnterEvent;
 class QDragMoveEvent;
 class QDropEvent;
+class QEvent;
 class QKeyEvent;
 class QMouseEvent;
 class QPainter;
@@ -27,6 +29,8 @@ class QResizeEvent;
 class QWheelEvent;
 
 namespace Editor {
+
+enum class Tool : uint8_t { Select, Anchor, Pan, Zoom, Sketch };
 
 class Viewport : public QWidget {
     Q_OBJECT
@@ -41,10 +45,15 @@ public:
     void ShowOutlines(std::vector<Document::StageOutline> outlines,
                       std::optional<uint16_t> selected, std::vector<uint16_t> group = {});
     [[nodiscard]] QSize FittedSize(QSize available) const;
+    [[nodiscard]] double StageScale() const;
     void SetSnapping(bool on);
     void ClearGuides();
     void SetRulers(bool on);
     void FitStage();
+    void ZoomStep(double notches);
+    void ShowContext(std::optional<std::array<Document::Point, 4>> corners);
+    void SetTool(Tool tool);
+    [[nodiscard]] Tool CurrentTool() const;
 
 signals:
     void Resized(int width, int height);
@@ -55,14 +64,19 @@ signals:
     void ZoomChanged();
     void CharacterDropped(uint16_t character, double x, double y);
     void DepthsBanded(std::vector<uint16_t> depths);
+    void PlayAsked();
+    void EnterAsked(double x, double y);
 
 protected:
     void paintEvent(QPaintEvent* event) override;
     void resizeEvent(QResizeEvent* event) override;
     void mousePressEvent(QMouseEvent* event) override;
+    void mouseDoubleClickEvent(QMouseEvent* event) override;
     void mouseMoveEvent(QMouseEvent* event) override;
     void mouseReleaseEvent(QMouseEvent* event) override;
     void keyPressEvent(QKeyEvent* event) override;
+    void keyReleaseEvent(QKeyEvent* event) override;
+    bool event(QEvent* happening) override;
     void wheelEvent(QWheelEvent* event) override;
     void dragEnterEvent(QDragEnterEvent* event) override;
     void dragMoveEvent(QDragMoveEvent* event) override;
@@ -89,8 +103,12 @@ private:
     void DrawRulers(QPainter& painter) const;
     void DrawPath(QPainter& painter) const;
     void DrawBand(QPainter& painter) const;
+    void DrawContext(QPainter& painter) const;
     [[nodiscard]] bool PressGuide(QPointF at);
     [[nodiscard]] std::optional<std::size_t> GuideNear(QPointF at) const;
+    [[nodiscard]] bool PanningNow() const;
+    void ZoomBy(double notches, QPointF at);
+    void ShowToolCursor();
 
     QImage frame_;
     std::vector<QImage> ghosts_;
@@ -98,9 +116,13 @@ private:
     std::vector<Document::SnapGuide> guides_;
     std::optional<std::size_t> dragged_guide_;
     bool rulers_ = false;
+    Tool tool_ = Tool::Select;
+    bool space_held_ = false;
+    bool panned_with_space_ = false;
     QSize stage_;
     QString message_;
     std::vector<Document::StageOutline> outlines_;
+    std::optional<std::array<Document::Point, 4>> context_;
     std::optional<uint16_t> selected_;
     std::vector<uint16_t> group_;
     Gesture gesture_ = Gesture::None;

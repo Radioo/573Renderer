@@ -2,10 +2,11 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
-#include "editor_ease_dialog.h"
+#include "editor_ease_editor.h"
 #include "editor_timeline.h"
 #include "editor_filter.h"
 #include "editor_mime.h"
+#include "editor_drift_sheet.h"
 #include "editor_viewport.h"
 #include "widget_test_support.h"
 
@@ -26,6 +27,13 @@
 #include <QDropEvent>
 #include <QMimeData>
 #include <QObject>
+#include <QString>
+#include <QTableWidgetItem>
+#include <QTableWidget>
+#include <QPushButton>
+#include <QToolButton>
+#include <QLineEdit>
+#include <QLabel>
 #include <QTreeWidget>
 #include <QTreeWidgetItem>
 #include <QPoint>
@@ -36,6 +44,7 @@
 #include <QSize>
 #include <QtGlobal>
 
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <optional>
@@ -845,9 +854,82 @@ TEST_CASE("Dragging an ease handle moves it and keeps it inside the segment's ti
     Drag(curve, {10, 10}, {100, 100});
     CHECK(edits == 2);
     CHECK_FALSE(curve.grab().isNull());
+}
 
-    Editor::EaseDialog dialog({.x1 = 0.1, .y1 = 0.2, .x2 = 0.3, .y2 = 0.4}, nullptr);
-    CHECK(dialog.Result() == Document::Bezier{.x1 = 0.1, .y1 = 0.2, .x2 = 0.3, .y2 = 0.4});
+TEST_CASE("The Pan tool and a held Space drag the stage the way the middle button does") {
+    Editor::Viewport viewport;
+    ShowStage(viewport);
+    const QImage plain = viewport.grab().toImage();
+    Drag(viewport, QPointF(400, 300), QPointF(500, 340));
+    CHECK(viewport.grab().toImage() == plain);
+
+    viewport.SetTool(Editor::Tool::Pan);
+    Drag(viewport, QPointF(400, 300), QPointF(500, 340));
+    const QImage panned = viewport.grab().toImage();
+    CHECK(panned != plain);
+    viewport.FitStage();
+    CHECK(viewport.grab().toImage() == plain);
+
+    viewport.SetTool(Editor::Tool::Select);
+    Hold(viewport, Qt::Key_Space);
+    Drag(viewport, QPointF(400, 300), QPointF(500, 340));
+    CHECK(viewport.grab().toImage() == panned);
+    Let(viewport, Qt::Key_Space);
+    viewport.FitStage();
+    Drag(viewport, QPointF(400, 300), QPointF(500, 340));
+    CHECK(viewport.grab().toImage() == plain);
+}
+
+TEST_CASE("The Zoom tool zooms in where it is clicked, and out with Alt") {
+    Editor::Viewport viewport;
+    ShowStage(viewport);
+    viewport.SetTool(Editor::Tool::Zoom);
+    const double plain = viewport.StageScale();
+    Click(viewport, QPointF(400, 300));
+    const double closer = viewport.StageScale();
+    CHECK(closer > plain);
+    Click(viewport, QPointF(400, 300), Qt::AltModifier);
+    CHECK_THAT(viewport.StageScale(), WithinAbs(plain, 1e-9));
+}
+
+TEST_CASE("The Anchor tool moves the anchor without dragging the object") {
+    Editor::Viewport viewport;
+    ShowStage(viewport);
+    std::vector<std::pair<double, double>> moved;
+    int dragged = 0;
+    QObject::connect(&viewport, &Editor::Viewport::AnchorMoved,
+                     [&moved](uint16_t, double dx, double dy) { moved.emplace_back(dx, dy); });
+    QObject::connect(&viewport, &Editor::Viewport::Dragged,
+                     [&dragged](uint16_t, double, double, bool) { dragged++; });
+    viewport.SetTool(Editor::Tool::Anchor);
+    Drag(viewport, QPointF(150, 100), QPointF(200, 130));
+    REQUIRE(moved.size() == 1);
+    CHECK_THAT(moved.front().first, WithinAbs(100, 0.5));
+    CHECK_THAT(moved.front().second, WithinAbs(60, 0.5));
+    CHECK(dragged == 0);
+}
+
+TEST_CASE("A clip shown in place dims the stage around it and draws its edge") {
+    Editor::Viewport viewport;
+    ShowStage(viewport);
+    QImage lit(1920, 1080, QImage::Format_ARGB32);
+    lit.fill(QColor(255, 255, 255));
+    viewport.ShowFrame(lit, QSize(1920, 1080));
+    const QPoint inside(300, 200);
+    const QPoint outside(520, 200);
+    const QImage plain = viewport.grab().toImage();
+    REQUIRE(plain.pixelColor(inside) == QColor(255, 255, 255));
+    REQUIRE(plain.pixelColor(outside) == QColor(255, 255, 255));
+    viewport.ShowContext(
+        std::array<Document::Point, 4>{Document::Point{100, 100}, Document::Point{1000, 100},
+                                       Document::Point{1000, 700}, Document::Point{100, 700}});
+    const QImage dimmed = viewport.grab().toImage();
+    CHECK(dimmed != plain);
+    CHECK(dimmed.pixelColor(inside) == plain.pixelColor(inside));
+    CHECK(dimmed.pixelColor(outside) != plain.pixelColor(outside));
+
+    viewport.ShowContext(std::nullopt);
+    CHECK(viewport.grab().toImage() == plain);
 }
 
 int main(int argc, char** argv) {

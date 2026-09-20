@@ -2,6 +2,7 @@
 
 #include "editor_mime.h"
 #include "editor_timeline.h"
+#include "editor_timeline_metrics.h"
 #include "widget_test_support.h"
 
 #include "document/key_selection.h"
@@ -85,7 +86,7 @@ TEST_CASE("Holding Shift snaps a dragged bar's ends to other spans and the clip'
     CHECK(moves == std::vector<int64_t>{18, 19, 19, 69, 120});
     const auto ghost_reaches = [&timeline](double x) {
         const QImage drawn = timeline.grab().toImage();
-        for (int y = 26; y < 26 + 16; y++) {
+        for (int y = 40; y < 40 + 16; y++) {
             if (drawn.pixelColor(static_cast<int>(x), y) == QColor(240, 190, 80)) return true;
         }
         return false;
@@ -261,4 +262,142 @@ TEST_CASE("Alt-dragging the first or last selected keyframe stretches the select
     Drag(timeline, {FrameX(4), kFirstPropertyY}, {FrameX(6), kFirstPropertyY}, Qt::AltModifier);
     CHECK(stretches.size() == 2);
     CHECK(shifts == std::vector<int64_t>{1, 1, 2});
+}
+
+TEST_CASE("The gutter switches solo a depth and dragging a row moves it to another depth") {
+    Editor::Timeline timeline;
+    timeline.resize(kTimelineWidth, 200);
+    timeline.ShowAnimation(
+        11,
+        {Document::DepthRow{.depth = 3,
+                            .spans = {Document::Span{.first_frame = 0, .last_frame = 10}}},
+         Document::DepthRow{.depth = 2,
+                            .spans = {Document::Span{.first_frame = 0, .last_frame = 10}}}},
+        {});
+
+    std::vector<uint16_t> soloed;
+    QObject::connect(&timeline, &Editor::Timeline::SoloToggled,
+                     [&soloed](uint16_t depth) { soloed.push_back(depth); });
+    std::vector<std::pair<uint16_t, uint16_t>> moved;
+    QObject::connect(&timeline, &Editor::Timeline::DepthDragged,
+                     [&moved](uint16_t depth, uint16_t onto) { moved.emplace_back(depth, onto); });
+
+    Click(timeline, {33, kDepthRowY});
+    REQUIRE(soloed.size() == 1);
+    CHECK(soloed.front() == 3);
+
+    Drag(timeline, {48, kDepthRowY}, {48, kDepthRowY + 16});
+    REQUIRE(moved.size() == 1);
+    CHECK(moved.front().first == 3);
+    CHECK(moved.front().second == 2);
+
+    moved.clear();
+    Drag(timeline, {48, kDepthRowY}, {50, kDepthRowY + 2});
+    CHECK(moved.empty());
+}
+
+TEST_CASE("The scripts lane marks the frames carrying one and its button asks for a camera") {
+    Editor::Timeline timeline;
+    ShowScene(timeline);
+    constexpr int kNoteY = 33;
+    const QImage plain = timeline.grab().toImage();
+    timeline.SetFrameNotes({Document::FrameNote{.frame = 2, .script = true, .camera = false},
+                            Document::FrameNote{.frame = 6, .script = false, .camera = true}});
+    const QImage marked = timeline.grab().toImage();
+    CHECK(marked != plain);
+    CHECK(marked.pixelColor(static_cast<int>(FrameX(2)), kNoteY) == QColor(150, 200, 240));
+    CHECK(marked.pixelColor(static_cast<int>(FrameX(6)) - 2, kNoteY - 2) == QColor(240, 190, 80));
+    CHECK(marked.pixelColor(static_cast<int>(FrameX(4)), kNoteY) != QColor(150, 200, 240));
+
+    std::vector<uint32_t> sought;
+    int cameras = 0;
+    QObject::connect(&timeline, &Editor::Timeline::FrameChosen,
+                     [&sought](uint32_t frame) { sought.push_back(frame); });
+    QObject::connect(&timeline, &Editor::Timeline::CameraAsked, [&cameras] { cameras++; });
+    Click(timeline, {FrameX(6) + 2, kNoteY});
+    CHECK(sought == std::vector<uint32_t>{6});
+    Click(timeline, {FrameX(4), kNoteY});
+    CHECK(sought == std::vector<uint32_t>{6});
+    CHECK(cameras == 0);
+    Click(timeline, {20, kNoteY});
+    CHECK(cameras == 1);
+    CHECK(sought == std::vector<uint32_t>{6});
+}
+
+TEST_CASE("Double-clicking the ruler asks for a label, and a flag asks to rename it") {
+    Editor::Timeline timeline;
+    ShowScene(timeline);
+    timeline.ShowAnimation(
+        11,
+        {Document::DepthRow{.depth = 1,
+                            .spans = {Document::Span{.first_frame = 0, .last_frame = 10}}}},
+        {Document::AnimationLabel{.name = "loop", .frame = 3}});
+    std::vector<uint32_t> asked;
+    std::vector<QString> renamed;
+    QObject::connect(&timeline, &Editor::Timeline::LabelAsked,
+                     [&asked](uint32_t frame) { asked.push_back(frame); });
+    QObject::connect(&timeline, &Editor::Timeline::LabelRenameAsked,
+                     [&renamed](const QString& label) { renamed.push_back(label); });
+    constexpr double kRulerY = 10;
+    Send(timeline, QEvent::MouseButtonDblClick, {FrameX(7), kRulerY}, Qt::LeftButton);
+    CHECK(asked == std::vector<uint32_t>{7});
+    CHECK(renamed.empty());
+    Send(timeline, QEvent::MouseButtonDblClick, {FrameX(3) + 1, kRulerY}, Qt::LeftButton);
+    CHECK(asked == std::vector<uint32_t>{7});
+    REQUIRE(renamed.size() == 1);
+    CHECK(renamed.front() == "loop");
+    Send(timeline, QEvent::MouseButtonDblClick, {FrameX(7), kDepthRowY}, Qt::LeftButton);
+    CHECK(asked == std::vector<uint32_t>{7});
+    CHECK(renamed.size() == 1);
+}
+
+TEST_CASE("The gutter's column headers ask to show and unlock every depth") {
+    Editor::Timeline timeline;
+    ShowScene(timeline);
+    int shown = 0;
+    int unlocked = 0;
+    std::vector<uint32_t> sought;
+    QObject::connect(&timeline, &Editor::Timeline::ShowAllAsked, [&shown] { shown++; });
+    QObject::connect(&timeline, &Editor::Timeline::UnlockAllAsked, [&unlocked] { unlocked++; });
+    QObject::connect(&timeline, &Editor::Timeline::FrameChosen,
+                     [&sought](uint32_t frame) { sought.push_back(frame); });
+    const QImage plain = timeline.grab().toImage();
+    Click(timeline, {Editor::kEyeLeft + 4, 12});
+    CHECK(shown == 1);
+    CHECK(unlocked == 0);
+    Click(timeline, {Editor::kLockLeft + 4, 12});
+    CHECK(unlocked == 1);
+    Click(timeline, {Editor::kNumberLeft + 4, 12});
+    CHECK(shown == 1);
+    CHECK(unlocked == 1);
+    CHECK(sought.empty());
+    timeline.SetHiddenDepths({1});
+    CHECK(timeline.grab().toImage() != plain);
+}
+
+TEST_CASE("The timeline zoom is set in pixels a frame and says when it changed") {
+    Editor::Timeline timeline;
+    timeline.resize(kTimelineWidth, 200);
+    timeline.ShowAnimation(
+        2000,
+        {Document::DepthRow{.depth = 1,
+                            .spans = {Document::Span{.first_frame = 0, .last_frame = 1999}}}},
+        {});
+    int changes = 0;
+    QObject::connect(&timeline, &Editor::Timeline::ZoomChanged, [&changes] { changes++; });
+    CHECK(timeline.ZoomPixels() < 1.0);
+    CHECK(timeline.minimumWidth() == 0);
+
+    timeline.SetZoomPixels(20);
+    CHECK(timeline.ZoomPixels() == 20);
+    CHECK(timeline.minimumWidth() > 20 * 1999);
+    CHECK(changes == 1);
+
+    timeline.ZoomIn();
+    CHECK(timeline.ZoomPixels() > 20);
+    CHECK(changes == 2);
+
+    timeline.SetZoomPixels(0.01);
+    CHECK(timeline.minimumWidth() == 0);
+    CHECK(changes == 3);
 }

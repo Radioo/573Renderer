@@ -84,7 +84,14 @@ ones that start the preview host live in
 `R573_IIDX_DIR`). The `Script`, its steps and the package helpers are shared
 from `editor/tests/window_test_support.h`, including `OwnDroppedDot`, which
 drops the dot shape on depth 3 at frame 0, makes a project and lets it own that
-depth, the start of every test that edits an owned depth. Its `main` points
+depth, the start of every test that edits an owned depth. A case that compares
+pictures of a widget takes them through `Picture`, never `grab()` directly: the
+window is never shown, so its docked layout is still at its constructed size
+until something forces a pass, and the first `grab()` is that pass. It returns a
+picture of the pre-layout geometry and the widget is a different size
+immediately afterwards, which made a later capture of the same frame compare
+unequal to the first one. `Picture` grabs, processes events and grabs again
+until the widget's size stops changing. Its `main` points
 `QSettings` at a temporary INI directory under its own organisation name, so it
 never reads the user's game install or layout. Each case writes a small package
 to a temporary directory and opens it. Context menus are raised by emitting the
@@ -144,13 +151,22 @@ passed once each target had its own name.
 ## Window layout
 
 `Editor::Window` is a `QMainWindow` hosting a Qt Advanced Docking System
-`CDockManager`. The viewport is the dock manager's central widget, with the
-package tree docked left, the library below it, the inspector right with the
-history below it, and the timeline bottom with the graph as a second tab. `View > Panels` has a toggle for each panel (the dock's
-own toggle action), so a panel closed with its title bar button can be opened
-again. Qt 6
-Widgets is ADR 0003; the panel arrangement is the one the editor design
-settled on before implementation started.
+`CDockManager`. The stage is the dock manager's central widget. The inspector
+is docked right at the full height of the window with the history as a second
+tab, the timeline is docked under the stage with the graph as a second tab,
+and the package tree and the library are docked left of the stage, one above
+the other, so the timeline runs under both the stage and the left panels and
+stops at the inspector. The order `BuildPanels` adds them in is what gives that
+shape: the inspector first (splitting the whole window), then the timeline
+under the stage's area only, then the package and library beside the stage
+inside the space the timeline's split left. `View > Panels` has a toggle for
+each panel (the dock's own toggle action), so a panel closed with its title bar
+button can be opened again, and `View > Show the history` brings the History tab
+to the front. Qt 6 Widgets is ADR 0003.
+
+ADS takes a tab that is not in front out of the window's widget tree, so a test
+looks a panel up through the dock manager (`Panel` in `window_test_support.h`,
+which calls `CDockManager::findDockWidget`) rather than with `findChild`.
 
 Window geometry, `QMainWindow` state and the dock manager's own state are
 saved to `QSettings` on close and restored in the constructor
@@ -158,9 +174,164 @@ saved to `QSettings` on close and restored in the constructor
 layout version (`kDocksVersion`), and the dock manager ignores a saved state of
 another version, so a layout saved before a panel existed falls back to the
 default arrangement instead of restoring without the new panel. Raise the
-version whenever the set of panels changes; it went to 1 with the library,
-2 with the history and 3 with the graph. The organisation and application names
+version whenever the set or the default arrangement of panels changes; it went
+to 1 with the library, 2 with the history, 3 with the graph and 4 with the
+redesigned arrangement above. The organisation and application names
 `QSettings` keys off are set in `main` before the window exists.
+
+### Top bar
+
+A fixed tool bar (`top_bar`, `editor_shell.cpp`) under the menus holds undo,
+redo and the history button (theme icons, so Windows draws them from Segoe
+Fluent Icons with no image files), then the open file's name and how far it is
+from its saved state (`document_state`: "title.ifs, saved", "title.ifs,
+unsaved, 1 edit", or just "unsaved" once the saved document has fallen off the
+undo stack; the count is `Document::History::StepsFromSaved`). With a project
+open it also shows the project chip (`project`, a menu with showing the project
+folder, export and closing the project) and the Export button (`export`). The
+Export button's count is `Document::AwaitingExport`: the IFS entries the
+project writes whose bytes no longer match what the last export recorded, plus
+the project images the IFS does not hold yet. Every keyframe edit is written
+into the open document straight away, so the count is not "edits the IFS is
+missing"; it is the entries the drift check at the next opening would report
+if the file were saved without exporting. The Save button carries the
+`file.save` command. Everything on the bar runs through the command registry,
+so it greys out and refuses the same way the menus do. `RefreshTopBar` runs
+from `RefreshState`, which every edit, undo, redo and save goes through.
+
+### Status bar
+
+The status bar keeps six permanent sections on its right (`editor_shell.cpp`):
+the preview host (`host_status`: "No preview host", or "Preview host ready,
+N ms a frame" with the time the last render took), the stage size and frame
+rate of the open animation (`stage_status`, from `Document::StageSizeOf` and
+`Document::FrameRate`), the frame (`frame_status`, "Frame 2 of 3"), what is
+chosen (`chosen_status`: a depth, several depths, or selected keyframes),
+snapping (`snap_status`) and the stage zoom (`zoom_status`, the shown stage
+width over the stage's own width, `Viewport::StageScale`). `RefreshStatus` is
+cheap enough for every rendered frame of playback because it never reads the
+animation; the stage section is filled from `ShowFrame`, which reads it anyway.
+Temporary messages (refusals, results of an edit) still show on the left.
+
+## Commands
+
+Every command the editor offers is registered once in `Editor::Commands`
+(`editor/src/editor_commands.cpp`, object name `commands`) with a stable id
+(`depth.split`, `clip.trim`, `key.wiggle`, ...), its menu text, its shortcut and
+a refusal check. The refusal check returns nothing when the command can run and
+one sentence saying what it needs otherwise ("Choose a depth first", "Select
+two or more keyframes first", "The project owns depth 3 here. Detach it before
+splitting it."). The menus File, Edit, Depth, Keyframe, Clip, View and Playback
+are built from the registry (`editor_menus.cpp`, `editor_depth_menu.cpp`), so
+every command is in a menu and a menu is a full index of what the editor can do.
+
+Running a command, by its menu item, its shortcut or `Commands::Run`, asks the
+refusal check first. A refused command changes nothing and its reason goes to
+`Window::ShowRefusal`, which puts it in the status bar. When a menu opens, each
+of its commands is greyed while it is refused, with the reason as its tooltip,
+and put back as it was when the menu closes, so a shortcut is never left dead
+by a menu that happened to be opened while its command was refused. Undo and
+Redo are the exception that is also disabled outside menus, since
+`RefreshState` keeps them in step with the history.
+
+The refusal checks live in `editor_refusals.cpp` and the command bodies use the
+same functions, so a refusal reached from a context menu (which acts on the
+frame under the cursor rather than the playhead) reads the same as the greyed
+reason. Refusals only the document can make, such as a span that already starts
+on the frame being split, are still found by running the edit and reported in a
+dialog. Commands scoped to the timeline (copy, cut, paste, delete, select every
+keyframe and the keyframe commands) keep a widget shortcut on the timeline, so
+Ctrl+C in a text field is left to the text field.
+
+`editor_window_tests` reaches commands the same way: `CommandsOf`, `RunCommand`,
+`RefusalOf` and `CommandFor` in `window_test_support.h` run a command by id or
+shortcut and return its refusal or the dialogs it raised. The command cases
+check that every command is in a menu, that no two commands share a shortcut,
+that every shortcut the editor had before the registry still runs a command,
+and that a refused command greys out with its reason and leaves the undo
+history alone.
+
+### Notices
+
+`Editor::Notices` (`editor_notices.cpp`) is a strip between the stage and the
+selection bar. It stays hidden until there is something to say, then shows up to
+three notices, each with a Close button, an Undo button when the thing it
+reports can be undone, and a timer that takes it away after eight seconds.
+`Window::ShowRefusal` sends every refused command there, and `Window::ShowResult`
+sends what an edit did beyond the obvious: how many keyframes a simplify
+removed, how many clips a trim, extract or lift left restarting, what owning a
+depth captured, what an export wrote, how many unused definitions went. Undo on
+a notice runs the `edit.undo` command, so it undoes exactly one step, the one the
+notice is about.
+
+The status bar keeps what is about the session rather than the edit: the preview
+host, opening and saving, playback, the project, and errors.
+
+### The selection bar
+
+Under the stage sits `Editor::SelectionBar` (`editor_selection_bar.cpp`), which
+names what is chosen and lists that selection's commands as buttons:
+"Depth 2" with fit, centre anchor, flip, arrange, split, duplicate, group,
+keyframe or detach and remove; "2 depths chosen" with align, spread, sequence
+and remove; "3 keyframes, translation" with hold, easy ease, reverse, stretch,
+wiggle, simplify, copy and delete; and "Nothing chosen" with none. Every button
+is a command id: its label is the registry's short name (`Command::brief`, which
+falls back to the menu text), it is disabled while the command is refused with
+the reason as its tooltip, and clicking it runs the command through the
+registry, so the bar can never do something a menu would not.
+`Window::RefreshSelectionBar` fills it from the same state the status bar reads,
+on every `ShowFrame`.
+
+### Popovers instead of questions
+
+Wiggle, simplify, time-stretch and group into a sprite used to ask for their
+numbers through a chain of `QInputDialog`s. They now open `Editor::Popover`
+(`editor_popover.cpp`) beside the selection bar button that started them: a
+title, one spin box per number with the default already filled in, an optional
+line of detail, and Cancel and an apply button named after the command.
+
+While a popover is open the values are previewed on the stage. The preview goes
+through `Window::PreviewAuthored`, which applies the change to a copy of the
+owned depth, bakes it into a copy of the animation and renders that copy through
+the host (`PreviewOnStage`), so nothing touches the document or the undo
+history. Cancelling, or pressing Escape, calls `Window::CancelPreview`, which
+reloads the real document and puts the keyframe selection back. Applying runs
+the same edit the menu item used to, as one undo step.
+
+A popover is reused for every command, so `Ask` empties its rows and its button
+row first. The buttons are deleted through `qDeleteAll` on a copied list of the
+direct children, because deleting them while walking `QObject::children()` walks
+a list that each deletion edits.
+
+Each one keeps what it needs: wiggle draws its seed once when the popover opens,
+so the preview and the applied wiggle are the same jitter; simplify's detail
+line says how many of the selected keyframes would go at the tolerance shown
+(`Window::KeysAfterSimplify`, which runs the document's own simplify on a copy);
+group into a sprite starts from the chosen depths and the work area, or the
+widest span under the playhead when there is no work area, and its fields are
+there to adjust that rather than to be typed from nothing.
+
+### Command search
+
+`Edit > Search commands, depths and animations` (Ctrl+K), or the search field in
+the middle of the top bar, opens `Editor::CommandSearch` (`editor_search.cpp`), a
+popup over the window with a text box and a result list. The window fills it
+each time it opens (`Window::OpenSearch`): every registered command with the
+menu it belongs to, its text and its shortcut, the depths of the clip on screen
+("Depth 4, splash", with the frames its spans cover), and the animations of the
+package. A command that is refused right now stays in the list, greyed, with
+its refusal under its name, and cannot be run from there; a toggle shows
+whether it is on. Typing keeps the results that hold every typed word,
+ignoring case, anywhere in the menu name and the text; this is a filter, not a
+fuzzy match, which is what a list of a hundred named commands needs. The
+arrow keys move to the next result that can run, Enter runs it after closing
+the popup (so a command that opens a dialog opens it over the window, not over
+the popup), and Escape closes it. Going to a depth seeks to its first frame
+when it shows nothing on the playhead and then chooses it; opening an animation
+selects it in the package tree, as a click there does. The widget tests drive
+the filter, the greyed result, the arrows skipping it, Enter and Escape; the
+window tests search for a refused split, run it once a depth is chosen, go to a
+depth and find an animation.
 
 ## The host
 
@@ -203,14 +374,14 @@ labels them, each with how many placements use it (`Document::CharacterUses`),
 greyed when nothing does (`editor_library.cpp`). It is filled again whenever the
 clip timeline is (`ShowClipTimeline`), which every edit, reload and clip change
 goes through, and emptied when the animation closes. Double-clicking a sprite
-shows it on its own, as picking it in the clip box does; the switch is posted to
+shows it on its own, as entering it from the timeline does; the switch is posted to
 the event loop because it refills the library, which would otherwise delete the
 item while its own double-click signal is still being delivered. Its menu places
 the character on a new depth from the playhead, asking for the depth (the first
 free one is suggested) and the last frame the way the timeline's add depth does
 (`Window::AskForLastFrame`, `Window::AddCharacterDepth`, both shared with it).
 On a sprite it also offers `Duplicate this sprite` (`Document::DuplicateSprite`,
-one undo step, refilling the clip box so the copy can be edited on its own), and
+one undo step, refilling the clip list so the copy can be edited on its own), and
 with a depth selected, `Use on depth N from frame F`, which sets the character
 of the placement live on that frame through the same field edit the inspector's
 Character row uses, as After Effects replaces a layer's source. Duplicating a
@@ -219,11 +390,11 @@ the other places the original is shown. The menu always offers `New empty
 sprite...`, with or without a character under the cursor, as After Effects
 offers New Composition: it asks for a frame count (the current clip's is
 suggested), defines an empty sprite of that many frames (`Document::NewSprite`,
-one undo step), refills the clip box and opens the new sprite in it
+one undo step), refills the clip list and opens the new sprite
 (`Window::ShowLibrarySprite`, as a double-click does), so depths can be added to
 it straight away, for one by dropping a character on the timeline. The window
 test makes a five frame sprite from a library with nothing selected, sees it in
-the clip box and the library, drops a character into it on its fifth frame, and
+the crumb and the library, drops a character into it on its fifth frame, and
 sees the entry offered with an item selected too; dropping the refill, the
 opening, the entry or its handling fails it.
 The package tree and the library are named (`package`, `library`) so a test can
@@ -282,9 +453,96 @@ step. The list is refilled with the Edit menu's labels (`RefreshState`), so it
 follows every edit, undo, redo and jump; the jump is posted to the event loop
 because refilling deletes the clicked row.
 
-**Inspector.** Selecting an item calls `Outline::Describe` and prints
-`Document::Fields` as one line per field. When the selection is an animation
-the window also shows it.
+**Inspector.** `Editor::Inspector` (`editor_inspector.cpp`) is a panel, not a
+table. At the top it names what is chosen (the depth, the character it shows and
+the frames of its span) and whether that depth is BAKED or KEYED. Under that are
+the Transform and Appearance sections, built from `Document::ViewPlacement`
+(docs/document.md): Position and Anchor in stage pixels, Scale in percent,
+Rotation and Skew in degrees, the multiply and add colours as a swatch, a hex
+value and an alpha. Each row carries a mark saying whether this frame set that
+group or an earlier one did, with the frame in its tooltip, and each value box is
+a spin box that takes a typed number; the X and Y captions beside a pair are
+`ScrubLabel`s, so dragging one changes that number. Committing a box emits
+`ValueEdited`, which `Window::ApplyViewEdit` applies through
+`Document::SetViewedOwned` for a depth the project owns and
+`Document::SetViewedBaked` otherwise, as one undo step named after the row.
+Clicking a colour swatch opens Qt's colour dialog on the colour shown and writes
+the choice back the same way.
+
+Rebuilding those rows deletes the widgets that were showing them, and one of
+them is usually the spin box whose `editingFinished` started the edit, so the
+rows are taken out of the layout, hidden and then `deleteLater`ed. Deleting them
+outright freed a widget while its own key handler was still running.
+
+An owned depth's rows also carry a keying button: a plus to start animating that
+value (`Document::AddTrack` on the track `Document::ViewTrack` names), a hollow
+mark when the value is animated but not keyed on this frame, and a filled one
+when it is, which removes that keyframe. The track a row keys is the one the
+depth already animates, so Rotation and Skew key the rotate skew track a turn
+writes.
+
+Every field the format holds is still there: `Raw placement fields` at the
+bottom of the panel is the old two-column table (`raw_fields`), collapsed by
+default, with the same rows, the same `Document::InspectFrame` model and the
+same edit targets, so animation settings, cameras, library call arguments,
+keyframe values and filters are edited exactly as before, and the unknown data
+is still shown and protected. Selecting an entry in the package tree prints
+`Document::Fields` into that table as it always did.
+
+
+**Start screen.** With no IFS open the centre of the window shows
+`Editor::StartScreen` instead of the stage (both live in one `centre_stack`
+`QStackedWidget`). It carries Open IFS, Open project and New project as buttons
+over the same commands the File menu runs, the recent files, the game install
+card and a line saying that without an install everything but the picture still
+works. A recent file opened from the list opens the IFS, or the project folder
+if that is what was remembered. `Window::RememberRecent` keeps the last eight
+paths in `recent/files`, newest first, with each one's animation count in
+`recent/animations` taken from the package as it is opened, so the start screen
+never parses a package to draw itself. `Window::RefreshStartScreen` reads them
+back, drops what is no longer on disk, and marks the ones that have a project
+folder beside them; a path remembered before the count was kept simply shows
+no count. The
+card says where the game install is, how the build is named and whether the
+preview is running. Packages have no thumbnail on this screen: the picture of
+an animation comes from the preview host, which is not up while the start
+screen is.
+
+The window takes drops anywhere (`Window::dropEvent`): an `.ifs` file opens as
+a package, a folder opens as a project, and anything else is refused by name.
+
+**Library.** Each character is a row with a thumbnail of what it draws
+(`Window::LibraryTile` decodes the image the shape uses through
+`Document::File::ShapeImages` and `ReadImage`; a sprite has no picture of its
+own so it has no tile), its name and how many depths use it, greyed when
+nothing does. Above the list, four buttons narrow it by kind: Sprites, Images,
+Shapes and Imported. `Window::ShowLibraryKinds` applies the text filter first
+and then hides whatever kind is switched off, so the two filters stack instead
+of fighting. Return on a chosen character places it on the next free depth from
+the playhead to the end of the clip (`Window::PlaceLibraryCharacter`), the same
+edit the Place menu item makes. A character dragged onto the inspector's
+Character row replaces what the chosen depth places
+(`Editor::CharacterDrop`, `Window::UseCharacterOnDepth`). `New empty sprite`
+no longer asks how many frames to make: it makes one as long as the clip it was
+asked from.
+
+**Package panel.** The panel is three tabs over the same package
+(`Window::BuildPackageTabs`). Animations lists every animation with its frame
+count, stage size and frame rate, and ends with a `+ New animation` row that
+makes one when it is double-clicked. Images lists the package's textures with
+their size and a thumbnail decoded through `Document::File::ReadImage`; an
+image the decoder cannot read keeps its row and loses only the size and the
+picture. Files is the raw entry tree with its filter box, unchanged, and still
+the one named `package`. Every row of every tab carries the same entry path, so
+choosing one selects it in the Files tree (`Window::ChooseEntryFrom` through
+`Window::SelectEntry`) and the same context menu opens over it.
+
+An animation row is renamed by typing over it: `Window::RenameEntryRow` sends
+the typed name to `Window::ApplyAnimationRename`, the half of
+`Window::RenameAnimationEntry` that does the work, so the dialog and the inline
+edit take the same path, including the refusal when the project owns depths in
+that animation, after which the row is filled again from the package. Image
+rows are not editable, because an image has no rename of its own.
 
 **Viewport.** `Editor::Viewport` paints one `QImage` scaled to fit, and emits
 its new size when it is resized. The window debounces that by 120 ms, asks the
@@ -308,6 +566,34 @@ their own. A zoom also asks the host for a larger render
 resize uses), up to the stage's own size or the fitted size when that is
 larger. Past that the game's pixels are shown enlarged, which is what the game
 would draw, rather than a render the game never makes.
+
+**Stage bar and tool strip.** `Editor::StageBar` sits above the viewport and
+`Editor::ToolStrip` down its left edge. Both are views over the registry built
+after `BuildMenus` has registered the commands, so a button is a `QToolButton`
+that runs a command id and, for the checkable ones, follows its action's
+`toggled`. The bar carries the clip breadcrumb on the left (the file, the
+animation and each clip entered, each a button that opens that clip, rebuilt
+only when the crumbs change so seeking does not churn the layout), then the
+overlay toggles (Snap, Rulers, Onion, Path, Background), the zoom control (a
+minus, the current percentage in `stage_zoom`, a plus), Fit and Picture. The
+minus and plus run `view.zoom_out` and `view.zoom_in` (Ctrl+- and Ctrl++),
+which step `Viewport::ZoomStep` by the same 1.25 a wheel notch uses, around the
+middle of the view rather than the pointer.
+
+The strip holds the five tools, one at a time: Select (V), Anchor (A), Pan (H),
+Zoom (Z) and Motion sketch (Y). They are ordinary commands made checkable and
+put in one exclusive `QActionGroup`, and each one's `run` sets the viewport's
+tool and checks its own action, so choosing a tool from the menu, the strip,
+its shortcut or the command search all end in the same place and running the
+chosen tool again is not an unchoosing. Select is what the editor has always
+done. Anchor makes every drag on the chosen depth an anchor move, so the cross
+does not have to be hit. Pan drags the stage the way the middle button does,
+and Zoom clicks in where it is clicked, out with Alt, both through the same
+`Viewport::ZoomBy` the wheel uses. Holding Space pans whatever the tool is: the
+viewport accepts the shortcut override for Space so the key reaches it rather
+than the play command, and lets go with `PlayAsked` when the hold moved
+nothing, so a tap on the stage still plays and a hold still pans. The cursor
+says which of these is live.
 
 `View > Onion skin` (remembered, off by default) draws the frames either side
 of the one shown over it at 35% opacity while playback is stopped, as Flash
@@ -368,7 +654,7 @@ applied on release through `Document::ReshapeOwnedDepth` or
 the handle lies outside the outline. The timeline shades the selected depth's
 row.
 
-`Edit > Centre the anchor in the content` (Ctrl+Alt+Home, After Effects' Center
+`Depth > Centre the anchor in the content` (Ctrl+Alt+Home, After Effects' Center
 Anchor Point in Layer Content) moves the chosen depth's anchor to the centre of
 what it shows on the playhead's frame, over the whole span, without moving it
 on screen (`Window::CentreChosenAnchor`, through `Document::CentreAnchor`), as
@@ -380,7 +666,7 @@ anchor, reads the new origin (the centre of its 2x1 quad) and the changed
 translation, is refused a second time, undoes, and is refused on an owned
 depth; dropping the owned check or the menu entry fails it.
 
-`Edit > Fit to the stage` (Ctrl+Alt+F), `Fit to the stage's width`
+`Depth > Fit to the stage` (Ctrl+Alt+F), `Fit to the stage's width`
 (Ctrl+Alt+Shift+H) and `Fit to the stage's height` (Ctrl+Alt+Shift+G), After
 Effects' Fit to Comp and its width and height forms, scale the chosen depth
 about its anchor so its box fills the stage (or one side of it, keeping the
@@ -393,8 +679,8 @@ translation, undoing in between, is refused on depth 1 (no box), fits an owned
 depth to the width and sees it scaled and moved, and is refused inside a new
 sprite. Dropping the sprite check, either move, or a shortcut's mode fails it.
 
-`Playback > Motion sketch while dragging` is After Effects' Motion Sketch.
-While it is on, dragging a depth the project owns on the stage starts playback
+The Motion sketch tool (`tool.sketch`, Y, on the tool strip and in the
+Playback menu) is After Effects' Motion Sketch. While it is the chosen tool, dragging a depth the project owns on the stage starts playback
 (`Window::SketchMove`, which `Window::MoveOnStage` asks first), and every frame
 the playhead shows while the button is held records the pointer's offset from
 where it was pressed: `Window::SeekTo` records the latest offset for each frame
@@ -421,7 +707,7 @@ Dropping the per-frame recording, the playback start or stop, the return to the
 start frame, the owned check, the mode check or the recording of the drag's
 own frame fails them.
 
-`Edit > Flip horizontally` and `Flip vertically` (Flash's Flip Horizontal and
+`Depth > Flip horizontally` and `Flip vertically` (Flash's Flip Horizontal and
 Flip Vertical, no shortcut) mirror the chosen depth along its own x or y axis
 about its anchor on the playhead's frame, the way a -100% scale does in After
 Effects, as one undo step. Each is `Window::ReshapeOnStage` with a scale of
@@ -532,7 +818,7 @@ after opening another animation of the package brings the sprites and shapes
 the depth uses along under new ids, as one undo step. Opening a package drops
 the copy, because its shapes and images belong to the package it came from.
 
-`Edit > Split depth at the playhead` (Ctrl+Shift+D), or `Split depth N at
+`Depth > Split depth at the playhead` (Ctrl+Shift+D), or `Split depth N at
 frame F` in the timeline menu, splits the selected depth's span at the playhead
 into two bars on the same depth (`Window::SplitDepthAt`, through
 `Document::SplitSpan`), as one undo step. Each half can then be moved, trimmed
@@ -570,7 +856,7 @@ than the keyframes. Dropping either record of what was copied, the delete
 after a keyframe cut, the removal after a depth cut, the depth copy, the paste
 choice, the cut shortcut or the keyframe copy fails them.
 
-`Edit > Duplicate depth` (Ctrl+D, After Effects' Duplicate Layer) copies the
+`Depth > Duplicate depth` (Ctrl+D, After Effects' Duplicate Layer) copies the
 selected depth's span under the playhead onto the first depth above it that is
 free for it (`Window::DuplicateChosenDepth`, `Document::FreeDepthAbove`), with
 no dialog, as one undo step, and selects the copy; the timeline menu's
@@ -581,7 +867,7 @@ then 3 onto 4, undoes, and reads the report's exact text, which is what tells
 it apart from the document's own refusal; skipping a depth, taking a taken
 one, dropping the report or the shortcut fails it.
 
-`Edit > At the playhead` holds After Effects' bracket keys for the selected
+`Depth > At the playhead` holds After Effects' bracket keys for the selected
 depth: `[` moves its span so it starts on the playhead and `]` so it ends there
 (`Window::MoveEdgeToPlayhead`, through `MoveSpanInTime`), Alt+`[` trims its
 start to the playhead and Alt+`]` its end (`Window::TrimEdgeToPlayhead`,
@@ -595,7 +881,7 @@ reading the frames it shows after each, sees `[` on an aligned span leave the
 undo name alone, and sees the refusal; swapping either end of the move, either
 trim end, the empty-move guard or the report fails it.
 
-`Edit > Arrange` changes the selected depth's place in the stacking order at the
+`Depth > Arrange` changes the selected depth's place in the stacking order at the
 playhead, with After Effects' shortcuts: `Bring forward` (Ctrl+]), `Send
 backward` (Ctrl+[), `Bring to front` (Ctrl+Shift+]) and `Send to back`
 (Ctrl+Shift+[) (`Window::ArrangeDepth`, through `Document::ArrangeSpan`). It is
@@ -613,11 +899,11 @@ The timeline menu also offers to group the selected depth and the ones above it
 into a sprite (`Window::GroupDepthsIntoSprite`): it asks for the last depth, then
 the first and last frame, which start as the widest span those depths have under
 the playhead, and applies `Document::GroupIntoSprite` as one undo step. It is
-refused while the project owns any depth in that range. The clip box is refilled
+refused while the project owns any depth in that range. The clip list is refilled
 so the new sprite can be picked, keeping the clip that was being edited. The
 same menu offers to ungroup the sprite on the selected depth
 (`Window::UngroupSpriteAt`, through `Document::UngroupSprite`), which is refused
-while the project owns that depth and refills the clip box the same way.
+while the project owns that depth and refills the clip list the same way.
 
 The menu also hides the selected depth in the view, or shows it again, and
 offers to show every hidden depth when any is hidden, which is After Effects'
@@ -670,7 +956,7 @@ back. Leaving out the group move, the kept pick, storing the owned depth, the
 group outlines, the snap filter, the Ctrl toggle or the unseeking number click
 fails them.
 
-`Edit > Align` lines the chosen depths up by their left edges, horizontal
+`Depth > Align` lines the chosen depths up by their left edges, horizontal
 centres, right edges, tops, vertical centres or bottoms, and spreads their
 centres evenly across or down (`Window::ArrangeChosen`, through
 `Document::AlignOffsets` and `Document::SpreadOffsets`). It works on the chosen
@@ -696,15 +982,91 @@ The window test drops a second depth, removes both with Delete, undoes, and
 sees the removal refused once the project owns one of them; removing only the
 first depth, dropping the ownership check or leaving Delete to keyframes only
 fails it.
-With a sprite picked in the clip box, the menu also names that sprite's export
+With a sprite open, the menu also names that sprite's export
 (`Window::NameShownSpriteExport`, through `Document::NameSpriteExport`): the box
 starts on the current name and an empty answer removes it. It is an undoable
-document edit, and the clip box keeps the sprite picked under its new label.
+document edit, and the breadcrumb keeps the sprite open under its new label.
 
 A live window test hides the widest depth of `graphic/1/title.ifs` and requires
 the rendered frame to change and then come back exactly; comparing with the
 selection outline in the picture was seen to pass even with the filter
 switched off, so both pictures are taken with no depth selected.
+
+**Timeline bar.** Above the timeline, `Editor::TimelineBar`
+(`editor_timeline_bar.cpp`) holds the transport and what the playhead is on:
+first frame, previous frame, play, next frame, last frame, previous and next
+change on the depth and loop, each running its registry command, then a spin box
+with the frame (typing one seeks there), the clip's last frame, the time in
+seconds from the animation's own rate, the label at or before the playhead, the
+work area with buttons to start it, end it and clear it, a Timeline and Graph
+switch that brings that panel's tab to the front, a + Depth button running
+`depth.add`, and the timeline zoom: minus, a slider in pixels a frame, plus. `Window::RefreshTimelineBar` fills it on every seek, work area change
+and clip change, from `shown_labels_` and `shown_rate_`, which
+`ShowClipTimeline` caches so a scrub costs no read.
+
+The labels on the bar have fixed widths. They used to be sized to their text,
+and because the bar sets the timeline panel's minimum width, a longer label
+widened the panel, which moved every frame's x and made a rendered timeline
+differ from the same frame rendered a moment earlier: the frame-key test
+compares those pictures and caught it.
+
+The slider is `Timeline::SetZoomPixels` and `Timeline::ZoomPixels`, the same
+zoom the wheel and the commands use, said in pixels a frame. The timeline never
+zooms out past fitting the whole clip, so a slider dragged below that snaps back
+on the next `ZoomChanged`, which `Window::RefreshTimelineBar` listens for. The
+slider's top is the larger of 48 (the most pixels a frame the timeline zooms to)
+and the fit, so a short clip that already fits at more than that still reads its
+true scale rather than sitting pinned at the end.
+
++ Depth (`depth.add`, `Window::AddDepthHere`) asks which character or package
+image to place with the same `ChoosePlaceable` list the timeline menu uses, then
+puts it on the next free depth from the playhead to the clip's last frame. The
+window test places one, sees the timeline picture change, and undoes it back to
+what it was.
+
+**The scripts lane.** Between the ruler and the rows, `Timeline::DrawNotes`
+draws one lane for what a frame carries besides placements: a dot on every frame
+with a script and a square on every frame with a camera, from
+`Document::FrameNotes` (`src/document/frame_notes.cpp`), which walks each frame's
+tags and keeps the frames holding an `Action` or a `Camera`. Clicking a mark
+seeks to that frame; the lane's gutter is a Camera button that runs `clip.camera`,
+so adding or removing the camera at the playhead does not need the context menu.
+`ShowClipTimeline` fills the lane with the clip it is showing, so entering a
+sprite shows that sprite's scripts.
+
+The ruler's gutter carries the column headers: an eye that runs
+`depth.show_all` and a padlock that runs `depth.unlock_all`
+(`Window::UnlockEveryDepth`), each lit while anything is hidden or locked, so
+undoing a solo or a lock is one click rather than a walk down the rows. They
+replaced the frame number that used to sit there, which the bar's frame field
+already says. Double-clicking the ruler asks for a label at that frame
+(`LabelAsked`, `Window::AddLabelAt`) and double-clicking a label's flag renames
+it (`LabelRenameAsked`, `Window::RenameLabel`, which the context menu now calls
+too).
+
+The rows are listed front depth first: `ShowClipTimeline` sorts
+`Document::DescribeClip`'s rows by depth, descending, before handing them over,
+so the list reads like the stacking order on the stage. Each bar is coloured by
+what its span places, from `SetCharacterKinds` (image, shape, sprite or text),
+and carries a tick on every frame where a placement changes that depth
+(`SetDepthMarks`, from `Document::DepthMarks`), so a baked depth shows where its
+motion changes and not just where it starts and ends. A depth the project owns
+gets an amber line along the bottom of its bar (`SetKeyedDepths`), which is the
+timeline's half of the inspector's KEYED badge.
+
+Each row's gutter carries a third switch beside the eye and the padlock: solo,
+which hides every other depth of the clip, drawn filled while that depth is the
+only one shown. Dragging a row by its depth number onto another row moves that
+depth's span there (`Timeline::DepthDragged`, then `Window::MoveSpanOntoDepth`),
+with the target row outlined while the drag lasts, which is the direct gesture
+that replaces the "Move to another depth" question; the menu item still asks, for
+a depth that is not on screen. The gutter grew from 56 to 64 pixels to fit the
+third switch, and the widget tests' `kTimelineWidth` grew by the same 8 pixels so
+the frame area keeps its width and their frame positions still line up.
+
+`editor_timeline.cpp` was 963 lines, so its painting moved to
+`editor_timeline_paint.cpp` and the sizes and colours both halves share moved to
+`editor_timeline_metrics.h`.
 
 **Timeline.** `Editor::Timeline` draws a ruler carrying the animation's labels
 at their frames, then one row per depth from `Document::DepthRows`, with a bar
@@ -772,7 +1134,7 @@ left as it was. `Remove unused definitions from
 <name>` (`Window::RemoveUnusedDefinitionsFrom`) runs
 `Document::RemoveUnusedDefinitions` on a copy first, so a package with nothing
 to remove says so in the status bar without adding an undo step; otherwise it
-applies the result as one undo step, refills the clip box when that animation
+applies the result as one undo step, refills the clip list when that animation
 is on screen (falling back to the root when the shown sprite was removed) and
 says how many definitions went. It is refused while the project owns depths in
 the animation, like rename and remove. The image path goes
@@ -885,12 +1247,39 @@ out.
 
 Opening a project checks it against its IFS before the user can touch anything.
 `Window::ReportDrift` asks `Document::ProjectDrift` which exported entries no
-longer match, and asks about each one in turn: keep what the IFS holds, which
-calls `KeepIfsVersion` and so drops the project's source for that entry, or
-export again, which leaves the project owning it so the next export overwrites
-it. The choices are written to the manifest straight away, the same as owning
+longer match and shows them all in one sheet (`Editor::DriftSheet`): a row an
+entry, saying whether it changed or is gone, each ticked to keep what the IFS
+holds, with a button to tick or untick every row at once. Closing the sheet
+calls `KeepIfsVersion` for the ticked ones, which drops the project's source for
+them; the rest are left owned, so the next export overwrites them. The choices are written to the manifest straight away, the same as owning
 and detaching, so a decision is never held only in memory. A project whose IFS
 nobody touched asks nothing.
+
+`Depth > Keyframe this depth` no longer needs a project open: with none,
+`Window::MakeProjectIn` makes one in the folder `Window::SuggestedProjectFolder`
+names, beside the IFS and called after it, and the depth is owned in it. The
+File menu's New project is still there for putting one somewhere else.
+
+**What the timeline keeps when a clip is shown again.** `Timeline::ShowKeys` is
+the only place that decides which keyframes stay selected: it clears the
+selection when it is handed a different depth than the one it holds, and
+otherwise drops the keys whose property or frame is no longer there.
+`Timeline::ShowAnimation` keeps the shown depth, its lanes and the selection,
+because it runs again on every reload after an edit, an undo or a redo, showing
+the same clip as before. It used to clear all three, which is why an undo left
+the selection bar and the inspector's Keyframes section empty until the depth
+was chosen again, and why `Window::EditAuthored` carried its own copy of the
+selection across every edit.
+
+`Window::ShowClipTimeline` hands the keys over itself
+(`ShowKeysForDepth(AuthoredAt(depth_, frame_))`, after the frame is clamped to
+the new clip), so the timeline's key state follows the window's chosen depth on
+every path that shows a clip, including the one that opens an animation with the
+preview host running and never reaches `Window::ShowFrame`. Opening another
+animation or clip resets `depth_` first, so that call hands over nothing and the
+selection goes. Two window tests pin it: an ease applied to two chosen
+keyframes survives an undo and a redo with both still chosen, and an undo of the
+edit that made one of them drops that one alone.
 
 Selecting an owned depth opens its animated properties as lanes under its depth
 row on the timeline, one per track, with a mark at every keyframe: a diamond for
@@ -932,7 +1321,7 @@ keyframes (`Window::SimplifySelectedKeys`, through `Document::SimplifyKeys`).
 It asks for the largest change allowed on any frame, in the property's own
 units, 0 meaning nothing drawn may change, and removes every keyframe a line
 can stand in for, as one undo step. The status bar says how many went.
-`EditAuthored` already restores the selection without the keyframes an edit
+The selection keeps itself across an edit without the keyframes that edit
 removed, so the survivors stay selected, and a focus on a removed keyframe
 shows no keyframe row, since the inspector finds no keyframe there. The window
 test drags the dot's owned depth into a straight run on four frames, sees the
@@ -1039,13 +1428,69 @@ not tested.
 A tab that is not in front is taken out of the window's widget tree by the dock
 manager, so `findChild` on the window cannot see the graph while the timeline
 tab is showing; the window test finds it through `QApplication::allWidgets`.
+
+**The graph panel.** `Editor::GraphEditor` draws every track of the owned depth
+that is checked in the property list beside it (`graph_properties`), one colour
+a track from `GraphEditor::ColourOf`, the first component in a thicker line than
+the rest, with a box on each keyframe. `Window::FillGraphProperties` lists the
+tracks with their colours and check states, and `Window::RefreshGraphTracks`
+hands the checked ones to the graph. Unchecking a property refreshes the graph
+only: rebuilding the list from inside its own `itemChanged` would delete the
+item whose signal is running, which crashed the window test, so the list is
+rebuilt only when the track names themselves change.
+
+Fit all and Fit keys (`graph.fit_all`, `graph.fit_keys`, on the panel and in the
+View menu) set the value range `GraphEditor::Fit` works out: every sampled frame
+of the shown tracks, or only their keyframes. A bezier ease can overshoot
+between two keys, so the two ranges differ exactly when the curve leaves the
+values it joins, which is what the widget test pins.
+
+A key with a bezier ease carries two handles on the way to the next key, drawn
+at the curve's control points in the graph's own space. Dragging one moves that
+control point (time clamped to the segment) and letting go emits `EaseEdited`,
+which `Window::ApplyGraphEase` writes with `Document::SetKeysEase` for that one
+keyframe, as one undo step. The numbers it writes are the same four the
+inspector's Keyframes section shows.
  How a keyframe leaves its frame applies to the whole
 selection when the right-clicked keyframe is part of it, and to that keyframe
-alone otherwise. Bezier opens `Editor::EaseDialog`: the curve drawn with
+alone otherwise. Bezier sets the curve the keyframe already had, or the first
+`Document::EasePresets` curve, and the curve itself is then edited in the
+inspector rather than in a dialog.
+
+**The Content section.** Above Transform, the inspector says what the depth
+places and how it is drawn: the character's name with a Replace button
+(`Window::ReplaceCharacterOnDepth` asks which of the animation's characters to
+use and writes it through `Window::UseCharacterOnDepth`), the blend mode as a
+dropdown, a Masks up to depth number, and the placement's filters. The blend
+names come from `Document::BlendModes` (`src/document/blend_modes.cpp`), which
+carries every mode `Blend::MapAfpMode` handles, including the second and third
+codes the game gives additive and subtractive, so a file that uses mode 8 keeps
+mode 8 rather than being rewritten to 4. A value outside that list is shown as
+"Mode N" and kept. The dropdown and the number write through
+`Window::EditPlacementFieldOnDepth`, which is `Document::EditPlacementField` on
+the same "Blend" and "Clip depth" fields the raw table edits.
+
+Filters are listed as "Filter 1: colour matrix". Adding and removing them goes
+through the keyframe path (`Document::AddKeyFilterAt`,
+`Document::RemoveKeyFilterAt`), so the buttons are there only for a depth the
+project owns, and a depth with no Filters keyframe at the playhead is told so
+rather than silently doing nothing. `Window::ShowInspectorExtras` fills the
+section from the same `Document::InspectFrame` rows the raw table uses.
+
+**The Keyframes section.** `Editor::EaseEditor` (`editor_ease_editor.cpp`) is
+the old ease dialog with its buttons taken off, embedded in the inspector's
+Keyframes section, which appears only while keyframes are chosen. It says how
+many are chosen, carries Hold, Linear and Bezier as checkable buttons showing
+the ease of the first one, the `Editor::CurveEditor` drawn with
 `Document::EaseProgress` over a unit square that has room above and below for
 an overshoot, two handles to drag (kept inside the segment's time), a button
 for each `Document::EasePresets` curve, and the four numbers as text, kept in
-step with the handles.
+step with the handles. The curve and the numbers are greyed out unless the ease
+is Bezier. Every one of those, the moment it is used, is one undo step over the
+whole selection through `Window::ApplySelectedKeysEase` and
+`Document::SetKeysEase`. `Window::RefreshEaseSection` fills the section from
+`Document::KeyAt` on the first chosen keyframe, and runs whenever the selection
+or the shown keys change. There is no modal ease dialog any more.
 
 With a keyframe selected the inspector carries three rows for it above the
 placement fields: which property and frame it is, its value, and the ease it
@@ -1069,7 +1514,7 @@ the placement rows below it are produced from the keyframes rather than edited.
 With no depth selected on the root timeline the inspector shows the
 animation's settings instead (stage size, frame rate, background colour and
 whether the header's colour is used), and editing one is an undoable animation
-edit like any other. `Playback > Draw the background colour` asks the preview
+edit like any other. `View > Draw the background colour` asks the preview
 host to draw the animation's background (`Window::DrawBackground`). It is off by
 default, as in the game, is remembered in the settings and is sent again
 whenever the host starts.
@@ -1130,7 +1575,7 @@ three frame work area on `graphic/1/title.ifs`, plays for 0.7 seconds and
 requires the playhead to have stopped inside it; with the work area left out
 of playback it was seen to fail.
 
-`Edit > Trim the clip to the work area` (Ctrl+Shift+X, After Effects' Trim Comp
+`Clip > Trim the clip to the work area` (Ctrl+Shift+X, After Effects' Trim Comp
 to Work Area) keeps only the work area's frames of the clip on screen
 (`Window::TrimClipToWorkArea`, through `Document::TrimClipToFrames`), as one
 undo step. The work area is cleared, since it is now the whole clip, and the
@@ -1146,7 +1591,7 @@ says nothing, and the owned refusal; the live test trims `title` to six frames
 around frame 400 and reads the host's frame. Dropping the clearing, the seek,
 the quiet case, the owned or work-area check, or the shortcut fails them.
 
-`Edit > Extract the work area` (After Effects' Extract Work Area, no shortcut)
+`Clip > Extract the work area` (After Effects' Extract Work Area, no shortcut)
 takes the work area's frames out of the clip and closes the gap
 (`Window::ExtractWorkArea`, through `Document::ExtractFrames`), as one undo
 step. The work area is cleared, and the playhead keeps its content: a frame
@@ -1160,7 +1605,7 @@ sees the status message, the cleared work area, the whole clip refused and the
 owned refusal; dropping the playhead's branch, the clearing or either
 refusal fails it.
 
-`Edit > Lift the work area` (After Effects' Lift Work Area, no shortcut)
+`Clip > Lift the work area` (After Effects' Lift Work Area, no shortcut)
 empties the work area's frames and leaves every other frame where it was
 (`Window::LiftWorkArea`, through `Document::LiftFrames`), as one undo step.
 The playhead and the work area stay, so the same frames can be looked at
@@ -1186,13 +1631,45 @@ is refreshed once when playback stops. Playback also stops when the animation
 changes, when a document is opened, when an edit is made and when a seek fails,
 so it can never keep running against something that is no longer there.
 
-The timeline panel has a clip box above the rows. Picking an animation fills it
-with the animation's clips, the root first, and picking a sprite shows that
-sprite's depths, labels and frames on the timeline and its placements and
-cameras in the inspector. Placement fields, library call arguments, cameras,
-labels and the structure edits all apply to the clip that is picked.
+There is no clip box any more. `Window::FillClips` keeps the animation's clips
+(`clips_`, the root first) and which one is open (`clip_index_`), the stage
+bar's breadcrumb shows the file, the root and the open clip, and a crumb opens
+that clip. A clip is entered by double-clicking its bar on the timeline
+(`Timeline::SpriteAt` reads the character the span places and only a sprite
+counts), by double-clicking the object itself on stage (`Viewport::EnterAsked`,
+`Window::EnterSpriteAt` picks the depth under the point and enters what it
+places) or by double-clicking it in the library. Escape leaves it
+(`clip.leave`, refused at the root). Opening a clip shows that sprite's depths,
+labels and frames on the timeline and its placements and cameras in the
+inspector. Placement fields, library call arguments, cameras, labels and the
+structure edits all apply to the clip that is open.
 
-Picking a sprite shows it on its own in the viewport. `Window::LoadViewportClip`
+**Editing a clip in place.** `Clip > Edit a clip in place on the root`
+(`clip.in_context`, remembered, on by default) keeps the root on screen while a
+sprite is open. `Window::ContextOf` finds the root depth that places this
+sprite at `root_frame_` and takes its stage outline; `Window::RefreshContext`
+stores it on every `ShowFrame`. The viewport dims everything outside that
+outline and draws its edge (`Viewport::ShowContext`), the sprite's own outlines
+are mapped onto the root through it (`Document::OutlineThrough`), and a drag is
+mapped back the other way (`Window::UnderContext` through
+`Document::UnderOutline`), so dragging a depth inside a clip that is placed at
+200% moves it by half what the pointer moved. Scale and turn gestures are
+computed against the mapped outline, so they carry the clip's own axes with
+them; a clip placed with a skew is the one case where the reshape is only an
+approximation of what the pointer drew.
+
+Everything that hit-tests the stage goes through `Window::OutlinesOnStage`,
+which maps the clip's outlines the same way the drawing does, so a click picks
+what is under the pointer and the motion path is drawn where the object is.
+
+What the host renders is still the root at `root_frame_`, so seeking inside the
+clip moves the outlines and the inspector but not the picture under them. A
+clip that is not placed on the root at `root_frame_` has no outline to map
+through, so the window falls back to showing it on its own and the status bar
+says that is why.
+
+With `clip.in_context` off, picking a sprite shows it on its own in the
+viewport. `Window::LoadViewportClip`
 asks `Document::PreviewSymbolFor` for the bytes and the symbol name, reloads the
 package with those bytes and sends `ShowSymbol`, so from then on the frame
 count, the timeline, seeking and playback are all the sprite's, read back from

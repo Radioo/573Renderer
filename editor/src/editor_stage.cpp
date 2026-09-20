@@ -41,59 +41,6 @@
 
 namespace Editor {
 
-void Window::AddViewMenu() {
-    QMenu* view = menuBar()->addMenu(tr("&View"));
-    QAction* snap = view->addAction(tr("&Snap while moving on stage"));
-    snap->setCheckable(true);
-    snap->setChecked(QSettings().value(kSnapKey, true).toBool());
-    viewport_->SetSnapping(snap->isChecked());
-    connect(snap, &QAction::toggled, this, [this](bool on) {
-        QSettings().setValue(kSnapKey, on);
-        viewport_->SetSnapping(on);
-    });
-    QAction* rulers = view->addAction(tr("&Rulers"));
-    rulers->setCheckable(true);
-    rulers->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_R));
-    rulers->setChecked(QSettings().value(kRulersKey, false).toBool());
-    viewport_->SetRulers(rulers->isChecked());
-    connect(rulers, &QAction::toggled, this, [this](bool on) {
-        QSettings().setValue(kRulersKey, on);
-        viewport_->SetRulers(on);
-    });
-    QAction* clear_guides = view->addAction(tr("Clear &guides"));
-    connect(clear_guides, &QAction::triggered, viewport_, &Viewport::ClearGuides);
-    onion_action_ = view->addAction(tr("&Onion skin"));
-    onion_action_->setCheckable(true);
-    onion_action_->setChecked(QSettings().value(kOnionKey, false).toBool());
-    connect(onion_action_, &QAction::toggled, this, [this](bool on) {
-        QSettings().setValue(kOnionKey, on);
-        if (!on) {
-            viewport_->ShowGhosts({});
-            return;
-        }
-        if (host_.Running() && !animation_name_.empty()) RenderFrame();
-    });
-    path_action_ = view->addAction(tr("Motion &path"));
-    path_action_->setCheckable(true);
-    path_action_->setChecked(QSettings().value(kPathKey, true).toBool());
-    connect(path_action_, &QAction::toggled, this, [this](bool on) {
-        QSettings().setValue(kPathKey, on);
-        ShowFrame();
-    });
-    QAction* zoom_in = view->addAction(tr("Zoom the timeline &in"));
-    zoom_in->setShortcut(QKeySequence(Qt::Key_Equal));
-    connect(zoom_in, &QAction::triggered, timeline_, &Timeline::ZoomIn);
-    QAction* zoom_out = view->addAction(tr("Zoom the timeline ou&t"));
-    zoom_out->setShortcut(QKeySequence(Qt::Key_Minus));
-    connect(zoom_out, &QAction::triggered, timeline_, &Timeline::ZoomOut);
-    QMenu* panels = view->addMenu(tr("&Panels"));
-    for (ads::CDockWidget* dock : docks_->dockWidgetsMap())
-        panels->addAction(dock->toggleViewAction());
-    QAction* fit = view->addAction(tr("&Fit the stage in the view"));
-    fit->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_0));
-    connect(fit, &QAction::triggered, viewport_, &Viewport::FitStage);
-}
-
 void Window::ShowGhostsAround(uint32_t frame) {
     std::vector<QImage> ghosts;
     for (const int64_t step : {int64_t{-1}, int64_t{1}}) {
@@ -109,20 +56,66 @@ void Window::ShowGhostsAround(uint32_t frame) {
 }
 
 bool Window::OutlinesMatchView() const {
-    return !clip_.sprite || symbol_shown_;
+    return !clip_.sprite || symbol_shown_ || context_.has_value();
+}
+
+std::optional<Document::StageOutline>
+Window::ContextOf(const AfpAnimation::Animation& animation) const {
+    if (!clip_.sprite || symbol_shown_) return std::nullopt;
+    const AfpAnimation::Container* root = Document::FindClip(animation, Document::ClipId{});
+    if (root == nullptr) return std::nullopt;
+    const std::vector<Document::DepthRow> rows = Document::DepthRows(*root);
+    std::optional<uint16_t> placed;
+    for (const Document::DepthRow& row : rows) {
+        for (const auto& [at, character] : row.shows) {
+            if (at <= root_frame_ && character == *clip_.sprite) placed = row.depth;
+        }
+    }
+    if (!placed) return std::nullopt;
+    const std::vector<Document::StageOutline> outlines =
+        Document::StageOutlines(animation, Document::ClipId{}, root_frame_, shape_bounds_);
+    const auto found = std::ranges::find(outlines, *placed, &Document::StageOutline::depth);
+    if (found == outlines.end()) return std::nullopt;
+    return *found;
+}
+
+Document::StageOffset Window::UnderContext(double dx, double dy) const {
+    if (!context_) return Document::StageOffset{.x = dx, .y = dy};
+    const std::optional<Document::Point> moved = Document::UnderOutline(
+        *context_, Document::Point{context_->anchor[0] + dx, context_->anchor[1] + dy});
+    if (!moved) return Document::StageOffset{.x = dx, .y = dy};
+    return Document::StageOffset{.x = (*moved)[0], .y = (*moved)[1]};
+}
+
+std::vector<Document::StageOutline>
+Window::OutlinesOnStage(const AfpAnimation::Animation& animation) const {
+    std::vector<Document::StageOutline> outlines = VisibleOutlines(animation);
+    if (!context_) return outlines;
+    for (Document::StageOutline& outline : outlines)
+        outline = Document::OutlineThrough(outline, *context_);
+    return outlines;
+}
+
+void Window::RefreshContext(const AfpAnimation::Animation& animation) {
+    context_.reset();
+    if (context_action_ == nullptr || !context_action_->isChecked()) return;
+    context_ = ContextOf(animation);
 }
 
 void Window::UpdateOutlines(const AfpAnimation::Animation& animation) {
+    if (shape_bounds_path_ != animation_path_ && file_) {
+        shape_bounds_ = file_->ShapeBounds(animation_path_);
+        shape_bounds_path_ = animation_path_;
+    }
+    RefreshContext(animation);
+    viewport_->ShowContext(
+        context_ ? std::optional<std::array<Document::Point, 4>>(context_->corners) : std::nullopt);
     viewport_->ShowPath(PathOfDepth(animation));
     if (!file_ || !OutlinesMatchView()) {
         viewport_->ShowOutlines({}, std::nullopt);
         return;
     }
-    if (shape_bounds_path_ != animation_path_) {
-        shape_bounds_ = file_->ShapeBounds(animation_path_);
-        shape_bounds_path_ = animation_path_;
-    }
-    viewport_->ShowOutlines(VisibleOutlines(animation),
+    viewport_->ShowOutlines(OutlinesOnStage(animation),
                             depth_ ? std::optional<uint16_t>(static_cast<uint16_t>(*depth_))
                                    : std::nullopt,
                             SelectedDepths());
@@ -139,8 +132,12 @@ Window::PathOfDepth(const AfpAnimation::Animation& animation) const {
     const std::vector<uint16_t> hidden = HiddenHere();
     if (std::ranges::find(hidden, depth) != hidden.end()) return {};
     const Document::AuthoredDepth* owned = AuthoredAt(depth, frame_);
-    return Document::MotionPath(*shown, depth, frame_,
-                                owned != nullptr ? owned->tracks : std::vector<Document::Track>{});
+    std::vector<Document::PathPoint> path = Document::MotionPath(
+        *shown, depth, frame_, owned != nullptr ? owned->tracks : std::vector<Document::Track>{});
+    if (!context_) return path;
+    for (Document::PathPoint& point : path)
+        point.at = Document::ThroughOutline(*context_, point.at);
+    return path;
 }
 
 void Window::PickOnStage(double x, double y) {
@@ -150,7 +147,7 @@ void Window::PickOnStage(double x, double y) {
         ReportOnce(QString::fromStdString(animation.error()));
         return;
     }
-    const std::optional<uint16_t> picked = Document::DepthAt(VisibleOutlines(*animation), {x, y});
+    const std::optional<uint16_t> picked = Document::DepthAt(OutlinesOnStage(*animation), {x, y});
     const std::vector<uint16_t> group = SelectedDepths();
     if (picked && group.size() > 1 && std::ranges::find(group, *picked) != group.end()) {
         depth_ = *picked;
@@ -199,31 +196,28 @@ void Window::CentreChosenAnchor() {
 }
 
 bool Window::RefuseOwnedAnchor(uint16_t depth) {
-    if (!AuthoredIndexAt(depth, frame_)) return false;
-    ReportProblem(tr("The project owns depth %1 and draws it from keyframes, which keep no "
-                     "anchor. Detach it before moving its anchor.")
-                      .arg(depth));
-    return true;
+    const std::optional<QString> refused = AnchorRefusal(depth);
+    if (refused) ReportProblem(*refused);
+    return refused.has_value();
 }
 
 void Window::MoveAnchorOnStage(uint16_t depth, double dx, double dy) {
     if (!file_ || animation_path_.empty() || RefuseOwnedAnchor(depth)) return;
     const Document::ClipId clip = clip_;
     const uint32_t frame = frame_;
+    const Document::StageOffset under = UnderContext(dx, dy);
     EditAnimation(tr("Move the anchor of depth %1").arg(depth),
-                  [clip, depth, frame, dx, dy](AfpAnimation::Animation& edited) {
+                  [clip, depth, frame, under](AfpAnimation::Animation& edited) {
                       return Document::MoveAnchor(edited, clip, depth, frame,
-                                                  Document::Point{dx, dy});
+                                                  Document::Point{under.x, under.y});
                   });
 }
 
 void Window::FitChosenToStage(Document::StageFit fit) {
-    if (!file_ || animation_path_.empty()) return;
-    if (clip_.sprite) {
-        ReportProblem(tr("A sprite has no stage of its own. Fit depths on the root timeline."));
+    if (const std::optional<QString> refused = FitRefusal()) {
+        ReportProblem(*refused);
         return;
     }
-    if (!depth_) return;
     const auto animation = file_->ReadAnimation(animation_path_);
     if (!animation) {
         ReportOnce(QString::fromStdString(animation.error()));
@@ -341,8 +335,7 @@ void Window::MoveDepthsOnStage(const std::vector<Document::DepthOffset>& moves, 
 
 void Window::ArrangeChosen(const QString& name,
                            const std::function<std::vector<Document::DepthOffset>(
-                               const std::vector<Document::StageOutline>&)>& offsets,
-                           std::size_t fewest) {
+                               const std::vector<Document::StageOutline>&)>& offsets) {
     if (!file_ || animation_path_.empty()) return;
     const auto animation = file_->ReadAnimation(animation_path_);
     if (!animation) {
@@ -354,56 +347,15 @@ void Window::ArrangeChosen(const QString& name,
     for (const Document::StageOutline& outline : VisibleOutlines(*animation)) {
         if (std::ranges::find(group, outline.depth) != group.end()) chosen.push_back(outline);
     }
-    if (!OutlinesMatchView() || chosen.size() < fewest) {
-        ReportProblem(tr("Choose at least %1 depths shown on the stage first").arg(fewest));
-        return;
-    }
     std::vector<Document::DepthOffset> moves;
     for (const Document::DepthOffset& move : offsets(chosen)) {
         if (move.offset[0] != 0 || move.offset[1] != 0) moves.push_back(move);
     }
     if (moves.empty()) {
-        statusBar()->showMessage(tr("The chosen depths are already lined up"));
+        ShowResult(tr("The chosen depths are already lined up"), false);
         return;
     }
     MoveDepthsOnStage(moves, name, true);
-}
-
-void Window::AddAlignMenu(QMenu* edit) {
-    QMenu* align = edit->addMenu(tr("&Align"));
-    const std::array<std::pair<QString, Document::AlignTo>, 6> lines{{
-        {tr("&Left edges"), Document::AlignTo::Left},
-        {tr("&Horizontal centres"), Document::AlignTo::HorizontalCentre},
-        {tr("&Right edges"), Document::AlignTo::Right},
-        {tr("&Top edges"), Document::AlignTo::Top},
-        {tr("&Vertical centres"), Document::AlignTo::VerticalCentre},
-        {tr("&Bottom edges"), Document::AlignTo::Bottom},
-    }};
-    for (const auto& [text, how] : lines) {
-        connect(align->addAction(text), &QAction::triggered, this, [this, text, how] {
-            ArrangeChosen(
-                tr("Align %1").arg(QString(text).remove('&').toLower()),
-                [how](const std::vector<Document::StageOutline>& chosen) {
-                    return Document::AlignOffsets(chosen, how);
-                },
-                2);
-        });
-    }
-    align->addSeparator();
-    const std::array<std::pair<QString, Document::Spread>, 2> spreads{{
-        {tr("Spread centres &across"), Document::Spread::Across},
-        {tr("Spread centres &down"), Document::Spread::Down},
-    }};
-    for (const auto& [text, how] : spreads) {
-        connect(align->addAction(text), &QAction::triggered, this, [this, text, how] {
-            ArrangeChosen(
-                QString(text).remove('&'),
-                [how](const std::vector<Document::StageOutline>& chosen) {
-                    return Document::SpreadOffsets(chosen, how);
-                },
-                3);
-        });
-    }
 }
 
 void Window::PreviewOnStage(AnimationChange change) {
@@ -411,6 +363,28 @@ void Window::PreviewOnStage(AnimationChange change) {
     if (preview_scheduled_) return;
     preview_scheduled_ = true;
     QTimer::singleShot(0, this, &Window::RunStagePreview);
+}
+
+void Window::CancelPreview(std::vector<Document::KeyRef> keys) {
+    pending_preview_.reset();
+    if (previewed_) Reload();
+    previewed_ = false;
+    timeline_->SelectKeys(std::move(keys));
+    ShowFrame();
+}
+
+void Window::PreviewAuthored(const AuthoredChange& change) {
+    if (!depth_) return;
+    const std::optional<std::size_t> at = AuthoredIndexAt(static_cast<uint16_t>(*depth_), frame_);
+    if (!at) return;
+    Document::AuthoredDepth edited = authored_[*at];
+    if (!change(edited)) return;
+    PreviewOnStage([edited](AfpAnimation::Animation& animation) {
+        using Written = Support::Expected<void, std::string>;
+        auto baked = Document::BakedFor(animation, edited);
+        if (!baked) return Written(Support::Unexpected(baked.error()));
+        return Document::WriteAuthored(animation, edited, *baked);
+    });
 }
 
 void Window::RunStagePreview() {
@@ -429,7 +403,7 @@ void Window::RunStagePreview() {
 }
 
 bool Window::SketchMove(uint16_t depth, double dx, double dy, bool finished) {
-    if (!sketch_action_->isChecked()) return false;
+    if (viewport_->CurrentTool() != Tool::Sketch) return false;
     if (!sketch_ && !AuthoredIndexAt(depth, frame_)) return false;
     const Document::StageOffset offset{.x = dx, .y = dy};
     if (!sketch_) {
@@ -450,9 +424,11 @@ bool Window::SketchMove(uint16_t depth, double dx, double dy, bool finished) {
     return true;
 }
 
-void Window::MoveOnStage(uint16_t depth, double dx, double dy, bool finished) {
+void Window::MoveOnStage(uint16_t depth, double stage_dx, double stage_dy, bool finished) {
+    const Document::StageOffset offset = UnderContext(stage_dx, stage_dy);
+    const double dx = offset.x;
+    const double dy = offset.y;
     if (SketchMove(depth, dx, dy, finished)) return;
-    const Document::StageOffset offset{.x = dx, .y = dy};
     const std::vector<uint16_t> group = SelectedDepths();
     if (group.size() > 1 && std::ranges::find(group, depth) != group.end()) {
         std::vector<Document::DepthOffset> moves;

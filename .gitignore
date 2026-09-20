@@ -18,3 +18,5 @@ __pycache__/
 tools/render_regress/game_dirs.json
 /build-asan/
 build-editor/
+
+*.local.md

@@ -1,5 +1,7 @@
 #include "editor_window.h"
 
+#include "editor_popover.h"
+#include "editor_selection_bar.h"
 #include "editor_timeline.h"
 
 #include "document/authored.h"
@@ -9,7 +11,6 @@
 #include "support/expected.h"
 
 #include <QAction>
-#include <QInputDialog>
 #include <QKeySequence>
 #include <QRandomGenerator>
 #include <QStatusBar>
@@ -44,29 +45,6 @@ void Window::FocusKey(const QString& property, uint32_t frame) {
     key_property_ = property;
     key_frame_ = frame;
     ShowFrame();
-}
-
-void Window::AddKeyActions() {
-    const auto add = [this](const QString& text, const QKeySequence& keys, auto slot) {
-        auto* action = new QAction(text, timeline_);
-        action->setShortcut(keys);
-        action->setShortcutContext(Qt::WidgetShortcut);
-        connect(action, &QAction::triggered, this, slot);
-        timeline_->addAction(action);
-    };
-    add(tr("Copy"), QKeySequence::Copy, &Window::CopySelection);
-    add(tr("Cut"), QKeySequence::Cut, &Window::CutSelection);
-    add(tr("Paste"), QKeySequence::Paste, &Window::PasteClipboard);
-    add(tr("Delete keyframes"), QKeySequence::Delete, &Window::RemoveSelectedKeys);
-    add(tr("Select every keyframe"), QKeySequence::SelectAll, &Window::SelectAllKeys);
-    add(tr("Toggle hold"), QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_H),
-        &Window::ToggleHoldSelectedKeys);
-    add(tr("Easy ease"), QKeySequence(Qt::Key_F9),
-        [this] { EasyEaseSelectedKeys(Document::EasySide::Both); });
-    add(tr("Easy ease in"), QKeySequence(Qt::SHIFT | Qt::Key_F9),
-        [this] { EasyEaseSelectedKeys(Document::EasySide::In); });
-    add(tr("Easy ease out"), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_F9),
-        [this] { EasyEaseSelectedKeys(Document::EasySide::Out); });
 }
 
 bool Window::CopySelectedKeys() {
@@ -186,14 +164,25 @@ void Window::ReverseSelectedKeys() {
 void Window::StretchSelectedKeys() {
     const std::vector<Document::KeyRef> chosen = timeline_->SelectedKeys();
     if (chosen.empty()) return;
-    bool accepted = false;
-    const int percent = QInputDialog::getInt(this, tr("Time-stretch keyframes"),
-                                             tr("Stretch factor (%)"), 100, 1, 10000, 1, &accepted);
-    if (!accepted) return;
-    StretchSelectedKeysBy(
-        Document::KeyStretch{.anchor = std::ranges::min(chosen, {}, &Document::KeyRef::frame).frame,
-                             .scale = percent,
-                             .over = 100});
+    const uint32_t anchor = std::ranges::min(chosen, {}, &Document::KeyRef::frame).frame;
+    popover_->Ask(PopoverAsk{.title = tr("Time-stretch %1 keyframes").arg(chosen.size()),
+                             .apply = tr("Stretch"),
+                             .fields = {PopoverField{.label = tr("Stretch to"),
+                                                     .value = 100,
+                                                     .lowest = 1,
+                                                     .highest = 10000,
+                                                     .suffix = tr(" %")}},
+                             .describe = {},
+                             .preview = {},
+                             .run =
+                                 [this, anchor](const PopoverValues& values) {
+                                     StretchSelectedKeysBy(Document::KeyStretch{
+                                         .anchor = anchor,
+                                         .scale = static_cast<int64_t>(values.at(0)),
+                                         .over = 100});
+                                 },
+                             .cancelled = {}},
+                  BarAnchor("key.stretch"));
 }
 
 void Window::StretchSelectedKeysBy(const Document::KeyStretch& stretch) {
@@ -212,57 +201,129 @@ void Window::StretchSelectedKeysBy(const Document::KeyStretch& stretch) {
     SelectMovedKeys(chosen, std::move(stretched));
 }
 
+std::optional<std::size_t> Window::KeysAfterSimplify(const std::vector<Document::KeyRef>& chosen,
+                                                     int64_t tolerance) const {
+    if (!depth_) return std::nullopt;
+    const std::optional<std::size_t> at = AuthoredIndexAt(static_cast<uint16_t>(*depth_), frame_);
+    if (!at) return std::nullopt;
+    Document::AuthoredDepth copy = authored_[*at];
+    auto kept = Document::SimplifyKeys(copy, chosen, tolerance);
+    if (!kept) return std::nullopt;
+    return kept->size();
+}
+
 void Window::SimplifySelectedKeys() {
     const std::vector<Document::KeyRef> chosen = timeline_->SelectedKeys();
-    bool accepted = false;
-    const int tolerance =
-        QInputDialog::getInt(this, tr("Simplify keyframes"),
-                             tr("Largest change allowed on any frame, in the property's own units"),
-                             0, 0, 1000000, 1, &accepted);
-    if (!accepted) return;
-    std::vector<Document::KeyRef> remaining;
-    if (!EditAuthored(tr("Simplify %n keyframe(s)", nullptr, static_cast<int>(chosen.size())),
-                      [&chosen, tolerance, &remaining](Document::AuthoredDepth& authored) {
-                          using Changed = Support::Expected<void, std::string>;
-                          auto kept = Document::SimplifyKeys(authored, chosen, tolerance);
-                          if (!kept) return Changed(Support::Unexpected(kept.error()));
-                          remaining = std::move(*kept);
-                          return Changed();
-                      })) {
-        return;
-    }
-    const std::size_t removed = chosen.size() - remaining.size();
-    statusBar()->showMessage(tr("%n keyframe(s) removed", nullptr, static_cast<int>(removed)));
-    ShowFrame();
+    if (chosen.empty()) return;
+    popover_->Ask(
+        PopoverAsk{
+            .title = tr("Simplify %1 keyframes").arg(chosen.size()),
+            .apply = tr("Simplify"),
+            .fields = {PopoverField{.label = tr("Largest change allowed"),
+                                    .value = 0,
+                                    .lowest = 0,
+                                    .highest = 1000000}},
+            .describe =
+                [this, chosen](const PopoverValues& values) {
+                    const std::optional<std::size_t> kept =
+                        KeysAfterSimplify(chosen, static_cast<int64_t>(values.at(0)));
+                    if (!kept) return QString();
+                    return tr("%1 of %2 keyframes go")
+                        .arg(chosen.size() - *kept)
+                        .arg(chosen.size());
+                },
+            .preview =
+                [this, chosen](const PopoverValues& values) {
+                    PreviewAuthored([&chosen, &values](Document::AuthoredDepth& authored) {
+                        using Changed = Support::Expected<void, std::string>;
+                        auto kept = Document::SimplifyKeys(authored, chosen,
+                                                           static_cast<int64_t>(values.at(0)));
+                        if (!kept) return Changed(Support::Unexpected(kept.error()));
+                        return Changed();
+                    });
+                },
+            .run =
+                [this, chosen](const PopoverValues& values) {
+                    std::vector<Document::KeyRef> remaining;
+                    if (!EditAuthored(
+                            tr("Simplify %n keyframe(s)", nullptr, static_cast<int>(chosen.size())),
+                            [&chosen, &values, &remaining](Document::AuthoredDepth& authored) {
+                                using Changed = Support::Expected<void, std::string>;
+                                auto kept = Document::SimplifyKeys(
+                                    authored, chosen, static_cast<int64_t>(values.at(0)));
+                                if (!kept) return Changed(Support::Unexpected(kept.error()));
+                                remaining = std::move(*kept);
+                                return Changed();
+                            })) {
+                        return;
+                    }
+                    const std::size_t removed = chosen.size() - remaining.size();
+                    ShowResult(tr("%n keyframe(s) removed", nullptr, static_cast<int>(removed)),
+                               true);
+                    ShowFrame();
+                },
+            .cancelled = [this, chosen] { CancelPreview(chosen); }},
+        BarAnchor("key.simplify"));
+}
+
+namespace {
+
+Document::Wiggle WiggleFrom(const PopoverValues& values, uint32_t seed) {
+    return Document::Wiggle{.every = static_cast<uint32_t>(values.at(0)),
+                            .magnitude = static_cast<int64_t>(values.at(1)),
+                            .seed = seed};
+}
+
 }
 
 void Window::WiggleSelectedKeys() {
     const std::vector<Document::KeyRef> chosen = timeline_->SelectedKeys();
-    bool accepted = false;
-    const int every =
-        QInputDialog::getInt(this, tr("Wiggle keyframes"), tr("A keyframe every how many frames"),
-                             2, 1, 10000, 1, &accepted);
-    if (!accepted) return;
-    const int magnitude = QInputDialog::getInt(this, tr("Wiggle keyframes"),
-                                               tr("Largest change, in the property's own units"),
-                                               20, 1, 1000000, 1, &accepted);
-    if (!accepted) return;
-    const Document::Wiggle wiggle{.every = static_cast<uint32_t>(every),
-                                  .magnitude = magnitude,
-                                  .seed = QRandomGenerator::global()->generate()};
-    std::vector<Document::KeyRef> wiggled;
-    if (!EditAuthored(tr("Wiggle %n keyframe(s)", nullptr, static_cast<int>(chosen.size())),
-                      [&chosen, &wiggle, &wiggled](Document::AuthoredDepth& authored) {
-                          using Changed = Support::Expected<void, std::string>;
-                          auto placed = Document::WiggleKeys(authored, chosen, wiggle);
-                          if (!placed) return Changed(Support::Unexpected(placed.error()));
-                          wiggled = std::move(*placed);
-                          return Changed();
-                      })) {
-        return;
-    }
-    timeline_->SelectKeys(std::move(wiggled));
-    ShowFrame();
+    if (chosen.empty()) return;
+    const uint32_t seed = QRandomGenerator::global()->generate();
+    popover_->Ask(
+        PopoverAsk{
+            .title = tr("Wiggle %1 keyframes").arg(chosen.size()),
+            .apply = tr("Wiggle"),
+            .fields = {PopoverField{.label = tr("A keyframe every"),
+                                    .value = 2,
+                                    .lowest = 1,
+                                    .highest = 10000,
+                                    .suffix = tr(" frames")},
+                       PopoverField{.label = tr("Largest change"),
+                                    .value = 20,
+                                    .lowest = 1,
+                                    .highest = 1000000}},
+            .describe = {},
+            .preview =
+                [this, chosen, seed](const PopoverValues& values) {
+                    PreviewAuthored([&chosen, &values, seed](Document::AuthoredDepth& authored) {
+                        using Changed = Support::Expected<void, std::string>;
+                        auto placed =
+                            Document::WiggleKeys(authored, chosen, WiggleFrom(values, seed));
+                        if (!placed) return Changed(Support::Unexpected(placed.error()));
+                        return Changed();
+                    });
+                },
+            .run =
+                [this, chosen, seed](const PopoverValues& values) {
+                    std::vector<Document::KeyRef> wiggled;
+                    if (!EditAuthored(
+                            tr("Wiggle %n keyframe(s)", nullptr, static_cast<int>(chosen.size())),
+                            [&chosen, &values, seed, &wiggled](Document::AuthoredDepth& authored) {
+                                using Changed = Support::Expected<void, std::string>;
+                                auto placed = Document::WiggleKeys(authored, chosen,
+                                                                   WiggleFrom(values, seed));
+                                if (!placed) return Changed(Support::Unexpected(placed.error()));
+                                wiggled = std::move(*placed);
+                                return Changed();
+                            })) {
+                        return;
+                    }
+                    timeline_->SelectKeys(std::move(wiggled));
+                    ShowFrame();
+                },
+            .cancelled = [this, chosen] { CancelPreview(chosen); }},
+        BarAnchor("key.wiggle"));
 }
 
 void Window::SelectMovedKeys(const std::vector<Document::KeyRef>& chosen,

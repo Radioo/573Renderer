@@ -31,6 +31,7 @@
 #include <QImage>
 #include <QMainWindow>
 #include <QSize>
+#include <QIcon>
 #include <QString>
 
 #include <cstddef>
@@ -43,10 +44,13 @@
 
 namespace ads {
 class CDockManager;
+class CDockWidget;
 }
 
 class QAction;
 class QComboBox;
+class QLabel;
+class QToolButton;
 class QMenu;
 class QScrollArea;
 class QWidget;
@@ -56,7 +60,11 @@ class QTableWidgetItem;
 class QTimer;
 class QLineEdit;
 class QListWidget;
+class QDragEnterEvent;
+class QDropEvent;
+class QStackedWidget;
 class QTreeWidget;
+class QTreeWidgetItem;
 
 namespace Editor {
 
@@ -78,6 +86,17 @@ using AuthoredChange =
 using OwnedChange = std::function<Support::Expected<void, std::string>(
     Document::AuthoredDepth&, const Document::BakedDepth&)>;
 
+class Commands;
+class Inspector;
+class SelectionBar;
+class Notices;
+class StageBar;
+class StartScreen;
+class ToolStrip;
+class Popover;
+class TimelineBar;
+class CommandSearch;
+struct SearchItem;
 class GraphEditor;
 class Timeline;
 class Viewport;
@@ -93,14 +112,58 @@ public:
 
 protected:
     void closeEvent(QCloseEvent* event) override;
+    void dragEnterEvent(QDragEnterEvent* event) override;
+    void dropEvent(QDropEvent* event) override;
 
 private:
     void BuildPanels();
     void BuildMenus();
+    void AddToolsMenu();
+    QMenu* AddMenu(QMenu* parent, const QString& title);
+    void AddFileMenu();
+    void AddEditMenu();
+    void AddDepthMenu();
+    void AddKeyframeMenu();
+    void AddClipMenu();
+    void AddPlaybackMenu();
+    void ShowRefusal(const QString& reason);
+    void ShowResult(const QString& what, bool undoable);
+    void BuildTopBar();
+    void BuildStatusBar();
+    void ShowProjectFolder();
+    void OpenSearch();
+    void AddDepthResults(std::vector<SearchItem>& items);
+    void RefreshTopBar();
+    void RefreshStatus();
+    void ShowStageStatus(const AfpAnimation::Animation& animation);
+    [[nodiscard]] std::optional<QString> NeedsDocument() const;
+    [[nodiscard]] std::optional<QString> NeedsAnimation() const;
+    [[nodiscard]] std::optional<QString> NeedsDepth() const;
+    [[nodiscard]] std::optional<QString> NeedsDepths(std::size_t fewest) const;
+    [[nodiscard]] std::optional<QString> OwnedRefusal(uint16_t depth, uint32_t frame,
+                                                      const QString& doing) const;
+    [[nodiscard]] std::optional<QString> ChosenDepthRefusal(const QString& doing) const;
+    [[nodiscard]] std::optional<QString> ChosenDepthsRefusal(const QString& doing) const;
+    [[nodiscard]] std::optional<QString> NeedsOwnedDepth() const;
+    [[nodiscard]] std::optional<QString> NeedsKeys(std::size_t fewest) const;
+    [[nodiscard]] std::optional<QString> NeedsProject() const;
+    [[nodiscard]] std::optional<QString> WorkAreaRefusal() const;
+    [[nodiscard]] std::optional<QString> AnchorRefusal(uint16_t depth) const;
+    [[nodiscard]] std::optional<QString> FitRefusal() const;
+    [[nodiscard]] std::optional<QString> StageDepthsRefusal(std::size_t fewest) const;
+    void InsertFrameAt(uint32_t frame);
+    void RemoveFrameAt(uint32_t frame);
+    void AddDepthHere();
+    void AddLabelAt(uint32_t frame);
+    void RenameLabel(const QString& label);
+    void ToggleCameraAt(uint32_t frame);
     void ChooseGameDirectory();
     void StartHost(const QString& game_dir);
     void ChooseDocument();
     void CreateProject();
+    [[nodiscard]] QString SuggestedProjectFolder() const;
+    bool MakeProjectIn(const QString& folder);
+    bool OpenOrMakeProject(const QString& folder);
     void ChooseProject();
     void CloseProject();
     void SaveProject();
@@ -119,7 +182,6 @@ private:
     void ApplyGraphMove(const QString& property, uint32_t frame, uint32_t to_frame,
                         const std::vector<int64_t>& value);
     bool EditOwned(const QString& name, const OwnedChange& change);
-    void AddKeyActions();
     bool CopySelectedKeys();
     void CopySelection();
     void CutSelection();
@@ -131,6 +193,8 @@ private:
     void ReverseSelectedKeys();
     void StretchSelectedKeys();
     void SimplifySelectedKeys();
+    [[nodiscard]] std::optional<std::size_t>
+    KeysAfterSimplify(const std::vector<Document::KeyRef>& chosen, int64_t tolerance) const;
     void WiggleSelectedKeys();
     void StretchSelectedKeysBy(const Document::KeyStretch& stretch);
     void SelectMovedKeys(const std::vector<Document::KeyRef>& chosen,
@@ -141,14 +205,45 @@ private:
     bool ApplyKeyEdit(const QString& value);
     bool ApplyKeyFilterEdit(const QString& field, const QString& value);
     void ShowInspectorMenu(const QPoint& where);
+    void ShowInspectorSubject(const AfpAnimation::Animation& animation);
+    void RefreshSelectionBar();
+    void RefreshTimelineBar();
+    void RefreshStageBar();
+    void ShowGraphPanel(bool graph);
+    [[nodiscard]] QWidget* BarAnchor(const QString& id) const;
+    void PreviewAuthored(const AuthoredChange& change);
+    void CancelPreview(std::vector<Document::KeyRef> keys);
+    void ApplyViewEdit(const QString& label, const std::vector<double>& values);
+    void RefreshEaseSection();
+    [[nodiscard]] QWidget* BuildGraphPanel();
+    void FillGraphProperties(const Document::AuthoredDepth& owned);
+    void RefreshGraphTracks(const Document::AuthoredDepth* owned);
+    void ApplyGraphEase(const QString& property, uint32_t frame, const Document::Bezier& bezier);
+    void ShowInspectorExtras(const AfpAnimation::Animation& animation, uint16_t depth,
+                             const QString& character);
+    void ReplaceCharacterOnDepth();
+    void EditPlacementFieldOnDepth(const QString& field, const QString& value);
+    void AddFilterOnDepth(bool hsv);
+    void RemoveFilterOnDepth(const QString& name);
+    void ApplySelectedKeysEase(Document::Ease ease, const Document::Bezier& bezier);
+    void ToggleViewKeying(const QString& label, bool animated);
+    void PickViewColour(const QString& label);
     void PickColour(QTableWidgetItem* cell);
     void StartAnimating();
     void OpenProject(const QString& folder);
     [[nodiscard]] std::string TargetBuild() const;
     void FillTree();
+    void RefreshStartScreen();
+    void RememberRecent(const QString& path);
+    [[nodiscard]] QWidget* BuildPackageTabs();
+    void FillAnimationRows();
+    void FillImageRows();
+    void ChooseEntryFrom(QTreeWidget& tree);
+    void RenameEntryRow(QTreeWidgetItem* item);
     void ShowSelectedEntry();
     void ShowAnimation(const std::string& name);
     void ShowFrame();
+    void OpenDropped(const QString& path);
     void ApplyFieldEdit(QTableWidgetItem* item);
     bool EditAnimation(const QString& name, const AnimationChange& change);
     void ShowTimelineMenu(const QPoint& where, uint32_t frame, const QString& label);
@@ -162,6 +257,7 @@ private:
     void AddNewAnimation();
     void RemoveAnimation(const std::string& path, const QString& name);
     void RenameAnimationEntry(const std::string& path, const QString& name);
+    void ApplyAnimationRename(const std::string& path, const QString& name, const QString& wanted);
     void DuplicateAnimationEntry(const std::string& path, const QString& name);
     void RemoveUnusedDefinitionsFrom(const std::string& path, const QString& name);
     [[nodiscard]] bool ProjectOwnsDepthsIn(const std::string& path) const;
@@ -190,9 +286,7 @@ private:
                            bool finished);
     void ArrangeChosen(const QString& name,
                        const std::function<std::vector<Document::DepthOffset>(
-                           const std::vector<Document::StageOutline>&)>& offsets,
-                       std::size_t fewest);
-    void AddAlignMenu(QMenu* edit);
+                           const std::vector<Document::StageOutline>&)>& offsets);
     void ShowGhostsAround(uint32_t frame);
     void SaveImageAs(const QString& name);
     void AddImageFromFile();
@@ -202,7 +296,6 @@ private:
     void JumpToFrame(int64_t frame);
     void GoToFrame();
     void StepToMark(Document::Direction direction);
-    void AddStepActions(QMenu* menu);
     void SetWorkArea(std::optional<Document::WorkArea> area);
     void TrimClipToWorkArea();
     void ExtractWorkArea();
@@ -214,6 +307,17 @@ private:
     void RefillClipsKeepingChoice();
     void NameShownSpriteExport();
     void ChooseClip(int index);
+    void EnterSprite(uint16_t character);
+    [[nodiscard]] std::optional<Document::StageOutline>
+    ContextOf(const AfpAnimation::Animation& animation) const;
+    [[nodiscard]] Document::StageOffset UnderContext(double dx, double dy) const;
+    void RefreshContext(const AfpAnimation::Animation& animation);
+    [[nodiscard]] std::vector<Document::StageOutline>
+    OutlinesOnStage(const AfpAnimation::Animation& animation) const;
+    void EnterSpriteAt(double x, double y);
+    void LeaveClip();
+    [[nodiscard]] int ClipIndexOf(const Document::ClipId& wanted) const;
+    [[nodiscard]] QString ClipName(int index) const;
     void ShowClipTimeline();
     [[nodiscard]] std::optional<Placeable>
     ChoosePlaceable(const AfpAnimation::Animation& animation);
@@ -237,19 +341,18 @@ private:
                      const AnimationChange& baked, bool finished);
     void PreviewOnStage(AnimationChange change);
     void RunStagePreview();
-    void MoveOnStage(uint16_t depth, double dx, double dy, bool finished);
+    void MoveOnStage(uint16_t depth, double stage_dx, double stage_dy, bool finished);
     [[nodiscard]] bool SketchMove(uint16_t depth, double dx, double dy, bool finished);
     void ReshapeOnStage(uint16_t depth, double scale_x, double scale_y, double turn, bool finished);
     void MoveSpanInTime(uint16_t depth, uint32_t frame, int64_t by);
     void MoveSpanToDepth(uint16_t depth, uint32_t frame);
+    void MoveSpanOntoDepth(uint16_t depth, uint32_t frame, uint16_t to);
     void ArrangeDepth(Document::Arrange how, const QString& name);
     void SplitDepthAt(uint16_t depth, uint32_t frame);
     void SequenceChosenDepths(uint32_t frame);
     [[nodiscard]] std::optional<Document::Span> SpanNearPlayhead();
     void MoveEdgeToPlayhead(SpanEnd end);
     void TrimEdgeToPlayhead(SpanEnd end);
-    void AddPlayheadMenu(QMenu* edit);
-    void AddArrangeMenu(QMenu* edit);
     void DuplicateSpanToDepth(uint16_t depth, uint32_t frame);
     void DuplicateChosenDepth();
     void DuplicateSpanOnto(uint16_t depth, uint32_t frame, uint16_t to);
@@ -269,16 +372,23 @@ private:
     void JumpInHistory(int row);
     void FillLibrary(const AfpAnimation::Animation& animation,
                      const std::vector<Document::CharacterSummary>& characters);
+    void ShowLibraryKinds();
+    void PlaceLibraryCharacter(uint16_t character);
+    [[nodiscard]] QIcon LibraryTile(const std::map<uint16_t, std::string>& images,
+                                    uint16_t character);
+    [[nodiscard]] QWidget* BuildLibraryPanel();
     void ShowLibrarySprite(uint16_t sprite);
     void ShowLibraryMenu(const QPoint& where);
     bool CopySpanAt(uint16_t depth, uint32_t frame);
     void PasteSpanAt(uint32_t frame);
     void GroupDepthsIntoSprite(uint16_t depth, uint32_t frame);
+    void GroupIntoSpriteOver(const Document::GroupRange& range);
     void UngroupSpriteAt(uint16_t depth, uint32_t frame);
     [[nodiscard]] std::vector<uint16_t> HiddenHere() const;
     [[nodiscard]] bool IsHidden(uint16_t depth) const;
     void ToggleHidden(uint16_t depth);
     void ShowEveryDepth();
+    void UnlockEveryDepth();
     void UpdateViewRows();
     [[nodiscard]] bool IsLocked(uint16_t depth) const;
     void ToggleLocked(uint16_t depth);
@@ -298,28 +408,61 @@ private:
 
     ads::CDockManager* docks_ = nullptr;
     QTreeWidget* package_tree_ = nullptr;
+    QTreeWidget* animations_tree_ = nullptr;
+    QTreeWidget* images_tree_ = nullptr;
     QTreeWidget* library_ = nullptr;
     QLineEdit* package_filter_ = nullptr;
     QLineEdit* library_filter_ = nullptr;
+    std::vector<Document::CharacterKind> library_kinds_;
+    std::map<uint16_t, QIcon> library_tiles_;
+    std::string library_tiles_path_;
     QAction* onion_action_ = nullptr;
     QAction* path_action_ = nullptr;
     std::vector<uint16_t> selected_depths_;
     QListWidget* history_list_ = nullptr;
     QTableWidget* inspector_ = nullptr;
+    Inspector* inspector_panel_ = nullptr;
+    SelectionBar* selection_bar_ = nullptr;
+    Popover* popover_ = nullptr;
+    Notices* notices_ = nullptr;
+    StageBar* stage_bar_ = nullptr;
+    StartScreen* start_ = nullptr;
+    QStackedWidget* centre_ = nullptr;
+    ToolStrip* tool_strip_ = nullptr;
+    TimelineBar* timeline_bar_ = nullptr;
+    ads::CDockWidget* timeline_dock_ = nullptr;
+    ads::CDockWidget* graph_dock_ = nullptr;
+    std::vector<Document::AnimationLabel> shown_labels_;
+    double shown_rate_ = 0;
     QAction* background_action_ = nullptr;
     Viewport* viewport_ = nullptr;
     Timeline* timeline_ = nullptr;
     GraphEditor* graph_ = nullptr;
+    QListWidget* graph_properties_ = nullptr;
+    std::vector<std::string> graph_hidden_;
     QTimer* resize_timer_ = nullptr;
     QTimer* play_timer_ = nullptr;
-    QComboBox* clip_box_ = nullptr;
+    std::vector<Document::ClipSummary> clips_;
+    int clip_index_ = 0;
     QAction* play_action_ = nullptr;
     QAction* loop_action_ = nullptr;
     QAction* undo_action_ = nullptr;
     QAction* redo_action_ = nullptr;
-    QAction* create_project_action_ = nullptr;
-    QAction* close_project_action_ = nullptr;
-    QAction* export_action_ = nullptr;
+    Commands* commands_ = nullptr;
+    CommandSearch* search_ = nullptr;
+    ads::CDockWidget* history_dock_ = nullptr;
+    QLabel* document_state_ = nullptr;
+    QToolButton* project_button_ = nullptr;
+    QToolButton* export_button_ = nullptr;
+    QAction* project_button_action_ = nullptr;
+    QAction* export_button_action_ = nullptr;
+    QLabel* host_status_ = nullptr;
+    QLabel* stage_status_ = nullptr;
+    QLabel* frame_status_ = nullptr;
+    QLabel* chosen_status_ = nullptr;
+    QLabel* snap_status_ = nullptr;
+    QLabel* zoom_status_ = nullptr;
+    qint64 render_ms_ = 0;
     Host host_;
     std::optional<Document::File> file_;
     Document::History history_;
@@ -344,7 +487,10 @@ private:
     Document::ClipId clip_;
     std::optional<Document::WorkArea> work_area_;
     bool symbol_shown_ = false;
+    std::optional<Document::StageOutline> context_;
+    QAction* context_action_ = nullptr;
     bool filling_inspector_ = false;
+    bool filling_tree_ = false;
     std::optional<SharedTexture::Reader> reader_;
     QSize stage_size_;
     std::map<uint16_t, Document::Box> shape_bounds_;
@@ -360,7 +506,6 @@ private:
         Document::SketchedOffsets offsets;
     };
     std::optional<Sketch> sketch_;
-    QAction* sketch_action_ = nullptr;
 };
 
 }

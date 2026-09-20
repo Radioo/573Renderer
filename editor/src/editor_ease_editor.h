@@ -2,16 +2,17 @@
 
 #include "document/keyframes.h"
 
-#include <QDialog>
 #include <QPointF>
 #include <QWidget>
 
 #include <cstddef>
 #include <optional>
 
+class QLabel;
 class QLineEdit;
 class QMouseEvent;
 class QPaintEvent;
+class QToolButton;
 
 namespace Editor {
 
@@ -42,20 +43,34 @@ private:
     std::optional<std::size_t> grabbed_;
 };
 
-class EaseDialog : public QDialog {
+struct EaseView {
+    Document::Ease ease = Document::Ease::Linear;
+    Document::Bezier bezier;
+    int keys = 0;
+};
+
+class EaseEditor : public QWidget {
     Q_OBJECT
 
 public:
-    EaseDialog(const Document::Bezier& initial, QWidget* parent);
+    explicit EaseEditor(QWidget* parent = nullptr);
 
-    [[nodiscard]] const Document::Bezier& Result() const { return curve_->Curve(); }
+    void Show(const EaseView& view);
+
+signals:
+    void EaseChosen(Document::Ease ease, const Document::Bezier& bezier);
 
 private:
     void ShowNumbers();
     void ReadNumbers();
+    void Choose(Document::Ease ease, const Document::Bezier& bezier);
 
     CurveEditor* curve_ = nullptr;
     QLineEdit* numbers_ = nullptr;
+    QLabel* counted_ = nullptr;
+    QToolButton* hold_ = nullptr;
+    QToolButton* linear_ = nullptr;
+    QToolButton* bezier_ = nullptr;
 };
 
 }

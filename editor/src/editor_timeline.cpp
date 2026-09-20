@@ -1,5 +1,7 @@
 #include "editor_timeline.h"
 
+#include "editor_timeline_metrics.h"
+
 #include "editor_mime.h"
 
 #include "document/key_selection.h"
@@ -45,53 +47,6 @@
 
 namespace Editor {
 
-namespace {
-
-constexpr int kGutterWidth = 56;
-constexpr int kRulerHeight = 26;
-constexpr int kRowHeight = 16;
-constexpr int kBarInset = 2;
-constexpr int kShortestNamedBar = 24;
-constexpr int kEyeLeft = 3;
-constexpr int kLockLeft = 17;
-constexpr int kSwitchWidth = 12;
-constexpr int kNumberLeft = 30;
-constexpr int kNamePadding = 3;
-constexpr int kNamePixels = 10;
-constexpr int kEmptyHeight = 80;
-constexpr int kLabelReach = 30;
-constexpr int kLabelGrab = 4;
-constexpr int kKeyReach = 6;
-constexpr int kKeyRadius = 4;
-constexpr int kPropertyIndent = 8;
-constexpr int kSpanDragThreshold = 4;
-constexpr int kEdgeReach = 3;
-constexpr double kSnapPixels = 8.0;
-constexpr double kZoomStep = 1.25;
-constexpr double kMostPixelsPerFrame = 48.0;
-constexpr double kZoomSlack = 1e-9;
-constexpr int kTickSpacing = 60;
-constexpr int kTickHeight = 6;
-constexpr std::array<uint32_t, 10> kTickSteps{1, 2, 5, 10, 20, 50, 100, 200, 500, 1000};
-
-const QColor kRuler(58, 58, 62);
-const QColor kRow(40, 40, 44);
-const QColor kSpanName(240, 240, 244);
-const QColor kSwitchOn(222, 222, 228);
-const QColor kSwitchOff(96, 96, 104);
-const QColor kPropertyRow(34, 34, 38);
-const QColor kSelectedRow(44, 66, 88);
-const QColor kBar(70, 128, 196);
-const QColor kHiddenBar(92, 92, 98);
-const QColor kKey(210, 210, 216);
-const QColor kKeySelected(240, 190, 80);
-const QColor kKeyLine(96, 96, 104);
-const QColor kLabelMark(220, 180, 90);
-const QColor kPlayhead(230, 90, 90);
-const QColor kWorkArea(72, 96, 132);
-
-}
-
 Timeline::Timeline(QWidget* parent) : QWidget(parent) {
     setMinimumHeight(kEmptyHeight);
     setFocusPolicy(Qt::ClickFocus);
@@ -105,9 +60,6 @@ void Timeline::ShowAnimation(uint32_t frame_count, std::vector<Document::DepthRo
     rows_ = std::move(rows);
     labels_ = std::move(labels);
     frame_ = 0;
-    keyed_depth_.reset();
-    tracks_.clear();
-    selected_keys_.clear();
     Resize();
     ApplyZoom();
     update();
@@ -184,7 +136,7 @@ QScrollArea* Timeline::ScrollArea() const {
 
 void Timeline::Resize() {
     const int lanes = static_cast<int>(Lanes().size());
-    setMinimumHeight(std::max(kEmptyHeight, kRulerHeight + lanes * kRowHeight));
+    setMinimumHeight(std::max(kEmptyHeight, kRowsTop + lanes * kRowHeight));
 }
 
 std::vector<Timeline::Lane> Timeline::Lanes() const {
@@ -199,8 +151,8 @@ std::vector<Timeline::Lane> Timeline::Lanes() const {
 }
 
 std::optional<std::size_t> Timeline::LaneAt(int y) const {
-    const int lane = (y - kRulerHeight) / kRowHeight;
-    if (lane < 0 || y < kRulerHeight) return std::nullopt;
+    const int lane = (y - kRowsTop) / kRowHeight;
+    if (lane < 0 || y < kRowsTop) return std::nullopt;
     const std::vector<Lane> lanes = Lanes();
     if (static_cast<std::size_t>(lane) >= lanes.size()) return std::nullopt;
     return static_cast<std::size_t>(lane);
@@ -238,6 +190,16 @@ void Timeline::ZoomOut() {
     ZoomAround(FrameToX(frame_), 1.0 / kZoomStep);
 }
 
+double Timeline::ZoomPixels() const {
+    return zoom_.value_or(PixelsPerFrame());
+}
+
+void Timeline::SetZoomPixels(double pixels) {
+    const double now = ZoomPixels();
+    if (now <= 0 || pixels <= 0) return;
+    ZoomAround(FrameToX(frame_), pixels / now);
+}
+
 void Timeline::ZoomAround(int cursor, double factor) {
     if (frame_count_ <= 1) return;
     QScrollArea* area = ScrollArea();
@@ -257,24 +219,7 @@ void Timeline::ZoomAround(int cursor, double factor) {
     if (area != nullptr)
         area->horizontalScrollBar()->setValue(FrameToX(anchor) - (cursor - scrolled));
     update();
-}
-
-void Timeline::DrawTicks(QPainter& painter) const {
-    const double spacing = PixelsPerFrame();
-    if (spacing <= 0.0) return;
-    uint32_t step = kTickSteps.back();
-    for (const uint32_t candidate : kTickSteps) {
-        if (spacing * candidate >= kTickSpacing) {
-            step = candidate;
-            break;
-        }
-    }
-    painter.setPen(palette().color(QPalette::Mid));
-    for (uint32_t frame = 0; frame < frame_count_; frame += step) {
-        const int x = FrameToX(frame);
-        painter.drawLine(x, kRulerHeight - kTickHeight, x, kRulerHeight);
-        painter.drawText(x + 2, kRulerHeight - kTickHeight - 2, QString::number(frame));
-    }
+    emit ZoomChanged();
 }
 
 int Timeline::FrameToX(uint32_t frame) const {
@@ -408,11 +353,26 @@ bool Timeline::PressSwitch(const Lane& lane, QPoint at) {
         emit LockToggled(lane.depth);
         return true;
     }
+    if (at.x() >= kSoloLeft && at.x() < kSoloLeft + kSwitchWidth) {
+        emit SoloToggled(lane.depth);
+        return true;
+    }
     return false;
+}
+
+std::optional<uint16_t> Timeline::DepthRowAt(int y) const {
+    const std::optional<std::size_t> lane = LaneAt(y);
+    if (!lane) return std::nullopt;
+    const std::vector<Lane> lanes = Lanes();
+    if (lanes[*lane].is_property) return std::nullopt;
+    return lanes[*lane].depth;
 }
 
 bool Timeline::PressDepthNumber(const Lane& lane, QPoint at, Qt::KeyboardModifiers modifiers) {
     if (lane.is_property || at.x() < kNumberLeft || at.x() >= kGutterWidth) return false;
+    row_dragged_ = lane.depth;
+    row_onto_ = lane.depth;
+    row_press_y_ = at.y();
     const bool adding = (modifiers & Qt::ControlModifier) != 0;
     const bool ranging = (modifiers & Qt::ShiftModifier) != 0 && !selected_depths_.empty();
     if (!adding && !ranging) {
@@ -441,27 +401,45 @@ bool Timeline::PressDepthNumber(const Lane& lane, QPoint at, Qt::KeyboardModifie
     return true;
 }
 
-void Timeline::DrawSwitches(QPainter& painter, uint16_t depth, int y) const {
-    const bool hidden = std::ranges::find(hidden_depths_, depth) != hidden_depths_.end();
-    const bool locked = std::ranges::find(locked_depths_, depth) != locked_depths_.end();
-    const int middle = y + kRowHeight / 2;
-    painter.save();
-    painter.setRenderHint(QPainter::Antialiasing);
-    const QRectF eye(kEyeLeft, middle - 3, kSwitchWidth, 6);
-    painter.setPen(QPen(hidden ? kSwitchOff : kSwitchOn, 1));
-    painter.setBrush(Qt::NoBrush);
-    painter.drawEllipse(eye);
-    if (!hidden) {
-        painter.setBrush(kSwitchOn);
-        painter.drawEllipse(eye.center(), 2, 2);
+void Timeline::SetCharacterKinds(std::map<uint16_t, Document::CharacterKind> kinds) {
+    kinds_ = std::move(kinds);
+    update();
+}
+
+void Timeline::SetDepthMarks(std::map<uint16_t, std::vector<uint32_t>> marks) {
+    marks_ = std::move(marks);
+    update();
+}
+
+void Timeline::SetFrameNotes(std::vector<Document::FrameNote> notes) {
+    notes_ = std::move(notes);
+    update();
+}
+
+bool Timeline::PressColumnHeaders(QPoint at) {
+    if (at.y() >= kRulerHeight || at.x() >= kGutterWidth) return false;
+    if (at.x() >= kEyeLeft && at.x() < kEyeLeft + kSwitchWidth) emit ShowAllAsked();
+    if (at.x() >= kLockLeft && at.x() < kLockLeft + kSwitchWidth) emit UnlockAllAsked();
+    return true;
+}
+
+bool Timeline::PressNotes(QPoint at) {
+    if (at.y() < kRulerHeight || at.y() >= kRowsTop) return false;
+    if (at.x() < kGutterWidth) {
+        emit CameraAsked();
+        return true;
     }
-    const QRectF body(kLockLeft + 2, middle - 1, kSwitchWidth - 4, 6);
-    painter.setPen(QPen(locked ? kSwitchOn : kSwitchOff, 1));
-    painter.setBrush(locked ? QBrush(kSwitchOn) : QBrush(Qt::NoBrush));
-    painter.drawRect(body);
-    painter.setBrush(Qt::NoBrush);
-    painter.drawArc(QRectF(kLockLeft + 3, middle - 6, kSwitchWidth - 6, 8), 0, 180 * 16);
-    painter.restore();
+    for (const Document::FrameNote& note : notes_) {
+        if (std::abs(FrameToX(note.frame) - at.x()) > kNoteReach) continue;
+        emit FrameChosen(note.frame);
+        return true;
+    }
+    return true;
+}
+
+void Timeline::SetKeyedDepths(std::vector<uint16_t> depths) {
+    keyed_depths_ = std::move(depths);
+    update();
 }
 
 void Timeline::SetCharacterNames(std::map<uint16_t, QString> names) {
@@ -476,15 +454,20 @@ QString Timeline::SpanName(const Document::DepthRow& row, const Document::Span& 
     return name == names_.end() ? QString() : name->second;
 }
 
-void Timeline::DrawSpanName(QPainter& painter, const QString& name, const QRect& bar) const {
-    if (name.isEmpty() || bar.width() < kShortestNamedBar) return;
-    QFont font = painter.font();
-    font.setPixelSize(kNamePixels);
-    painter.setFont(font);
-    const QRect inside = bar.adjusted(kNamePadding, 0, -kNamePadding, 0);
-    painter.setPen(kSpanName);
-    painter.drawText(inside, Qt::AlignLeft | Qt::AlignVCenter,
-                     painter.fontMetrics().elidedText(name, Qt::ElideRight, inside.width()));
+std::optional<uint16_t> Timeline::SpriteAt(QPoint at) const {
+    const std::optional<std::size_t> lane = LaneAt(at.y());
+    if (!lane) return std::nullopt;
+    const Lane found = Lanes()[*lane];
+    if (found.is_property) return std::nullopt;
+    const auto row = std::ranges::find(rows_, found.depth, &Document::DepthRow::depth);
+    const std::optional<Document::Span> span = SpanAt(found.depth, at.x());
+    if (row == rows_.end() || !span) return std::nullopt;
+    const auto shown = row->shows.find(span->first_frame);
+    if (shown == row->shows.end()) return std::nullopt;
+    const auto kind = kinds_.find(shown->second);
+    if (kind == kinds_.end() || kind->second != Document::CharacterKind::Sprite)
+        return std::nullopt;
+    return shown->second;
 }
 
 QString Timeline::SpanNameAt(QPoint at) const {
@@ -591,7 +574,7 @@ void Timeline::PressSpan(const Lane& lane, QPoint at) {
 void Timeline::SelectBand(bool adding) {
     std::vector<Document::KeyRef> chosen = adding ? band_kept_ : std::vector<Document::KeyRef>{};
     const QRect band = QRect(*band_from_, band_to_).normalized();
-    int y = kRulerHeight;
+    int y = kRowsTop;
     for (const Lane& lane : Lanes()) {
         const QRect row(0, y, width(), kRowHeight);
         y += kRowHeight;
@@ -605,6 +588,7 @@ void Timeline::SelectBand(bool adding) {
         }
     }
     selected_keys_ = std::move(chosen);
+    emit KeysSelected();
 }
 
 bool Timeline::PressLabel(QPoint at) {
@@ -620,6 +604,28 @@ bool Timeline::PressLabel(QPoint at) {
     return true;
 }
 
+void Timeline::mouseDoubleClickEvent(QMouseEvent* event) {
+    if (event->button() != Qt::LeftButton || frame_count_ == 0) {
+        QWidget::mouseDoubleClickEvent(event);
+        return;
+    }
+    if (event->pos().y() >= kRowsTop) {
+        const std::optional<uint16_t> sprite = SpriteAt(event->pos());
+        if (sprite) emit SpriteEntered(*sprite);
+        return;
+    }
+    if (event->pos().y() >= kRulerHeight) {
+        QWidget::mouseDoubleClickEvent(event);
+        return;
+    }
+    const QString label = LabelNear(event->pos().x(), kLabelGrab);
+    if (label.isEmpty()) {
+        emit LabelAsked(XToFrame(event->pos().x()));
+        return;
+    }
+    emit LabelRenameAsked(label);
+}
+
 void Timeline::mousePressEvent(QMouseEvent* event) {
     drag_from_.reset();
     stretch_fixed_.reset();
@@ -630,6 +636,8 @@ void Timeline::mousePressEvent(QMouseEvent* event) {
     label_dragging_ = false;
     if (event->button() != Qt::LeftButton) return;
     if (PressLabel(event->pos())) return;
+    if (PressColumnHeaders(event->pos())) return;
+    if (PressNotes(event->pos())) return;
     const bool toggle = (event->modifiers() & Qt::ControlModifier) != 0;
     const std::optional<std::size_t> lane = LaneAt(event->pos().y());
     if (lane) {
@@ -651,6 +659,13 @@ void Timeline::mousePressEvent(QMouseEvent* event) {
 }
 
 void Timeline::mouseMoveEvent(QMouseEvent* event) {
+    if (row_dragged_ && (event->buttons() & Qt::LeftButton) != 0) {
+        if (std::abs(event->pos().y() - row_press_y_) >= kRowHeight) {
+            row_onto_ = DepthRowAt(event->pos().y());
+            update();
+        }
+        return;
+    }
     if ((event->buttons() & Qt::LeftButton) == 0) {
         ShowHoverCursor(event->pos());
         return;
@@ -688,6 +703,16 @@ void Timeline::mouseMoveEvent(QMouseEvent* event) {
 }
 
 void Timeline::mouseReleaseEvent(QMouseEvent* event) {
+    if (row_dragged_) {
+        const std::optional<uint16_t> dragged = std::exchange(row_dragged_, std::nullopt);
+        const std::optional<uint16_t> onto = std::exchange(row_onto_, std::nullopt);
+        if (dragged && onto && *dragged != *onto) {
+            update();
+            emit DepthDragged(*dragged, *onto);
+            return;
+        }
+        update();
+    }
     if (event->button() != Qt::LeftButton) return;
     if (label_grabbed_) {
         const QString label = *label_grabbed_;
@@ -743,38 +768,6 @@ void Timeline::mouseReleaseEvent(QMouseEvent* event) {
     emit KeysShifted(static_cast<int64_t>(released) - static_cast<int64_t>(*from));
 }
 
-void Timeline::DrawSpanGhost(QPainter& painter, const Document::Span& span, int y) const {
-    const Document::Span ghost = Dragged(span, span_to_);
-    const int from = FrameToX(ghost.first_frame);
-    const int to = FrameToX(ghost.last_frame);
-    painter.setPen(kKeySelected);
-    painter.setBrush(Qt::NoBrush);
-    painter.drawRect(
-        QRect(from, y + kBarInset, std::max(2, to - from), kRowHeight - 2 - 2 * kBarInset));
-}
-
-void Timeline::DrawKeys(QPainter& painter, const Document::Track& track, int y) const {
-    const int middle = y + kRowHeight / 2;
-    for (const Document::Keyframe& key : track.keys) {
-        const bool selected = IsSelected({.property = track.property, .frame = key.frame});
-        const int64_t shown = selected ? ShownFrame(key.frame) : static_cast<int64_t>(key.frame);
-        const int x = FrameToX(static_cast<uint32_t>(std::clamp<int64_t>(
-            shown, 0, frame_count_ > 0 ? static_cast<int64_t>(frame_count_ - 1) : 0)));
-        painter.setPen(Qt::NoPen);
-        painter.setBrush(selected ? kKeySelected : kKey);
-        if (key.ease == Document::Ease::Hold) {
-            painter.drawRect(QRect(x - kKeyRadius + 1, middle - kKeyRadius + 1, 2 * kKeyRadius - 2,
-                                   2 * kKeyRadius - 2));
-        } else {
-            const QPolygon diamond({QPoint(x, middle - kKeyRadius), QPoint(x + kKeyRadius, middle),
-                                    QPoint(x, middle + kKeyRadius),
-                                    QPoint(x - kKeyRadius, middle)});
-            painter.drawPolygon(diamond);
-        }
-    }
-    painter.setBrush(Qt::NoBrush);
-}
-
 void Timeline::SetHiddenDepths(std::vector<uint16_t> depths) {
     hidden_depths_ = std::move(depths);
     update();
@@ -788,88 +781,6 @@ void Timeline::SetWorkArea(std::optional<Document::WorkArea> area) {
 void Timeline::SetLockedDepths(std::vector<uint16_t> depths) {
     locked_depths_ = std::move(depths);
     update();
-}
-
-void Timeline::paintEvent(QPaintEvent* event) {
-    QPainter painter(this);
-    painter.fillRect(event->rect(), palette().color(QPalette::Base));
-    if (frame_count_ == 0) {
-        painter.setPen(palette().color(QPalette::Text));
-        painter.drawText(rect(), Qt::AlignCenter, tr("No animation selected"));
-        return;
-    }
-
-    painter.fillRect(QRect(0, 0, width(), kRulerHeight), kRuler);
-    if (work_area_) {
-        const int from = FrameToX(work_area_->first_frame);
-        const int to = FrameToX(work_area_->last_frame + 1);
-        painter.fillRect(QRect(from, 0, std::max(2, to - from), kRulerHeight), kWorkArea);
-    }
-    DrawTicks(painter);
-    painter.setPen(palette().color(QPalette::BrightText));
-    painter.drawText(QRect(0, 0, kGutterWidth, kRulerHeight), Qt::AlignCenter,
-                     QString::number(frame_));
-    for (const Document::AnimationLabel& label : labels_) {
-        const bool dragged = label_dragging_ && label_grabbed_ &&
-                             *label_grabbed_ == QString::fromStdString(label.name);
-        const int x = FrameToX(dragged ? label_to_ : label.frame);
-        painter.setPen(kLabelMark);
-        painter.drawLine(x, 0, x, kRulerHeight);
-        painter.drawText(x + 3, kRulerHeight - 8, QString::fromStdString(label.name));
-    }
-
-    int y = kRulerHeight;
-    for (const Lane& lane : Lanes()) {
-        if (lane.is_property) {
-            const Document::Track& track = tracks_[lane.track];
-            painter.fillRect(QRect(0, y, width(), kRowHeight - 1), kPropertyRow);
-            painter.setPen(palette().color(QPalette::Text));
-            painter.drawText(QRect(kPropertyIndent, y, kGutterWidth * 3, kRowHeight),
-                             Qt::AlignLeft | Qt::AlignVCenter,
-                             QString::fromStdString(track.property));
-            if (track.keys.size() > 1) {
-                painter.setPen(kKeyLine);
-                painter.drawLine(FrameToX(track.keys.front().frame), y + kRowHeight / 2,
-                                 FrameToX(track.keys.back().frame), y + kRowHeight / 2);
-            }
-            DrawKeys(painter, track, y);
-            y += kRowHeight;
-            continue;
-        }
-
-        const auto row = std::ranges::find(rows_, lane.depth, &Document::DepthRow::depth);
-        painter.fillRect(QRect(0, y, width(), kRowHeight - 1),
-                         std::ranges::find(selected_depths_, lane.depth) != selected_depths_.end()
-                             ? kSelectedRow
-                             : kRow);
-        DrawSwitches(painter, lane.depth, y);
-        painter.setPen(palette().color(QPalette::Text));
-        painter.drawText(QRect(kNumberLeft, y, kGutterWidth - 6 - kNumberLeft, kRowHeight),
-                         Qt::AlignRight | Qt::AlignVCenter, QString::number(lane.depth));
-        const bool hidden = std::ranges::find(hidden_depths_, lane.depth) != hidden_depths_.end();
-        if (row != rows_.end()) {
-            for (const Document::Span& span : row->spans) {
-                const int from = FrameToX(span.first_frame);
-                const int to = FrameToX(span.last_frame);
-                const QRect bar(from, y + kBarInset, std::max(2, to - from),
-                                kRowHeight - 1 - 2 * kBarInset);
-                painter.fillRect(bar, hidden ? kHiddenBar : kBar);
-                DrawSpanName(painter, SpanName(*row, span), bar);
-                if (span_dragging_ && span_depth_ == lane.depth && span_grabbed_ == span)
-                    DrawSpanGhost(painter, span, y);
-            }
-        }
-        y += kRowHeight;
-    }
-
-    const int playhead = FrameToX(frame_);
-    painter.setPen(kPlayhead);
-    painter.drawLine(playhead, 0, playhead, height());
-    if (band_from_) {
-        painter.setPen(kKeySelected);
-        painter.setBrush(Qt::NoBrush);
-        painter.drawRect(QRect(*band_from_, band_to_).normalized());
-    }
 }
 
 bool Timeline::TakesDrop(const QMimeData* data, QPointF at) const {

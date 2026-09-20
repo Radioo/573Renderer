@@ -3,6 +3,7 @@
 #include "document/document.h"
 #include "document/project.h"
 
+#include <cstddef>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -23,6 +24,8 @@ struct DriftedEntry {
 [[nodiscard]] std::vector<ExportedEntry> RecordExported(const File& file, const Project& project);
 
 [[nodiscard]] std::vector<DriftedEntry> ProjectDrift(const File& file, const Project& project);
+
+[[nodiscard]] std::size_t AwaitingExport(const File& file, const Project& project);
 
 void KeepIfsVersion(Project& project, std::string_view path);
 

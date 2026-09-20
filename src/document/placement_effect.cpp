@@ -3,6 +3,7 @@
 #include "formats/afp_animation.h"
 
 #include <array>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <optional>
@@ -40,6 +41,19 @@ std::array<double, 4> Packed(uint32_t packed) {
             static_cast<double>(packed & 0xFFU) / kColourUnit};
 }
 
+using Units = std::array<int32_t, 2>;
+
+int32_t Rounded(double value) {
+    return static_cast<int32_t>(std::llround(value));
+}
+
+std::array<int16_t, 4> Channels(const std::array<double, 4>& colour) {
+    std::array<int16_t, 4> out{};
+    for (std::size_t at = 0; at < out.size(); at++)
+        out.at(at) = static_cast<int16_t>(std::llround(colour.at(at) * kColourUnit));
+    return out;
+}
+
 std::array<double, 6> Matrix(const AfpAnimation::Placement& placement) {
     std::array<double, 6> matrix = AppliedState{}.matrix;
     if (placement.scale) {
@@ -72,6 +86,59 @@ std::optional<std::size_t> PlacingTag(const AfpAnimation::Container& clip,
     return index;
 }
 
+void ApplyGroupFrames(GroupFrames& applied, const AfpAnimation::Tag& tag, uint16_t depth,
+                      uint32_t at) {
+    if (const auto* remove = std::get_if<AfpAnimation::Remove>(&tag.body)) {
+        if (remove->depth == depth) applied = GroupFrames{};
+        return;
+    }
+    const auto* placement = std::get_if<AfpAnimation::Placement>(&tag.body);
+    if (placement == nullptr || placement->depth != depth) return;
+    if ((placement->flags & kUpdateExisting) == 0) {
+        applied = GroupFrames{.matrix = at, .colour = at};
+        return;
+    }
+    if (!applied.matrix && !applied.colour) return;
+    if ((placement->flags & kUseMatrix) != 0) applied.matrix = at;
+    if ((placement->flags & kUseColour) != 0) applied.colour = at;
+}
+}
+
+uint32_t ControlsNeeded(const AfpAnimation::Placement& placement) {
+    uint32_t bits = 0;
+    if (placement.scale || placement.rotate_skew || placement.translation ||
+        placement.short_scale || placement.short_rotate_skew) {
+        bits |= kUseMatrix;
+    }
+    if (placement.multiply_colour || placement.add_colour || placement.packed_multiply_colour ||
+        placement.packed_add_colour) {
+        bits |= kUseColour;
+    }
+    return bits;
+}
+
+void CarryApplied(AfpAnimation::Placement& placement, const AppliedState& state, uint32_t bits) {
+    if ((bits & kUseMatrix) != 0 && !placement.short_scale && !placement.short_rotate_skew) {
+        const std::array<double, 6>& matrix = state.matrix;
+        if (!placement.scale && (matrix[kScaleX] != 1.0 || matrix[kScaleY] != 1.0)) {
+            placement.scale =
+                Units{Rounded(matrix[kScaleX] * kLongUnit), Rounded(matrix[kScaleY] * kLongUnit)};
+        }
+        if (!placement.rotate_skew && (matrix[kSkewB] != 0.0 || matrix[kSkewC] != 0.0)) {
+            placement.rotate_skew =
+                Units{Rounded(matrix[kSkewB] * kLongUnit), Rounded(matrix[kSkewC] * kLongUnit)};
+        }
+        if (!placement.translation && (matrix[kMoveX] != 0.0 || matrix[kMoveY] != 0.0))
+            placement.translation = Units{Rounded(matrix[kMoveX]), Rounded(matrix[kMoveY])};
+    }
+    if ((bits & kUseColour) == 0) return;
+    const AppliedState identity;
+    if (!placement.multiply_colour && !placement.packed_multiply_colour &&
+        state.multiply != identity.multiply) {
+        placement.multiply_colour = Channels(state.multiply);
+    }
+    if (!placement.add_colour && !placement.packed_add_colour && state.add != identity.add)
+        placement.add_colour = Channels(state.add);
 }
 
 void ApplyPlacement(AppliedState& state, const AfpAnimation::Placement& placement) {
@@ -94,6 +161,19 @@ void ApplyPlacement(AppliedState& state, const AfpAnimation::Placement& placemen
             state.multiply = Packed(*placement.packed_multiply_colour);
         if (placement.packed_add_colour) state.add = Packed(*placement.packed_add_colour);
     }
+}
+
+GroupFrames LastApplied(const AfpAnimation::Container& clip, uint16_t depth, uint32_t frame) {
+    GroupFrames applied;
+    for (uint32_t at = 0; at <= frame && at < clip.frames.size(); at++) {
+        const AfpAnimation::Frame& owner = clip.frames[at];
+        for (std::size_t i = 0; i < owner.tag_count; i++) {
+            const std::optional<std::size_t> index = PlacingTag(clip, owner, i);
+            if (!index) break;
+            ApplyGroupFrames(applied, clip.tags[*index], depth, at);
+        }
+    }
+    return applied;
 }
 
 std::vector<std::pair<uint32_t, AppliedState>>

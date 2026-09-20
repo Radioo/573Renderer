@@ -4,6 +4,7 @@
 
 #include <array>
 #include <cstdint>
+#include <optional>
 #include <utility>
 #include <vector>
 
@@ -19,7 +20,21 @@ struct AppliedState {
 
 void ApplyPlacement(AppliedState& state, const AfpAnimation::Placement& placement);
 
+[[nodiscard]] uint32_t ControlsNeeded(const AfpAnimation::Placement& placement);
+
+void CarryApplied(AfpAnimation::Placement& placement, const AppliedState& state, uint32_t bits);
+
 [[nodiscard]] std::vector<std::pair<uint32_t, AppliedState>>
 ReplayDepth(const AfpAnimation::Container& clip, uint16_t depth, uint32_t first, uint32_t last);
+
+struct GroupFrames {
+    std::optional<uint32_t> matrix;
+    std::optional<uint32_t> colour;
+
+    friend bool operator==(const GroupFrames&, const GroupFrames&) = default;
+};
+
+[[nodiscard]] GroupFrames LastApplied(const AfpAnimation::Container& clip, uint16_t depth,
+                                      uint32_t frame);
 
 }

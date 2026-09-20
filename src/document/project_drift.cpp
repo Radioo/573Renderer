@@ -7,6 +7,7 @@
 #include "document/project.h"
 
 #include <algorithm>
+#include <cstddef>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -55,6 +56,18 @@ std::vector<ExportedEntry> RecordExported(const File& file, const Project& proje
         out.push_back(ExportedEntry{.path = path, .digest = *digest});
     }
     return out;
+}
+
+std::size_t AwaitingExport(const File& file, const Project& project) {
+    std::size_t waiting = 0;
+    for (const ExportedEntry& entry : RecordExported(file, project)) {
+        if (std::ranges::find(project.exported, entry) == project.exported.end()) waiting++;
+    }
+    for (const SourceImage& image : project.images) {
+        const auto stored = StoredName(kTextureDirectory, image.name);
+        if (!stored || !file.EntryDigest(JoinPath(kTextureDirectory, *stored))) waiting++;
+    }
+    return waiting;
 }
 
 std::vector<DriftedEntry> ProjectDrift(const File& file, const Project& project) {

@@ -307,3 +307,35 @@ TEST_CASE("A step that only changes authored content is undone like any other") 
     CHECK(undone->file.Encode() == file.Encode());
     CHECK(history.RedoName() == "own depth 1");
 }
+
+TEST_CASE("The history counts the steps between here and the saved document") {
+    Document::History history;
+    Document::File file = OpenSample();
+    CHECK(history.StepsFromSaved() == std::optional<std::size_t>(0));
+    history.Record("one", Of(file));
+    AddLabel(file, "one", 1);
+    history.Record("two", Of(file));
+    AddLabel(file, "two", 2);
+    CHECK(history.StepsFromSaved() == std::optional<std::size_t>(2));
+
+    auto undone = history.Undo(Of(file));
+    REQUIRE(undone.has_value());
+    if (!undone) return;
+    file = std::move(undone->file);
+    CHECK(history.StepsFromSaved() == std::optional<std::size_t>(1));
+    history.MarkSaved();
+    CHECK(history.StepsFromSaved() == std::optional<std::size_t>(0));
+    auto redone = history.Redo(Of(file));
+    REQUIRE(redone.has_value());
+    CHECK(history.StepsFromSaved() == std::optional<std::size_t>(1));
+}
+
+TEST_CASE("A saved document that fell off the stack is no number of steps away") {
+    Document::History history(1);
+    Document::File file = OpenSample();
+    history.Record("one", Of(file));
+    AddLabel(file, "one", 1);
+    history.Record("two", Of(file));
+    AddLabel(file, "two", 2);
+    CHECK_FALSE(history.StepsFromSaved().has_value());
+}

@@ -840,6 +840,7 @@ catch_discover_tests(document_outline_local_tests DISCOVERY_MODE POST_BUILD PROP
 
 add_executable(document_tests
     tests/document/atlas_tests.cpp
+    tests/document/blend_modes_tests.cpp
     tests/document/authored_character_tests.cpp
     tests/document/authored_control_bits_tests.cpp
     tests/document/authored_curve_tests.cpp
@@ -857,6 +858,7 @@ add_executable(document_tests
     tests/document/filter_fields_tests.cpp
     tests/document/filter_values_tests.cpp
     tests/document/frame_edit_tests.cpp
+    tests/document/frame_notes_tests.cpp
     tests/document/history_tests.cpp
     tests/document/key_selection_tests.cpp
     tests/document/group_sprite_tests.cpp
@@ -868,7 +870,9 @@ add_executable(document_tests
     tests/document/label_edit_tests.cpp
     tests/document/library_call_tests.cpp
     tests/document/outline_tests.cpp
+    tests/document/outline_through_tests.cpp
     tests/document/placement_edit_tests.cpp
+    tests/document/placement_control_bits_tests.cpp
     tests/document/placement_effect_tests.cpp
     tests/document/playback_tests.cpp
     tests/document/project_drift_tests.cpp
@@ -901,6 +905,8 @@ add_executable(document_tests
     tests/document/sprite_structure_tests.cpp
     tests/document/stage_bounds_tests.cpp
     tests/document/stage_move_tests.cpp
+    tests/document/transform_parts_tests.cpp
+    tests/document/inspector_view_tests.cpp
     tests/document/timeline_tests.cpp
     tests/document/ungroup_sprite_tests.cpp
 )

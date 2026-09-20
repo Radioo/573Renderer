@@ -8,6 +8,7 @@
 #include <QDragEnterEvent>
 #include <QDragMoveEvent>
 #include <QDropEvent>
+#include <QEvent>
 #include <QKeyEvent>
 #include <QLineF>
 #include <QMimeData>
@@ -18,6 +19,7 @@
 #include <QPaintEvent>
 #include <QPen>
 #include <QPointF>
+#include <QPainterPath>
 #include <QPolygonF>
 #include <QRectF>
 #include <QResizeEvent>
@@ -69,6 +71,8 @@ constexpr std::array<int, 9> kTickSteps{1, 5, 10, 25, 50, 100, 250, 500, 1000};
 const QColor kRulerColour(44, 44, 48);
 const QColor kRulerMark(170, 170, 176);
 const QColor kGuideLine(0, 200, 230);
+const QColor kDimmed(0, 0, 0, 140);
+const QColor kContextEdge(120, 220, 255);
 
 QPointF Middle(QPointF a, QPointF b) {
     return (a + b) / 2.0;
@@ -85,6 +89,13 @@ Viewport::Viewport(QWidget* parent) : QWidget(parent) {
 }
 
 void Viewport::keyPressEvent(QKeyEvent* event) {
+    if (event->key() == Qt::Key_Space && !event->isAutoRepeat()) {
+        space_held_ = true;
+        panned_with_space_ = false;
+        ShowToolCursor();
+        event->accept();
+        return;
+    }
     const Document::StageOutline* selected = SelectedOutline();
     const double step = (event->modifiers() & Qt::ShiftModifier) != 0 ? kShiftNudge : kNudge;
     QPointF by;
@@ -192,6 +203,11 @@ void Viewport::ShowGhosts(std::vector<QImage> ghosts) {
     update();
 }
 
+double Viewport::StageScale() const {
+    if (stage_.isEmpty()) return 0;
+    return Target().width() / stage_.width();
+}
+
 QSize Viewport::FittedSize(QSize available) const {
     if (stage_.isEmpty()) return available;
     const QSize fitted = stage_.scaled(available, Qt::KeepAspectRatio);
@@ -226,26 +242,108 @@ void Viewport::dropEvent(QDropEvent* event) {
     emit CharacterDropped(static_cast<uint16_t>(character), stage->x(), stage->y());
 }
 
+void Viewport::keyReleaseEvent(QKeyEvent* event) {
+    if (event->key() != Qt::Key_Space || event->isAutoRepeat()) {
+        QWidget::keyReleaseEvent(event);
+        return;
+    }
+    space_held_ = false;
+    ShowToolCursor();
+    event->accept();
+    if (!panned_with_space_) emit PlayAsked();
+    panned_with_space_ = false;
+}
+
+bool Viewport::event(QEvent* happening) {
+    if (happening->type() == QEvent::ShortcutOverride) {
+        auto* key = dynamic_cast<QKeyEvent*>(happening);
+        if (key != nullptr && key->key() == Qt::Key_Space) {
+            key->accept();
+            return true;
+        }
+    }
+    return QWidget::event(happening);
+}
+
 void Viewport::wheelEvent(QWheelEvent* event) {
     if ((event->modifiers() & Qt::ControlModifier) == 0 || event->angleDelta().y() == 0) {
         QWidget::wheelEvent(event);
         return;
     }
     event->accept();
+    ZoomBy(static_cast<double>(event->angleDelta().y()) / kWheelNotch, event->position());
+}
+
+void Viewport::ZoomBy(double notches, QPointF at) {
     const QRectF before = Target();
     if (before.isEmpty()) return;
-    const double notches = static_cast<double>(event->angleDelta().y()) / kWheelNotch;
     zoom_ = std::clamp(zoom_ * std::pow(kZoomStep, notches), kLeastZoom, kMostZoom);
-    const QPointF cursor = event->position();
-    const QPointF fraction((cursor.x() - before.x()) / before.width(),
-                           (cursor.y() - before.y()) / before.height());
+    const QPointF fraction((at.x() - before.x()) / before.width(),
+                           (at.y() - before.y()) / before.height());
     const QSizeF after = Target().size();
-    const QPointF top_left(cursor.x() - (fraction.x() * after.width()),
-                           cursor.y() - (fraction.y() * after.height()));
+    const QPointF top_left(at.x() - (fraction.x() * after.width()),
+                           at.y() - (fraction.y() * after.height()));
     pan_ = top_left + QPointF(after.width() / 2, after.height() / 2) -
            QPointF(width() / 2.0, height() / 2.0);
     update();
     emit ZoomChanged();
+}
+
+void Viewport::ZoomStep(double notches) {
+    ZoomBy(notches, QPointF(width() / 2.0, height() / 2.0));
+}
+
+void Viewport::DrawContext(QPainter& painter) const {
+    if (!context_) return;
+    QPolygonF inside;
+    for (const Document::Point& corner : *context_)
+        inside << ToWidget(corner);
+    QPainterPath outside;
+    outside.addRect(QRectF(rect()));
+    QPainterPath clip;
+    clip.addPolygon(inside);
+    painter.fillPath(outside.subtracted(clip), kDimmed);
+    painter.setPen(QPen(kContextEdge, 1, Qt::DashLine));
+    painter.setBrush(Qt::NoBrush);
+    painter.drawPolygon(inside);
+}
+
+void Viewport::ShowContext(std::optional<std::array<Document::Point, 4>> corners) {
+    context_ = std::move(corners);
+    update();
+}
+
+void Viewport::SetTool(Tool tool) {
+    tool_ = tool;
+    ShowToolCursor();
+}
+
+Tool Viewport::CurrentTool() const {
+    return tool_;
+}
+
+bool Viewport::PanningNow() const {
+    return tool_ == Tool::Pan || space_held_;
+}
+
+void Viewport::ShowToolCursor() {
+    if (PanningNow()) {
+        setCursor(panning_from_ ? Qt::ClosedHandCursor : Qt::OpenHandCursor);
+        return;
+    }
+    switch (tool_) {
+    case Tool::Zoom:
+        setCursor(Qt::PointingHandCursor);
+        break;
+    case Tool::Anchor:
+    case Tool::Sketch:
+        setCursor(Qt::CrossCursor);
+        break;
+    case Tool::Select:
+    case Tool::Pan:
+        unsetCursor();
+        break;
+    }
 }
 
 void Viewport::ClearGuides() {
@@ -487,6 +585,7 @@ void Viewport::paintEvent(QPaintEvent* event) {
         DrawGroup(painter, *selected);
     }
     DrawPath(painter);
+    DrawContext(painter);
     DrawBand(painter);
     if (rulers_) DrawRulers(painter);
 }
@@ -497,19 +596,27 @@ void Viewport::resizeEvent(QResizeEvent* event) {
 }
 
 void Viewport::mousePressEvent(QMouseEvent* event) {
-    if (event->button() == Qt::MiddleButton) {
+    if (event->button() == Qt::MiddleButton ||
+        (event->button() == Qt::LeftButton && PanningNow())) {
         panning_from_ = event->position();
+        panned_with_space_ = space_held_;
+        ShowToolCursor();
         return;
     }
     gesture_ = Gesture::None;
     dragging_ = false;
     if (event->button() != Qt::LeftButton) return;
+    if (tool_ == Tool::Zoom) {
+        ZoomBy((event->modifiers() & Qt::AltModifier) != 0 ? -1 : 1, event->position());
+        return;
+    }
     const std::optional<QPointF> stage = ToStage(event->position());
     if (!stage) return;
     const Document::Point point{stage->x(), stage->y()};
     const Document::StageOutline* selected = SelectedOutline();
     Gesture gesture =
         selected != nullptr ? GestureAt(*selected, event->position(), point) : Gesture::None;
+    if (tool_ == Tool::Anchor && selected != nullptr) gesture = Gesture::Anchor;
     const bool on_handle =
         gesture == Gesture::Scale || gesture == Gesture::Turn || gesture == Gesture::Anchor;
     if (!on_handle && PressGuide(event->position())) return;
@@ -532,8 +639,17 @@ void Viewport::mousePressEvent(QMouseEvent* event) {
     }
 }
 
+void Viewport::mouseDoubleClickEvent(QMouseEvent* event) {
+    const std::optional<QPointF> stage = ToStage(event->position());
+    if (event->button() != Qt::LeftButton || !stage || PanningNow() || tool_ == Tool::Zoom) {
+        QWidget::mouseDoubleClickEvent(event);
+        return;
+    }
+    emit EnterAsked(stage->x(), stage->y());
+}
+
 void Viewport::mouseMoveEvent(QMouseEvent* event) {
-    if (panning_from_ && (event->buttons() & Qt::MiddleButton) != 0) {
+    if (panning_from_ && event->buttons() != Qt::NoButton) {
         pan_ += event->position() - *panning_from_;
         panning_from_ = event->position();
         update();
@@ -591,8 +707,9 @@ void Viewport::EmitGesture(Gesture gesture, const Document::StageOutline& outlin
 }
 
 void Viewport::mouseReleaseEvent(QMouseEvent* event) {
-    if (event->button() == Qt::MiddleButton) {
+    if (panning_from_) {
         panning_from_.reset();
+        ShowToolCursor();
         return;
     }
     if (event->button() != Qt::LeftButton) return;

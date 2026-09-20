@@ -1,7 +1,8 @@
 #include "editor_window.h"
 
-#include "editor_ease_dialog.h"
+#include "editor_ease_editor.h"
 #include "editor_graph.h"
+#include "editor_inspector.h"
 #include "editor_timeline.h"
 
 #include "document/colour_pick.h"
@@ -18,6 +19,8 @@
 #include <QInputDialog>
 #include <QColor>
 #include <QColorDialog>
+#include <QListWidget>
+#include <QSignalBlocker>
 #include <QMenu>
 #include <QPoint>
 #include <QString>
@@ -34,15 +37,118 @@
 
 namespace Editor {
 
+void Window::FillGraphProperties(const Document::AuthoredDepth& owned) {
+    if (graph_properties_ == nullptr) return;
+    const QSignalBlocker held(graph_properties_);
+    bool listed = graph_properties_->count() == static_cast<int>(owned.tracks.size());
+    for (int at = 0; listed && at < graph_properties_->count(); at++) {
+        listed = graph_properties_->item(at)->text().toStdString() ==
+                 owned.tracks[static_cast<std::size_t>(at)].property;
+    }
+    if (!listed) {
+        graph_properties_->clear();
+        for (std::size_t at = 0; at < owned.tracks.size(); at++) {
+            auto* item = new QListWidgetItem(QString::fromStdString(owned.tracks[at].property),
+                                             graph_properties_);
+            item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
+            item->setForeground(GraphEditor::ColourOf(at));
+        }
+    }
+    for (int at = 0; at < graph_properties_->count(); at++) {
+        QListWidgetItem* item = graph_properties_->item(at);
+        item->setCheckState(std::ranges::find(graph_hidden_, item->text().toStdString()) ==
+                                    graph_hidden_.end()
+                                ? Qt::Checked
+                                : Qt::Unchecked);
+    }
+}
+
+void Window::RefreshGraphTracks(const Document::AuthoredDepth* owned) {
+    if (owned == nullptr) {
+        graph_->ShowTracks({}, {}, 0, 0, 0);
+        return;
+    }
+    std::vector<std::string> shown;
+    for (const Document::Track& track : owned->tracks) {
+        if (std::ranges::find(graph_hidden_, track.property) == graph_hidden_.end())
+            shown.push_back(track.property);
+    }
+    graph_->ShowTracks(owned->tracks, std::move(shown), owned->first_frame, owned->last_frame,
+                       frame_);
+}
+
 void Window::ShowKeysForDepth(const Document::AuthoredDepth* owned) {
     if (owned == nullptr) {
         timeline_->ShowKeys(std::nullopt, {});
-        graph_->ShowTrack(std::nullopt, 0, 0, 0);
+        graph_->ShowTracks({}, {}, 0, 0, 0);
+        if (graph_properties_ != nullptr) graph_properties_->clear();
+        RefreshEaseSection();
         return;
     }
     timeline_->ShowKeys(owned->depth, owned->tracks);
-    graph_->ShowTrack(Document::GraphedTrack(*owned, key_property_.toStdString()),
-                      owned->first_frame, owned->last_frame, frame_);
+    FillGraphProperties(*owned);
+    RefreshGraphTracks(owned);
+    RefreshEaseSection();
+}
+
+void Window::AddFilterOnDepth(bool hsv) {
+    const uint32_t frame = frame_;
+    const Document::NewFilter kind =
+        hsv ? Document::NewFilter::Hsv : Document::NewFilter::ColourMatrix;
+    EditAuthored(tr("Add a filter on frame %1").arg(frame),
+                 [frame, kind](Document::AuthoredDepth& owned) {
+                     return Document::AddKeyFilterAt(owned, frame, kind);
+                 });
+}
+
+void Window::RemoveFilterOnDepth(const QString& name) {
+    const uint32_t frame = frame_;
+    const std::string field = name.toStdString();
+    EditAuthored(tr("Remove %1 on frame %2").arg(name).arg(frame),
+                 [frame, &field](Document::AuthoredDepth& owned) {
+                     return Document::RemoveKeyFilterAt(owned, frame, field);
+                 });
+}
+
+void Window::RefreshEaseSection() {
+    if (inspector_panel_ == nullptr) return;
+    const std::vector<Document::KeyRef> chosen = timeline_->SelectedKeys();
+    const Document::AuthoredDepth* owned =
+        depth_ ? AuthoredAt(static_cast<uint16_t>(*depth_), frame_) : nullptr;
+    if (chosen.empty() || owned == nullptr) {
+        inspector_panel_->ShowEase(std::nullopt);
+        return;
+    }
+    const std::optional<Document::Keyframe> key =
+        Document::KeyAt(*owned, chosen.front().property, chosen.front().frame);
+    if (!key) {
+        inspector_panel_->ShowEase(std::nullopt);
+        return;
+    }
+    inspector_panel_->ShowEase(EaseView{.ease = key->ease,
+                                        .bezier = key->ease == Document::Ease::Bezier
+                                                      ? key->bezier
+                                                      : Document::EasePresets().front().bezier,
+                                        .keys = static_cast<int>(chosen.size())});
+}
+
+void Window::ApplyGraphEase(const QString& property, uint32_t frame,
+                            const Document::Bezier& bezier) {
+    const std::vector<Document::KeyRef> eased{
+        Document::KeyRef{.property = property.toStdString(), .frame = frame}};
+    EditAuthored(tr("Ease %1 on frame %2").arg(property).arg(frame),
+                 [&eased, &bezier](Document::AuthoredDepth& owned) {
+                     return Document::SetKeysEase(owned, eased, Document::Ease::Bezier, bezier);
+                 });
+}
+
+void Window::ApplySelectedKeysEase(Document::Ease ease, const Document::Bezier& bezier) {
+    const std::vector<Document::KeyRef> eased = timeline_->SelectedKeys();
+    if (eased.empty()) return;
+    EditAuthored(tr("Ease %n keyframe(s)", nullptr, static_cast<int>(eased.size())),
+                 [&eased, ease, bezier](Document::AuthoredDepth& owned) {
+                     return Document::SetKeysEase(owned, eased, ease, bezier);
+                 });
 }
 
 void Window::ApplyGraphMove(const QString& property, uint32_t frame, uint32_t to_frame,
@@ -90,7 +196,6 @@ bool Window::EditAuthored(const QString& name, const AuthoredChange& change) {
         ReportProblem(QString::fromStdString(changed.error()));
         return false;
     }
-    std::vector<Document::KeyRef> kept = timeline_->SelectedKeys();
     if (!EditAnimation(name, [&edited](AfpAnimation::Animation& animation) {
             using Written = Support::Expected<void, std::string>;
             auto baked = Document::BakedFor(animation, edited);
@@ -101,7 +206,6 @@ bool Window::EditAuthored(const QString& name, const AuthoredChange& change) {
     }
     authored_[*at] = std::move(edited);
     SaveProject();
-    timeline_->SelectKeys(std::move(kept));
     ShowFrame();
     return true;
 }
@@ -242,7 +346,7 @@ void Window::ShowKeyMenu(const QPoint& where, const QString& property, uint32_t 
     QMenu* ease = on_key ? menu.addMenu(tr("How it leaves frame %1").arg(frame)) : nullptr;
     QAction* hold = ease != nullptr ? ease->addAction(tr("Hold")) : nullptr;
     QAction* linear = ease != nullptr ? ease->addAction(tr("Linear")) : nullptr;
-    QAction* bezier = ease != nullptr ? ease->addAction(tr("Bezier...")) : nullptr;
+    QAction* bezier = ease != nullptr ? ease->addAction(tr("Bezier")) : nullptr;
     menu.addSeparator();
     const std::size_t selected = timeline_->SelectedKeys().size();
     QAction* copy =
@@ -349,13 +453,9 @@ void Window::ShowKeyMenu(const QPoint& where, const QString& property, uint32_t 
     if (chosen == hold) {
         wanted = Document::Ease::Hold;
     } else if (chosen == bezier) {
-        const Document::Bezier start = key && key->ease == Document::Ease::Bezier
-                                           ? key->bezier
-                                           : Document::EasePresets().front().bezier;
-        EaseDialog dialog(start, this);
-        if (dialog.exec() != QDialog::Accepted) return;
         wanted = Document::Ease::Bezier;
-        curve = dialog.Result();
+        curve = key && key->ease == Document::Ease::Bezier ? key->bezier
+                                                           : Document::EasePresets().front().bezier;
     } else if (chosen != linear) {
         return;
     }

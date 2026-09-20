@@ -2,6 +2,11 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <DockManager.h>
+#include <DockWidget.h>
+
+#include "editor_commands.h"
+#include "editor_popover.h"
 #include "editor_timeline.h"
 #include "editor_viewport.h"
 #include "editor_window.h"
@@ -29,6 +34,9 @@
 #include <QColor>
 #include <QComboBox>
 #include <QDialog>
+#include <QDoubleSpinBox>
+#include <QLabel>
+#include <QPushButton>
 #include <QElapsedTimer>
 #include <QDir>
 #include <QFile>
@@ -43,12 +51,14 @@
 #include <QMessageBox>
 #include <QPoint>
 #include <QSettings>
+#include <QSize>
 #include <QString>
 #include <QStringList>
 #include <QTableWidget>
 #include <QTableWidgetItem>
 #include <QTemporaryDir>
 #include <QTimer>
+#include <QToolButton>
 #include <QTreeWidget>
 #include <QTreeWidgetItem>
 #include <QTreeWidgetItemIterator>
@@ -175,6 +185,22 @@ inline Script::Step Answer(const QString& text) {
     };
 }
 
+inline Script::Step AnswerMatching(const QString& part) {
+    return [part] {
+        auto* dialog = qobject_cast<QInputDialog*>(QApplication::activeModalWidget());
+        if (dialog == nullptr) return false;
+        auto* items = dialog->findChild<QComboBox*>();
+        if (items == nullptr) return false;
+        for (int at = 0; at < items->count(); at++) {
+            if (!items->itemText(at).contains(part)) continue;
+            items->setCurrentIndex(at);
+            dialog->accept();
+            return true;
+        }
+        return false;
+    };
+}
+
 inline Script::Step AnswerNumber(int number) {
     return [number] {
         auto* dialog = qobject_cast<QInputDialog*>(QApplication::activeModalWidget());
@@ -295,6 +321,137 @@ inline QAction* ShortcutAction(QWidget& window, const QKeySequence& keys) {
     return nullptr;
 }
 
+inline bool Settle(const std::function<bool()>& done) {
+    QElapsedTimer waited;
+    waited.start();
+    while (!done() && waited.elapsed() < kLongestWaitMs)
+        QApplication::processEvents();
+    return done();
+}
+
+inline QStringList CrumbTexts(QWidget& window) {
+    QStringList texts;
+    for (QToolButton* button : window.findChildren<QToolButton*>()) {
+        if (button->objectName().startsWith("crumb_")) texts.append(button->text());
+    }
+    return texts;
+}
+
+inline QString OpenClip(QWidget& window) {
+    const QStringList crumbs = CrumbTexts(window);
+    return crumbs.size() > 2 ? crumbs.back() : QString();
+}
+
+inline bool EnterFirstSprite(QWidget& window) {
+    auto* library = window.findChild<QTreeWidget*>("library");
+    if (library == nullptr) return false;
+    for (QTreeWidgetItemIterator it(library); *it != nullptr; ++it) {
+        if (!(*it)->text(0).contains("Sprite")) continue;
+        emit library->itemDoubleClicked(*it, 0);
+        return Settle([&window] { return !OpenClip(window).isEmpty(); });
+    }
+    return false;
+}
+
+inline QImage Picture(QWidget& widget) {
+    QImage shot = widget.grab().toImage();
+    for (int pass = 0; pass < 8; pass++) {
+        const QSize settled = widget.size();
+        QApplication::processEvents();
+        shot = widget.grab().toImage();
+        if (widget.size() == settled) break;
+    }
+    return shot;
+}
+
+inline ads::CDockWidget* Panel(QWidget& window, const QString& title) {
+    auto* docks = window.findChild<ads::CDockManager*>();
+    REQUIRE(docks != nullptr);
+    return docks->findDockWidget(title);
+}
+
+inline Editor::Popover& PopoverOf(QWidget& window) {
+    auto* popover = window.findChild<Editor::Popover*>("popover");
+    REQUIRE(popover != nullptr);
+    return *popover;
+}
+
+inline void SetPopoverValue(QWidget& window, const QString& label, double value) {
+    auto* box = PopoverOf(window).findChild<QDoubleSpinBox*>("popover_" + label);
+    REQUIRE(box != nullptr);
+    box->setValue(value);
+    QApplication::processEvents();
+}
+
+inline QString PopoverDetail(QWidget& window) {
+    auto* detail = PopoverOf(window).findChild<QLabel*>("popover_detail");
+    REQUIRE(detail != nullptr);
+    return detail->text();
+}
+
+inline void PressPopover(QWidget& window, const QString& button) {
+    auto* pressed = PopoverOf(window).findChild<QPushButton*>("popover_" + button);
+    REQUIRE(pressed != nullptr);
+    pressed->click();
+    QApplication::processEvents();
+}
+
+inline QStringList NoticeTexts(QWidget& window) {
+    QStringList said;
+    for (const QLabel* text : window.findChildren<QLabel*>("notice_text"))
+        said.append(text->text());
+    return said;
+}
+
+inline QString LastNotice(QWidget& window) {
+    const QStringList said = NoticeTexts(window);
+    return said.isEmpty() ? QString() : said.back();
+}
+
+inline QString FrameStatus(QWidget& window) {
+    auto* status = window.findChild<QLabel*>("frame_status");
+    REQUIRE(status != nullptr);
+    return status->text();
+}
+
+inline Editor::Commands& CommandsOf(QWidget& window) {
+    auto* commands = window.findChild<Editor::Commands*>("commands");
+    REQUIRE(commands != nullptr);
+    return *commands;
+}
+
+inline QString CommandFor(QWidget& window, const QKeySequence& keys) {
+    Editor::Commands& commands = CommandsOf(window);
+    for (const QString& id : commands.Ids()) {
+        if (commands.Action(id)->shortcut() == keys) return id;
+    }
+    return {};
+}
+
+inline QStringList RunCommand(QWidget& window, const QString& id) {
+    Editor::Commands& commands = CommandsOf(window);
+    if (const std::optional<QString> refused = commands.Refusal(id)) {
+        CHECK_FALSE(commands.Run(id));
+        return {*refused};
+    }
+    Script run({});
+    commands.Run(id);
+    QApplication::processEvents();
+    return run.Problems();
+}
+
+inline QString RefusalOf(QWidget& window, const QString& id) {
+    Editor::Commands& commands = CommandsOf(window);
+    if (const std::optional<QString> refused = commands.Refusal(id)) {
+        CHECK_FALSE(commands.Run(id));
+        return *refused;
+    }
+    Script refused({});
+    commands.Run(id);
+    REQUIRE(Settle([&refused] { return !refused.Problems().isEmpty(); }));
+    return refused.Problems().front();
+}
+
 struct Opened {
     QTemporaryDir dir;
     Editor::Window window;
@@ -309,14 +466,6 @@ inline void Open(Opened& opened, bool with_image = false) {
     opened.inspector = opened.window.findChild<QTableWidget*>();
     REQUIRE(opened.tree != nullptr);
     REQUIRE(opened.inspector != nullptr);
-}
-
-inline bool Settle(const std::function<bool()>& done) {
-    QElapsedTimer waited;
-    waited.start();
-    while (!done() && waited.elapsed() < kLongestWaitMs)
-        QApplication::processEvents();
-    return done();
 }
 
 inline void RunMenu(Script& script, QTreeWidget& tree) {

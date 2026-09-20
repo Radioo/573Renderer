@@ -1,10 +1,10 @@
-#include "editor_ease_dialog.h"
+#include "editor_ease_editor.h"
 
 #include "document/keyframes.h"
 
 #include <QColor>
-#include <QDialogButtonBox>
 #include <QHBoxLayout>
+#include <QLabel>
 #include <QLineEdit>
 #include <QLineF>
 #include <QMouseEvent>
@@ -13,11 +13,11 @@
 #include <QPaintEvent>
 #include <QPen>
 #include <QPointF>
-#include <QPushButton>
 #include <QRectF>
 #include <QRegularExpression>
 #include <QString>
 #include <QStringList>
+#include <QToolButton>
 #include <QVBoxLayout>
 
 #include <array>
@@ -142,44 +142,86 @@ void CurveEditor::mouseReleaseEvent(QMouseEvent* event) {
     event->accept();
 }
 
-EaseDialog::EaseDialog(const Document::Bezier& initial, QWidget* parent) : QDialog(parent) {
-    setWindowTitle(tr("Bezier ease"));
+EaseEditor::EaseEditor(QWidget* parent) : QWidget(parent) {
+    setObjectName("ease_editor");
     curve_ = new CurveEditor;
-    curve_->SetCurve(initial);
+    curve_->setObjectName("ease_curve");
     numbers_ = new QLineEdit;
+    numbers_->setObjectName("ease_numbers");
     numbers_->setToolTip(tr("Control points as x1, y1, x2, y2"));
+    counted_ = new QLabel;
+    counted_->setObjectName("ease_count");
+
+    auto* kinds = new QHBoxLayout;
+    const auto kind = [this, kinds](const QString& name, const QString& text, Document::Ease ease) {
+        auto* button = new QToolButton;
+        button->setObjectName(name);
+        button->setText(text);
+        button->setCheckable(true);
+        connect(button, &QToolButton::clicked, this,
+                [this, ease] { Choose(ease, curve_->Curve()); });
+        kinds->addWidget(button);
+        return button;
+    };
+    hold_ = kind("ease_hold", tr("Hold"), Document::Ease::Hold);
+    linear_ = kind("ease_linear", tr("Linear"), Document::Ease::Linear);
+    bezier_ = kind("ease_bezier", tr("Bezier"), Document::Ease::Bezier);
+
     auto* presets = new QHBoxLayout;
     for (const Document::EasePreset& preset : Document::EasePresets()) {
-        auto* button = new QPushButton(QString::fromStdString(preset.name));
+        auto* button = new QToolButton;
+        button->setObjectName("ease_preset_" + QString::fromStdString(preset.name));
+        button->setText(QString::fromStdString(preset.name));
         const Document::Bezier chosen = preset.bezier;
-        connect(button, &QPushButton::clicked, this, [this, chosen] {
-            curve_->SetCurve(chosen);
-            ShowNumbers();
-        });
+        connect(button, &QToolButton::clicked, this,
+                [this, chosen] { Choose(Document::Ease::Bezier, chosen); });
         presets->addWidget(button);
     }
-    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
-    connect(buttons, &QDialogButtonBox::accepted, this, &QDialog::accept);
-    connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
-    connect(curve_, &CurveEditor::CurveEdited, this, &EaseDialog::ShowNumbers);
-    connect(numbers_, &QLineEdit::editingFinished, this, &EaseDialog::ReadNumbers);
+
+    connect(curve_, &CurveEditor::CurveEdited, this,
+            [this] { Choose(Document::Ease::Bezier, curve_->Curve()); });
+    connect(numbers_, &QLineEdit::editingFinished, this, &EaseEditor::ReadNumbers);
 
     auto* layout = new QVBoxLayout(this);
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(4);
+    layout->addWidget(counted_);
+    layout->addLayout(kinds);
     layout->addWidget(curve_, 1);
     layout->addLayout(presets);
     layout->addWidget(numbers_);
-    layout->addWidget(buttons);
+}
+
+void EaseEditor::Show(const EaseView& view) {
+    counted_->setText(view.keys == 1 ? tr("1 keyframe") : tr("%1 keyframes").arg(view.keys));
+    hold_->setChecked(view.ease == Document::Ease::Hold);
+    linear_->setChecked(view.ease == Document::Ease::Linear);
+    bezier_->setChecked(view.ease == Document::Ease::Bezier);
+    curve_->setEnabled(view.ease == Document::Ease::Bezier);
+    numbers_->setEnabled(view.ease == Document::Ease::Bezier);
+    curve_->SetCurve(view.bezier);
     ShowNumbers();
 }
 
-void EaseDialog::ShowNumbers() {
+void EaseEditor::Choose(Document::Ease ease, const Document::Bezier& bezier) {
+    emit EaseChosen(ease, bezier);
+}
+
+void EaseEditor::ShowNumbers() {
     numbers_->setText(CurveText(curve_->Curve()));
 }
 
-void EaseDialog::ReadNumbers() {
+void EaseEditor::ReadNumbers() {
     const std::optional<Document::Bezier> typed = CurveFrom(numbers_->text());
-    if (typed) curve_->SetCurve(*typed);
+    const Document::Bezier shown = curve_->Curve();
+    if (!typed) {
+        ShowNumbers();
+        return;
+    }
+    curve_->SetCurve(*typed);
     ShowNumbers();
+    if (curve_->Curve() == shown) return;
+    Choose(Document::Ease::Bezier, curve_->Curve());
 }
 
 }

@@ -34,6 +34,7 @@ set(R573_EDITOR_DOCUMENT_SOURCES
     src/document/atlas.cpp
     src/document/atlas_write.cpp
     src/document/authored.cpp
+    src/document/blend_modes.cpp
     src/document/animation_strings.cpp
     src/document/camera_edit.cpp
     src/document/characters.cpp
@@ -47,6 +48,7 @@ set(R573_EDITOR_DOCUMENT_SOURCES
     src/document/curve_values.cpp
     src/document/filter_values.cpp
     src/document/frame_edit.cpp
+    src/document/frame_notes.cpp
     src/document/history.cpp
     src/document/group_sprite.cpp
     src/document/hidden_depths.cpp
@@ -84,6 +86,8 @@ set(R573_EDITOR_DOCUMENT_SOURCES
     src/document/sprite_exports.cpp
     src/document/stage_bounds.cpp
     src/document/stage_move.cpp
+    src/document/transform_parts.cpp
+    src/document/inspector_view.cpp
     src/document/tags.cpp
     src/document/library_call.cpp
     src/document/placement_edit.cpp

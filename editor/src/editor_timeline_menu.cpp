@@ -30,6 +30,69 @@ void Window::MoveLabelTo(const QString& label, uint32_t frame) {
     });
 }
 
+void Window::InsertFrameAt(uint32_t frame) {
+    const Document::ClipId clip = clip_;
+    EditAnimation(tr("Insert frame %1").arg(frame), [clip, frame](AfpAnimation::Animation& edited) {
+        return Document::InsertFrame(edited, clip, frame);
+    });
+}
+
+void Window::RemoveFrameAt(uint32_t frame) {
+    const Document::ClipId clip = clip_;
+    EditAnimation(tr("Remove frame %1").arg(frame), [clip, frame](AfpAnimation::Animation& edited) {
+        return Document::RemoveFrame(edited, clip, frame);
+    });
+}
+
+void Window::AddLabelAt(uint32_t frame) {
+    bool answered = false;
+    const QString name = QInputDialog::getText(this, tr("Add a label"), tr("Name"),
+                                               QLineEdit::Normal, QString(), &answered);
+    if (!answered || name.isEmpty()) return;
+    const Document::ClipId clip = clip_;
+    const std::string text = name.toStdString();
+    EditAnimation(tr("Add label %1").arg(name),
+                  [clip, text, frame](AfpAnimation::Animation& edited) {
+                      return Document::AddLabel(edited, clip, text, frame);
+                  });
+}
+
+void Window::ToggleCameraAt(uint32_t frame) {
+    const Document::ClipId clip = clip_;
+    const auto animation = file_->ReadAnimation(animation_path_);
+    const AfpAnimation::Container* shown =
+        animation ? Document::FindClip(*animation, clip) : nullptr;
+    if (shown != nullptr && Document::CameraTag(*shown, frame).has_value()) {
+        EditAnimation(tr("Remove the camera on frame %1").arg(frame),
+                      [clip, frame](AfpAnimation::Animation& edited) {
+                          return Document::RemoveCamera(edited, clip, frame);
+                      });
+        return;
+    }
+    bool answered = false;
+    const int id = QInputDialog::getInt(this, tr("Add a camera"), tr("Camera"), 0, 0,
+                                        std::numeric_limits<uint16_t>::max(), 1, &answered);
+    if (!answered) return;
+    const auto number = static_cast<uint16_t>(id);
+    EditAnimation(tr("Add camera %1").arg(id),
+                  [clip, frame, number](AfpAnimation::Animation& edited) {
+                      return Document::AddCamera(edited, clip, frame, number);
+                  });
+}
+
+void Window::RenameLabel(const QString& label) {
+    const Document::ClipId clip = clip_;
+    bool answered = false;
+    const QString renamed = QInputDialog::getText(this, tr("Rename a label"), tr("Name"),
+                                                  QLineEdit::Normal, label, &answered);
+    if (!answered || renamed.isEmpty()) return;
+    const std::string named = label.toStdString();
+    const std::string text = renamed.toStdString();
+    EditAnimation(tr("Rename %1").arg(label), [clip, named, text](AfpAnimation::Animation& edited) {
+        return Document::RenameLabel(edited, clip, named, text);
+    });
+}
+
 void Window::ShowTimelineMenu(const QPoint& where, uint32_t frame, const QString& label) {
     if (!file_ || animation_path_.empty()) return;
     const Document::ClipId clip = clip_;
@@ -122,38 +185,16 @@ void Window::ShowTimelineMenu(const QPoint& where, uint32_t frame, const QString
         StartAnimating();
         return;
     }
-    if (chosen == add_camera) {
-        bool answered = false;
-        const int id = QInputDialog::getInt(this, tr("Add a camera"), tr("Camera"), 0, 0,
-                                            std::numeric_limits<uint16_t>::max(), 1, &answered);
-        if (!answered) return;
-        const auto number = static_cast<uint16_t>(id);
-        EditAnimation(tr("Add camera %1").arg(id),
-                      [clip, frame, number](AfpAnimation::Animation& edited) {
-                          return Document::AddCamera(edited, clip, frame, number);
-                      });
+    if (chosen == add_camera || chosen == remove_camera) {
+        ToggleCameraAt(frame);
         return;
     }
-    if (chosen == remove_camera) {
-        EditAnimation(tr("Remove the camera on frame %1").arg(frame),
-                      [clip, frame](AfpAnimation::Animation& edited) {
-                          return Document::RemoveCamera(edited, clip, frame);
-                      });
-        return;
-    }
-
     if (chosen == insert_frame) {
-        EditAnimation(tr("Insert frame %1").arg(frame),
-                      [clip, frame](AfpAnimation::Animation& edited) {
-                          return Document::InsertFrame(edited, clip, frame);
-                      });
+        InsertFrameAt(frame);
         return;
     }
     if (chosen == remove_frame) {
-        EditAnimation(tr("Remove frame %1").arg(frame),
-                      [clip, frame](AfpAnimation::Animation& edited) {
-                          return Document::RemoveFrame(edited, clip, frame);
-                      });
+        RemoveFrameAt(frame);
         return;
     }
     if (chosen == add_depth) {
@@ -220,28 +261,12 @@ void Window::ShowTimelineMenu(const QPoint& where, uint32_t frame, const QString
     }
 
     if (chosen == add) {
-        bool answered = false;
-        const QString name = QInputDialog::getText(this, tr("Add a label"), tr("Name"),
-                                                   QLineEdit::Normal, QString(), &answered);
-        if (!answered || name.isEmpty()) return;
-        const std::string text = name.toStdString();
-        EditAnimation(tr("Add label %1").arg(name),
-                      [clip, text, frame](AfpAnimation::Animation& edited) {
-                          return Document::AddLabel(edited, clip, text, frame);
-                      });
+        AddLabelAt(frame);
         return;
     }
     const std::string named = label.toStdString();
     if (chosen == rename) {
-        bool answered = false;
-        const QString renamed = QInputDialog::getText(this, tr("Rename a label"), tr("Name"),
-                                                      QLineEdit::Normal, label, &answered);
-        if (!answered || renamed.isEmpty()) return;
-        const std::string text = renamed.toStdString();
-        EditAnimation(tr("Rename %1").arg(label),
-                      [clip, named, text](AfpAnimation::Animation& edited) {
-                          return Document::RenameLabel(edited, clip, named, text);
-                      });
+        RenameLabel(label);
         return;
     }
     if (chosen == move) {

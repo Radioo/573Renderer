@@ -65,6 +65,22 @@ target_link_libraries(editor_shared
 add_executable(ifs_editor WIN32
     src/editor_main.cpp
     src/editor_window.cpp
+    src/editor_commands.cpp
+    src/editor_menus.cpp
+    src/editor_depth_menu.cpp
+    src/editor_refusals.cpp
+    src/editor_shell.cpp
+    src/editor_search.cpp
+    src/editor_inspector.cpp
+    src/editor_selection_bar.cpp
+    src/editor_popover.cpp
+    src/editor_notices.cpp
+    src/editor_package_panel.cpp
+    src/editor_stage_bar.cpp
+    src/editor_start_screen.cpp
+    src/editor_tool_strip.cpp
+    src/editor_timeline_bar.cpp
+    src/editor_inspector_panel.cpp
     src/editor_files.cpp
     src/editor_host.cpp
     src/editor_project.cpp
@@ -82,10 +98,12 @@ add_executable(ifs_editor WIN32
     src/editor_graph.cpp
     src/editor_animations.cpp
     src/editor_key_selection.cpp
-    src/editor_ease_dialog.cpp
+    src/editor_drift_sheet.cpp
+    src/editor_ease_editor.cpp
     src/editor_playback.cpp
     src/editor_layout.cpp
     src/editor_timeline.cpp
+    src/editor_timeline_paint.cpp
     src/editor_viewport.cpp
 )
 target_include_directories(ifs_editor PRIVATE src)
@@ -116,13 +134,19 @@ r573_deploy_qt_plugin(ifs_editor Qt6::QJpegPlugin)
 
 add_executable(editor_widget_tests
     tests/editor_widget_tests.cpp
+    tests/editor_dialog_widget_tests.cpp
     tests/editor_graph_widget_tests.cpp
     tests/editor_timeline_widget_tests.cpp
+    tests/editor_search_widget_tests.cpp
+    src/editor_search.cpp
+    src/editor_inspector.cpp
     src/editor_filter.cpp
     src/editor_graph.cpp
     src/editor_timeline.cpp
+    src/editor_timeline_paint.cpp
     src/editor_viewport.cpp
-    src/editor_ease_dialog.cpp
+    src/editor_drift_sheet.cpp
+    src/editor_ease_editor.cpp
 )
 target_include_directories(editor_widget_tests PRIVATE src)
 target_link_libraries(editor_widget_tests PRIVATE editor_shared Qt6::Widgets Catch2::Catch2)
@@ -135,7 +159,29 @@ add_executable(editor_window_tests
     tests/editor_panel_window_tests.cpp
     tests/editor_key_window_tests.cpp
     tests/editor_depth_window_tests.cpp
+    tests/editor_command_window_tests.cpp
+    tests/editor_bar_window_tests.cpp
+    tests/editor_shell_window_tests.cpp
+    tests/editor_search_window_tests.cpp
+    tests/editor_inspector_window_tests.cpp
+    tests/editor_selection_window_tests.cpp
     src/editor_window.cpp
+    src/editor_commands.cpp
+    src/editor_menus.cpp
+    src/editor_depth_menu.cpp
+    src/editor_refusals.cpp
+    src/editor_shell.cpp
+    src/editor_search.cpp
+    src/editor_inspector.cpp
+    src/editor_selection_bar.cpp
+    src/editor_popover.cpp
+    src/editor_notices.cpp
+    src/editor_package_panel.cpp
+    src/editor_stage_bar.cpp
+    src/editor_start_screen.cpp
+    src/editor_tool_strip.cpp
+    src/editor_timeline_bar.cpp
+    src/editor_inspector_panel.cpp
     src/editor_files.cpp
     src/editor_host.cpp
     src/editor_project.cpp
@@ -153,10 +199,12 @@ add_executable(editor_window_tests
     src/editor_graph.cpp
     src/editor_animations.cpp
     src/editor_key_selection.cpp
-    src/editor_ease_dialog.cpp
+    src/editor_drift_sheet.cpp
+    src/editor_ease_editor.cpp
     src/editor_playback.cpp
     src/editor_layout.cpp
     src/editor_timeline.cpp
+    src/editor_timeline_paint.cpp
     src/editor_viewport.cpp
 )
 target_include_directories(editor_window_tests PRIVATE src "${R573_ROOT}/tests/document")

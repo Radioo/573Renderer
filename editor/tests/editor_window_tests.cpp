@@ -1,3 +1,4 @@
+#include <catch2/matchers/catch_matchers_floating_point.hpp>
 #include <catch2/catch_session.hpp>
 #include <catch2/catch_test_macros.hpp>
 
@@ -45,6 +46,9 @@
 #include <QStatusBar>
 #include <QString>
 #include <QStringList>
+#include <QLabel>
+#include <QSlider>
+#include <QToolButton>
 #include <QTableWidget>
 #include <QTableWidgetItem>
 #include <QTemporaryDir>
@@ -245,7 +249,7 @@ TEST_CASE("Definitions nothing uses are removed from the package menu") {
         Script tidied({Choose("Remove unused definitions from intro")});
         RunMenu(tidied, *opened.tree);
         CHECK(tidied.Problems().isEmpty());
-        return opened.window.statusBar()->currentMessage();
+        return LastNotice(opened.window);
     };
     CHECK(tidy() == "Nothing in intro is unused");
     emit timeline->DepthChosen(2);
@@ -329,19 +333,26 @@ TEST_CASE("Depths grouped from the timeline menu become a sprite, and ungrouping
     Opened opened;
     Open(opened);
     auto* timeline = opened.window.findChild<Editor::Timeline*>();
-    auto* clips = opened.window.findChild<QComboBox*>();
+    auto* library = opened.window.findChild<QTreeWidget*>("library");
     REQUIRE(timeline != nullptr);
-    REQUIRE(clips != nullptr);
-    const int before = clips->count();
+    REQUIRE(library != nullptr);
+    const auto sprites = [&library] {
+        int seen = 0;
+        for (QTreeWidgetItemIterator it(library); *it != nullptr; ++it) {
+            if ((*it)->text(0).contains("Sprite")) seen++;
+        }
+        return seen;
+    };
+    const int before = sprites();
     emit timeline->DepthChosen(1);
     {
-        Script grouped({Choose("Group depth 1 and up here into a sprite..."), AcceptInput(),
-                        AcceptInput(), AcceptInput()});
+        Script grouped({Choose("Group depth 1 and up here into a sprite...")});
         emit timeline->MenuRequested(QPoint(4, 4), 1, QString());
         REQUIRE(Settle([&grouped] { return grouped.Finished(); }));
+        PressPopover(opened.window, "apply");
         CHECK(grouped.Problems().isEmpty());
-        CHECK(clips->count() == before + 1);
-        CHECK(clips->currentIndex() == 0);
+        CHECK(sprites() == before + 1);
+        CHECK(OpenClip(opened.window).isEmpty());
         CHECK(RowValue(*opened.inspector, "Depth") == "1");
     }
     {
@@ -349,31 +360,30 @@ TEST_CASE("Depths grouped from the timeline menu become a sprite, and ungrouping
         emit timeline->MenuRequested(QPoint(4, 4), 1, QString());
         REQUIRE(Settle([&ungrouped] { return ungrouped.Finished(); }));
         CHECK(ungrouped.Problems().isEmpty());
-        CHECK(clips->count() == before);
+        CHECK(sprites() == before);
     }
     {
-        Script regrouped({Choose("Group depth 1 and up here into a sprite..."), AcceptInput(),
-                          AcceptInput(), AcceptInput()});
+        Script regrouped({Choose("Group depth 1 and up here into a sprite...")});
         emit timeline->MenuRequested(QPoint(4, 4), 1, QString());
         REQUIRE(Settle([&regrouped] { return regrouped.Finished(); }));
+        PressPopover(opened.window, "apply");
         CHECK(regrouped.Problems().isEmpty());
     }
-    clips->setCurrentIndex(1);
+    REQUIRE(EnterFirstSprite(opened.window));
     {
         Script named({Choose("Name the export of this sprite..."), Answer("banner")});
         emit timeline->MenuRequested(QPoint(4, 4), 0, QString());
         REQUIRE(Settle([&named] { return named.Finished(); }));
         CHECK(named.Problems().isEmpty());
-        CHECK(clips->currentIndex() == 1);
-        CHECK(clips->currentText().startsWith("banner"));
+        CHECK(OpenClip(opened.window).startsWith("banner"));
     }
     {
         Script clash({Choose("Name the export of this sprite..."), Answer("intro")});
         emit timeline->MenuRequested(QPoint(4, 4), 0, QString());
         REQUIRE(Settle([&clash] { return !clash.Problems().isEmpty(); }));
-        CHECK(clips->currentText().startsWith("banner"));
+        CHECK(OpenClip(opened.window).startsWith("banner"));
     }
-    clips->setCurrentIndex(0);
+    REQUIRE(RunCommand(opened.window, "clip.leave").isEmpty());
     emit timeline->DepthChosen(1);
     {
         Script ungroup_again({Choose("Ungroup the sprite on depth 1 here")});
@@ -654,8 +664,7 @@ TEST_CASE("Frame keys step through the clip and jump between a depth's changes")
 
     const auto at = [&](uint32_t frame) {
         emit timeline->FrameChosen(frame);
-        QApplication::processEvents();
-        return timeline->grab().toImage();
+        return Picture(*timeline);
     };
     const std::vector<QImage> frames{at(0), at(1), at(2)};
     REQUIRE(frames[0] != frames[2]);
@@ -664,8 +673,7 @@ TEST_CASE("Frame keys step through the clip and jump between a depth's changes")
         QAction* action = ShortcutAction(opened.window, QKeySequence(key));
         REQUIRE(action != nullptr);
         action->trigger();
-        QApplication::processEvents();
-        return timeline->grab().toImage();
+        return Picture(*timeline);
     };
     CHECK(press(Qt::Key_K) == frames[2]);
     CHECK(press(Qt::Key_K) == frames[2]);
@@ -685,10 +693,7 @@ TEST_CASE("B and N set the work area on the ruler and it can be cleared") {
     Open(opened);
     auto* timeline = opened.window.findChild<Editor::Timeline*>();
     REQUIRE(timeline != nullptr);
-    const auto picture = [&] {
-        QApplication::processEvents();
-        return timeline->grab().toImage();
-    };
+    const auto picture = [&] { return Picture(*timeline); };
     emit timeline->FrameChosen(1);
     const QImage plain = picture();
     QAction* start = ShortcutAction(opened.window, QKeySequence(Qt::Key_B));
@@ -724,12 +729,12 @@ TEST_CASE("The timeline gutter hides and locks a depth") {
     CHECK(offers("Hide depth 1 in the view"));
     CHECK(offers("Lock depth 1 on stage"));
     const auto click = [&](int x) {
-        QMouseEvent press(QEvent::MouseButtonPress, QPointF(x, 34),
-                          timeline->mapToGlobal(QPointF(x, 34)), Qt::LeftButton, Qt::LeftButton,
+        QMouseEvent press(QEvent::MouseButtonPress, QPointF(x, 48),
+                          timeline->mapToGlobal(QPointF(x, 48)), Qt::LeftButton, Qt::LeftButton,
                           Qt::NoModifier);
         QApplication::sendEvent(timeline, &press);
-        QMouseEvent release(QEvent::MouseButtonRelease, QPointF(x, 34),
-                            timeline->mapToGlobal(QPointF(x, 34)), Qt::LeftButton, Qt::NoButton,
+        QMouseEvent release(QEvent::MouseButtonRelease, QPointF(x, 48),
+                            timeline->mapToGlobal(QPointF(x, 48)), Qt::LeftButton, Qt::NoButton,
                             Qt::NoModifier);
         QApplication::sendEvent(timeline, &release);
     };

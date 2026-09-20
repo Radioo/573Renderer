@@ -1,5 +1,7 @@
 #include "editor_window.h"
 
+#include "editor_drift_sheet.h"
+
 #include "editor_files.h"
 
 #include "document/authored.h"
@@ -37,6 +39,55 @@ namespace Editor {
 std::string Window::TargetBuild() const {
     if (project_ && !project_->build.empty()) return project_->build;
     return std::string(kBuildSlug);
+}
+
+QString Window::SuggestedProjectFolder() const {
+    const QFileInfo ifs(document_path_);
+    return ifs.dir().filePath(ifs.completeBaseName() + " project");
+}
+
+bool Window::OpenOrMakeProject(const QString& folder) {
+    const QString manifest =
+        QString::fromStdString(Document::ProjectManifestPath(folder.toStdString()));
+    if (!QFileInfo::exists(manifest)) return MakeProjectIn(folder);
+    const auto project = Document::ReadProject(ReadFileBytes(manifest));
+    if (!project) {
+        ReportProblem(QString::fromStdString(project.error()));
+        return false;
+    }
+    QSettings().setValue(kProjectDirKey, folder);
+    authored_ = project->content;
+    project_ = *project;
+    project_folder_ = folder;
+    RefreshState();
+    return true;
+}
+
+bool Window::MakeProjectIn(const QString& folder) {
+    const QString manifest =
+        QString::fromStdString(Document::ProjectManifestPath(folder.toStdString()));
+    if (QFileInfo::exists(manifest)) {
+        ReportProblem(tr("%1 already holds a project").arg(folder));
+        return false;
+    }
+    if (!QDir().mkpath(folder)) {
+        ReportProblem(tr("%1 could not be made").arg(folder));
+        return false;
+    }
+    Document::Project project{
+        .build = TargetBuild(),
+        .ifs_path = Document::StoredIfsPath(
+            folder.toStdString(), QFileInfo(document_path_).absoluteFilePath().toStdString())};
+    if (!WriteFileBytes(manifest, Document::WriteProject(project))) {
+        ReportProblem(tr("%1 could not be written").arg(manifest));
+        return false;
+    }
+    QSettings().setValue(kProjectDirKey, folder);
+    project_ = std::move(project);
+    project_folder_ = folder;
+    authored_.clear();
+    RefreshState();
+    return true;
 }
 
 void Window::CreateProject() {
@@ -116,26 +167,21 @@ void Window::ReportDrift() {
     const std::vector<Document::DriftedEntry> drift = Document::ProjectDrift(*file_, *project_);
     if (drift.empty()) return;
 
+    std::vector<DriftRow> rows;
+    rows.reserve(drift.size());
     for (const Document::DriftedEntry& entry : drift) {
-        const QString path = QString::fromStdString(entry.path);
-        const QString what = entry.kind == Document::DriftKind::Missing
-                                 ? tr("%1 is no longer in the IFS.").arg(path)
-                                 : tr("%1 has changed in the IFS since the last export.").arg(path);
-        QMessageBox box(this);
-        box.setWindowTitle(tr("IFS Editor"));
-        box.setText(what);
-        box.setInformativeText(
-            tr("Keep what the IFS holds, which drops the project's source for it, or export "
-               "again and overwrite it?"));
-        QPushButton* keep = box.addButton(tr("Keep the IFS version"), QMessageBox::AcceptRole);
-        box.addButton(tr("Export again"), QMessageBox::RejectRole);
-        box.exec();
-        if (box.clickedButton() == keep) Document::KeepIfsVersion(*project_, entry.path);
+        rows.push_back(DriftRow{.path = QString::fromStdString(entry.path),
+                                .missing = entry.kind == Document::DriftKind::Missing});
     }
+    DriftSheet sheet(rows, this);
+    const int answered = sheet.exec();
+    statusBar()->showMessage(tr("%1 entry(s) had changed since the last export").arg(drift.size()));
+    if (answered != QDialog::Accepted) return;
+    for (const QString& path : sheet.Kept())
+        Document::KeepIfsVersion(*project_, path.toStdString());
     authored_ = project_->content;
     SaveProject();
     RefreshState();
-    statusBar()->showMessage(tr("%1 entry(s) had changed since the last export").arg(drift.size()));
 }
 
 void Window::CloseProject() {
@@ -282,11 +328,12 @@ void Window::ExportToPackage() {
     RefreshState();
     Reload();
     ShowFrame();
-    statusBar()->showMessage(tr("Exported %1 owned depth(s) into the IFS").arg(authored_.size()));
+    ShowResult(tr("Exported %1 owned depth(s) into the IFS").arg(authored_.size()), true);
 }
 
 void Window::OwnSelectedDepth(uint32_t frame) {
     if (!file_ || !depth_ || animation_path_.empty()) return;
+    if (!project_ && !OpenOrMakeProject(SuggestedProjectFolder())) return;
     const auto animation = file_->ReadAnimation(animation_path_);
     if (!animation) {
         ReportProblem(QString::fromStdString(animation.error()));
@@ -304,10 +351,11 @@ void Window::OwnSelectedDepth(uint32_t frame) {
     SaveProject();
     RefreshState();
     ShowFrame();
-    statusBar()->showMessage(tr("Depth %1 is now the project's, from frame %2 to %3")
-                                 .arg(*depth_)
-                                 .arg(authored_.back().first_frame)
-                                 .arg(authored_.back().last_frame));
+    ShowResult(tr("Depth %1 is now the project's, from frame %2 to %3")
+                   .arg(*depth_)
+                   .arg(authored_.back().first_frame)
+                   .arg(authored_.back().last_frame),
+               true);
 }
 
 void Window::DetachSelectedDepth() {

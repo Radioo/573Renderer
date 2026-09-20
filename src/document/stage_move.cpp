@@ -89,11 +89,6 @@ std::optional<std::array<int16_t, 2>> ShortPair(double first, double second) {
     return std::array<int16_t, 2>{static_cast<int16_t>(*x), static_cast<int16_t>(*y)};
 }
 
-Linear LinearOf(const AppliedState& state) {
-    const std::array<double, 6>& m = state.matrix;
-    return {.a = m[kScaleX], .b = m[kSkewB], .c = m[kSkewC], .d = m[kScaleY]};
-}
-
 Support::Expected<void, std::string> WritePart(std::optional<std::array<int32_t, 2>>& long_form,
                                                std::optional<std::array<int16_t, 2>>& short_form,
                                                double first, double second, bool identity) {
@@ -210,9 +205,9 @@ Support::Expected<void, std::string> PlaceAtPoint(AfpAnimation::Animation& anima
     return {};
 }
 
-Support::Expected<void, std::string> ReshapeBakedDepth(AfpAnimation::Animation& animation,
-                                                       ClipId clip, uint16_t depth, uint32_t frame,
-                                                       const Reshape& reshape) {
+Support::Expected<void, std::string> SetBakedLinear(AfpAnimation::Animation& animation, ClipId clip,
+                                                    uint16_t depth, uint32_t frame,
+                                                    const Linear& next) {
     auto found = RequireClip(animation, clip);
     if (!found) return Support::Unexpected(found.error());
     AfpAnimation::Container& target = **found;
@@ -226,7 +221,6 @@ Support::Expected<void, std::string> ReshapeBakedDepth(AfpAnimation::Animation& 
     if ((placement->flags & kThreeD) != 0)
         return Support::Unexpected("depth " + std::to_string(depth) + " is placed in 3D");
     if ((placement->flags & kUseMatrix) == 0) CarryMatrix(*placement, shown.back().second);
-    const Linear next = Reshaped(LinearOf(shown.back().second), reshape);
     auto scaled = WritePart(placement->scale, placement->short_scale, next.a, next.d,
                             next.a == 1.0 && next.d == 1.0);
     if (!scaled) return Support::Unexpected(scaled.error());
@@ -234,12 +228,11 @@ Support::Expected<void, std::string> ReshapeBakedDepth(AfpAnimation::Animation& 
                      next.b == 0.0 && next.c == 0.0);
 }
 
-Support::Expected<void, std::string> ReshapeOwnedDepth(AuthoredDepth& authored,
-                                                       const BakedDepth& baked, uint32_t frame,
-                                                       const Reshape& reshape) {
+Support::Expected<void, std::string> SetOwnedLinear(AuthoredDepth& authored,
+                                                    const BakedDepth& baked, uint32_t frame,
+                                                    const Linear& next) {
     if ((baked.create.flags & kThreeD) != 0)
         return Support::Unexpected("depth " + std::to_string(authored.depth) + " is placed in 3D");
-    const Linear next = Reshaped(LinearOf(KeyedState(authored, baked, frame)), reshape);
     AuthoredDepth edited = authored;
     auto scaled = KeyPart(edited, baked, frame, kScale, kShortScale, {next.a, next.d});
     if (!scaled) return Support::Unexpected(scaled.error());
@@ -247,6 +240,29 @@ Support::Expected<void, std::string> ReshapeOwnedDepth(AuthoredDepth& authored,
     if (!turned) return Support::Unexpected(turned.error());
     authored = std::move(edited);
     return {};
+}
+
+Support::Expected<void, std::string> ReshapeBakedDepth(AfpAnimation::Animation& animation,
+                                                       ClipId clip, uint16_t depth, uint32_t frame,
+                                                       const Reshape& reshape) {
+    auto found = RequireClip(animation, clip);
+    if (!found) return Support::Unexpected(found.error());
+    const auto shown = ReplayDepth(**found, depth, frame, frame);
+    if (shown.empty()) {
+        return Support::Unexpected("depth " + std::to_string(depth) + " holds nothing on frame " +
+                                   std::to_string(frame));
+    }
+    return SetBakedLinear(animation, clip, depth, frame,
+                          Reshaped(LinearOf(shown.back().second), reshape));
+}
+
+Support::Expected<void, std::string> ReshapeOwnedDepth(AuthoredDepth& authored,
+                                                       const BakedDepth& baked, uint32_t frame,
+                                                       const Reshape& reshape) {
+    if ((baked.create.flags & kThreeD) != 0)
+        return Support::Unexpected("depth " + std::to_string(authored.depth) + " is placed in 3D");
+    return SetOwnedLinear(authored, baked, frame,
+                          Reshaped(LinearOf(KeyedState(authored, baked, frame)), reshape));
 }
 
 Support::Expected<void, std::string> MoveOwnedDepth(AuthoredDepth& authored,
