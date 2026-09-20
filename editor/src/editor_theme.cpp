@@ -1,6 +1,8 @@
 #include "editor_theme.h"
 
 #include <QApplication>
+#include <algorithm>
+#include <cmath>
 #include <QFont>
 #include <QFontDatabase>
 #include <QPalette>
@@ -11,8 +13,29 @@ namespace Editor::Theme {
 
 namespace {
 
+constexpr double kContrastOffset = 0.05;
+constexpr double kLowChannel = 0.03928;
+constexpr double kFlatSlope = 12.92;
+constexpr double kCurveShift = 0.055;
+constexpr double kCurveScale = 1.055;
+constexpr double kCurvePower = 2.4;
+constexpr double kRedShare = 0.2126;
+constexpr double kGreenShare = 0.7152;
+constexpr double kBlueShare = 0.0722;
+
 QString Hex(const QColor& colour) {
     return colour.name(QColor::HexRgb);
+}
+
+double Channel(int value) {
+    const double part = static_cast<double>(value) / 255.0;
+    return part <= kLowChannel ? part / kFlatSlope
+                               : std::pow((part + kCurveShift) / kCurveScale, kCurvePower);
+}
+
+double Luminance(const QColor& colour) {
+    return (kRedShare * Channel(colour.red())) + (kGreenShare * Channel(colour.green())) +
+           (kBlueShare * Channel(colour.blue()));
 }
 
 QString Pick(const QStringList& wanted, const QString& fallback) {
@@ -23,6 +46,18 @@ QString Pick(const QStringList& wanted, const QString& fallback) {
     return fallback;
 }
 
+}
+
+double Contrast(const QColor& text, const QColor& behind) {
+    const double lit = Luminance(text);
+    const double under = Luminance(behind);
+    const double brighter = std::max(lit, under);
+    const double darker = std::min(lit, under);
+    return (brighter + kContrastOffset) / (darker + kContrastOffset);
+}
+
+std::vector<QColor> InkColours() {
+    return {kText, kSoft, kFaint, kAccent, kOnAccent, kOnChosen, kQuietOnAccent, kAmber, kGreen};
 }
 
 QString SansFamily() {

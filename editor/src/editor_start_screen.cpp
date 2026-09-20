@@ -107,7 +107,7 @@ StartScreen::StartScreen(Commands& commands, QWidget* parent)
     open_line->addSpacing(4);
     open_line->addWidget(
         Mono(QKeySequence(QKeySequence::Open).toString(QKeySequence::NativeText).replace("+", " "),
-             Theme::kFaint, 11));
+             Theme::kQuietOnAccent, 11));
     open_line->addStretch();
     connect(open, &QPushButton::clicked, this,
             [this] { commands_.Run(QStringLiteral("file.open")); });

@@ -3,6 +3,8 @@
 #include <QColor>
 #include <QString>
 
+#include <vector>
+
 class QApplication;
 
 namespace Editor::Theme {
@@ -21,6 +23,7 @@ inline const QColor kChosen(0x1b, 0x33, 0x50);
 inline const QColor kAmber(0xf2, 0xb8, 0x4b);
 inline const QColor kGreen(0x3e, 0xcf, 0x8e);
 inline const QColor kOnChosen(0x9c, 0xc8, 0xff);
+inline const QColor kQuietOnAccent(0x0e, 0x2b, 0x4c);
 
 inline constexpr int kBaseSize = 12;
 inline constexpr int kBarHeight = 44;
@@ -36,6 +39,12 @@ inline constexpr int kStageBarHeight = 36;
 inline constexpr int kStageIconSide = 16;
 inline constexpr int kStageButtonSide = 28;
 inline constexpr int kPanelStripHeight = 30;
+
+inline constexpr double kLeastContrast = 4.5;
+
+[[nodiscard]] double Contrast(const QColor& text, const QColor& behind);
+
+[[nodiscard]] std::vector<QColor> InkColours();
 
 [[nodiscard]] QString SansFamily();
 

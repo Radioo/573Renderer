@@ -47,6 +47,12 @@ wrong layout, so:
   they live in the canvas's `project/*.dc.html` files. `editor/src/editor_theme.h` holds the ones
   already lifted out.
 - Never report a UI change as finished without having seen it.
+- **Every colour pair must clear 4.5:1.** Text the reader has to squint at is a
+  defect, not a style choice. The contrast gate (`editor/tests/editor_contrast_window_tests.cpp`
+  for the editor, `tests/gui/contrast_tests.cpp` for the renderer's ImGui interface) measures
+  every word the interface paints and fails the check gate below the WCAG AA bar. When adding a
+  colour, run those cases; when painting text somewhere the widget walk cannot see (a delegate,
+  a custom paintEvent), add the pair to the painted-pairs case in the same change.
 
 # FIXING A BUG: FAILING TEST FIRST, THEN THE FIX, THEN PROVE IT PASSES
 

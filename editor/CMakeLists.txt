@@ -192,6 +192,7 @@ add_executable(editor_window_tests
     tests/editor_search_window_tests.cpp
     tests/editor_inspector_window_tests.cpp
     tests/editor_selection_window_tests.cpp
+    tests/editor_contrast_window_tests.cpp
     src/editor_window.cpp
     src/editor_commands.cpp
     src/editor_menus.cpp

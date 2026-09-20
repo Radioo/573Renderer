@@ -80,7 +80,7 @@ void Delegate::paint(QPainter* painter, const QStyleOptionViewItem& option,
     QFont said(Theme::SansFamily());
     said.setPixelSize(kDetailSize);
     painter->setFont(said);
-    painter->setPen(Theme::kFaint);
+    painter->setPen(chosen ? Theme::kSoft : Theme::kFaint);
     QRect under_name = left;
     under_name.setTop(top.bottom() + 1);
     painter->drawText(

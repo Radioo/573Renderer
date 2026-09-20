@@ -2,6 +2,7 @@
 #include <catch2/catch_session.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include "editor_theme.h"
 #include "editor_timeline.h"
 #include "editor_timeline_metrics.h"
 #include "editor_viewport.h"
@@ -831,5 +832,6 @@ int main(int argc, char** argv) {
     QApplication app(argc, argv);
     QApplication::setOrganizationName("573RendererWindowTests");
     QApplication::setApplicationName("IFS Editor window tests");
+    Editor::Theme::Apply(app);
     return Catch::Session().run(argc, argv);
 }

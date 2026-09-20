@@ -162,6 +162,13 @@ Options: `--ifs <file>` opens a package, `--depth N` and `--frame N` choose one
 `--game <dir>` points at an install, `--size WxH` (default 1600x1000, the
 artboard's size), `--platform <name>` and `--keep-settings`.
 
+Colours are not left to the eye either: `Theme::Contrast` is the WCAG
+relative-luminance ratio, `Theme::kLeastContrast` is 4.5:1, and the cases in
+`editor/tests/editor_contrast_window_tests.cpp` fail when any word the editor
+draws lands under it. They grab the real window and measure the painted
+pixels, so a stylesheet's `:checked` colour and a delegate's own painting are
+both covered; see docs/gates.md for how the sampling works and what it caught.
+
 Known deviations from the artboards, all deliberate:
 
 - The library is a list of rows with thumbnails rather than the artboard's grid

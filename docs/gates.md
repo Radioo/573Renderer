@@ -496,3 +496,42 @@ the qpro code and each one crashed IIDX 34 in a different way, one per debugging
 round: the mc-work lookup, the definition lookup, and the matrix stack's base
 and depth. They were invisible to review because they sat inside lambdas and
 static initializers rather than next to the other offsets.
+
+## Text contrast gate
+
+Nothing in either interface may draw words the reader has to squint at. Two
+test cases enforce it and both run in `tools/checks.sh`, so the gate fails
+before anything is pushed.
+
+`editor/tests/editor_contrast_window_tests.cpp` builds the real editor window
+off-screen with the theme applied, grabs it, and walks every visible, enabled
+widget that carries text. For each one it takes the most common colour inside
+the widget as the surface and looks for the theme's own ink colours
+(`Theme::InkColours`) among the widget's pixels, ignoring the surface colour
+itself; a token that covers at least a few pixels is text (or an icon) that
+was really painted there. The worst pair goes through `Theme::Contrast`, the
+WCAG relative-luminance ratio, and anything under `Theme::kLeastContrast`
+(4.5:1, the WCAG AA bar for normal text) fails the case by name, colour and
+ratio. Sampling the painted pixels rather than the palette is what makes it
+see through Qt stylesheets: a `:checked` rule's colour never reaches
+`QWidget::palette()`, and snapping to the theme's exact tokens keeps
+antialiased glyph edges from being mistaken for ink. The cases cover the start
+screen, an open animation with a depth chosen, selected keyframes, the history
+panel, the graph tab, a project's chips, the command search and a popover. A
+fourth case checks the pairs the panels paint themselves, where there is no
+widget to sample: the row delegate's names and details on a panel, a hovered
+and a chosen row, the panel tab strip, and the timeline's frame numbers, depth
+numbers, depth names and the names on each kind of bar.
+
+`tests/gui/contrast_tests.cpp` does the static half for the renderer's ImGui
+interface: it applies the style for every profile accent and checks
+`ImGuiCol_Text` against every surface text sits on (window, popup, frame,
+title, menu bar, table header, button, header and tab, in both their plain and
+hovered forms), compositing translucent surfaces over the window first.
+Disabled text is exempt in both, as WCAG exempts inactive controls.
+
+This gate exists because the start screen's "Ctrl O" chip shipped as `#8a909b`
+on the accent `#4c9dff`: a ratio of 1.16:1, which is text you can only find by
+knowing it is there. The same sweep found the row delegate drawing its detail
+line in `#8a909b` on a chosen row's `#1b3350` (4.00:1). Both are fixed; the
+gate is what keeps them fixed.

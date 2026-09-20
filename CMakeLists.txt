@@ -975,6 +975,7 @@ add_executable(gui_tests
     tests/gui/clip_modal_tests.cpp
     tests/gui/modal_layout_tests.cpp
     tests/gui/dpi_scaling_tests.cpp
+    tests/gui/contrast_tests.cpp
     tests/gui/timeline_editor_tests.cpp
     tests/gui/tween_ui_tests.cpp
     tests/gui/host_live_tests.cpp
