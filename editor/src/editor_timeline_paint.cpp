@@ -90,8 +90,9 @@ void Timeline::DrawSwitches(QPainter& painter, uint16_t depth, int y) const {
     painter.drawPixmap(
         kLockLeft, top,
         Icons::Drawn(Icons::Glyph::Lock, locked ? kSwitchOn : kSwitchOff, kSwitchWidth));
-    painter.drawPixmap(kSoloLeft, top,
-                       Icons::Drawn(Icons::Glyph::Solo, solo ? kSoloOn : kSwitchOff, kSwitchWidth));
+    painter.drawPixmap(
+        kSoloLeft, top,
+        Icons::Drawn(Icons::Glyph::Solo, solo ? SoloOn() : kSwitchOff, kSwitchWidth));
 }
 
 QColor Timeline::BarColour(const Document::DepthRow& row, const Document::Span& span,
@@ -244,9 +245,9 @@ void Timeline::paintEvent(QPaintEvent* event) {
     if (work_area_) {
         const int from = FrameToX(work_area_->first_frame);
         const int to = FrameToX(work_area_->last_frame + 1);
-        painter.fillRect(QRect(from, 0, std::max(2, to - from), kRulerHeight), kWorkArea);
+        painter.fillRect(QRect(from, 0, std::max(2, to - from), kRulerHeight), WorkArea());
         painter.fillRect(QRect(from, kRowsTop, std::max(2, to - from), height() - kRowsTop),
-                         kWorkAreaTint);
+                         WorkAreaTint());
     }
     DrawTicks(painter);
     DrawColumnHeaders(painter);
@@ -283,7 +284,7 @@ void Timeline::paintEvent(QPaintEvent* event) {
         const auto row = std::ranges::find(rows_, lane.depth, &Document::DepthRow::depth);
         painter.fillRect(QRect(kGutterWidth, y, width() - kGutterWidth, kRowHeight - 1), kRow);
         if (std::ranges::find(selected_depths_, lane.depth) != selected_depths_.end())
-            painter.fillRect(QRect(0, y, width(), kRowHeight - 1), kSelectedRow);
+            painter.fillRect(QRect(0, y, width(), kRowHeight - 1), SelectedRow());
         painter.setPen(kGutterLine);
         painter.drawLine(0, y + kRowHeight - 1, width(), y + kRowHeight - 1);
         DrawSwitches(painter, lane.depth, y);

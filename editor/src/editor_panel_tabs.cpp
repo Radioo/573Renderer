@@ -82,7 +82,7 @@ void PanelTabBar::paintEvent(QPaintEvent*) {
         }
         if (!current) continue;
         painter.fillRect(where.left(), where.bottom() - kUnderline + 1, where.width(), kUnderline,
-                         Theme::kAccent);
+                         Theme::Accent());
     }
 }
 

@@ -230,7 +230,7 @@ void Window::BuildTopBar() {
     save->setObjectName("save");
     save->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
     QAction* save_action = commands_->Action("file.save");
-    save_action->setIcon(Icons::Of(Icons::Glyph::Save, Theme::kOnAccent, 15));
+    save_action->setIcon(Icons::Of(Icons::Glyph::Save, Theme::OnAccent(), 15));
     save->setDefaultAction(save_action);
     save->setFixedHeight(Theme::kBarControl);
     save_ = bar->addWidget(save);

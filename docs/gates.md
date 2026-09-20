@@ -530,6 +530,15 @@ title, menu bar, table header, button, header and tab, in both their plain and
 hovered forms), compositing translucent surfaces over the window first.
 Disabled text is exempt in both, as WCAG exempts inactive controls.
 
+A fifth case sweeps the accent itself: the editor takes its accent from
+Windows, so the derivation in `Theme::UseAccent` runs for the design blue, the
+machine's own accent, the Windows default, a bright yellow, a near-black navy,
+a mid grey and a magenta, and every pair that accent colours (ink on it, the
+chip on it, ink on its hover, the text and detail on a chosen row, the tint on
+one) has to clear the bar for all of them. That is what forced the hover to
+tilt away from the ink instead of always toward white, and the chosen row's
+tint to be pushed until it reads.
+
 This gate exists because the start screen's "Ctrl O" chip shipped as `#8a909b`
 on the accent `#4c9dff`: a ratio of 1.16:1, which is text you can only find by
 knowing it is there. The same sweep found the row delegate drawing its detail

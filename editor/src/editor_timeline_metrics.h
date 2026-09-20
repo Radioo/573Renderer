@@ -1,5 +1,7 @@
 #pragma once
 
+#include "editor_theme.h"
+
 #include <QColor>
 
 #include <array>
@@ -51,9 +53,9 @@ inline const QColor kRulerText(0x8a, 0x90, 0x9b);
 inline const QColor kSpanName(0xff, 0xff, 0xff, 0xd8);
 inline const QColor kSwitchOn(0xb0, 0xb5, 0xbe);
 inline const QColor kSwitchOff(0x45, 0x4a, 0x52);
-inline const QColor kSoloOn(0x9c, 0xc8, 0xff);
+
 inline const QColor kPropertyRow(0x1a, 0x1c, 0x20);
-inline const QColor kSelectedRow(0x1b, 0x33, 0x50, 0x66);
+
 inline const QColor kBar(0x2f, 0x55, 0x7c);
 inline const QColor kBarTop(0x5d, 0x8f, 0xc4);
 inline const QColor kImageBar(0x2f, 0x55, 0x7c);
@@ -71,12 +73,37 @@ inline const QColor kKeyLine(0x45, 0x4a, 0x52);
 inline const QColor kLabelMark(0xb0, 0xb5, 0xbe);
 inline const QColor kLabelChip(0x2b, 0x2f, 0x35);
 inline const QColor kPlayhead(0xff, 0x5d, 0x5d);
-inline const QColor kWorkArea(0x4c, 0x9d, 0xff, 0x55);
-inline const QColor kWorkAreaTint(0x4c, 0x9d, 0xff, 0x0d);
+
 inline const QColor kNotesLane(0x1a, 0x1c, 0x20);
 inline const QColor kNotesText(0x8a, 0x90, 0x9b);
 inline const QColor kScriptMark(0x5d, 0x8f, 0xc4);
 inline const QColor kCameraMark(0xf2, 0xb8, 0x4b);
 inline const QColor kBarText(0xe7, 0xe8, 0xeb);
+
+inline constexpr int kSelectedWash = 0x66;
+inline constexpr int kWorkAreaWash = 0x55;
+inline constexpr int kWorkAreaTintWash = 0x0d;
+
+[[nodiscard]] inline QColor Washed(const QColor& colour, int alpha) {
+    QColor washed = colour;
+    washed.setAlpha(alpha);
+    return washed;
+}
+
+[[nodiscard]] inline QColor SelectedRow() {
+    return Washed(Theme::Chosen(), kSelectedWash);
+}
+
+[[nodiscard]] inline QColor SoloOn() {
+    return Theme::OnChosen();
+}
+
+[[nodiscard]] inline QColor WorkArea() {
+    return Washed(Theme::Accent(), kWorkAreaWash);
+}
+
+[[nodiscard]] inline QColor WorkAreaTint() {
+    return Washed(Theme::Accent(), kWorkAreaTintWash);
+}
 
 }

@@ -208,7 +208,7 @@ QToolButton* TimelineBar::AddCommand(const QString& id, Icons::Glyph glyph) {
                            action->shortcut().toString(QKeySequence::NativeText) + ")");
     if (id.endsWith("toggle")) button->setProperty("play", true);
     if (action != nullptr && action->isCheckable()) {
-        button->setIcon(Icons::Toggling(glyph, Theme::kSoft, Theme::kOnChosen, kIconSide));
+        button->setIcon(Icons::Toggling(glyph, Theme::kSoft, Theme::OnChosen(), kIconSide));
         button->setCheckable(true);
         button->setChecked(action->isChecked());
         connect(action, &QAction::toggled, button, &QToolButton::setChecked);

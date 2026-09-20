@@ -101,13 +101,13 @@ StartScreen::StartScreen(Commands& commands, QWidget* parent)
     open_line->setContentsMargins(9, 0, 9, 0);
     open_line->setSpacing(6);
     auto* open_icon = new QLabel;
-    open_icon->setPixmap(Icons::Drawn(Icons::Glyph::File, Theme::kOnAccent, 15));
+    open_icon->setPixmap(Icons::Drawn(Icons::Glyph::File, Theme::OnAccent(), 15));
     open_line->addWidget(open_icon);
-    open_line->addWidget(Said(tr("Open IFS"), Theme::kOnAccent, 13, true));
+    open_line->addWidget(Said(tr("Open IFS"), Theme::OnAccent(), 13, true));
     open_line->addSpacing(4);
     open_line->addWidget(
         Mono(QKeySequence(QKeySequence::Open).toString(QKeySequence::NativeText).replace("+", " "),
-             Theme::kQuietOnAccent, 11));
+             Theme::QuietOnAccent(), 11));
     open_line->addStretch();
     connect(open, &QPushButton::clicked, this,
             [this] { commands_.Run(QStringLiteral("file.open")); });

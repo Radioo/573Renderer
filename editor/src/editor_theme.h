@@ -2,7 +2,9 @@
 
 #include <QColor>
 #include <QString>
+#include <QtTypes>
 
+#include <optional>
 #include <vector>
 
 class QApplication;
@@ -17,13 +19,10 @@ inline const QColor kEdge(0x35, 0x39, 0x41);
 inline const QColor kText(0xe7, 0xe8, 0xeb);
 inline const QColor kSoft(0xb0, 0xb5, 0xbe);
 inline const QColor kFaint(0x8a, 0x90, 0x9b);
-inline const QColor kAccent(0x4c, 0x9d, 0xff);
-inline const QColor kOnAccent(0x06, 0x12, 0x1f);
-inline const QColor kChosen(0x1b, 0x33, 0x50);
 inline const QColor kAmber(0xf2, 0xb8, 0x4b);
 inline const QColor kGreen(0x3e, 0xcf, 0x8e);
-inline const QColor kOnChosen(0x9c, 0xc8, 0xff);
-inline const QColor kQuietOnAccent(0x0e, 0x2b, 0x4c);
+inline const QColor kDesignAccent(0x4c, 0x9d, 0xff);
+inline const QColor kInk(0x06, 0x12, 0x1f);
 
 inline constexpr int kBaseSize = 12;
 inline constexpr int kBarHeight = 44;
@@ -45,6 +44,24 @@ inline constexpr double kLeastContrast = 4.5;
 [[nodiscard]] double Contrast(const QColor& text, const QColor& behind);
 
 [[nodiscard]] std::vector<QColor> InkColours();
+
+[[nodiscard]] std::optional<QColor> AccentFromDwm(quint32 packed, bool reversed);
+
+[[nodiscard]] std::optional<QColor> SystemAccent();
+
+void UseAccent(const QColor& accent);
+
+[[nodiscard]] QColor Accent();
+
+[[nodiscard]] QColor Lifted();
+
+[[nodiscard]] QColor OnAccent();
+
+[[nodiscard]] QColor QuietOnAccent();
+
+[[nodiscard]] QColor Chosen();
+
+[[nodiscard]] QColor OnChosen();
 
 [[nodiscard]] QString SansFamily();
 

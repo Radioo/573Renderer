@@ -124,11 +124,27 @@ The window follows a design canvas (an artboard set; the link is in
 it is a hard requirement, and a behaviour test cannot see a wrong colour, font
 or metric, so every visual change is checked by looking at the running window.
 
-`editor/src/editor_theme.{h,cpp}` holds the design's tokens once: the colours
+The accent is Windows's, not the artboard's. `Theme::SystemAccent` reads
+`HKEY_CURRENT_USER\Software\Microsoft\Windows\DWM`: `AccentColor` is a DWORD
+in `0xAABBGGRR` order, `ColorizationColor` the same colour in `0xAARRGGBB`, and
+`Theme::AccentFromDwm` unpacks either, refusing pure black and pure white as
+"nothing set". With no value at all the design's `#4c9dff` stands in.
+`Theme::UseAccent` then derives everything that hangs off it, so one colour
+from the system re-tints the whole window: `OnAccent` is whichever of the text
+white and the near-black ink reads better on it, `Lifted` is the hover, tilted
+away from that ink rather than always toward white, `QuietOnAccent` is the ink
+blended back toward the accent as far as 5:1 allows (the `Ctrl O` chip),
+`Chosen` is the page blended a quarter of the way to the accent (selected rows,
+checked chips, the timeline's chosen lane) and `OnChosen` is the accent lifted
+toward the text and then pushed further until it clears 4.5:1 on `Chosen`. An
+accent that cannot carry either ink is darkened or lightened until it can
+(`Fitted`), so a mid-grey system accent still reads. The accent is read once in
+`Theme::Apply`, at startup.
+
+`editor/src/editor_theme.{h,cpp}` holds the design's other tokens once: the colours
 (page `#0c0d0f`, panel `#141518`, field `#1a1c20`, line `#282b31`, edge
-`#353941`, text `#e7e8eb`, soft `#b0b5be`, faint `#8a909b`, accent `#4c9dff` on
-`#06121f`, the chosen row `#1b3350` with `#9cc8ff` on it, amber `#f2b84b`,
-green `#3ecf8e`), the families (Segoe UI Variable Text, Cascadia Mono for
+`#353941`, text `#e7e8eb`, soft `#b0b5be`, faint `#8a909b`, the ink `#06121f`,
+amber `#f2b84b`, green `#3ecf8e`), the families (Segoe UI Variable Text, Cascadia Mono for
 anything numeric or key-capped) and the heights (44 top bar, 24 status bar, 28
 controls, 30 panel tab strip). `Theme::Apply` sets the application font, a full
 `QPalette` and one global stylesheet; `Theme::DockStyle` is the separate sheet

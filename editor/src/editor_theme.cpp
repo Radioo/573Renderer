@@ -1,13 +1,16 @@
 #include "editor_theme.h"
 
 #include <QApplication>
-#include <algorithm>
-#include <cmath>
 #include <QFont>
 #include <QFontDatabase>
 #include <QPalette>
+#include <QSettings>
 #include <QString>
 #include <QStringList>
+#include <QVariant>
+
+#include <algorithm>
+#include <cmath>
 
 namespace Editor::Theme {
 
@@ -22,6 +25,21 @@ constexpr double kCurvePower = 2.4;
 constexpr double kRedShare = 0.2126;
 constexpr double kGreenShare = 0.7152;
 constexpr double kBlueShare = 0.0722;
+constexpr double kChosenMix = 0.26;
+constexpr double kOnChosenMix = 0.44;
+constexpr double kLiftMix = 0.12;
+constexpr double kQuietStep = 0.08;
+constexpr double kQuietFloor = 5.0;
+constexpr int kQuietSteps = 12;
+constexpr int kFitSteps = 8;
+constexpr int kReadSteps = 16;
+constexpr double kReadStep = 0.1;
+constexpr int kFitPercent = 115;
+constexpr int kMidLightness = 128;
+constexpr int kTopChannel = 255;
+constexpr uint kRedByte = 16;
+constexpr uint kGreenByte = 8;
+constexpr uint kByteMask = 0xFFU;
 
 QString Hex(const QColor& colour) {
     return colour.name(QColor::HexRgb);
@@ -36,6 +54,61 @@ double Channel(int value) {
 double Luminance(const QColor& colour) {
     return (kRedShare * Channel(colour.red())) + (kGreenShare * Channel(colour.green())) +
            (kBlueShare * Channel(colour.blue()));
+}
+
+QColor Blend(const QColor& from, const QColor& to, double part) {
+    const auto mix = [part](int a, int b) {
+        return static_cast<int>(std::lround(a + ((b - a) * part)));
+    };
+    return {mix(from.red(), to.red()), mix(from.green(), to.green()), mix(from.blue(), to.blue())};
+}
+
+QColor Ink(const QColor& surface) {
+    return Contrast(kText, surface) >= Contrast(kInk, surface) ? kText : kInk;
+}
+
+QColor Quiet(const QColor& surface) {
+    const QColor ink = Ink(surface);
+    QColor quiet = ink;
+    for (int step = 1; step <= kQuietSteps; step++) {
+        const QColor tried = Blend(ink, surface, step * kQuietStep);
+        if (Contrast(tried, surface) < kQuietFloor) break;
+        quiet = tried;
+    }
+    return quiet;
+}
+
+QColor Readable(const QColor& from, const QColor& toward, const QColor& behind) {
+    QColor tried = from;
+    for (int step = 0; step <= kReadSteps; step++) {
+        if (Contrast(tried, behind) >= kLeastContrast) break;
+        tried = Blend(tried, toward, kReadStep);
+    }
+    return tried;
+}
+
+QColor Fitted(const QColor& accent) {
+    QColor fitted = accent;
+    for (int step = 0; step < kFitSteps; step++) {
+        if (Contrast(Ink(fitted), fitted) >= kLeastContrast) break;
+        fitted = fitted.lightness() < kMidLightness ? fitted.darker(kFitPercent)
+                                                    : fitted.lighter(kFitPercent);
+    }
+    return fitted;
+}
+
+struct Palette {
+    QColor accent = kDesignAccent;
+    QColor lifted = kDesignAccent;
+    QColor on_accent = kInk;
+    QColor quiet_on_accent = kInk;
+    QColor chosen = kPage;
+    QColor on_chosen = kText;
+};
+
+Palette& Shown() {
+    static Palette shown;
+    return shown;
 }
 
 QString Pick(const QStringList& wanted, const QString& fallback) {
@@ -57,7 +130,64 @@ double Contrast(const QColor& text, const QColor& behind) {
 }
 
 std::vector<QColor> InkColours() {
-    return {kText, kSoft, kFaint, kAccent, kOnAccent, kOnChosen, kQuietOnAccent, kAmber, kGreen};
+    return {kText,    kSoft,      kFaint,     kAmber,   kGreen,
+            Accent(), OnAccent(), OnChosen(), Lifted(), QuietOnAccent()};
+}
+
+std::optional<QColor> AccentFromDwm(quint32 packed, bool reversed) {
+    const int first = static_cast<int>((packed >> kRedByte) & kByteMask);
+    const int green = static_cast<int>((packed >> kGreenByte) & kByteMask);
+    const int last = static_cast<int>(packed & kByteMask);
+    const QColor said(reversed ? last : first, green, reversed ? first : last);
+    if (!said.isValid()) return std::nullopt;
+    if (said.red() == 0 && said.green() == 0 && said.blue() == 0) return std::nullopt;
+    if (said.red() == kTopChannel && said.green() == kTopChannel && said.blue() == kTopChannel)
+        return std::nullopt;
+    return said;
+}
+
+std::optional<QColor> SystemAccent() {
+    const QSettings dwm(R"(HKEY_CURRENT_USER\Software\Microsoft\Windows\DWM)",
+                        QSettings::NativeFormat);
+    const QVariant accent = dwm.value("AccentColor");
+    if (accent.isValid()) return AccentFromDwm(accent.toUInt(), true);
+    const QVariant colorization = dwm.value("ColorizationColor");
+    if (colorization.isValid()) return AccentFromDwm(colorization.toUInt(), false);
+    return std::nullopt;
+}
+
+void UseAccent(const QColor& accent) {
+    Palette& shown = Shown();
+    shown.accent = Fitted(accent);
+    shown.on_accent = Ink(shown.accent);
+    shown.lifted = Blend(shown.accent, shown.on_accent == kText ? kInk : kText, kLiftMix);
+    shown.quiet_on_accent = Quiet(shown.accent);
+    shown.chosen = Blend(kPage, shown.accent, kChosenMix);
+    shown.on_chosen = Readable(Blend(shown.accent, kText, kOnChosenMix), kText, shown.chosen);
+}
+
+QColor Accent() {
+    return Shown().accent;
+}
+
+QColor Lifted() {
+    return Shown().lifted;
+}
+
+QColor OnAccent() {
+    return Shown().on_accent;
+}
+
+QColor QuietOnAccent() {
+    return Shown().quiet_on_accent;
+}
+
+QColor Chosen() {
+    return Shown().chosen;
+}
+
+QColor OnChosen() {
+    return Shown().on_chosen;
 }
 
 QString SansFamily() {
@@ -105,12 +235,13 @@ ads--CTitleBarButton:hover { background: %field; }
         .replace("%panel", Hex(kPanel))
         .replace("%field", Hex(kField))
         .replace("%line", Hex(kLine))
-        .replace("%accent", Hex(kAccent))
+        .replace("%accent", Hex(Accent()))
         .replace("%faint", Hex(kFaint))
         .replace("%text", Hex(kText));
 }
 
 void Apply(QApplication& app) {
+    UseAccent(SystemAccent().value_or(kDesignAccent));
     QFont base(SansFamily());
     base.setPixelSize(kBaseSize);
     QApplication::setFont(base);
@@ -125,7 +256,7 @@ void Apply(QApplication& app) {
     palette.setColor(QPalette::Button, kPanel);
     palette.setColor(QPalette::ButtonText, kText);
     palette.setColor(QPalette::BrightText, kText);
-    palette.setColor(QPalette::Highlight, kChosen);
+    palette.setColor(QPalette::Highlight, Chosen());
     palette.setColor(QPalette::HighlightedText, kText);
     palette.setColor(QPalette::ToolTipBase, kPanel);
     palette.setColor(QPalette::ToolTipText, kText);
@@ -179,11 +310,11 @@ QToolButton#export { color: %amber; background: #3d3016; border: 1px solid #6b55
                      padding: 0px 9px; }
 QToolButton#export:hover { background: #4a3a1b; }
 QToolButton#save { color: %onaccent; background: %accent; font-weight: 600; padding: 0px 9px; }
-QToolButton#save:hover { background: #63a9ff; }
+QToolButton#save:hover { background: %lifted; }
 
 QWidget#start_screen { background: %page; }
 QPushButton#start_open { background: %accent; color: %onaccent; border: 0px; }
-QPushButton#start_open:hover { background: #63a9ff; }
+QPushButton#start_open:hover { background: %lifted; }
 QPushButton#start_open_project { background: transparent; border: 1px solid %edge; }
 QPushButton#start_open_project:hover { background: %panel; }
 QFrame#start_drop { border: 1px dashed %edge; background: transparent; }
@@ -342,12 +473,13 @@ QLabel { background: transparent; }
                           .replace("%text", Hex(kText))
                           .replace("%soft", Hex(kSoft))
                           .replace("%faint", Hex(kFaint))
-                          .replace("%accent", Hex(kAccent))
-                          .replace("%onaccent", Hex(kOnAccent))
-                          .replace("%chosen", Hex(kChosen))
+                          .replace("%accent", Hex(Accent()))
+                          .replace("%onaccent", Hex(OnAccent()))
+                          .replace("%chosen", Hex(Chosen()))
                           .replace("%amber", Hex(kAmber))
                           .replace("%mono", MonoFamily())
-                          .replace("%onchosen", Hex(kOnChosen)));
+                          .replace("%onchosen", Hex(OnChosen()))
+                          .replace("%lifted", Hex(Lifted())));
 }
 
 }

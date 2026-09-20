@@ -52,7 +52,7 @@ void Delegate::paint(QPainter* painter, const QStyleOptionViewItem& option,
     const bool under = (option.state & QStyle::State_MouseOver) != 0;
     painter->save();
     painter->fillRect(option.rect,
-                      chosen ? Theme::kChosen : (under ? Theme::kField : Theme::kPanel));
+                      chosen ? Theme::Chosen() : (under ? Theme::kField : Theme::kPanel));
     QRect left = option.rect.adjusted(kLeft, 0, 0, 0);
     const QPixmap thumbnail =
         qvariant_cast<QIcon>(index.data(Qt::DecorationRole)).pixmap(kThumbWidth, kThumbHeight);

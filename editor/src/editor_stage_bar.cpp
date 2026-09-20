@@ -66,7 +66,7 @@ void StageBar::Build() {
         if (action == nullptr) continue;
         QToolButton* toggle = IconButton("stage_" + id);
         toggle->setIcon(
-            Icons::Toggling(glyph, Theme::kSoft, Theme::kOnChosen, Theme::kStageIconSide));
+            Icons::Toggling(glyph, Theme::kSoft, Theme::OnChosen(), Theme::kStageIconSide));
         toggle->setToolTip(action->text().remove('&'));
         toggle->setCheckable(true);
         toggle->setChecked(action->isChecked());

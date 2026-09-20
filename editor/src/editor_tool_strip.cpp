@@ -49,7 +49,7 @@ void ToolStrip::Build() {
         button->setObjectName("strip_" + id);
         button->setProperty("strip", true);
         button->setIcon(
-            Icons::Toggling(glyph, Theme::kSoft, Theme::kOnChosen, Theme::kToolIconSide));
+            Icons::Toggling(glyph, Theme::kSoft, Theme::OnChosen(), Theme::kToolIconSide));
         button->setIconSize(QSize(Theme::kToolIconSide, Theme::kToolIconSide));
         button->setFixedSize(Theme::kToolButtonSide, Theme::kToolButtonSide);
         button->setToolTip(action->text().remove('&') + " (" +
