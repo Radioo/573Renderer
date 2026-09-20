@@ -9,12 +9,15 @@
 #include <QDir>
 #include <QElapsedTimer>
 #include <QEvent>
-#include <QWidget>
+#include <QFile>
 #include <QImage>
+#include <QList>
 #include <QSettings>
 #include <QSize>
 #include <QString>
 #include <QStringList>
+#include <QTextStream>
+#include <QWidget>
 
 namespace {
 
@@ -86,6 +89,22 @@ int main(int argc, char** argv) {
     const QString hovered = Taken("--hover", arguments, QString());
     if (!hovered.isEmpty()) {
         if (QWidget* under = window.findChild<QWidget*>(hovered)) Editor::Hover(*under);
+    }
+    const QString report = Taken("--report", arguments, QString());
+    if (!report.isEmpty()) {
+        QFile writing(QDir(out).filePath(report));
+        if (writing.open(QIODevice::WriteOnly | QIODevice::Text)) {
+            QTextStream lines(&writing);
+            for (QWidget* one : window.findChildren<QWidget*>()) {
+                if (one->objectName().isEmpty()) continue;
+                const QPoint at = one->mapTo(&window, QPoint(0, 0));
+                lines << one->objectName() << ' ' << one->metaObject()->className() << ' ' << at.x()
+                      << ',' << at.y() << ' ' << one->width() << 'x' << one->height() << " hint "
+                      << one->sizeHint().width() << 'x' << one->sizeHint().height() << " font "
+                      << one->font().pixelSize() << " shown " << (one->isVisible() ? 1 : 0)
+                      << Qt::endl;
+            }
+        }
     }
     QImage shot;
     for (int pass = 0; pass < 8; pass++) {

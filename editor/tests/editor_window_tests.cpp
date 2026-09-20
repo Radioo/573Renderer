@@ -829,7 +829,7 @@ TEST_CASE("Stage snapping is on until it is turned off, and the choice is kept")
 }
 
 int main(int argc, char** argv) {
-    qputenv("QT_QPA_PLATFORM", "minimal");
+    if (qEnvironmentVariableIsEmpty("QT_QPA_PLATFORM")) qputenv("QT_QPA_PLATFORM", "minimal");
     QTemporaryDir settings;
     QSettings::setDefaultFormat(QSettings::IniFormat);
     QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, settings.path());

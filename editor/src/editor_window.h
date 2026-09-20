@@ -475,6 +475,7 @@ private:
     StageBar* stage_bar_ = nullptr;
     StartScreen* start_ = nullptr;
     PanelTabs* package_tabs_ = nullptr;
+    PanelTabs* library_tabs_ = nullptr;
     QLineEdit* animations_filter_ = nullptr;
     QLineEdit* images_filter_ = nullptr;
     QLabel* library_of_ = nullptr;

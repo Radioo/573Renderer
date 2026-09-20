@@ -160,6 +160,7 @@ QWidget* Window::BuildLibraryPanel() {
 
     auto* panel = new PanelTabs;
     panel->setObjectName("library_tabs");
+    library_tabs_ = panel;
     panel->addTab(inside, tr("Library"));
     panel->setCornerWidget(corner, Qt::TopRightCorner);
     return panel;
@@ -220,7 +221,7 @@ void Window::FillLibrary(const std::vector<LibraryRow>& characters) {
                            ? QString()
                            : tr("of %1").arg(QString::fromStdString(animation_name_));
     library_of_->setText(of);
-    library_of_->setFixedWidth(library_of_->fontMetrics().horizontalAdvance(of));
+    library_tabs_->Relayout();
     ShowLibraryKinds();
 }
 

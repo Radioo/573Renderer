@@ -62,7 +62,8 @@ no host. Its cases live in `editor/tests/editor_widget_tests.cpp`,
 on the timeline, labels and zoom) and `editor/tests/editor_graph_widget_tests.cpp`
 (the graph panel), with the mouse helpers (`Send`, `Click`, `Drag`, `Wheel`),
 the timeline geometry and the sample scene shared from
-`editor/tests/widget_test_support.h`;
+`editor/tests/widget_test_support.h`, with the panel tab strip's corner layout
+in `editor/tests/editor_panel_tabs_widget_tests.cpp`;
 its `main` sets `QT_QPA_PLATFORM=minimal` before creating the `QApplication`,
 and the minimal platform plugin is deployed next to it. The cases cover
 clicking, Ctrl-clicking and box-selecting keyframes, dragging a selection by
@@ -93,7 +94,12 @@ immediately afterwards, which made a later capture of the same frame compare
 unequal to the first one. `Picture` grabs, processes events and grabs again
 until the widget's size stops changing. Its `main` points
 `QSettings` at a temporary INI directory under its own organisation name, so it
-never reads the user's game install or layout. Each case writes a small package
+never reads the user's game install or layout, and it asks for the minimal
+platform only when `QT_QPA_PLATFORM` is not already set, so
+`QT_QPA_PLATFORM=windows ./build-editor/editor_window_tests.exe` runs the same
+cases against the real platform. Layout answers can differ between the two (the
+minimal plugin lays a panel out where the real one leaves it stale), so a case
+about geometry is worth running both ways. Each case writes a small package
 to a temporary directory and opens it. Context menus are raised by emitting the
 widget's `customContextMenuRequested` signal; a `Script` of steps, run from a
 timer while the menu and its dialogs block, picks a menu item by selecting it
@@ -246,8 +252,16 @@ it clears its own `QSettings` first so the shot is the same every time.
 Options: `--ifs <file>` opens a package, `--depth N` and `--frame N` choose one
 (so the inspector, the selection bar and the timeline have something to show),
 `--game <dir>` points at an install, `--hover <objectName>` puts the named
-widget under the pointer, `--size WxH` (default 1600x1000, the artboard's
-size), `--platform <name>` and `--keep-settings`.
+widget under the pointer, `--report <file>` writes a text line per named widget
+(object name, class, position in the window, size, size hint, font size and
+whether it is shown) next to the PNG, `--size WxH` (default 1600x1000, the
+artboard's size), `--platform <name>` and `--keep-settings`.
+
+`--report` is how a layout question gets an answer instead of a guess. Reading
+a screenshot tells you two things overlap; the report tells you the label sits
+at x 248 with width 5 while its hint is 34, which names the defect. Use it
+whenever a widget looks wrong in a shot, and quote its numbers rather than
+estimating them from pixels.
 
 `--hover` goes through `Editor::Hover` (`editor_hover.h`), which the window
 tests use too. Faking a hover needs more than `WA_UnderMouse`: a `QPushButton`
@@ -342,6 +356,43 @@ panel header; the timeline and the inspector keep theirs, since Timeline/Graph
 and Inspector/History are exactly the tabs the design draws there.
 `Theme::DockStyle` gives those tabs the panel colours and the 2 px accent
 underline.
+
+The default sizes are set once the panels exist, with
+`CDockManager::setSplitterSizes` on each of the four splitters ADS builds:
+package against library, the left column against the stage, the stage against
+the timeline, and everything against the inspector. That call only lands when
+the count of sizes matches the splitter's child count, so each one names the
+area whose parent splitter holds exactly those two children. The left column
+was the one nobody sized for a while, which left its width to whatever ADS
+worked out from size hints. The panels also carry their own minimum sizes
+(220 px for the package and the library, 260 px for the inspector, 180 px high
+for the timing area), so a restored layout can never squeeze them down to a
+strip of icons.
+
+`SaveLayout` and `RestoreLayout` (`editor_layout.cpp`) keep that layout in
+`QSettings` between runs, and both refuse a dead one:
+
+- **Saving** writes the dock state only when the dock manager is visible. It
+  lives on a page of `centre_stack`, and `QStackedLayout` gives geometry to the
+  current page alone, so a window closed while the start screen or the busy
+  page was up has never laid its splitters out. Its state is a set of zeroes.
+  The window geometry and `QMainWindow` state are still written, since those
+  are real whatever page is up.
+- **Restoring** checks the stored state with `LayoutSized` before handing it to
+  ADS: it uncompresses the XML (ADS compresses it by default) and reads every
+  `<Sizes>` list. A list that is all zeroes means that splitter was never laid
+  out, and `QSplitter::setSizes` with zeroes collapses each panel to its
+  minimum and gives the rest to the stage. One such list is enough to throw the
+  whole state away and keep the built-in defaults.
+
+That is what a user saw as "the default layout": the package and the library at
+60 px, the inspector clipped off the right edge and the timeline reduced to its
+transport bar, all of it restored from a `window/docks` value whose every
+`<Sizes>` read `0 0`. `A layout saved before a package was opened...` in
+`editor/tests/editor_shell_window_tests.cpp` closes a window that never showed
+its docks and checks that nothing was stored, then opens a package and measures
+each panel; `A stored layout whose splitters are all zero...` pins `LayoutSized`
+itself.
 
 ADS takes a tab that is not in front out of the window's widget tree, so a test
 looks a panel up through the dock manager (`Panel` in `window_test_support.h`,
@@ -759,6 +810,23 @@ beside it in faint 11 px and a 2 px accent underline under the current one
 plus (a new animation, or an image from a file on the Images tab) and the
 `...` that opens the package menu. Each tab is a filter field with the search
 glyph over the list (`WithFilter`).
+
+A corner widget that changes width after the panel has been laid out needs
+`PanelTabs::Relayout`. `QTabWidget` gives the corner its geometry from
+`setUpLayout`, which is private and runs on a resize, a tab change or a
+`QEvent::LayoutRequest` sent to the tab widget, never because the corner's own
+size hint grew. Qt would normally post that request through the corner's
+layout, but `QLayout::update` posts only while the layout is `activated`, and a
+layout invalidated while its widget was hidden stays quiet, which is exactly
+what a panel on a hidden page of `centre_stack` does. So `Relayout` activates
+the corner's layout and sends the tab widget a `LayoutRequest` itself. The
+library calls it after writing the animation name, since that name is what
+changes width. Without it the corner kept the width it had when the label was
+empty, and the plus button was laid out on top of the name: `Library`, then
+`of title` with the plus drawn through its last letter. `A corner widget that
+grows after the panel is laid out...` in
+`editor/tests/editor_panel_tabs_widget_tests.cpp` is that case, and it needs no
+window or game install.
 
 Animations lists every animation as a 40 px row: a thumbnail, the name, and
 "1440 frames, 1280 x 720, 60 fps" under it, and ends with a `+ New animation`
@@ -1353,8 +1421,9 @@ picks a frame, which seeks the host and re-renders. The widget lives in a
 ## What the editor remembers
 
 `QSettings` (organisation `573Renderer`, application `IFS Editor`) keeps the
-window geometry, the `QMainWindow` state, the dock manager state, the last game
-install and the last directory an IFS was opened from. The game install is
+window geometry, the `QMainWindow` state, the dock manager state (only when it
+is worth keeping, see **Window layout**), the last game install and the last
+directory an IFS was opened from. The game install is
 booted at startup when it is set, so the preview is ready without going through
 the menu; the first animation in a freshly opened package is selected, so
 opening a file shows something.

@@ -164,6 +164,8 @@ add_executable(editor_widget_tests
     tests/editor_graph_widget_tests.cpp
     tests/editor_timeline_widget_tests.cpp
     tests/editor_search_widget_tests.cpp
+    tests/editor_panel_tabs_widget_tests.cpp
+    src/editor_panel_tabs.cpp
     src/editor_search.cpp
     src/editor_inspector.cpp
     src/editor_filter.cpp

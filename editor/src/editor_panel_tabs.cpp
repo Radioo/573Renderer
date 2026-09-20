@@ -2,8 +2,11 @@
 
 #include "editor_theme.h"
 
+#include <QCoreApplication>
+#include <QEvent>
 #include <QFont>
 #include <QFontMetrics>
+#include <QLayout>
 #include <QPainter>
 #include <QRect>
 #include <QString>
@@ -89,6 +92,15 @@ void PanelTabBar::paintEvent(QPaintEvent*) {
 PanelTabs::PanelTabs(QWidget* parent) : QTabWidget(parent) {
     setTabBar(new PanelTabBar);
     setDocumentMode(true);
+}
+
+void PanelTabs::Relayout() {
+    for (const Qt::Corner where : {Qt::TopLeftCorner, Qt::TopRightCorner}) {
+        QWidget* corner = cornerWidget(where);
+        if (corner != nullptr && corner->layout() != nullptr) corner->layout()->activate();
+    }
+    QEvent request(QEvent::LayoutRequest);
+    QCoreApplication::sendEvent(this, &request);
 }
 
 void PanelTabs::ShowCount(int index, int count) {

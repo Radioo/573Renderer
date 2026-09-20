@@ -105,6 +105,10 @@ constexpr int kPackageShare = 262;
 constexpr int kLibraryShare = 330;
 constexpr int kStageWidth = 1280;
 constexpr int kInspectorWidth = 320;
+constexpr int kLeftColumnWidth = 290;
+constexpr int kLeastSideWidth = 220;
+constexpr int kLeastInspectorWidth = 260;
+constexpr int kLeastTimingHeight = 180;
 
 ads::CDockWidget* MakePanel(const QString& title, QWidget* content) {
     auto* dock = new ads::CDockWidget(title);
@@ -341,16 +345,24 @@ void Window::BuildPanels() {
     stage_layout->addWidget(notices_);
     stage_layout->addWidget(selection_bar_);
     ads::CDockAreaWidget* centre = docks_->setCentralWidget(MakePanel(tr("Stage"), stage));
-    ads::CDockAreaWidget* package_area = docks_->addDockWidget(
-        ads::LeftDockWidgetArea, MakePanel(tr("Package"), BuildPackageTabs()), centre);
-    ads::CDockAreaWidget* library_area = docks_->addDockWidget(
-        ads::BottomDockWidgetArea, MakePanel(tr("Library"), BuildLibraryPanel()), package_area);
+    QWidget* package_tabs = BuildPackageTabs();
+    package_tabs->setMinimumWidth(kLeastSideWidth);
+    ads::CDockWidget* package_dock = MakePanel(tr("Package"), package_tabs);
+    ads::CDockAreaWidget* package_area =
+        docks_->addDockWidget(ads::LeftDockWidgetArea, package_dock, centre);
+    QWidget* library_panel = BuildLibraryPanel();
+    library_panel->setMinimumWidth(kLeastSideWidth);
+    ads::CDockWidget* library_dock = MakePanel(tr("Library"), library_panel);
+    ads::CDockAreaWidget* library_area =
+        docks_->addDockWidget(ads::BottomDockWidgetArea, library_dock, package_area);
+    timeline_panel->setMinimumHeight(kLeastTimingHeight);
     timeline_dock_ = MakePanel(tr("Timeline"), timeline_panel);
     ads::CDockAreaWidget* timing_area =
         docks_->addDockWidget(ads::BottomDockWidgetArea, timeline_dock_);
     graph_dock_ = MakePanel(tr("Graph"), BuildGraphPanel());
     docks_->addDockWidget(ads::CenterDockWidgetArea, graph_dock_, timing_area);
     timeline_dock_->setAsCurrentTab();
+    inspector_panel_->setMinimumWidth(kLeastInspectorWidth);
     ads::CDockWidget* inspector_dock = MakePanel(tr("Inspector"), inspector_panel_);
     ads::CDockAreaWidget* inspector_area =
         docks_->addDockWidget(ads::RightDockWidgetArea, inspector_dock);
@@ -361,6 +373,7 @@ void Window::BuildPanels() {
     library_area->setDockAreaFlag(ads::CDockAreaWidget::HideSingleWidgetTitleBar, true);
     package_filter_->setObjectName("package_filter");
     library_filter_->setObjectName("library_filter");
+    docks_->setSplitterSizes(centre, {kLeftColumnWidth, kStageWidth});
     docks_->setSplitterSizes(timing_area, {kStageShare, kTimelineShare});
     docks_->setSplitterSizes(package_area, {kPackageShare, kLibraryShare});
     docks_->setSplitterSizes(inspector_area, {kStageWidth, kInspectorWidth});

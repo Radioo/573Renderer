@@ -25,6 +25,7 @@ public:
     explicit PanelTabs(QWidget* parent = nullptr);
 
     void ShowCount(int index, int count);
+    void Relayout();
 };
 
 }

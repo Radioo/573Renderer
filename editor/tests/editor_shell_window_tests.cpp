@@ -1,9 +1,11 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <DockAreaWidget.h>
+#include <DockManager.h>
 #include <DockWidget.h>
 
 #include "editor_hover.h"
+#include "editor_layout.h"
 #include "editor_timeline.h"
 #include "editor_window.h"
 
@@ -12,6 +14,7 @@
 #include <QUrl>
 #include <QStackedWidget>
 #include <QSettings>
+#include <QByteArray>
 #include <QMimeData>
 #include <QDropEvent>
 #include <QDragEnterEvent>
@@ -37,6 +40,9 @@
 using namespace WindowTest;
 
 namespace {
+
+constexpr int kLeastPanelWidth = 220;
+constexpr int kLeastTimelineHeight = 200;
 
 QRect Placed(QWidget& window, QWidget* widget) {
     return QRect(widget->mapTo(&window, QPoint(0, 0)), widget->size());
@@ -316,4 +322,46 @@ TEST_CASE("Hovering the command search lifts it without clashing with the shortc
     Editor::Unhover(*field);
     CHECK(field->grab().toImage() == quiet);
     CHECK(glass->grab().toImage() == quiet_glass);
+}
+
+TEST_CASE("A layout saved before a package was opened does not shrink the panels next time") {
+    QSettings().remove("window/docks");
+    {
+        Editor::Window closed;
+        auto* docks = closed.findChild<ads::CDockManager*>();
+        REQUIRE(docks != nullptr);
+        Editor::SaveLayout(closed, *docks);
+    }
+    CHECK_FALSE(QSettings().contains("window/docks"));
+
+    Opened opened;
+    ShowOffScreen(opened.window);
+    Open(opened);
+    auto* docks = opened.window.findChild<ads::CDockManager*>();
+    REQUIRE(docks != nullptr);
+    const auto room = [docks](const QString& name) {
+        ads::CDockWidget* panel = docks->findDockWidget(name);
+        REQUIRE(panel != nullptr);
+        REQUIRE(panel->dockAreaWidget() != nullptr);
+        return panel->dockAreaWidget()->size();
+    };
+    CHECK(room("Package").width() >= kLeastPanelWidth);
+    CHECK(room("Library").width() >= kLeastPanelWidth);
+    CHECK(room("Inspector").width() >= kLeastPanelWidth);
+    CHECK(room("Timeline").height() >= kLeastTimelineHeight);
+    QSettings().remove("window/docks");
+}
+
+TEST_CASE("A stored layout whose splitters are all zero is not put back") {
+    const QByteArray dead =
+        R"(<QtAdvancedDockingSystem><Sizes>0 0 </Sizes><Sizes>0 0 </Sizes></QtAdvancedDockingSystem>)";
+    const QByteArray alive =
+        R"(<QtAdvancedDockingSystem><Sizes>290 1280 </Sizes><Sizes>0 0 </Sizes></QtAdvancedDockingSystem>)";
+    const QByteArray sized =
+        R"(<QtAdvancedDockingSystem><Sizes>290 1280 </Sizes><Sizes>592 340 </Sizes></QtAdvancedDockingSystem>)";
+    CHECK_FALSE(Editor::LayoutSized(QByteArray()));
+    CHECK_FALSE(Editor::LayoutSized(dead));
+    CHECK_FALSE(Editor::LayoutSized(alive));
+    CHECK(Editor::LayoutSized(sized));
+    CHECK(Editor::LayoutSized(qCompress(sized, 9)));
 }
