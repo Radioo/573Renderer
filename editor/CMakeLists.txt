@@ -6,6 +6,7 @@ endif()
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
+set(CMAKE_AUTORCC ON)
 if(MSVC)
     set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
 endif()
@@ -63,6 +64,7 @@ target_link_libraries(editor_shared
 )
 
 set(R573_EDITOR_APP_SOURCES
+    icons/icons.qrc
     src/editor_window.cpp
     src/editor_commands.cpp
     src/editor_menus.cpp
@@ -159,12 +161,14 @@ r573_deploy_qt_plugin(ifs_editor_shot Qt6::QSvgPlugin)
 r573_deploy_qt_plugin(ifs_editor_shot Qt6::QSvgIconPlugin)
 
 add_executable(editor_widget_tests
+    icons/icons.qrc
     tests/editor_widget_tests.cpp
     tests/editor_dialog_widget_tests.cpp
     tests/editor_graph_widget_tests.cpp
     tests/editor_timeline_widget_tests.cpp
     tests/editor_search_widget_tests.cpp
     tests/editor_panel_tabs_widget_tests.cpp
+    tests/editor_icons_widget_tests.cpp
     src/editor_panel_tabs.cpp
     src/editor_search.cpp
     src/editor_inspector.cpp
@@ -188,6 +192,7 @@ r573_deploy_qt_plugin(editor_widget_tests Qt6::QSvgPlugin)
 r573_deploy_qt_plugin(editor_widget_tests Qt6::QSvgIconPlugin)
 
 add_executable(editor_window_tests
+    icons/icons.qrc
     tests/editor_window_tests.cpp
     tests/editor_live_window_tests.cpp
     tests/editor_panel_window_tests.cpp

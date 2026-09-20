@@ -228,13 +228,47 @@ the dock manager needs. Panels key off object names and properties
 (`QToolButton[transport="true"]`, `QWidget[section="true"]`, ...) rather than
 inline styles, so a colour exists in one place.
 
-The design's icons are its own SVG paths, rendered through Qt SVG
-(`editor/src/editor_icons.{h,cpp}`): `Icons::Body` returns the path data,
-`Drawn` renders it into a pixmap at a colour and a side, `Of` makes a QIcon
-with a 1x and a 2x pixmap, and `Toggling` adds an On pixmap in the chosen
-colour for a checkable button. `qtsvg` is in `vcpkg.json`'s `editor` feature
-and the `qsvg`/`qsvgicon` plugins are deployed like the others. Nothing is
+The icons are Lucide, vendored as SVG files under `editor/icons/` from
+`lucide-static` 1.47.0 with its ISC licence beside them
+(`editor/icons/LICENSE`), compiled into the binary by `editor/icons/icons.qrc`
+and `CMAKE_AUTORCC`. `editor/src/editor_icons.{h,cpp}` maps each `Glyph` to a
+file name; `Drawn` renders `:/icons/<name>.svg` into a pixmap at a side, then
+fills it through `CompositionMode_SourceIn` so the whole glyph takes the asked
+colour whatever the file strokes or fills; `Of` makes a QIcon with a 1x and a
+2x pixmap, and `Toggling` adds an On pixmap in the chosen colour for a
+checkable button. `qtsvg` is in `vcpkg.json`'s `editor` feature and the
+`qsvg`/`qsvgicon` plugins are deployed like the others. Nothing is
 hand-painted.
+
+`icons.qrc` belongs to every target that draws, the test binaries included: a
+target without it renders each icon as an empty pixmap and says nothing.
+`Every glyph draws its file...` in
+`editor/tests/editor_icons_widget_tests.cpp` walks the whole `Glyph` enum at 14
+and 32 px and checks each one inks pixels and that every solid pixel carries
+the asked colour, which catches a missing resource, a misspelled file name and
+a tint that did not apply. It guards `editor_widget_tests`;
+`editor_window_tests` is guarded by the search hover case, which fails when the
+glyph stops changing colour. Adding `icons/icons.qrc` to `editor_window_tests`
+is how that case went green again.
+
+They used to be path data typed into `Icons::Body`, transcribed from the
+artboards, and the artboards' own icons are hand-drawn approximations of this
+same set. Several were wrong. Undo was
+`<path d="M9 7L4 12l5 5"/><path d="M4 7h10a6 6 0 0 1 0 12h-2"/>`: the arrow
+head's vertex sits at y 12 while the tail it belongs to runs at y 7, so the
+head floated five pixels under the curve and the pair read as a detached loop
+rather than an arrow. Lucide's `undo-2` is
+`<path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11"/>`,
+where both start at (4, 9). **Do not type path data for a new icon.** Fetch the
+file (`https://unpkg.com/lucide-static@1.47.0/icons/<name>.svg`), put it in
+`editor/icons/`, add it to `icons.qrc` and name it from `Named`.
+
+Two places where Lucide differs from the artboards on purpose: its `play` is an
+outlined triangle where the artboard filled it, and `previous change` /
+`next change` keep the `diamond` the artboards use as the label for that pair,
+so the two buttons look alike. The artboards draw them directionally, with the
+same shapes as previous and next frame, which is ambiguous in the other
+direction. Neither is settled.
 
 `build-editor/ifs_editor_shot.exe` (`editor/src/editor_shot_main.cpp`) is how
 the window is looked at:

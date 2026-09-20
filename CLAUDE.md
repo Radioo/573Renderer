@@ -28,10 +28,18 @@ things), `find_package` its component, link it, and deploy its plugins with
   `qoffscreen.dll`) is that a real constraint - say so, and pick the next real option, never a
   hand-rolled stand-in.
 - **Say what was installed and why** in the reply. Do not silently reimplement.
+- **An icon set is a library too. NEVER type SVG path data by hand.** Vendor the real files from a
+  maintained set (the editor uses Lucide under `editor/icons/`, licence beside them) and name them
+  from code. Copying paths out of the design artboards does not count either: the artboards' icons
+  are themselves hand-drawn approximations.
 - Burned (2026-09-20): building the editor UI I needed the design's stroke icons, found no Qt SVG in
   the build, and started writing a QPainter icon painter instead of adding `qtsvg` to `vcpkg.json`.
   The user was rightly angry. `qtsvg` + `Qt6::Svg` + the `qsvg`/`qsvgicon` plugins took one edit and
   renders the design's own SVG paths exactly.
+- Burned again the same day: with Qt SVG linked, I typed 37 icon path bodies into `Icons::Body`
+  instead of fetching an icon set. Several were geometrically wrong - undo drew its arrow head five
+  pixels below the tail it belonged to, which the user spotted on screen and asked whether I had
+  hallucinated the icons. I had. They are Lucide files now.
 
 # THE EDITOR'S LOOK IS CHECKED BY LOOKING AT IT
 
