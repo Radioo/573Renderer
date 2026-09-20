@@ -4,6 +4,7 @@
 #include "document/clip.h"
 #include "document/library_call.h"
 #include "document/placement_edit.h"
+#include "document/placement_effect.h"
 #include "formats/afp_animation.h"
 #include "support/expected.h"
 
@@ -42,7 +43,15 @@ Support::Expected<void, std::string> EditPlacementField(AfpAnimation::Animation&
     if (!found) return Support::Unexpected(found.error());
     auto placement = LivePlacement(**found, depth, frame);
     if (!placement) return Support::Unexpected(placement.error());
-    return SetPlacementField(animation, **placement, field, value);
+    const auto shown = ReplayDepth(**found, depth, frame, frame);
+    auto written = SetPlacementField(animation, **placement, field, value);
+    if (!written) return written;
+    if (shown.empty()) return written;
+    const uint32_t missing = ControlsNeeded(**placement) & ~(*placement)->flags;
+    if (missing == 0) return written;
+    CarryApplied(**placement, shown.back().second, missing);
+    (*placement)->flags |= missing;
+    return written;
 }
 
 Support::Expected<void, std::string> EditCallArgument(AfpAnimation::Animation& animation,

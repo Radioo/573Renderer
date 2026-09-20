@@ -103,3 +103,25 @@ _Avoid_: action, actionscript, code
 **Library call**:
 A script that only calls one aeplib function with constant arguments, such as setting a rect mask or jumping to a label, edited as a single item on the timeline.
 _Avoid_: action, command, event
+
+### The editor's own parts
+
+**Command**:
+One named thing the editor can do, registered once with its id, its words, its shortcut and the sentence it says when it cannot run. Menus, the selection bar, the tool strip and the command search are all views over the same registry, so a command reads and refuses the same way wherever it is reached from.
+_Avoid_: action, operation, feature
+
+**Refusal**:
+The sentence a command says instead of running, naming what is missing. A greyed menu item carries its refusal as a tooltip, and running a command from anywhere else says it in a notice.
+_Avoid_: error, validation, disabled reason
+
+**Selection bar**:
+The strip under the stage that names what is chosen (a depth, several depths, keyframes or nothing) and carries the commands that act on it.
+_Avoid_: toolbar, action bar, context bar
+
+**Notice**:
+A line that appears under the stage to report what an edit did, sometimes with an Undo, and goes away by itself. The status bar keeps host state and errors; a notice is for the result of something the user just did.
+_Avoid_: toast, alert, message box
+
+**In place**:
+Editing a clip while the root stays on screen around it, dimmed, with the clip's own outlines mapped onto the root through its placement. The opposite is showing the clip on its own, which is what the editor falls back to when the clip is not placed on the root at the playhead.
+_Avoid_: in context, isolation mode, edit in place mode

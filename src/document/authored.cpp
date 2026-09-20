@@ -111,22 +111,9 @@ bool WritesFrame(const Track& track, uint32_t frame) {
     return track.keys[after - 1].ease != Ease::Hold;
 }
 
-uint32_t NeededControls(const AfpAnimation::Placement& placement) {
-    uint32_t bits = 0;
-    if (placement.scale || placement.rotate_skew || placement.translation ||
-        placement.short_scale || placement.short_rotate_skew) {
-        bits |= kUseMatrix;
-    }
-    if (placement.multiply_colour || placement.add_colour || placement.packed_multiply_colour ||
-        placement.packed_add_colour) {
-        bits |= kUseColour;
-    }
-    return bits;
-}
-
 Support::Expected<void, std::string> CheckControls(const AfpAnimation::Placement& placement,
                                                    uint32_t frame) {
-    const uint32_t missing = NeededControls(placement) & ~placement.flags;
+    const uint32_t missing = ControlsNeeded(placement) & ~placement.flags;
     if (missing == 0) return {};
     const std::string field = (missing & kUseMatrix) != 0 ? "matrix" : "colour";
     return Support::Unexpected("frame " + std::to_string(frame) + " carries a " + field +
@@ -293,7 +280,7 @@ BakedDepth BakedOf(const AfpAnimation::Container& clip, const std::vector<Placed
         if (update.extended_flags.has_value() !=
             ExpectsExtended(baked.update_extended_flags, update))
             baked.other_extended_frames.push_back(placements[i].frame);
-        const uint32_t extra = update.flags & kControlBits & ~NeededControls(update);
+        const uint32_t extra = update.flags & kControlBits & ~ControlsNeeded(update);
         if (extra != 0) {
             baked.extra_controls.push_back(
                 FrameControls{.frame = placements[i].frame, .bits = extra});
@@ -438,7 +425,7 @@ AuthoredPlacements(const AuthoredDepth& authored, const BakedDepth& baked) {
             if (!written) return Support::Unexpected(written.error());
             wrote = true;
         }
-        placement.flags |= NeededControls(placement) | applied;
+        placement.flags |= ControlsNeeded(placement) | applied;
         if (frame != authored.first_frame)
             placement.extended_flags = ExtendedWord(baked, placement, frame);
         const bool blank = std::ranges::find(baked.blank_frames, frame) != baked.blank_frames.end();
