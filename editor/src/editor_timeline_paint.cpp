@@ -235,8 +235,9 @@ void Timeline::paintEvent(QPaintEvent* event) {
     QPainter painter(this);
     painter.fillRect(event->rect(), palette().color(QPalette::Base));
     if (frame_count_ == 0) {
-        painter.setPen(palette().color(QPalette::Text));
-        painter.drawText(rect(), Qt::AlignCenter, tr("No animation selected"));
+        painter.setPen(waiting_.isEmpty() ? palette().color(QPalette::Text) : kRulerText);
+        painter.drawText(rect(), Qt::AlignCenter,
+                         waiting_.isEmpty() ? tr("No animation selected") : waiting_);
         return;
     }
 

@@ -19,6 +19,7 @@
           "name": "qtbase",
           "default-features": false,
           "features": [
+            "concurrent",
             "gui",
             "jpeg",
             "png",

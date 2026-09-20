@@ -104,6 +104,11 @@ void Timeline::SelectDepths(std::vector<uint16_t> depths) {
     update();
 }
 
+void Timeline::Waiting(const QString& what) {
+    waiting_ = what;
+    update();
+}
+
 void Timeline::Clear() {
     selected_depths_.clear();
     selected_keys_.clear();

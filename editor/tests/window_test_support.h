@@ -483,10 +483,29 @@ inline void WidenTimeline(Editor::Timeline& timeline) {
     }
 }
 
+inline constexpr int kOffScreen = -32000;
+
+inline void ShowOffScreen(Editor::Window& window) {
+    window.setWindowFlag(Qt::Tool);
+    window.setWindowFlag(Qt::WindowDoesNotAcceptFocus);
+    window.setAttribute(Qt::WA_ShowWithoutActivating);
+    window.resize(kWindowWidth, kWindowHeight);
+    window.move(kOffScreen, kOffScreen);
+    window.show();
+    window.move(kOffScreen, kOffScreen);
+    QApplication::processEvents();
+}
+
+inline void WaitForOpen(Editor::Window& window) {
+    REQUIRE(Settle([&window] { return !window.Loading(); }));
+    QApplication::processEvents();
+}
+
 inline void Open(Opened& opened, bool with_image = false) {
     REQUIRE(opened.dir.isValid());
     opened.window.resize(kWindowWidth, kWindowHeight);
     opened.window.OpenDocument(WritePackage(opened.dir, with_image));
+    WaitForOpen(opened.window);
     opened.tree = opened.window.findChild<QTreeWidget*>("package");
     opened.inspector = opened.window.findChild<QTableWidget*>();
     REQUIRE(opened.tree != nullptr);

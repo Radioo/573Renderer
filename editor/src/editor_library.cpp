@@ -200,50 +200,27 @@ void Window::PlaceLibraryCharacter(uint16_t character) {
     AddCharacterDepth(*depth, character, frame_, frames - 1);
 }
 
-QIcon Window::LibraryTile(const std::map<uint16_t, std::string>& images, uint16_t character) {
-    const auto known = library_tiles_.find(character);
-    if (known != library_tiles_.end()) return known->second;
-    const auto named = images.find(character);
-    if (named == images.end()) return {};
-    const auto pixels = file_->ReadImage(named->second);
-    if (!pixels) return {};
-    const QImage picture(pixels->bgra.data(), static_cast<int>(pixels->width),
-                         static_cast<int>(pixels->height), QImage::Format_ARGB32);
-    const QIcon tile(QPixmap::fromImage(
-        picture.scaled(kTileSide, kTileSide, Qt::KeepAspectRatio, Qt::SmoothTransformation)));
-    library_tiles_.emplace(character, tile);
-    return tile;
-}
-
-void Window::FillLibrary(const AfpAnimation::Animation& animation,
-                         const std::vector<Document::CharacterSummary>& characters) {
+void Window::FillLibrary(const std::vector<LibraryRow>& characters) {
     library_->clear();
-    if (library_tiles_path_ != animation_path_) {
-        library_tiles_.clear();
-        library_tiles_path_ = animation_path_;
-    }
-    const std::map<uint16_t, std::string> images = file_->ShapeImages(animation_path_);
-    const std::map<uint16_t, std::size_t> uses = Document::CharacterUses(animation);
     const QBrush unused = library_->palette().brush(QPalette::Disabled, QPalette::Text);
-    for (const Document::CharacterSummary& one : characters) {
-        const auto found = uses.find(one.id);
-        const std::size_t count = found == uses.end() ? 0 : found->second;
-        auto* item = new QTreeWidgetItem(
-            library_, {QString::fromStdString(one.label), QString::number(count)});
+    for (const LibraryRow& one : characters) {
+        auto* item = new QTreeWidgetItem(library_, {one.label, QString::number(one.uses)});
         item->setData(0, kIdRole, one.id);
         item->setData(0, kKindRole, static_cast<int>(one.kind));
-        item->setIcon(0, LibraryTile(images, one.id));
-        item->setData(0, Rows::kDetailRole,
-                      count == 0 ? tr("unused")
-                                 : tr("used %n time(s)", "", static_cast<int>(count)));
-        if (count == 0) {
-            item->setForeground(0, unused);
-            item->setForeground(1, unused);
-        }
+        if (!one.tile.isNull()) item->setIcon(0, QIcon(QPixmap::fromImage(one.tile)));
+        const QString says = one.uses == 0   ? tr("unused")
+                             : one.uses == 1 ? tr("used once")
+                                             : tr("used %1 times").arg(one.uses);
+        item->setData(0, Rows::kDetailRole, says);
+        if (one.uses > 0) continue;
+        item->setForeground(0, unused);
+        item->setForeground(1, unused);
     }
-    library_of_->setText(animation_name_.empty()
-                             ? QString()
-                             : tr("of %1").arg(QString::fromStdString(animation_name_)));
+    const QString of = animation_name_.empty()
+                           ? QString()
+                           : tr("of %1").arg(QString::fromStdString(animation_name_));
+    library_of_->setText(of);
+    library_of_->setFixedWidth(library_of_->fontMetrics().horizontalAdvance(of));
     ShowLibraryKinds();
 }
 

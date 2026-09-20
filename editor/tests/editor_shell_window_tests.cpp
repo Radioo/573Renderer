@@ -126,6 +126,7 @@ TEST_CASE("The top bar shows the project and how many entries wait for an export
     CHECK(OnTopBar(opened.window, exporting));
     CHECK(exporting->text() == QString("Export to IFS (2)"));
     REQUIRE(RunCommand(opened.window, "project.export").isEmpty());
+    WaitForOpen(opened.window);
     CHECK(exporting->text() == QString("Export to IFS"));
 }
 
@@ -275,7 +276,7 @@ TEST_CASE("The start screen lists recent files until one is open, and a drop ope
     CHECK(entered.isAccepted());
     QDropEvent drop(QPointF(4, 4), Qt::CopyAction, &data, Qt::LeftButton, Qt::NoModifier);
     QApplication::sendEvent(&opened.window, &drop);
-    QApplication::processEvents();
+    WaitForOpen(opened.window);
 
     CHECK(centre->currentWidget() != start);
     auto* tree = opened.window.findChild<QTreeWidget*>("package");

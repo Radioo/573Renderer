@@ -41,8 +41,14 @@
 
 namespace Editor {
 
+namespace {
+
+constexpr int kPreviewRetryMs = 8;
+
+}
+
 void Window::ShowGhostsAround(uint32_t frame) {
-    if (animation_name_.empty()) return;
+    if (animation_name_.empty() || !HostReady()) return;
     std::vector<QImage> ghosts;
     for (const int64_t step : {int64_t{-1}, int64_t{1}}) {
         const int64_t neighbour = static_cast<int64_t>(frame) + step;
@@ -391,16 +397,27 @@ void Window::PreviewAuthored(const AuthoredChange& change) {
 void Window::RunStagePreview() {
     preview_scheduled_ = false;
     if (!pending_preview_) return;
+    if (!file_ || !OutlinesMatchView()) {
+        pending_preview_.reset();
+        return;
+    }
+    if (!HostReady()) {
+        preview_scheduled_ = true;
+        QTimer::singleShot(kPreviewRetryMs, this, &Window::RunStagePreview);
+        return;
+    }
     const AnimationChange change = std::move(*pending_preview_);
     pending_preview_.reset();
-    if (!file_ || !host_.Running() || !OutlinesMatchView()) return;
     Document::File shown = *file_;
     auto animation = shown.ReadAnimation(animation_path_);
     if (!animation || !change(*animation)) return;
     if (!shown.WriteAnimation(animation_path_, *animation)) return;
-    if (!LoadViewportClip(shown)) return;
-    previewed_ = true;
-    SeekViewport(symbol_shown_ ? frame_ : root_frame_);
+    LoadIntoHost(false, std::move(shown), tr("Previewing the change"), [this](bool loaded) {
+        if (!loaded) return;
+        previewed_ = true;
+        SeekViewport(symbol_shown_ ? frame_ : root_frame_);
+        if (!pending_preview_) ShowFrame();
+    });
 }
 
 bool Window::SketchMove(uint16_t depth, double dx, double dy, bool finished) {

@@ -1,5 +1,7 @@
 #include "editor_window.h"
 
+#include "editor_jobs.h"
+
 #include "editor_drift_sheet.h"
 
 #include "editor_files.h"
@@ -23,6 +25,8 @@
 #include <QMessageBox>
 #include <QPushButton>
 #include <QSettings>
+#include <QStackedWidget>
+#include <QTimer>
 #include <QStatusBar>
 #include <QString>
 
@@ -149,16 +153,29 @@ void Window::OpenProject(const QString& folder) {
         ReportProblem(tr("The project names %1, which is not there").arg(ifs));
         return;
     }
-    if (!OfferToSave()) return;
-    OpenDocument(ifs);
+    OfferToSave([this, ifs, folder, kept = std::move(*project)](bool go) mutable {
+        if (!go) return;
+        OpenDocument(ifs);
+        FinishProjectOpen(ifs, folder, std::move(kept));
+    });
+}
+
+void Window::FinishProjectOpen(const QString& ifs, const QString& folder,
+                               Document::Project project) {
+    if (Loading()) {
+        QTimer::singleShot(0, this, [this, ifs, folder, kept = std::move(project)]() mutable {
+            FinishProjectOpen(ifs, folder, std::move(kept));
+        });
+        return;
+    }
     if (QFileInfo(document_path_).absoluteFilePath() != QFileInfo(ifs).absoluteFilePath()) return;
     QSettings().setValue(kProjectDirKey, folder);
-    authored_ = project->content;
-    project_ = std::move(*project);
+    authored_ = project.content;
+    project_ = std::move(project);
     project_folder_ = folder;
     if (host_.Running()) StartHost(QSettings().value(kGameDirKey).toString());
     RefreshState();
-    statusBar()->showMessage(tr("Project open in %1").arg(folder));
+    statusBar()->showMessage(tr("Project open in %1").arg(folder), kNoticeMs);
     ReportDrift();
 }
 
@@ -310,25 +327,47 @@ void Window::EditOwnedScript() {
 void Window::ExportToPackage() {
     if (!file_ || !project_) return;
     project_->content = authored_;
-    Document::File before = *file_;
     const QString folder = project_folder_;
-    const auto exported =
-        Document::ExportProject(*file_, *project_, [folder](const std::string& file) {
-            return LoadImage(
-                QString::fromStdString(Document::ProjectSourcePath(folder.toStdString(), file)));
+    ShowBusy(tr("Exporting into %1").arg(QFileInfo(document_path_).fileName()));
+    JobStarted();
+    Jobs::Start<ExportedProject>(
+        this, pool_,
+        [copy = *file_, project = *project_, folder](QPromise<ExportedProject>& promise) mutable {
+            ExportedProject made;
+            const auto exported =
+                Document::ExportProject(copy, project, [folder](const std::string& file) {
+                    return LoadImage(QString::fromStdString(
+                        Document::ProjectSourcePath(folder.toStdString(), file)));
+                });
+            if (!exported) {
+                made.refusal = QString::fromStdString(exported.error());
+                promise.addResult(std::move(made));
+                return;
+            }
+            made.file = std::move(copy);
+            made.project = std::move(project);
+            promise.addResult(std::move(made));
+        },
+        [this](ExportedProject made) {
+            opening_ = false;
+            JobFinished();
+            centre_->setCurrentIndex(file_ ? 1 : 0);
+            if (!made.file) {
+                ReportProblem(made.refusal);
+                RefreshState();
+                return;
+            }
+            Document::File before = *file_;
+            file_ = std::move(*made.file);
+            project_ = std::move(*made.project);
+            history_.Record(tr("Export").toStdString(),
+                            Document::Snapshot{.file = std::move(before), .authored = authored_});
+            SaveProject();
+            RefreshState();
+            Reload();
+            ShowFrame();
+            ShowResult(tr("Exported %1 owned depth(s) into the IFS").arg(authored_.size()), true);
         });
-    if (!exported) {
-        file_ = std::move(before);
-        ReportProblem(QString::fromStdString(exported.error()));
-        return;
-    }
-    history_.Record(tr("Export").toStdString(),
-                    Document::Snapshot{.file = std::move(before), .authored = authored_});
-    SaveProject();
-    RefreshState();
-    Reload();
-    ShowFrame();
-    ShowResult(tr("Exported %1 owned depth(s) into the IFS").arg(authored_.size()), true);
 }
 
 void Window::OwnSelectedDepth(uint32_t frame) {

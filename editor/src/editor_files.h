@@ -20,6 +20,8 @@ inline constexpr const char* kPathKey = "stage/path";
 inline constexpr const char* kRecentKey = "recent/files";
 inline constexpr const char* kRecentCountsKey = "recent/animations";
 inline constexpr const char* kBuildSlug = "iidx33";
+inline constexpr int kNoticeMs = 5000;
+inline constexpr int kProblemMs = 15000;
 
 [[nodiscard]] std::vector<uint8_t> ReadFileBytes(const QString& path);
 

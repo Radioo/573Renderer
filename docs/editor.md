@@ -117,6 +117,76 @@ loaded runs all passed. A case that needs a second
 script closes the first one first, because a live script also takes the warning
 boxes.
 
+## Nothing heavy runs on the window's thread
+
+The window never blocks. Every piece of work that takes more than an instant
+runs on a thread pool the window owns (`pool_`, a `QThreadPool` member), is
+started through `Editor::Jobs::Start` (`editor/src/editor_jobs.h`, a thin
+wrapper over `QtConcurrent::run` with a `QPromise` for progress and a
+`QFutureWatcher` that delivers the result back on the window's thread), and
+reports what it is doing while it runs. `Window::Loading` is true while any job
+or a pending viewport resize is outstanding, which is also what the tests wait
+on (`WaitForOpen` in `window_test_support.h`).
+
+The jobs, and what each one shows:
+
+- **Opening a package** (`Window::OpenDocument` → `OpenPackage`,
+  `editor/src/editor_open.cpp`). The worker reads the file, parses the IFS,
+  then decodes every animation and every texture to build the package rows,
+  reporting `Reading <name>` per entry. The window switches to the Busy page
+  the moment the open starts, so no panel is ever shown empty before its
+  content is on the way. `Window::FinishOpen` moves the parsed document in and
+  fills the trees from prepared rows, which is pure widget work.
+- **Refreshing the package rows after a structural edit** (`Window::ReloadRows`).
+  `EditDocument` compares the entry paths before and after a change and starts
+  this job only when the set of entries moved, so a keyframe edit costs
+  nothing. The old rows stay on screen until the new ones land.
+- **Reading a clip for the timeline, the library and the inspector**
+  (`Window::ShowClipTimeline` → `ReadClipView`, `editor/src/editor_clip_view.cpp`).
+  This is the work that used to cost 219 ms on IIDX 33's `title.ifs` every time
+  an animation was opened or an edit landed: decoding the animation, listing
+  the characters, decoding a tile for each one, and walking the depth rows. The
+  timeline says `Reading <name>` while its first read is in flight.
+- **Loading the preview host with a package** (`Window::LoadIntoHost` →
+  `Editor::LoadIntoHost`, `editor/src/editor_host_load.cpp`): the encode, the
+  optional hidden-depth filtering or sprite preview, the upload and the symbol
+  switch. The stage says what it is doing, and while it runs
+  `Window::HostReady` is false, so seeks, renders, resizes, onion skins and
+  snapshots stand aside instead of talking to a host that is mid-load. Requests
+  coalesce: a new one made while a load is in flight replaces the pending one,
+  which is what keeps a drag on the stage smooth. A resize asked for during a
+  load re-arms its timer rather than being dropped, and a stage preview waits
+  for the host instead of throwing its change away.
+- **Booting the preview host** (`Window::StartHost`): the process start and the
+  DLL load, which take seconds. The status bar says `Booting the preview
+  host...` and the window stays usable.
+- **Saving** (`Window::WriteDocument`): the encode and the write, on the Busy
+  page. `Save` and `OfferToSave` take a continuation rather than returning a
+  verdict, so the flows that need the save to finish first (opening another
+  file, closing the window) carry on in that continuation; `closeEvent` ignores
+  the first close, offers the save, and closes again once the answer is in.
+- **Exporting a project** (`Window::ExportToPackage`): the export, which
+  rewrites entries, on the Busy page.
+- **Saving frames** (`Window::SaveFramesAs`): the loop is chunked, one frame per
+  turn of the event loop, with the PNG encode of each frame on the pool. The
+  Busy page shows `Frame N, x of y` and a Stop button (`Busy::StopAsked`).
+
+The window's destructor clears and drains the pool before its members are
+destroyed, because a QFutureWatcher only waits when it is destroyed, and by
+then the window's own members would already be gone.
+
+What is left on the window's thread is widget work plus two small reads: the
+host render round trip (a few ms to about 100 ms for a big stage, and skipped
+entirely while a load is in flight) and `Window::ShowFrame`, which decodes the
+open animation to fill the inspector and the outlines. That measured 6 to 9 ms
+on IIDX 33's `title.ifs`, and it does not run during playback, so it is left
+uncached rather than risking a stale-document cache.
+
+Two layout defects fell out of this work and are fixed: the selection bar and
+the timeline bar put their contents in a `QScrollArea`, so their minimum widths
+no longer force the whole window wider than the screen (the selection bar alone
+demanded 2283 px, which pushed the stage off the edge of a 1600 px window).
+
 ## The look, and how it is checked
 
 The window follows a design canvas (an artboard set; the link is in

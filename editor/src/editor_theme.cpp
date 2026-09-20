@@ -322,7 +322,7 @@ QFrame#start_card { border: 1px solid %edge; background: %panel; }
 QFrame#start_rule { background: %line; border: 0px; }
 QLabel#start_dot { border: 0px; }
 QPushButton#recent_row { background: transparent; border: 0px; border-bottom: 1px solid %line;
-                         padding: 0px; }
+                         padding: 0px; min-height: 55px; max-height: 55px; }
 QPushButton#recent_row:hover { background: %panel; }
 
 QWidget#stage_bar { background: %panel; border-bottom: 1px solid %line; }

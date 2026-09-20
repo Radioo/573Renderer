@@ -1,5 +1,8 @@
 #include "editor_window.h"
 
+#include "editor_busy.h"
+#include "editor_jobs.h"
+
 #include "editor_files.h"
 #include "editor_viewport.h"
 
@@ -15,6 +18,8 @@
 #include <QPainter>
 #include <QProgressDialog>
 #include <QSettings>
+#include <QStackedWidget>
+#include <QTimer>
 #include <QSize>
 #include <QStatusBar>
 #include <QString>
@@ -56,7 +61,7 @@ Support::Expected<Window::ShownFrame, std::string> Window::ReadFrame() {
 }
 
 void Window::SaveFrameAs() {
-    if (!host_.Running() || animation_name_.empty() || stage_size_.isEmpty()) {
+    if (!HostReady() || animation_name_.empty() || stage_size_.isEmpty()) {
         ReportProblem(tr("Saving a frame needs the preview, so choose a game install first"));
         return;
     }
@@ -83,7 +88,7 @@ void Window::SaveFrameAs() {
 }
 
 void Window::SaveFramesAs() {
-    if (!host_.Running() || animation_name_.empty() || stage_size_.isEmpty()) {
+    if (!HostReady() || animation_name_.empty() || stage_size_.isEmpty()) {
         ReportProblem(tr("Saving frames needs the preview, so choose a game install first"));
         return;
     }
@@ -108,38 +113,79 @@ void Window::SaveFramesAs() {
         ReportProblem(QString::fromStdString(resized.error()));
         return;
     }
-    const auto total = static_cast<int>(last - first + 1);
-    QProgressDialog progress(tr("Saving frames"), tr("Stop"), 0, total, this);
-    progress.setWindowModality(Qt::WindowModal);
-    progress.setMinimumDuration(0);
-    const QString base = QString::fromStdString(animation_name_);
-    int saved = 0;
-    QString problem;
-    for (uint32_t frame = first; frame <= last && !progress.wasCanceled(); frame++) {
-        progress.setLabelText(tr("Frame %1, %2 of %3").arg(frame).arg(saved + 1).arg(total));
-        progress.setValue(saved);
-        const auto sought = host_.Seek(frame);
-        auto shown =
-            sought
-                ? ReadFrame()
-                : Support::Expected<ShownFrame, std::string>(Support::Unexpected(sought.error()));
-        if (!shown) {
-            problem = QString::fromStdString(shown.error());
-            break;
-        }
-        const QString path = QDir(folder).filePath(
-            QString("%1_%2.png").arg(base).arg(frame, kFrameDigits, 10, QChar('0')));
-        if (!Opaque(shown->image).save(path, "PNG")) {
-            problem = tr("%1 could not be written").arg(path);
-            break;
-        }
-        saved++;
+    frames_ = FrameExport{.folder = folder,
+                          .base = QString::fromStdString(animation_name_),
+                          .frame = first,
+                          .first = first,
+                          .last = last,
+                          .saved = 0,
+                          .stop = false};
+    ShowBusy(tr("Saving frames %1 to %2").arg(first).arg(last));
+    busy_->AllowStopping(true);
+    JobStarted();
+    QTimer::singleShot(0, this, &Window::SaveNextFrame);
+}
+
+void Window::StopFrames() {
+    if (frames_) frames_->stop = true;
+}
+
+void Window::SaveNextFrame() {
+    if (!frames_) return;
+    if (frames_->stop || frames_->frame > frames_->last) {
+        FinishFrames(QString());
+        return;
     }
-    progress.setValue(total);
+    const auto total = static_cast<int>(frames_->last - frames_->first + 1);
+    busy_->Move(frames_->saved, total,
+                tr("Frame %1, %2 of %3").arg(frames_->frame).arg(frames_->saved + 1).arg(total));
+    const auto sought = host_.Seek(frames_->frame);
+    auto shown =
+        sought ? ReadFrame()
+               : Support::Expected<ShownFrame, std::string>(Support::Unexpected(sought.error()));
+    if (!shown) {
+        FinishFrames(QString::fromStdString(shown.error()));
+        return;
+    }
+    const QString path = QDir(frames_->folder)
+                             .filePath(QString("%1_%2.png")
+                                           .arg(frames_->base)
+                                           .arg(frames_->frame, kFrameDigits, 10, QChar('0')));
+    frames_->frame++;
+    frames_->saved++;
+    JobStarted();
+    Jobs::Start<QString>(
+        this, pool_,
+        [picture = Opaque(shown->image), path](QPromise<QString>& promise) {
+            promise.addResult(picture.save(path, "PNG")
+                                  ? QString()
+                                  : QObject::tr("%1 could not be written").arg(path));
+        },
+        [this](const QString& refusal) {
+            JobFinished();
+            if (!refusal.isEmpty()) {
+                FinishFrames(refusal);
+                return;
+            }
+            SaveNextFrame();
+        });
+}
+
+void Window::FinishFrames(const QString& refusal) {
+    if (!frames_) return;
+    const FrameExport done = *frames_;
+    frames_.reset();
+    busy_->AllowStopping(false);
+    opening_ = false;
+    JobFinished();
+    centre_->setCurrentIndex(file_ ? 1 : 0);
     ResizeViewport();
     SeekViewport(symbol_shown_ ? frame_ : root_frame_);
-    if (!problem.isEmpty()) ReportProblem(problem);
-    statusBar()->showMessage(tr("Saved %1 of %2 frames to %3").arg(saved).arg(total).arg(folder));
+    RefreshState();
+    if (!refusal.isEmpty()) ReportProblem(refusal);
+    const auto total = static_cast<int>(done.last - done.first + 1);
+    statusBar()->showMessage(
+        tr("Saved %1 of %2 frames to %3").arg(done.saved).arg(total).arg(done.folder), kNoticeMs);
 }
 
 }

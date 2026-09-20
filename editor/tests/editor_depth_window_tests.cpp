@@ -412,6 +412,7 @@ TEST_CASE("A new empty sprite from the library opens ready to fill") {
         REQUIRE(Settle([&made] { return made.Finished(); }));
         CHECK(made.Problems().isEmpty());
     }
+    WaitForOpen(opened.window);
     REQUIRE(sprites() == before + 1);
     const QString opened_clip = OpenClip(opened.window);
     REQUIRE_FALSE(opened_clip.isEmpty());
@@ -537,6 +538,7 @@ TEST_CASE("A label dragged on the ruler is moved in the saved package") {
     QAction* save = ShortcutAction(opened.window, QKeySequence(QKeySequence::Save));
     REQUIRE(save != nullptr);
     save->trigger();
+    WaitForOpen(opened.window);
     QFile read(opened.dir.filePath("sample.ifs"));
     REQUIRE(read.open(QIODevice::ReadOnly));
     const QByteArray bytes = read.readAll();
@@ -570,6 +572,7 @@ TEST_CASE("Double-clicking the ruler adds a label, and a flag renames the one un
     QAction* save = ShortcutAction(opened.window, QKeySequence(QKeySequence::Save));
     REQUIRE(save != nullptr);
     save->trigger();
+    WaitForOpen(opened.window);
     QFile read(opened.dir.filePath("sample.ifs"));
     REQUIRE(read.open(QIODevice::ReadOnly));
     const QByteArray bytes = read.readAll();

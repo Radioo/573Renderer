@@ -118,6 +118,7 @@ TEST_CASE("The library counts uses, places a character and shows a sprite on its
         INFO(placed.Problems().join("|").toStdString());
         CHECK(placed.Problems().isEmpty());
     }
+    WaitForOpen(opened.window);
     REQUIRE(row("dot") != nullptr);
     CHECK(row("dot")->text(1) == "2");
     CHECK(RowValue(*opened.inspector, "Depth") == "3");
@@ -232,6 +233,7 @@ TEST_CASE("A sprite duplicated in the library can be put on a depth in place of 
         REQUIRE(Settle([&duplicated] { return duplicated.Finished(); }));
         CHECK(duplicated.Problems().isEmpty());
     }
+    WaitForOpen(opened.window);
     REQUIRE(sprites().size() == 2);
 
     QTreeWidgetItem* copy =
@@ -248,6 +250,7 @@ TEST_CASE("A sprite duplicated in the library can be put on a depth in place of 
         INFO(used.Problems().join("|").toStdString());
         CHECK(used.Problems().isEmpty());
     }
+    WaitForOpen(opened.window);
     CHECK(RowValue(*opened.inspector, "Character") == copied.toStdString());
     for (QTreeWidgetItem* one : sprites()) {
         const bool is_copy = one->data(0, Qt::UserRole).toString() == copied;
@@ -491,10 +494,12 @@ TEST_CASE("Delete removes the chosen depths here as one undo step, but not owned
         QApplication::processEvents();
         CHECK(removed.Problems().isEmpty());
     }
+    WaitForOpen(opened.window);
     CHECK(dot_row()->text(1) == "0");
     QAction* undo = ShortcutAction(opened.window, QKeySequence(QKeySequence::Undo));
     REQUIRE(undo != nullptr);
     undo->trigger();
+    WaitForOpen(opened.window);
     CHECK(dot_row()->text(1) == "2");
 
     QAction* project = nullptr;
@@ -782,6 +787,7 @@ TEST_CASE("The package panel lists animations and images in their own tabs") {
         RunMenu(added, *opened.tree);
         CHECK(added.Problems().isEmpty());
     }
+    WaitForOpen(opened.window);
     REQUIRE(images->topLevelItemCount() == before + 1);
     QTreeWidgetItem* picture = nullptr;
     for (int at = 0; at < images->topLevelItemCount(); at++) {
@@ -827,6 +833,7 @@ TEST_CASE("The new animation row on the Animations tab makes one") {
         INFO(made.Problems().join("|").toStdString());
         CHECK(made.Problems().isEmpty());
     }
+    WaitForOpen(opened.window);
     CHECK(animations->topLevelItemCount() == before + 1);
     CHECK(AnimationNamed(*opened.tree, "fresh") != nullptr);
 }
@@ -842,21 +849,24 @@ TEST_CASE("The library places on Enter, filters by kind, and drops onto the Char
     REQUIRE(timeline != nullptr);
     REQUIRE(shapes != nullptr);
     REQUIRE(character != nullptr);
-    QTreeWidgetItem* dot = nullptr;
-    for (QTreeWidgetItemIterator it(library); *it != nullptr; ++it) {
-        if ((*it)->text(0).contains("dot")) dot = *it;
-    }
-    REQUIRE(dot != nullptr);
-    CHECK_FALSE(dot->isHidden());
+    const auto dot = [&library] {
+        QTreeWidgetItem* found = nullptr;
+        for (QTreeWidgetItemIterator it(library); *it != nullptr; ++it) {
+            if ((*it)->text(0).contains("dot")) found = *it;
+        }
+        REQUIRE(found != nullptr);
+        return found;
+    };
+    CHECK_FALSE(dot()->isHidden());
     shapes->setChecked(false);
     QApplication::processEvents();
-    CHECK(dot->isHidden());
+    CHECK(dot()->isHidden());
     shapes->setChecked(true);
     QApplication::processEvents();
-    CHECK_FALSE(dot->isHidden());
+    CHECK_FALSE(dot()->isHidden());
 
-    const QString uses = dot->text(1);
-    library->setCurrentItem(dot);
+    const QString uses = dot()->text(1);
+    library->setCurrentItem(dot());
     {
         Script placed({});
         QKeyEvent entered(QEvent::KeyPress, Qt::Key_Return, Qt::NoModifier);
@@ -865,33 +875,26 @@ TEST_CASE("The library places on Enter, filters by kind, and drops onto the Char
         INFO(placed.Problems().join("|").toStdString());
         CHECK(placed.Problems().isEmpty());
     }
-    QTreeWidgetItem* again = nullptr;
-    for (QTreeWidgetItemIterator it(library); *it != nullptr; ++it) {
-        if ((*it)->text(0).contains("dot")) again = *it;
-    }
-    REQUIRE(again != nullptr);
-    CHECK(again->text(1).toInt() == uses.toInt() + 1);
+    WaitForOpen(opened.window);
+    CHECK(dot()->text(1).toInt() == uses.toInt() + 1);
 
-    library->setCurrentItem(again);
-    const QString used = again->text(1);
+    library->setCurrentItem(dot());
+    const QString used = dot()->text(1);
+    const auto character_id = dot()->data(0, kIdRole).toUInt();
     {
         Script opened_sprite({});
-        emit library->itemDoubleClicked(again, 0);
+        emit library->itemDoubleClicked(dot(), 0);
         REQUIRE(Settle([&opened_sprite] { return opened_sprite.Finished(); }));
     }
-    QTreeWidgetItem* after_double = nullptr;
-    for (QTreeWidgetItemIterator it(library); *it != nullptr; ++it) {
-        if ((*it)->text(0).contains("dot")) after_double = *it;
-    }
-    REQUIRE(after_double != nullptr);
-    CHECK(after_double->text(1) == used);
+    WaitForOpen(opened.window);
+    CHECK(dot()->text(1) == used);
 
     emit timeline->FrameChosen(0);
     emit timeline->DepthChosen(1);
-    QApplication::processEvents();
+    WaitForOpen(opened.window);
     const std::string before = RowValue(*opened.inspector, "Character");
     QMimeData data;
-    data.setData(Editor::kCharacterMime, QByteArray::number(again->data(0, kIdRole).toUInt()));
+    data.setData(Editor::kCharacterMime, QByteArray::number(character_id));
     {
         Script dropped({});
         QDragEnterEvent entered(QPoint(2, 2), Qt::CopyAction, &data, Qt::LeftButton,

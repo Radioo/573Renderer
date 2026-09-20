@@ -294,6 +294,7 @@ TEST_CASE("A package with no animation takes its first from another IFS") {
     const QString like = WritePackage(dir);
     Editor::Window window;
     window.OpenDocument(WriteImagesOnly(dir));
+    WaitForOpen(window);
     auto* tree = window.findChild<QTreeWidget*>("package");
     auto* inspector = window.findChild<QTableWidget*>();
     REQUIRE(tree != nullptr);
@@ -353,6 +354,7 @@ TEST_CASE("Depths grouped from the timeline menu become a sprite, and ungrouping
         REQUIRE(Settle([&grouped] { return grouped.Finished(); }));
         PressPopover(opened.window, "apply");
         CHECK(grouped.Problems().isEmpty());
+        WaitForOpen(opened.window);
         CHECK(sprites() == before + 1);
         CHECK(OpenClip(opened.window).isEmpty());
         CHECK(RowValue(*opened.inspector, "Depth") == "1");
@@ -362,6 +364,7 @@ TEST_CASE("Depths grouped from the timeline menu become a sprite, and ungrouping
         emit timeline->MenuRequested(QPoint(4, 4), 1, QString());
         REQUIRE(Settle([&ungrouped] { return ungrouped.Finished(); }));
         CHECK(ungrouped.Problems().isEmpty());
+        WaitForOpen(opened.window);
         CHECK(sprites() == before);
     }
     {
@@ -462,6 +465,7 @@ TEST_CASE("A depth copied from one animation pastes into another with its shape"
     QAction* save = ShortcutAction(opened.window, QKeySequence(QKeySequence::Save));
     REQUIRE(save != nullptr);
     save->trigger();
+    WaitForOpen(opened.window);
 
     QFile read(opened.dir.filePath("sample.ifs"));
     REQUIRE(read.open(QIODevice::ReadOnly));
@@ -502,6 +506,7 @@ TEST_CASE("A depth copied from one animation pastes into another with its shape"
     };
     CHECK(offers_paste());
     opened.window.OpenDocument(opened.dir.filePath("sample.ifs"));
+    WaitForOpen(opened.window);
     CHECK_FALSE(offers_paste());
 }
 

@@ -116,12 +116,14 @@ TEST_CASE("The scripts lane's camera button puts a camera on the playhead and ta
         REQUIRE(Settle([&added] { return added.Finished(); }));
         CHECK(added.Problems().isEmpty());
     }
+    WaitForOpen(opened.window);
     CHECK(Picture(*timeline) != plain);
     {
         Script removed({});
         emit timeline->CameraAsked();
         REQUIRE(Settle([&removed] { return removed.Problems().isEmpty(); }));
     }
+    WaitForOpen(opened.window);
     CHECK(Picture(*timeline) == plain);
 }
 
@@ -272,9 +274,10 @@ TEST_CASE("A drag inside a clip shown in place is mapped through the clip's own 
     const double clip_y = placed.section(',', 1, 1).trimmed().toDouble() / 20;
 
     REQUIRE(EnterFirstSprite(opened.window));
+    WaitForOpen(opened.window);
     emit timeline->FrameChosen(0);
     emit timeline->DepthChosen(2);
-    QApplication::processEvents();
+    WaitForOpen(opened.window);
     const QString before = QString::fromStdString(RowValue(*opened.inspector, "Translation"));
     {
         Script dragged({});
@@ -283,15 +286,15 @@ TEST_CASE("A drag inside a clip shown in place is mapped through the clip's own 
         CHECK(dragged.Problems().isEmpty());
     }
     emit timeline->DepthChosen(2);
-    QApplication::processEvents();
+    WaitForOpen(opened.window);
     const QString after = QString::fromStdString(RowValue(*opened.inspector, "Translation"));
     CHECK(after != before);
     const double inside_x = after.section(',', 0, 0).trimmed().toDouble() / 20;
     const double inside_y = after.section(',', 1, 1).trimmed().toDouble() / 20;
     emit timeline->DepthChosen(1);
-    QApplication::processEvents();
+    WaitForOpen(opened.window);
     emit viewport->Picked(clip_x + (2 * inside_x), clip_y + (2 * inside_y));
-    QApplication::processEvents();
+    WaitForOpen(opened.window);
     CHECK(RowValue(*opened.inspector, "Depth") == "2");
     const double moved = after.section(',', 0, 0).trimmed().toDouble() -
                          before.section(',', 0, 0).trimmed().toDouble();

@@ -32,7 +32,6 @@ using namespace Editor;
 
 namespace {
 
-constexpr int kOffScreen = -32000;
 constexpr int kLeastPixels = 40;
 constexpr int kLeastInkPixels = 6;
 
@@ -103,17 +102,6 @@ QStringList FaintText(QWidget& window) {
                          .arg(Editor::Theme::Contrast(*drawn, behind), 0, 'f', 2));
     }
     return faint;
-}
-
-void ShowOffScreen(Editor::Window& window) {
-    window.setWindowFlag(Qt::Tool);
-    window.setWindowFlag(Qt::WindowDoesNotAcceptFocus);
-    window.setAttribute(Qt::WA_ShowWithoutActivating);
-    window.resize(kWindowWidth, kWindowHeight);
-    window.move(kOffScreen, kOffScreen);
-    window.show();
-    window.move(kOffScreen, kOffScreen);
-    QApplication::processEvents();
 }
 
 }

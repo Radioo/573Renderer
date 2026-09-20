@@ -18,6 +18,7 @@
 #include <QPen>
 #include <QPixmap>
 #include <QPushButton>
+#include <QSizePolicy>
 #include <QString>
 #include <QVBoxLayout>
 #include <QVariant>
@@ -258,16 +259,22 @@ void StartScreen::ShowRecent(const std::vector<RecentFile>& recent) {
 
         auto* named = new QVBoxLayout;
         named->setContentsMargins(0, 0, 0, 0);
-        named->setSpacing(1);
+        named->setSpacing(2);
         const QFileInfo about(one.path);
         auto* title = Said(about.fileName(), Theme::kText, 13);
         title->setObjectName("recent_name");
-        named->addWidget(title);
         QString under = one.folder.section('/', -2);
-        if (one.animations >= 0) under += tr(", %1 animation(s)").arg(one.animations);
+        if (one.animations == 0) under += tr(", no animations");
+        if (one.animations == 1) under += tr(", 1 animation");
+        if (one.animations > 1) under += tr(", %1 animations").arg(one.animations);
         auto* sub = Said(under, Theme::kFaint, 11);
         sub->setObjectName("recent_detail");
+        for (QLabel* said : {title, sub})
+            said->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
+        named->addStretch();
+        named->addWidget(title);
         named->addWidget(sub);
+        named->addStretch();
         line->addLayout(named, 1);
 
         if (one.project) {

@@ -54,6 +54,23 @@ wrong layout, so:
   colour, run those cases; when painting text somewhere the widget walk cannot see (a delegate,
   a custom paintEvent), add the pair to the painted-pairs case in the same change.
 
+# THE EDITOR WINDOW NEVER BLOCKS
+
+Nothing that takes more than an instant may run on the window's thread: reading
+or writing a file, parsing or encoding a package, decoding an animation or an
+image, talking to the preview host, exporting. It goes on the window's thread pool
+through `Editor::Jobs::Start`, and the window says what it is doing while it runs.
+- **Every wait has a state.** A panel shows what it is loading, never an empty list
+  that the reader cannot tell from "there is nothing here". The Busy page
+  (`Editor::Busy`) covers document-wide work and carries a progress bar, a detail
+  line and a Stop button where the work can be stopped.
+- **Never show an empty state before the load has started.** Switch to the loading
+  state first, then start the job.
+- **Coalesce, never drop.** When a request arrives while the same kind of work is in
+  flight, keep the latest and run it when the current one finishes. Dropping it
+  leaves the screen showing something that is no longer true.
+- Anything the tests need to wait for must be visible through `Window::Loading`.
+
 # FIXING A BUG: FAILING TEST FIRST, THEN THE FIX, THEN PROVE IT PASSES
 
 Every bug fix follows this order, with no steps merged or skipped:

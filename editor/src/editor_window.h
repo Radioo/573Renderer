@@ -1,6 +1,8 @@
 #pragma once
 
 #include "editor_host.h"
+#include "editor_clip_view.h"
+#include "editor_open.h"
 
 #include "document/document.h"
 #include "document/authored.h"
@@ -33,6 +35,7 @@
 #include <QSize>
 #include <QIcon>
 #include <QString>
+#include <QThreadPool>
 
 #include <cstddef>
 #include <cstdint>
@@ -93,6 +96,31 @@ class Notices;
 class StageBar;
 class StartScreen;
 class PanelTabs;
+class Busy;
+struct OpenedPackage;
+
+struct FrameExport {
+    QString folder;
+    QString base;
+    uint32_t frame = 0;
+    uint32_t first = 0;
+    uint32_t last = 0;
+    int saved = 0;
+    bool stop = false;
+};
+
+struct ExportedProject {
+    std::optional<Document::File> file;
+    std::optional<Document::Project> project;
+    QString refusal;
+};
+
+struct PendingLoad {
+    bool fresh = false;
+    Document::File document;
+    QString what;
+    std::function<void(bool)> then;
+};
 class ToolStrip;
 class Popover;
 class TimelineBar;
@@ -110,6 +138,7 @@ public:
     ~Window() override;
 
     void OpenDocument(const QString& path);
+    [[nodiscard]] bool Loading() const;
 
 protected:
     void closeEvent(QCloseEvent* event) override;
@@ -174,6 +203,7 @@ private:
     void AddProjectImage();
     void EditOwnedScript();
     void ReportDrift();
+    void FinishProjectOpen(const QString& ifs, const QString& folder, Document::Project project);
     void OwnSelectedDepth(uint32_t frame);
     void DetachSelectedDepth();
     [[nodiscard]] const Document::AuthoredDepth* AuthoredAt(uint16_t depth, uint32_t frame) const;
@@ -236,6 +266,11 @@ private:
     void OpenProject(const QString& folder);
     [[nodiscard]] std::string TargetBuild() const;
     void FillTree();
+    void ReloadRows();
+    void ShowBusy(const QString& what);
+    void JobStarted();
+    void JobFinished();
+    void FinishOpen(const QString& path, OpenedPackage opened);
     void RefreshStartScreen();
     [[nodiscard]] QWidget* BuildPackageActions();
     void RememberRecent(const QString& path);
@@ -283,6 +318,9 @@ private:
     [[nodiscard]] Support::Expected<ShownFrame, std::string> ReadFrame();
     void SaveFrameAs();
     void SaveFramesAs();
+    void SaveNextFrame();
+    void FinishFrames(const QString& refusal);
+    void StopFrames();
     [[nodiscard]] std::vector<uint16_t> SelectedDepths() const;
     void ChooseDepths(std::vector<uint16_t> depths);
     void RemoveChosenDepths(uint32_t frame);
@@ -323,10 +361,14 @@ private:
     [[nodiscard]] int ClipIndexOf(const Document::ClipId& wanted) const;
     [[nodiscard]] QString ClipName(int index) const;
     void ShowClipTimeline();
+    void ApplyClipView(ClipView view);
+    void SayWhichClip(int index);
     [[nodiscard]] std::optional<Placeable>
     ChoosePlaceable(const AfpAnimation::Animation& animation);
     void PlaceImage(const std::string& image, const Document::DepthSpan& span);
-    bool LoadViewportClip(const Document::File& file);
+    void LoadIntoHost(bool fresh, Document::File document, const QString& what,
+                      std::function<void(bool)> then);
+    [[nodiscard]] bool HostReady() const;
     void TogglePlay();
     void StepPlayback();
     void StopPlayback();
@@ -374,8 +416,7 @@ private:
     [[nodiscard]] QListWidget* BuildHistory();
     void FillHistory();
     void JumpInHistory(int row);
-    void FillLibrary(const AfpAnimation::Animation& animation,
-                     const std::vector<Document::CharacterSummary>& characters);
+    void FillLibrary(const std::vector<LibraryRow>& characters);
     void ShowLibraryKinds();
     void PlaceLibraryCharacter(uint16_t character);
     [[nodiscard]] QIcon LibraryTile(const std::map<uint16_t, std::string>& images,
@@ -403,9 +444,11 @@ private:
     void TrimSpanOnTimeline(uint16_t depth, uint32_t frame, uint32_t first, uint32_t last);
     void ResizeViewport();
     void Reload();
-    bool Save();
-    bool SaveAs();
-    bool OfferToSave();
+    void Save(std::function<void(bool)> then = {});
+    void SaveAs(std::function<void(bool)> then = {});
+    void OfferToSave(std::function<void(bool)> then);
+    void AskForDocument();
+    void WriteDocument(const QString& path, std::function<void(bool)> then);
     void RefreshState();
     void ReportProblem(const QString& what);
     void ReportOnce(const QString& what);
@@ -436,6 +479,20 @@ private:
     QLineEdit* images_filter_ = nullptr;
     QLabel* library_of_ = nullptr;
     QStackedWidget* centre_ = nullptr;
+    QThreadPool pool_;
+    Busy* busy_ = nullptr;
+    bool host_busy_ = false;
+    bool closing_ = false;
+    std::optional<PendingLoad> pending_load_;
+    std::optional<FrameExport> frames_;
+    bool view_busy_ = false;
+    bool view_again_ = false;
+    bool view_retried_ = false;
+    uint32_t model_frames_ = 0;
+    bool opening_ = false;
+    int jobs_ = 0;
+    PackageRows rows_;
+
     ToolStrip* tool_strip_ = nullptr;
     TimelineBar* timeline_bar_ = nullptr;
     ads::CDockWidget* timeline_dock_ = nullptr;

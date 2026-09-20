@@ -79,6 +79,7 @@ TEST_CASE("A stage drag previews through the host before it is committed") {
     window.show();
     Script opening({});
     window.OpenDocument(title);
+    WaitForOpen(window);
     REQUIRE(opening.Problems().isEmpty());
 
     const std::optional<uint16_t> widest = WidestTitleDepth(title);
@@ -93,20 +94,15 @@ TEST_CASE("A stage drag previews through the host before it is committed") {
     REQUIRE(undo != nullptr);
     emit timeline->FrameChosen(kPreviewFrame);
     emit timeline->DepthChosen(*widest);
-    QApplication::processEvents();
+    WaitForOpen(window);
     const QImage before = Picture(*viewport);
 
     emit viewport->Dragged(*widest, 300, 150, false);
-    QApplication::processEvents();
-    QApplication::processEvents();
-    const QImage during = Picture(*viewport);
-    CHECK(during != before);
+    CHECK(Settle([&] { return Picture(*viewport) != before; }));
     CHECK_FALSE(undo->isEnabled());
 
     emit viewport->Dragged(*widest, 0, 0, false);
-    QApplication::processEvents();
-    QApplication::processEvents();
-    CHECK(Picture(*viewport) == before);
+    CHECK(Settle([&] { return Picture(*viewport) == before; }));
     CHECK(opening.Problems().isEmpty());
 }
 
@@ -124,6 +120,7 @@ TEST_CASE("Hiding a depth in the view takes it out of the rendered frame until i
     window.show();
     Script opening({});
     window.OpenDocument(title);
+    WaitForOpen(window);
     REQUIRE(opening.Problems().isEmpty());
     auto* timeline = window.findChild<Editor::Timeline*>();
     auto* viewport = window.findChild<Editor::Viewport*>();
@@ -152,7 +149,7 @@ TEST_CASE("Hiding a depth in the view takes it out of the rendered frame until i
         REQUIRE(Settle([&shown] { return shown.Finished(); }));
         CHECK(shown.Problems().isEmpty());
     }
-    CHECK(grab() == before);
+    CHECK(Settle([&] { return grab() == before; }));
     CHECK(opening.Problems().isEmpty());
 }
 
@@ -166,6 +163,7 @@ TEST_CASE("Playback stays inside the work area") {
     window.show();
     Script opening({});
     window.OpenDocument(game + "/data/graphic/1/title.ifs");
+    WaitForOpen(window);
     REQUIRE(opening.Problems().isEmpty());
     auto* timeline = window.findChild<Editor::Timeline*>();
     REQUIRE(timeline != nullptr);
@@ -207,6 +205,7 @@ TEST_CASE("A saved frame is the stage size, opaque, and leaves the viewport as i
     window.show();
     Script opening({});
     window.OpenDocument(game + "/data/graphic/1/title.ifs");
+    WaitForOpen(window);
     REQUIRE(opening.Problems().isEmpty());
     auto* timeline = window.findChild<Editor::Timeline*>();
     auto* viewport = window.findChild<Editor::Viewport*>();
@@ -224,6 +223,7 @@ TEST_CASE("A saved frame is the stage size, opaque, and leaves the viewport as i
     {
         Script saving({PickFile(path)});
         save->trigger();
+        WaitForOpen(window);
         REQUIRE(Settle([&saving] { return saving.Finished(); }));
         CHECK(saving.Problems().isEmpty());
     }
@@ -252,6 +252,7 @@ TEST_CASE("The work area saves as one PNG per frame, each as the frame saves on 
     window.show();
     Script opening({});
     window.OpenDocument(game + "/data/graphic/1/title.ifs");
+    WaitForOpen(window);
     REQUIRE(opening.Problems().isEmpty());
     auto* timeline = window.findChild<Editor::Timeline*>();
     auto* viewport = window.findChild<Editor::Viewport*>();
@@ -295,7 +296,7 @@ TEST_CASE("The work area saves as one PNG per frame, each as the frame saves on 
         INFO(saving.Problems().join("|").toStdString());
         CHECK(saving.Problems().isEmpty());
     }
-    QApplication::processEvents();
+    WaitForOpen(window);
     const QStringList files = QDir(folder).entryList({"*.png"}, QDir::Files, QDir::Name);
     CHECK(files == QStringList{"title_0400.png", "title_0401.png", "title_0402.png"});
     for (uint32_t frame = kPreviewFrame; frame <= kPreviewFrame + 2; frame++) {
@@ -306,7 +307,7 @@ TEST_CASE("The work area saves as one PNG per frame, each as the frame saves on 
         CHECK_FALSE(saved.hasAlphaChannel());
         CHECK(saved == QImage(dir.filePath(QString("single_%1.png").arg(frame))));
     }
-    CHECK(viewport->grab().toImage() == before);
+    CHECK(Picture(*viewport) == before);
     window.resize(1500, 880);
     REQUIRE(Settle([&window] {
         return FrameStatus(window).startsWith(QString("Frame %1 ").arg(kPreviewFrame + 1));
@@ -332,6 +333,7 @@ TEST_CASE(
     window.show();
     Script opening({});
     window.OpenDocument(title);
+    WaitForOpen(window);
     REQUIRE(opening.Problems().isEmpty());
     auto* timeline = window.findChild<Editor::Timeline*>();
     auto* viewport = window.findChild<Editor::Viewport*>();
@@ -373,6 +375,7 @@ TEST_CASE(
     REQUIRE(RunCommand(window, "clip.in_context").isEmpty());
     REQUIRE(EnterFirstSprite(window));
     emit timeline->DepthChosen(*sprite_depth);
+    WaitForOpen(window);
     REQUIRE(window.statusBar()->currentMessage().endsWith("on its own"));
     const QImage sprite_on = grab();
     path->trigger();
@@ -394,6 +397,7 @@ TEST_CASE("Trimming the title to a work area reloads the host on the kept frames
     window.show();
     Script opening({});
     window.OpenDocument(game + "/data/graphic/1/title.ifs");
+    WaitForOpen(window);
     REQUIRE(opening.Problems().isEmpty());
     auto* timeline = window.findChild<Editor::Timeline*>();
     REQUIRE(timeline != nullptr);
@@ -446,6 +450,7 @@ TEST_CASE("Onion skin shows the neighbouring frames and leaves the host on the p
     window.show();
     Script opening({});
     window.OpenDocument(game + "/data/graphic/1/title.ifs");
+    WaitForOpen(window);
     REQUIRE(opening.Problems().isEmpty());
     auto* timeline = window.findChild<Editor::Timeline*>();
     auto* viewport = window.findChild<Editor::Viewport*>();
@@ -489,6 +494,7 @@ TEST_CASE("Double-clicking a sprite on the stage opens it") {
     window.show();
     Script opening({});
     window.OpenDocument(title);
+    WaitForOpen(window);
     REQUIRE(opening.Problems().isEmpty());
     auto* timeline = window.findChild<Editor::Timeline*>();
     auto* viewport = window.findChild<Editor::Viewport*>();
@@ -521,6 +527,7 @@ TEST_CASE("A motion sketch plays the animation while the drag is held and keys w
     window.show();
     Script opening({});
     window.OpenDocument(title);
+    WaitForOpen(window);
     REQUIRE(opening.Problems().isEmpty());
     const std::optional<uint16_t> widest = WidestTitleDepth(title);
     REQUIRE(widest.has_value());

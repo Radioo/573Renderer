@@ -213,7 +213,9 @@ void Window::AddClipMenu() {
                               .checked = QSettings().value(kInContextKey, true).toBool(),
                               .set = [this](bool on) {
                                   QSettings().setValue(kInContextKey, on);
-                                  if (file_) LoadViewportClip(*file_);
+                                  if (file_)
+                                      LoadIntoHost(false, *file_, tr("Updating the preview"),
+                                                   [this](bool) { ShowFrame(); });
                                   ShowFrame();
                               }});
     clip->addAction(context_action_);

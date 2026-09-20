@@ -1,6 +1,9 @@
 #include "editor_window.h"
 
+#include "editor_busy.h"
 #include "editor_files.h"
+#include "editor_jobs.h"
+#include "editor_open.h"
 #include "editor_filter.h"
 #include "editor_graph.h"
 #include "editor_commands.h"
@@ -42,6 +45,7 @@
 #include <QDir>
 #include <QElapsedTimer>
 #include <QFileDialog>
+#include <QDebug>
 #include <QFileInfo>
 #include <QUrl>
 #include <QMimeData>
@@ -77,7 +81,6 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
-#include <fstream>
 #include <ios>
 #include <iterator>
 #include <string>
@@ -96,8 +99,6 @@ constexpr int kNameRole = Qt::UserRole + 2;
 constexpr int kThumbnailSide = 24;
 constexpr int kEditsRole = Qt::UserRole + 1;
 constexpr int kResizeDelayMs = 120;
-constexpr int kNoticeMs = 5000;
-constexpr int kProblemMs = 15000;
 constexpr int kStageShare = 592;
 constexpr int kTimelineShare = 340;
 constexpr int kPackageShare = 262;
@@ -135,6 +136,19 @@ void AddNodes(const std::vector<Document::Node>& nodes, QTreeWidget* tree,
         item->setData(0, kPathRole, QString::fromStdString(node.path));
         AddNodes(node.children, tree, item);
     }
+}
+
+void AddShape(const std::vector<Document::Node>& nodes, QStringList& shape) {
+    for (const Document::Node& node : nodes) {
+        shape.append(QString::fromStdString(node.path));
+        AddShape(node.children, shape);
+    }
+}
+
+QStringList PackageShape(const Document::File& file) {
+    QStringList shape;
+    AddShape(file.Nodes(), shape);
+    return shape;
 }
 
 int CountNodes(const std::vector<Document::Node>& nodes) {
@@ -185,7 +199,10 @@ Window::Window() {
     RefreshStartScreen();
 }
 
-Window::~Window() = default;
+Window::~Window() {
+    pool_.clear();
+    pool_.waitForDone();
+}
 
 void Window::BuildPanels() {
     ads::CDockManager::setConfigFlag(ads::CDockManager::ActiveTabHasCloseButton, false);
@@ -303,7 +320,9 @@ void Window::BuildPanels() {
     start_ = new StartScreen(*commands_);
     connect(start_, &StartScreen::FileAsked, this, [this](const QString& path) {
         if (path.endsWith(".ifs", Qt::CaseInsensitive)) {
-            if (OfferToSave()) OpenDocument(path);
+            OfferToSave([this, path](bool go) {
+                if (go) OpenDocument(path);
+            });
             return;
         }
         OpenProject(path);
@@ -346,10 +365,13 @@ void Window::BuildPanels() {
     docks_->setSplitterSizes(package_area, {kPackageShare, kLibraryShare});
     docks_->setSplitterSizes(inspector_area, {kStageWidth, kInspectorWidth});
 
+    busy_ = new Busy;
+    connect(busy_, &Busy::StopAsked, this, &Window::StopFrames);
     centre_ = new QStackedWidget;
     centre_->setObjectName("centre_stack");
     centre_->addWidget(start_);
     centre_->addWidget(docks_);
+    centre_->addWidget(busy_);
     setCentralWidget(centre_);
 }
 
@@ -359,7 +381,9 @@ void Window::OpenDropped(const QString& path) {
         return;
     }
     if (path.endsWith(".ifs", Qt::CaseInsensitive)) {
-        if (OfferToSave()) OpenDocument(path);
+        OfferToSave([this, path](bool go) {
+            if (go) OpenDocument(path);
+        });
         return;
     }
     if (QFileInfo(path).isDir()) {
@@ -401,65 +425,31 @@ void Window::StartHost(const QString& game_dir) {
         return;
     }
     statusBar()->showMessage(tr("Booting the preview host..."));
-    QApplication::setOverrideCursor(Qt::WaitCursor);
-    const auto started = host_.Start(host_exe, game_dir.toStdString(), TargetBuild());
-    QApplication::restoreOverrideCursor();
-    if (!started) {
-        ReportProblem(QString::fromStdString(started.error()));
-        RefreshStatus();
-        return;
-    }
-    statusBar()->clearMessage();
-    RefreshStatus();
-    DrawBackground(background_action_->isChecked());
-    if (!animation_name_.empty()) ShowAnimation(animation_name_);
-}
-
-void Window::ChooseDocument() {
-    if (!OfferToSave()) return;
-    const QSettings settings;
-    const QString start = settings.value(kDocumentDirKey).toString();
-    const QString path = QFileDialog::getOpenFileName(this, tr("Open an IFS"), start,
-                                                      tr("IFS files (*.ifs);;All files (*)"));
-    if (path.isEmpty()) return;
-    OpenDocument(path);
-}
-
-void Window::OpenDocument(const QString& path) {
-    StopPlayback();
-    const std::vector<uint8_t> bytes = ReadFileBytes(path);
-    if (bytes.empty()) {
-        ReportProblem(tr("%1 is empty or cannot be read").arg(path));
-        return;
-    }
-    auto file = Document::File::Open(bytes);
-    if (!file) {
-        ReportProblem(QString::fromStdString(file.error()));
-        return;
-    }
-    QSettings().setValue(kDocumentDirKey, QFileInfo(path).absolutePath());
-    file_ = std::move(*file);
-    history_.Clear();
-    copied_span_.reset();
-    viewport_->ClearGuides();
-    hidden_.clear();
-    locked_.clear();
-    document_path_ = path;
-    package_name_ = QFileInfo(path).completeBaseName().toStdString();
-    RememberRecent(path);
-    CloseAnimation();
-    FillTree();
-    if (const Document::Node* first = FirstAnimation(file_->Nodes()); first != nullptr)
-        SelectEntry(QString::fromStdString(first->path));
-    const std::vector<std::string>& problems = file_->Problems();
-    if (problems.empty()) {
-        statusBar()->showMessage(tr("%1 entries").arg(CountNodes(file_->Nodes())), kNoticeMs);
-        return;
-    }
-    statusBar()->showMessage(tr("%1 problems in the package, the first is: %2")
-                                 .arg(problems.size())
-                                 .arg(QString::fromStdString(problems.front())),
-                             kProblemMs);
+    host_busy_ = true;
+    JobStarted();
+    RefreshState();
+    Jobs::Start<QString>(
+        this, pool_,
+        [this, host_exe, dir = game_dir.toStdString()](QPromise<QString>& promise) {
+            const auto started = host_.Start(host_exe, dir, TargetBuild());
+            promise.addResult(started ? QString() : QString::fromStdString(started.error()));
+        },
+        [this](const QString& refusal) {
+            host_busy_ = false;
+            JobFinished();
+            if (!refusal.isEmpty()) {
+                ReportProblem(refusal);
+                RefreshStatus();
+                RefreshState();
+                return;
+            }
+            statusBar()->clearMessage();
+            RefreshStatus();
+            RefreshState();
+            DrawBackground(background_action_->isChecked());
+            if (!animation_name_.empty()) ShowAnimation(animation_name_);
+            RefreshStartScreen();
+        });
 }
 
 void Window::FillTree() {
@@ -651,6 +641,7 @@ bool Window::EditDocument(const QString& name, const DocumentChange& change) {
     if (!file_) return false;
     StopPlayback();
     Document::File before = *file_;
+    const QStringList shape = PackageShape(*file_);
     const auto changed = change(*file_);
     if (!changed) {
         file_ = std::move(before);
@@ -660,6 +651,7 @@ bool Window::EditDocument(const QString& name, const DocumentChange& change) {
     history_.Record(name.toStdString(),
                     Document::Snapshot{.file = std::move(before), .authored = authored_});
     RefreshState();
+    if (PackageShape(*file_) != shape) ReloadRows();
     FillTree();
     Reload();
     return true;
@@ -800,6 +792,10 @@ void Window::ShowRestored() {
 
 void Window::ResizeViewport() {
     if (!host_.Running() || animation_name_.empty()) return;
+    if (host_busy_) {
+        resize_timer_->start();
+        return;
+    }
     const QSize fitted = viewport_->FittedSize(viewport_->size());
     const auto resized =
         host_.Resize(static_cast<uint32_t>(fitted.width()), static_cast<uint32_t>(fitted.height()));
@@ -830,44 +826,6 @@ void Window::RenderFrame() {
     last_error_.clear();
     if (onion_action_ != nullptr && onion_action_->isChecked() && !Playing())
         ShowGhostsAround(frame->frame);
-}
-
-bool Window::Save() {
-    if (!file_) return true;
-    if (document_path_.isEmpty()) return SaveAs();
-    const auto encoded = file_->Encode();
-    if (!encoded) {
-        ReportProblem(QString::fromStdString(encoded.error()));
-        return false;
-    }
-    if (!WriteFileBytes(document_path_, *encoded)) {
-        ReportProblem(tr("%1 could not be written").arg(document_path_));
-        return false;
-    }
-    history_.MarkSaved();
-    RefreshState();
-    statusBar()->showMessage(tr("Saved %1").arg(document_path_));
-    return true;
-}
-
-bool Window::SaveAs() {
-    if (!file_) return true;
-    const QString path = QFileDialog::getSaveFileName(this, tr("Save the IFS"), document_path_,
-                                                      tr("IFS files (*.ifs);;All files (*)"));
-    if (path.isEmpty()) return false;
-    document_path_ = path;
-    return Save();
-}
-
-bool Window::OfferToSave() {
-    if (!file_ || history_.Saved()) return true;
-    const QMessageBox::StandardButton answer = QMessageBox::question(
-        this, tr("IFS Editor"),
-        tr("%1 has unsaved changes.").arg(QFileInfo(document_path_).fileName()),
-        QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel);
-    if (answer == QMessageBox::Cancel) return false;
-    if (answer == QMessageBox::Discard) return true;
-    return Save();
 }
 
 void Window::RefreshState() {
@@ -906,13 +864,18 @@ void Window::ReportOnce(const QString& what) {
 }
 
 void Window::closeEvent(QCloseEvent* event) {
-    if (!OfferToSave()) {
-        event->ignore();
+    if (closing_) {
+        SaveLayout(*this, *docks_);
+        host_.Stop();
+        QMainWindow::closeEvent(event);
         return;
     }
-    SaveLayout(*this, *docks_);
-    host_.Stop();
-    QMainWindow::closeEvent(event);
+    event->ignore();
+    OfferToSave([this](bool go) {
+        if (!go) return;
+        closing_ = true;
+        close();
+    });
 }
 
 }

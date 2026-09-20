@@ -62,6 +62,7 @@ public:
     [[nodiscard]] QString SpanNameAt(QPoint at) const;
     void SetWorkArea(std::optional<Document::WorkArea> area);
     void Clear();
+    void Waiting(const QString& what);
     void SetFrame(uint32_t frame);
     void ZoomIn();
     void ZoomOut();
@@ -166,6 +167,7 @@ private:
     void DrawSpanName(QPainter& painter, const QString& name, const QRect& bar) const;
 
     uint32_t frame_count_ = 0;
+    QString waiting_;
     uint32_t frame_ = 0;
     std::vector<Document::DepthRow> rows_;
     std::vector<Document::AnimationLabel> labels_;

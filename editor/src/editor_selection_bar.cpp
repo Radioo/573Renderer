@@ -12,6 +12,7 @@
 #include <QKeySequence>
 #include <QLabel>
 #include <QLayoutItem>
+#include <QScrollArea>
 #include <QPixmap>
 #include <QString>
 #include <QToolButton>
@@ -57,7 +58,9 @@ SelectionBar::SelectionBar(Commands& commands, QWidget* parent)
     thumbnail_->setObjectName("selection_thumbnail");
     thumbnail_->setFixedSize(kThumbWidth, kThumbHeight);
 
-    auto* layout = new QHBoxLayout(this);
+    auto* inside = new QWidget;
+    inside->setObjectName("selection_inside");
+    auto* layout = new QHBoxLayout(inside);
     layout->setContentsMargins(8, 0, 8, 0);
     layout->setSpacing(8);
     layout->addWidget(thumbnail_);
@@ -78,6 +81,18 @@ SelectionBar::SelectionBar(Commands& commands, QWidget* parent)
     removals_->setContentsMargins(0, 0, 0, 0);
     removals_->setSpacing(2);
     layout->addLayout(removals_);
+
+    auto* room = new QScrollArea;
+    room->setObjectName("selection_room");
+    room->setWidget(inside);
+    room->setWidgetResizable(true);
+    room->setFrameShape(QFrame::NoFrame);
+    room->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    room->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    auto* around = new QHBoxLayout(this);
+    around->setContentsMargins(0, 0, 0, 0);
+    around->setSpacing(0);
+    around->addWidget(room);
 }
 
 void SelectionBar::Show(const QString& summary, const QString& detail,

@@ -6,6 +6,7 @@
 #include <QApplication>
 #include <QByteArray>
 #include <QDir>
+#include <QElapsedTimer>
 #include <QImage>
 #include <QSettings>
 #include <QSize>
@@ -15,6 +16,7 @@
 namespace {
 
 constexpr int kOffScreen = -32000;
+constexpr qint64 kLongestWaitMs = 120000;
 
 QSize SizeFrom(const QString& text) {
     const QStringList parts = text.split('x');
@@ -62,7 +64,14 @@ int main(int argc, char** argv) {
     window.move(kOffScreen, kOffScreen);
     for (int pass = 0; pass < 4; pass++)
         QApplication::processEvents();
-    if (!file.isEmpty()) window.OpenDocument(file);
+    if (!file.isEmpty()) {
+        window.OpenDocument(file);
+        QElapsedTimer waited;
+        waited.start();
+        while (!arguments.contains("--busy") && window.Loading() &&
+               waited.elapsed() < kLongestWaitMs)
+            QApplication::processEvents();
+    }
     const QString depth = Taken("--depth", arguments, QString());
     if (!depth.isEmpty()) {
         if (auto* timeline = window.findChild<Editor::Timeline*>()) {

@@ -1,5 +1,9 @@
 #include "editor_window.h"
 
+#include "editor_clip_view.h"
+#include "editor_host_load.h"
+#include "editor_jobs.h"
+
 #include "editor_commands.h"
 #include "editor_graph.h"
 #include "editor_timeline.h"
@@ -313,10 +317,24 @@ void Window::ChooseClip(int index) {
     key_frame_.reset();
     frame_ = clip_.sprite ? 0 : root_frame_;
     SetWorkArea(std::nullopt);
-    if (file_) LoadViewportClip(*file_);
     ShowClipTimeline();
+    if (!file_) {
+        SeekViewport(frame_);
+        ShowFrame();
+        SayWhichClip(index);
+        return;
+    }
+    LoadIntoHost(false, *file_, tr("Loading %1").arg(ClipName(index)), [this, index](bool) {
+        ShowClipTimeline();
+        SeekViewport(frame_);
+        ShowFrame();
+        SayWhichClip(index);
+    });
     SeekViewport(frame_);
     ShowFrame();
+}
+
+void Window::SayWhichClip(int index) {
     if (!clip_.sprite) return;
     if (context_) {
         statusBar()->showMessage(tr("Editing %1 in place on the root, at frame %2")
@@ -340,101 +358,108 @@ void Window::ChooseClip(int index) {
                                  .arg(root_frame_));
 }
 
-bool Window::LoadViewportClip(const Document::File& document) {
+void Window::LoadIntoHost(bool fresh, Document::File document, const QString& what,
+                          std::function<void(bool)> then) {
+    if (!host_.Running() || animation_path_.empty()) {
+        if (then) then(false);
+        return;
+    }
+    if (host_busy_) {
+        pending_load_ = PendingLoad{
+            .fresh = fresh, .document = std::move(document), .what = what, .then = std::move(then)};
+        return;
+    }
+    host_busy_ = true;
     symbol_shown_ = false;
-    if (!host_.Running() || animation_path_.empty()) return false;
-    std::optional<Document::File> view;
-    if (!hidden_.empty()) {
-        auto filtered = Document::ViewWithout(document, hidden_);
-        if (!filtered) {
-            ReportOnce(QString::fromStdString(filtered.error()));
-            return false;
-        }
-        view = std::move(*filtered);
-    }
-    const Document::File& file = view ? *view : document;
-    std::vector<uint8_t> bytes;
-    std::string symbol;
-    const auto animation = file_->ReadAnimation(animation_path_);
-    const bool in_place = clip_.sprite && context_action_ != nullptr &&
-                          context_action_->isChecked() && animation &&
-                          ContextOf(*animation).has_value();
-    if (clip_.sprite && !in_place) {
-        auto preview = Document::PreviewSymbolFor(file, animation_path_, clip_);
-        if (!preview) {
-            ReportOnce(QString::fromStdString(preview.error()));
-            return false;
-        }
-        bytes = std::move(preview->ifs);
-        symbol = std::move(preview->name);
-    } else {
-        auto encoded = file.Encode();
-        if (!encoded) {
-            ReportOnce(QString::fromStdString(encoded.error()));
-            return false;
-        }
-        bytes = std::move(*encoded);
-    }
-    const auto loaded = host_.Reload(package_name_, animation_name_, bytes);
-    if (!loaded) {
-        ReportOnce(QString::fromStdString(loaded.error()));
-        return false;
-    }
-    frame_count_ = loaded->frame_count;
-    if (symbol.empty()) return true;
-    const auto shown = host_.ShowSymbol(symbol);
-    if (!shown) {
-        ReportOnce(QString::fromStdString(shown.error()));
-        return false;
-    }
-    frame_count_ = shown->frame_count;
-    symbol_shown_ = true;
-    return true;
+    viewport_->ShowMessage(what);
+    RefreshState();
+    JobStarted();
+    const HostRequest asked{.fresh = fresh,
+                            .document = std::move(document),
+                            .hidden = hidden_,
+                            .animation_path = animation_path_,
+                            .package_name = package_name_,
+                            .animation_name = animation_name_,
+                            .clip = clip_,
+                            .wants_in_place =
+                                context_action_ != nullptr && context_action_->isChecked(),
+                            .root_frame = root_frame_};
+    Jobs::Start<HostLoad>(
+        this, pool_,
+        [this, asked](QPromise<HostLoad>& promise) {
+            promise.addResult(Editor::LoadIntoHost(host_, asked));
+        },
+        [this, then = std::move(then)](HostLoad load) {
+            host_busy_ = false;
+            JobFinished();
+            if (!load.refusal.isEmpty()) ReportOnce(load.refusal);
+            if (load.loaded) {
+                frame_count_ = load.frame_count;
+                symbol_shown_ = load.symbol_shown;
+                ResizeViewport();
+            }
+            RefreshState();
+            if (then) then(load.loaded);
+            if (!pending_load_) return;
+            PendingLoad next = std::move(*pending_load_);
+            pending_load_.reset();
+            LoadIntoHost(next.fresh, std::move(next.document), next.what, std::move(next.then));
+        });
 }
 
 void Window::ShowClipTimeline() {
     if (!file_ || animation_path_.empty()) return;
-    const auto animation = file_->ReadAnimation(animation_path_);
-    if (!animation) {
-        ReportOnce(QString::fromStdString(animation.error()));
+    if (view_busy_) {
+        view_again_ = true;
         return;
     }
-    const std::optional<Document::AnimationDetails> details =
-        Document::DescribeClip(*animation, clip_);
-    if (!details) {
+    view_busy_ = true;
+    timeline_->Waiting(tr("Reading %1").arg(QString::fromStdString(animation_name_)));
+    JobStarted();
+    Jobs::Start<ClipView>(
+        this, pool_,
+        [copy = *file_, path = animation_path_, clip = clip_](QPromise<ClipView>& promise) mutable {
+            promise.addResult(ReadClipView(copy, path, clip));
+        },
+        [this](ClipView view) {
+            view_busy_ = false;
+            timeline_->Waiting(QString());
+            JobFinished();
+            ApplyClipView(std::move(view));
+            if (!view_again_) return;
+            view_again_ = false;
+            ShowClipTimeline();
+        });
+}
+
+void Window::ApplyClipView(ClipView view) {
+    if (!view.read) {
+        ReportOnce(view.refusal);
+        return;
+    }
+    if (!view.has_clip) {
         FillClips();
+        if (view_retried_) return;
+        view_retried_ = true;
         ShowClipTimeline();
         return;
     }
-    shown_labels_ = details->labels;
-    shown_rate_ = Document::FrameRate(*animation);
-    const std::vector<Document::CharacterSummary> characters =
-        Document::Characters(*animation, file_->ShapeImages(animation_path_));
-    FillLibrary(*animation, characters);
-    std::map<uint16_t, QString> names;
-    std::map<uint16_t, Document::CharacterKind> kinds;
-    for (const Document::CharacterSummary& one : characters) {
-        names.emplace(one.id, QString::fromStdString(one.label));
-        kinds.emplace(one.id, one.kind);
-    }
-    timeline_->SetCharacterNames(std::move(names));
-    timeline_->SetCharacterKinds(std::move(kinds));
-    std::vector<Document::DepthRow> front_first = details->depths;
-    std::ranges::sort(front_first, std::ranges::greater{}, &Document::DepthRow::depth);
-    std::map<uint16_t, std::vector<uint32_t>> marks;
+    view_retried_ = false;
+    shown_labels_ = view.labels;
+    shown_rate_ = view.rate;
+    FillLibrary(view.characters);
+    timeline_->SetCharacterNames(std::move(view.names));
+    timeline_->SetCharacterKinds(std::move(view.kinds));
     std::vector<uint16_t> keyed;
-    if (const AfpAnimation::Container* shown = Document::FindClip(*animation, clip_)) {
-        for (const Document::DepthRow& row : front_first)
-            marks.emplace(row.depth, Document::DepthMarks(*shown, row.depth));
-        timeline_->SetFrameNotes(Document::FrameNotes(*shown));
-    }
     for (const Document::AuthoredDepth& owned : authored_) {
         if (owned.animation == animation_path_ && owned.clip == clip_) keyed.push_back(owned.depth);
     }
-    timeline_->SetDepthMarks(std::move(marks));
+    timeline_->SetFrameNotes(std::move(view.notes));
+    timeline_->SetDepthMarks(std::move(view.marks));
     timeline_->SetKeyedDepths(std::move(keyed));
+    model_frames_ = view.model_frames;
     const uint32_t count = ClipFrameCount();
-    timeline_->ShowAnimation(count, std::move(front_first), details->labels);
+    timeline_->ShowAnimation(count, std::move(view.depths), view.labels);
     UpdateViewRows();
     frame_ = count == 0 ? 0 : std::min(frame_, count - 1);
     timeline_->SetFrame(frame_);
@@ -460,25 +485,23 @@ void Window::ShowAnimation(const std::string& name) {
         ShowFrame();
         return;
     }
-    const auto encoded = file_->Encode();
-    if (!encoded) {
-        ReportOnce(QString::fromStdString(encoded.error()));
-        return;
-    }
-    const auto loaded = host_.ShowAnimation(package_name_, name, *encoded);
-    if (!loaded) {
-        ReportOnce(QString::fromStdString(loaded.error()));
-        return;
-    }
-    frame_count_ = loaded->frame_count;
-    FillClips();
-    ShowClipTimeline();
-    ResizeViewport();
+    if (!file_) return;
+    LoadIntoHost(true, *file_, tr("Loading %1").arg(QString::fromStdString(name)),
+                 [this](bool loaded) {
+                     if (!loaded) return;
+                     FillClips();
+                     ShowClipTimeline();
+                     ResizeViewport();
+                 });
+}
+
+bool Window::HostReady() const {
+    return host_.Running() && !host_busy_;
 }
 
 void Window::SeekViewport(uint32_t frame) {
     if (!clip_.sprite) root_frame_ = frame;
-    if (!host_.Running()) return;
+    if (!HostReady()) return;
     const auto sought = host_.Seek(frame);
     if (!sought) {
         ReportOnce(QString::fromStdString(sought.error()));
@@ -642,10 +665,13 @@ void Window::SeekTo(uint32_t frame) {
 
 void Window::Reload() {
     if (animation_name_.empty() || !file_) return;
-    LoadViewportClip(*file_);
     ShowClipTimeline();
-    SeekViewport(symbol_shown_ ? frame_ : root_frame_);
     ShowFrame();
+    LoadIntoHost(false, *file_, tr("Updating the preview"), [this](bool) {
+        ShowClipTimeline();
+        SeekViewport(symbol_shown_ ? frame_ : root_frame_);
+        ShowFrame();
+    });
 }
 
 }

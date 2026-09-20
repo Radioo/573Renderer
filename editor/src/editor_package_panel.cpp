@@ -5,6 +5,7 @@
 #include "editor_icons.h"
 #include "editor_panel_tabs.h"
 #include "editor_rows.h"
+#include "editor_open.h"
 #include "editor_start_screen.h"
 #include "editor_theme.h"
 
@@ -75,7 +76,7 @@ void Window::RememberRecent(const QString& path) {
 
 void Window::RefreshStartScreen() {
     if (start_ == nullptr || centre_ == nullptr) return;
-    centre_->setCurrentIndex(file_ ? 1 : 0);
+    if (!opening_) centre_->setCurrentIndex(file_ ? 1 : 0);
     const QSettings settings;
     const QVariantMap counted = settings.value(kRecentCountsKey).toMap();
     std::vector<RecentFile> recent;
@@ -200,30 +201,17 @@ void Window::FillAnimationRows() {
     if (animations_tree_ == nullptr) return;
     animations_tree_->clear();
     int seed = 0;
-    for (const Document::Node& node : file_->Nodes()) {
-        for (const Document::Node& child : node.children) {
-            if (child.role != Document::Role::Animation) continue;
-            auto* row = new QTreeWidgetItem(animations_tree_);
-            row->setText(0, QString::fromStdString(child.name));
-            row->setData(0, kPathRole, QString::fromStdString(child.path));
-            row->setData(0, kNameRole, QString::fromStdString(child.name));
-            row->setFlags(row->flags() | Qt::ItemIsEditable);
-            row->setIcon(0, QIcon(Rows::Stripes(Rows::kThumbWidth, Rows::kThumbHeight, seed++)));
-            const auto animation = file_->ReadAnimation(child.path);
-            if (!animation) continue;
-            row->setText(1, QString::number(animation->root.frames.size()));
-            const Document::StageSize stage = Document::StageSizeOf(*animation);
-            row->setText(2, tr("%1x%2").arg(stage.width).arg(stage.height));
-            const QString rate = QString::number(Document::FrameRate(*animation), 'g', 4);
-            row->setText(3, rate);
-            row->setData(0, Rows::kDetailRole,
-                         tr("%1 frames, %2 %5 %3, %4 fps")
-                             .arg(animation->root.frames.size())
-                             .arg(stage.width)
-                             .arg(stage.height)
-                             .arg(rate)
-                             .arg(QChar(0x00D7)));
-        }
+    for (const AnimationRow& one : rows_.animations) {
+        auto* row = new QTreeWidgetItem(animations_tree_);
+        row->setText(0, one.name);
+        row->setText(1, one.frames);
+        row->setText(2, one.stage);
+        row->setText(3, one.rate);
+        row->setData(0, kPathRole, one.path);
+        row->setData(0, kNameRole, one.name);
+        row->setData(0, Rows::kDetailRole, one.detail);
+        row->setFlags(row->flags() | Qt::ItemIsEditable);
+        row->setIcon(0, QIcon(Rows::Stripes(Rows::kThumbWidth, Rows::kThumbHeight, seed++)));
     }
     auto* adding = new QTreeWidgetItem(animations_tree_);
     adding->setText(0, tr("+ New animation"));
@@ -235,24 +223,14 @@ void Window::FillAnimationRows() {
 void Window::FillImageRows() {
     if (images_tree_ == nullptr) return;
     images_tree_->clear();
-    for (const Document::Node& node : file_->Nodes()) {
-        for (const Document::Node& child : node.children) {
-            if (child.role != Document::Role::Texture) continue;
-            auto* row = new QTreeWidgetItem(images_tree_);
-            row->setText(0, QString::fromStdString(child.name));
-            row->setData(0, kPathRole, QString::fromStdString(child.path));
-            row->setData(0, kNameRole, QString::fromStdString(child.name));
-            const auto pixels = file_->ReadImage(child.name);
-            if (!pixels) continue;
-            row->setText(1, tr("%1x%2").arg(pixels->width).arg(pixels->height));
-            row->setData(0, Rows::kDetailRole,
-                         tr("%1 %3 %2").arg(pixels->width).arg(pixels->height).arg(QChar(0x00D7)));
-            const QImage picture(pixels->bgra.data(), static_cast<int>(pixels->width),
-                                 static_cast<int>(pixels->height), QImage::Format_ARGB32);
-            row->setIcon(0, QIcon(QPixmap::fromImage(
-                                picture.scaled(Rows::kThumbWidth, Rows::kThumbHeight,
-                                               Qt::KeepAspectRatio, Qt::SmoothTransformation))));
-        }
+    for (const ImageRow& one : rows_.images) {
+        auto* row = new QTreeWidgetItem(images_tree_);
+        row->setText(0, one.name);
+        row->setText(1, one.size);
+        row->setData(0, kPathRole, one.path);
+        row->setData(0, kNameRole, one.name);
+        row->setData(0, Rows::kDetailRole, one.detail);
+        if (!one.picture.isNull()) row->setIcon(0, QIcon(QPixmap::fromImage(one.picture)));
     }
     if (package_tabs_ != nullptr) package_tabs_->ShowCount(1, images_tree_->topLevelItemCount());
 }

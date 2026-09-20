@@ -355,6 +355,7 @@ void Inspector::ShowSubject(const InspectorSubject& subject) {
     badge_->setText(!subject.depth_chosen ? QString()
                     : subject.owned       ? tr("KEYED, edited through its keyframes")
                                           : tr("BAKED"));
+    badge_->setVisible(!badge_->text().isEmpty());
 }
 
 void Inspector::ShowView(const std::optional<Document::PlacementView>& view, uint32_t frame) {

@@ -10,6 +10,7 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QLayoutItem>
+#include <QScrollArea>
 #include <QSignalBlocker>
 #include <QSizePolicy>
 #include <QSlider>
@@ -62,14 +63,32 @@ TimelineBar::TimelineBar(Commands& commands, QWidget* parent)
     setObjectName("timeline_bar");
     setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
     setFixedHeight(kBarHeight);
-    auto* layout = new QHBoxLayout(this);
+    auto* inside = new QWidget;
+    inside->setObjectName("timeline_inside");
+    auto* layout = new QHBoxLayout(inside);
     layout->setContentsMargins(0, 0, 10, 0);
     layout->setSpacing(0);
     layout->addStretch();
+    auto* room = new QScrollArea;
+    room->setObjectName("timeline_room");
+    room->setWidget(inside);
+    room->setWidgetResizable(true);
+    room->setFrameShape(QFrame::NoFrame);
+    room->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    room->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    auto* around = new QHBoxLayout(this);
+    around->setContentsMargins(0, 0, 0, 0);
+    around->setSpacing(0);
+    around->addWidget(room);
+}
+
+QHBoxLayout* TimelineBar::Row() const {
+    auto* inside = findChild<QWidget*>("timeline_inside");
+    return inside == nullptr ? nullptr : qobject_cast<QHBoxLayout*>(inside->layout());
 }
 
 void TimelineBar::Build() {
-    auto* layout = qobject_cast<QHBoxLayout*>(this->layout());
+    QHBoxLayout* layout = Row();
     if (layout == nullptr || layout->count() > 1) return;
     delete layout->takeAt(0);
 

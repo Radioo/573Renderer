@@ -10,6 +10,7 @@
 #include <cstdint>
 #include <optional>
 
+class QHBoxLayout;
 class QLabel;
 class QSpinBox;
 class QSlider;
@@ -43,6 +44,7 @@ signals:
     void ZoomAsked(double pixels);
 
 private:
+    [[nodiscard]] QHBoxLayout* Row() const;
     [[nodiscard]] QToolButton* AddCommand(const QString& id, Icons::Glyph glyph);
     [[nodiscard]] QToolButton* ZoomStep(const QString& id, Icons::Glyph glyph);
 
