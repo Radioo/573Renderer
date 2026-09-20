@@ -94,19 +94,19 @@ TEST_CASE("A stage drag previews through the host before it is committed") {
     emit timeline->FrameChosen(kPreviewFrame);
     emit timeline->DepthChosen(*widest);
     QApplication::processEvents();
-    const QImage before = viewport->grab().toImage();
+    const QImage before = Picture(*viewport);
 
     emit viewport->Dragged(*widest, 300, 150, false);
     QApplication::processEvents();
     QApplication::processEvents();
-    const QImage during = viewport->grab().toImage();
+    const QImage during = Picture(*viewport);
     CHECK(during != before);
     CHECK_FALSE(undo->isEnabled());
 
     emit viewport->Dragged(*widest, 0, 0, false);
     QApplication::processEvents();
     QApplication::processEvents();
-    CHECK(viewport->grab().toImage() == before);
+    CHECK(Picture(*viewport) == before);
     CHECK(opening.Problems().isEmpty());
 }
 
@@ -132,7 +132,7 @@ TEST_CASE("Hiding a depth in the view takes it out of the rendered frame until i
     const auto grab = [&] {
         emit timeline->DepthChosen(kNoDepth);
         QApplication::processEvents();
-        return viewport->grab().toImage();
+        return Picture(*viewport);
     };
     emit timeline->FrameChosen(kPreviewFrame);
     const QImage before = grab();
@@ -345,7 +345,7 @@ TEST_CASE(
     CHECK(path->isChecked());
     const auto grab = [&] {
         QApplication::processEvents();
-        return viewport->grab().toImage();
+        return Picture(*viewport);
     };
     emit timeline->FrameChosen(kPreviewFrame);
     emit timeline->DepthChosen(*chosen);
@@ -380,6 +380,7 @@ TEST_CASE(
     path->trigger();
     CHECK(grab() == sprite_on);
     QSettings().remove("stage/path");
+    QSettings().remove("clip/in_context");
     CHECK(opening.Problems().isEmpty());
 }
 
@@ -417,6 +418,21 @@ TEST_CASE("Trimming the title to a work area reloads the host on the kept frames
     REQUIRE(Settle([&window] { return FrameStatus(window) == QString("Frame 2 of 6"); }));
     CHECK(FrameStatus(window) == QString("Frame 2 of 6"));
     CHECK(opening.Problems().isEmpty());
+}
+
+TEST_CASE("Starting with onion skin on and no file open says nothing about seeking") {
+    const QString game = qEnvironmentVariable("R573_IIDX_DIR");
+    if (game.isEmpty()) SKIP("R573_IIDX_DIR not set");
+    QSettings().setValue("game/directory", game);
+    QSettings().setValue("stage/onion", true);
+    Script booting({});
+    Editor::Window window;
+    QSettings().remove("game/directory");
+    QSettings().remove("stage/onion");
+    window.resize(1600, 900);
+    window.show();
+    QApplication::processEvents();
+    CHECK(booting.Problems().isEmpty());
 }
 
 TEST_CASE("Onion skin shows the neighbouring frames and leaves the host on the playhead") {
@@ -490,7 +506,7 @@ TEST_CASE("Double-clicking a sprite on the stage opens it") {
     CHECK(OpenClip(window).isEmpty());
     emit viewport->EnterAsked(x + 1, y + 1);
     REQUIRE(Settle([&window] { return !OpenClip(window).isEmpty(); }));
-    CHECK(OpenClip(window).contains("Sprite"));
+    CHECK(OpenClip(window).contains("sprite", Qt::CaseInsensitive));
     CHECK(opening.Problems().isEmpty());
 }
 

@@ -12,7 +12,6 @@
 #include <QStackedWidget>
 #include <QSettings>
 #include <QMimeData>
-#include <QListWidget>
 #include <QDropEvent>
 #include <QDragEnterEvent>
 #include <QComboBox>
@@ -61,9 +60,11 @@ QString LabelText(QWidget& window, const QString& name) {
 
 TEST_CASE("The window puts the timeline under the package and the stage, with the inspector at "
           "full height beside them") {
-    Editor::Window window;
+    Opened opened;
+    Editor::Window& window = opened.window;
     window.resize(1600, 1000);
     window.show();
+    Open(opened);
     QApplication::processEvents();
     ads::CDockWidget* package = Panel(window, "Package");
     ads::CDockWidget* library = Panel(window, "Library");
@@ -100,13 +101,14 @@ TEST_CASE("The top bar names the file and counts the edits since it was saved") 
     Open(opened, true);
     auto* timeline = opened.window.findChild<Editor::Timeline*>();
     REQUIRE(timeline != nullptr);
-    CHECK(LabelText(opened.window, "document_state") == QString("sample.ifs, saved"));
+    CHECK(LabelText(opened.window, "document_state") == QString("sample.ifs"));
+    CHECK(LabelText(opened.window, "document_edits") == QString("saved"));
     emit timeline->FrameChosen(1);
     emit timeline->DepthChosen(2);
     REQUIRE(RunCommand(opened.window, "depth.split").isEmpty());
-    CHECK(LabelText(opened.window, "document_state") == QString("sample.ifs, unsaved, 1 edit"));
+    CHECK(LabelText(opened.window, "document_edits") == QString("unsaved, 1 edit"));
     REQUIRE(RunCommand(opened.window, "edit.undo").isEmpty());
-    CHECK(LabelText(opened.window, "document_state") == QString("sample.ifs, saved"));
+    CHECK(LabelText(opened.window, "document_edits") == QString("saved"));
 }
 
 TEST_CASE("The top bar shows the project and how many entries wait for an export") {
@@ -139,7 +141,7 @@ TEST_CASE("The status bar says which frame is shown and what is chosen") {
     CHECK(LabelText(opened.window, "chosen_status") == QString("Depth 2 chosen"));
     emit timeline->DepthsChosen({1, 2});
     CHECK(LabelText(opened.window, "chosen_status") == QString("2 depths chosen"));
-    CHECK(LabelText(opened.window, "host_status") == QString("No preview host"));
+    CHECK(LabelText(opened.window, "host_status") == QString("not running"));
     CHECK(LabelText(opened.window, "snap_status") == QString("Snap on"));
     REQUIRE(RunCommand(opened.window, "view.snap").isEmpty());
     CHECK(LabelText(opened.window, "snap_status") == QString("Snap off"));
@@ -155,9 +157,9 @@ TEST_CASE("The timeline bar shows the frame, the time, the label and the work ar
     REQUIRE(frame != nullptr);
     emit timeline->FrameChosen(2);
     CHECK(frame->value() == 2);
-    CHECK(LabelText(opened.window, "timeline_count") == QString("of 2"));
+    CHECK(LabelText(opened.window, "timeline_count") == QString("/ 2"));
     CHECK(LabelText(opened.window, "timeline_time") == QString("0.03 s"));
-    CHECK(LabelText(opened.window, "timeline_work_area") == QString("No work area"));
+    CHECK(LabelText(opened.window, "timeline_work_area") == QString("none"));
     CHECK(LabelText(opened.window, "timeline_label") == QString("loop"));
 
     frame->setValue(0);
@@ -168,9 +170,9 @@ TEST_CASE("The timeline bar shows the frame, the time, the label and the work ar
     REQUIRE(RunCommand(opened.window, "clip.work_start").isEmpty());
     emit timeline->FrameChosen(2);
     REQUIRE(RunCommand(opened.window, "clip.work_end").isEmpty());
-    CHECK(LabelText(opened.window, "timeline_work_area") == QString("Work area 0 to 2"));
+    CHECK(LabelText(opened.window, "timeline_work_area") == QString("0 to 2"));
     REQUIRE(RunCommand(opened.window, "clip.work_clear").isEmpty());
-    CHECK(LabelText(opened.window, "timeline_work_area") == QString("No work area"));
+    CHECK(LabelText(opened.window, "timeline_work_area") == QString("none"));
 }
 
 TEST_CASE("The timeline bar switches the panel between the timeline and the graph") {
@@ -250,20 +252,20 @@ TEST_CASE("The stage bar names the clip on screen and its toggles follow the com
 }
 
 TEST_CASE("The start screen lists recent files until one is open, and a drop opens an IFS") {
-    Opened opened;
     QSettings().remove("recent/files");
+    Opened opened;
     auto* start = opened.window.findChild<QWidget*>("start_screen");
     auto* centre = opened.window.findChild<QStackedWidget*>("centre_stack");
-    auto* recent = opened.window.findChild<QListWidget*>("start_recent");
-    auto* host = opened.window.findChild<QLabel*>("start_host");
+    auto* install = opened.window.findChild<QLabel*>("start_install");
     REQUIRE(start != nullptr);
     REQUIRE(centre != nullptr);
-    REQUIRE(recent != nullptr);
-    REQUIRE(host != nullptr);
+    REQUIRE(install != nullptr);
+    const auto rows = [&start] { return start->findChildren<QPushButton*>("recent_row"); };
     CHECK(centre->currentWidget() == start);
-    CHECK(recent->count() == 1);
-    CHECK(recent->item(0)->text() == "Nothing opened yet");
-    CHECK(host->text().contains("No game install"));
+    CHECK(rows().empty());
+    REQUIRE(start->findChild<QLabel*>("recent_empty") != nullptr);
+    CHECK(start->findChild<QLabel*>("recent_empty")->text() == "Nothing opened yet");
+    CHECK(install->text().contains("None chosen"));
 
     const QString path = WritePackage(opened.dir);
     QMimeData data;
@@ -279,8 +281,9 @@ TEST_CASE("The start screen lists recent files until one is open, and a drop ope
     auto* tree = opened.window.findChild<QTreeWidget*>("package");
     REQUIRE(tree != nullptr);
     CHECK(AnimationNamed(*tree, "intro") != nullptr);
-    CHECK(recent->count() == 1);
-    CHECK(recent->item(0)->text().contains("sample.ifs"));
-    CHECK(recent->item(0)->text().contains("1 animation"));
+    REQUIRE(rows().size() == 1);
+    CHECK(rows().at(0)->property("path").toString() == path);
+    CHECK(rows().at(0)->findChild<QLabel*>("recent_name")->text() == "sample.ifs");
+    CHECK(rows().at(0)->findChild<QLabel*>("recent_detail")->text().contains("1 animation"));
     QSettings().remove("recent/files");
 }

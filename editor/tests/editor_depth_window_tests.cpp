@@ -5,6 +5,7 @@
 #include "editor_files.h"
 #include "editor_mime.h"
 #include "editor_timeline.h"
+#include "editor_timeline_metrics.h"
 #include "editor_viewport.h"
 #include "editor_window.h"
 #include "sample_package.h"
@@ -631,6 +632,7 @@ TEST_CASE("The timeline zoom keys zoom the timeline") {
         RunMenu(added, *opened.tree);
         CHECK(added.Problems().isEmpty());
     }
+    WidenTimeline(*timeline);
     QAction* zoom_in = ShortcutAction(opened.window, QKeySequence(Qt::Key_Equal));
     QAction* zoom_out = ShortcutAction(opened.window, QKeySequence(Qt::Key_Minus));
     REQUIRE(zoom_in != nullptr);

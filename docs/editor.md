@@ -117,6 +117,66 @@ loaded runs all passed. A case that needs a second
 script closes the first one first, because a live script also takes the warning
 boxes.
 
+## The look, and how it is checked
+
+The window follows a design canvas (an artboard set; the link is in
+`.scratch/ifs-editor-redesign/design.local.md`, which is gitignored). Matching
+it is a hard requirement, and a behaviour test cannot see a wrong colour, font
+or metric, so every visual change is checked by looking at the running window.
+
+`editor/src/editor_theme.{h,cpp}` holds the design's tokens once: the colours
+(page `#0c0d0f`, panel `#141518`, field `#1a1c20`, line `#282b31`, edge
+`#353941`, text `#e7e8eb`, soft `#b0b5be`, faint `#8a909b`, accent `#4c9dff` on
+`#06121f`, the chosen row `#1b3350` with `#9cc8ff` on it, amber `#f2b84b`,
+green `#3ecf8e`), the families (Segoe UI Variable Text, Cascadia Mono for
+anything numeric or key-capped) and the heights (44 top bar, 24 status bar, 28
+controls, 30 panel tab strip). `Theme::Apply` sets the application font, a full
+`QPalette` and one global stylesheet; `Theme::DockStyle` is the separate sheet
+the dock manager needs. Panels key off object names and properties
+(`QToolButton[transport="true"]`, `QWidget[section="true"]`, ...) rather than
+inline styles, so a colour exists in one place.
+
+The design's icons are its own SVG paths, rendered through Qt SVG
+(`editor/src/editor_icons.{h,cpp}`): `Icons::Body` returns the path data,
+`Drawn` renders it into a pixmap at a colour and a side, `Of` makes a QIcon
+with a 1x and a 2x pixmap, and `Toggling` adds an On pixmap in the chosen
+colour for a checkable button. `qtsvg` is in `vcpkg.json`'s `editor` feature
+and the `qsvg`/`qsvgicon` plugins are deployed like the others. Nothing is
+hand-painted.
+
+`build-editor/ifs_editor_shot.exe` (`editor/src/editor_shot_main.cpp`) is how
+the window is looked at:
+
+```bash
+./build-editor/ifs_editor_shot.exe --out screenshots --name start
+```
+
+It builds the real `Editor::Window` with the theme applied, opens it on the
+native Windows platform so the shot shows what the user will see, and writes a
+PNG into the given directory (`screenshots/` is gitignored). The window is a
+`Qt::Tool` with `WindowDoesNotAcceptFocus` and `WA_ShowWithoutActivating`
+moved to -32000, so it never takes focus or interrupts anything on screen, and
+it clears its own `QSettings` first so the shot is the same every time.
+Options: `--ifs <file>` opens a package, `--depth N` and `--frame N` choose one
+(so the inspector, the selection bar and the timeline have something to show),
+`--game <dir>` points at an install, `--size WxH` (default 1600x1000, the
+artboard's size), `--platform <name>` and `--keep-settings`.
+
+Known deviations from the artboards, all deliberate:
+
+- The library is a list of rows with thumbnails rather than the artboard's grid
+  of cards. The rows carry the same information; the grid would mean replacing
+  the tree the drag and drop, the filters and the tests are built on.
+- The stage bar has no "outlines of the chosen depths" toggle and the selection
+  bar keeps one button per command instead of the artboard's Flip, Arrange and
+  Align menus: there is no such command, and grouping would take the popover
+  anchors (`bar_<id>`) the keyframe popovers hang off.
+- The timeline header has no "+ Depth" button. The header is painted inside the
+  scrolling timeline widget, so a child button there would scroll away; the
+  command stays in the Depth menu.
+- The preview card on the start screen has no "Restart host" button because
+  there is no such command.
+
 ## Qt plugin deployment
 
 vcpkg's applocal step copies the Qt DLLs next to the executable, but not the
@@ -150,23 +210,41 @@ passed once each target had its own name.
 
 ## Window layout
 
-`Editor::Window` is a `QMainWindow` hosting a Qt Advanced Docking System
-`CDockManager`. The stage is the dock manager's central widget. The inspector
-is docked right at the full height of the window with the history as a second
-tab, the timeline is docked under the stage with the graph as a second tab,
-and the package tree and the library are docked left of the stage, one above
-the other, so the timeline runs under both the stage and the left panels and
-stops at the inspector. The order `BuildPanels` adds them in is what gives that
-shape: the inspector first (splitting the whole window), then the timeline
-under the stage's area only, then the package and library beside the stage
-inside the space the timeline's split left. `View > Panels` has a toggle for
-each panel (the dock's own toggle action), so a panel closed with its title bar
-button can be opened again, and `View > Show the history` brings the History tab
-to the front. Qt 6 Widgets is ADR 0003.
+`Editor::Window` is a `QMainWindow` whose central widget is a two-page
+`QStackedWidget` (`centre_stack`): the start screen, and the Qt Advanced
+Docking System `CDockManager` with every panel. Opening a document turns the
+page, so the welcome fills the window and the panels appear only when there is
+something to show.
+
+Inside the dock manager the stage is the central widget, the package and the
+library are docked left of it one above the other, the timeline (with the graph
+as a second tab) is docked at the bottom of the whole container so it runs
+under the stage and the left panels alike, and the inspector (with the history
+as a second tab) is docked right at the full height of the window, which stops
+the timeline at its edge. The order `BuildPanels` adds them in is what gives
+that shape: the package and the library beside the stage first, then the
+timeline at the container's bottom, then the inspector at the container's
+right, so the last split is the one that spans the whole height.
+`View > Panels` has a toggle for each panel (the dock's own toggle action), so
+a panel closed from a menu can be opened again, and `View > Show the history`
+brings the History tab to the front. Qt 6 Widgets is ADR 0003.
+
+The dock chrome is the design's, not ADS's default: config flags (set before
+the manager is built, because they are static) take away the close, undock and
+tab-menu buttons and the per-tab close button, and hide the title bar of the
+single central widget. The package and the library areas each set
+`HideSingleWidgetTitleBar`, because their own 30 px tab strip is the design's
+panel header; the timeline and the inspector keep theirs, since Timeline/Graph
+and Inspector/History are exactly the tabs the design draws there.
+`Theme::DockStyle` gives those tabs the panel colours and the 2 px accent
+underline.
 
 ADS takes a tab that is not in front out of the window's widget tree, so a test
 looks a panel up through the dock manager (`Panel` in `window_test_support.h`,
-which calls `CDockManager::findDockWidget`) rather than with `findChild`.
+which calls `CDockManager::findDockWidget`) rather than with `findChild`. A
+test that measures where the panels are has to open a document first, because
+the dock manager has no laid-out geometry while the start screen is the page in
+front.
 
 Window geometry, `QMainWindow` state and the dock manager's own state are
 saved to `QSettings` on close and restored in the constructor
@@ -175,43 +253,62 @@ layout version (`kDocksVersion`), and the dock manager ignores a saved state of
 another version, so a layout saved before a panel existed falls back to the
 default arrangement instead of restoring without the new panel. Raise the
 version whenever the set or the default arrangement of panels changes; it went
-to 1 with the library, 2 with the history, 3 with the graph and 4 with the
-redesigned arrangement above. The organisation and application names
-`QSettings` keys off are set in `main` before the window exists.
+to 1 with the library, 2 with the history, 3 with the graph, 4 with the
+redesigned arrangement and 5 when the timeline moved under the left panels. The
+organisation and application names `QSettings` keys off are set in `main` before
+the window exists.
 
 ### Top bar
 
-A fixed tool bar (`top_bar`, `editor_shell.cpp`) under the menus holds undo,
-redo and the history button (theme icons, so Windows draws them from Segoe
-Fluent Icons with no image files), then the open file's name and how far it is
-from its saved state (`document_state`: "title.ifs, saved", "title.ifs,
-unsaved, 1 edit", or just "unsaved" once the saved document has fallen off the
-undo stack; the count is `Document::History::StepsFromSaved`). With a project
-open it also shows the project chip (`project`, a menu with showing the project
-folder, export and closing the project) and the Export button (`export`). The
-Export button's count is `Document::AwaitingExport`: the IFS entries the
-project writes whose bytes no longer match what the last export recorded, plus
-the project images the IFS does not hold yet. Every keyframe edit is written
-into the open document straight away, so the count is not "edits the IFS is
-missing"; it is the entries the drift check at the next opening would report
-if the file were saved without exporting. The Save button carries the
-`file.save` command. Everything on the bar runs through the command registry,
-so it greys out and refuses the same way the menus do. `RefreshTopBar` runs
-from `RefreshState`, which every edit, undo, redo and save goes through.
+A fixed tool bar (`top_bar`, `editor_shell.cpp`) is the window's only visible
+chrome above the panels. The menu bar is built as usual but hidden
+(`menuBar()->setVisible(false)`); every top-level menu is also opened by a flat
+button on the bar (`menu_button`), so the menus stay a full index of the
+commands and the tests that walk `menuBar()->actions()` still see them. Left to
+right: the `IFS` logo chip, the menu buttons, a divider, undo, redo and the
+history button (SVG icons from the design), then the command search field
+(`search`: a button with the search glyph, the placeholder and a `Ctrl K` chip,
+centred in what the bar has left), then the document group and the Save button.
+
+The document group (`trailing`) holds the file glyph, the open file's name
+(`document_state`) and how far it is from its saved state (`document_edits`:
+"saved" in faint, "unsaved, 1 edit" or "unsaved, 3 edits" in amber once it has
+fallen off the undo stack; the count is `Document::History::StepsFromSaved`).
+With a project open the project chip (`project`, a menu with showing the
+project folder, export and closing the project) and the Export button
+(`export`) join it. The Export button's count is `Document::AwaitingExport`:
+the IFS entries the project writes whose bytes no longer match what the last
+export recorded, plus the project images the IFS does not hold yet. Every
+keyframe edit is written into the open document straight away, so the count is
+not "edits the IFS is missing"; it is the entries the drift check at the next
+opening would report if the file were saved without exporting. The Save button
+carries the `file.save` command. With no document open the whole group and Save
+are hidden, which is the start screen's bar in the design. Everything on the
+bar runs through the command registry, so it greys out and refuses the same way
+the menus do. `RefreshTopBar` runs from `RefreshState`, which every edit, undo,
+redo and save goes through.
 
 ### Status bar
 
-The status bar keeps six permanent sections on its right (`editor_shell.cpp`):
-the preview host (`host_status`: "No preview host", or "Preview host ready,
-N ms a frame" with the time the last render took), the stage size and frame
-rate of the open animation (`stage_status`, from `Document::StageSizeOf` and
-`Document::FrameRate`), the frame (`frame_status`, "Frame 2 of 3"), what is
-chosen (`chosen_status`: a depth, several depths, or selected keyframes),
-snapping (`snap_status`) and the stage zoom (`zoom_status`, the shown stage
-width over the stage's own width, `Viewport::StageScale`). `RefreshStatus` is
-cheap enough for every rendered frame of playback because it never reads the
-animation; the stage section is filled from `ShowFrame`, which reads it anyway.
-Temporary messages (refusals, results of an edit) still show on the left.
+The status bar is 24 px and splits in two (`editor_shell.cpp`). On the left,
+next to a dot that is green while the preview host runs and edge grey when it
+does not, sit the host (`host_named` "Preview host" and `host_status`: "not
+running", or "ready, N ms a frame" with the time the last render took), the
+stage size and frame rate of the open animation (`stage_status`, from
+`Document::StageSizeOf` and `Document::FrameRate`) and the frame
+(`frame_status`, "Frame 2 of 3"). On the right sit what is chosen
+(`chosen_status`: a depth, several depths, or selected keyframes), snapping
+(`snap_status`) and the stage zoom (`zoom_status`, the shown stage width over
+the stage's own width, `Viewport::StageScale`). `RefreshStatus` is cheap enough
+for every rendered frame of playback because it never reads the animation; the
+stage section is filled from `ShowFrame`, which reads it anyway.
+
+Temporary messages (refusals, results of an edit) take the whole left side:
+the group hides itself while one is shown (`QStatusBar::messageChanged`), so
+the two never overlap, and the messages that are not a refusal carry a timeout
+so the host and frame sections come back. A boot clears its own message
+instead: "Preview host running on ..." would only repeat what the left group
+already says.
 
 ## Commands
 
@@ -269,16 +366,19 @@ host, opening and saving, playback, the project, and errors.
 
 ### The selection bar
 
-Under the stage sits `Editor::SelectionBar` (`editor_selection_bar.cpp`), which
-names what is chosen and lists that selection's commands as buttons:
-"Depth 2" with fit, centre anchor, flip, arrange, split, duplicate, group,
-keyframe or detach and remove; "2 depths chosen" with align, spread, sequence
-and remove; "3 keyframes, translation" with hold, easy ease, reverse, stretch,
-wiggle, simplify, copy and delete; and "Nothing chosen" with none. Every button
-is a command id: its label is the registry's short name (`Command::brief`, which
-falls back to the menu text), it is disabled while the command is refused with
-the reason as its tooltip, and clicking it runs the command through the
-registry, so the bar can never do something a menu would not.
+Under the stage sits `Editor::SelectionBar` (`editor_selection_bar.cpp`), 40 px
+with a thumbnail, what is chosen in two lines (`selection_summary` "Depth 9"
+over `selection_detail` "baked, frame 300"), and that selection's commands as
+buttons: fit, centre anchor, flip, arrange, split, duplicate, group, keyframe
+or detach for a depth; align, spread and sequence for several; hold, easy ease,
+reverse, stretch, wiggle, simplify and copy for keyframes; and nothing at all
+for "Nothing chosen", which also hides the thumbnail and the divider. Anything
+that removes (`.remove`, `.delete`) is a trash icon pushed to the right end,
+away from the rest. Every button is a command id: its label is the registry's
+short name (`Command::brief`, which falls back to the menu text), it is
+disabled while the command is refused with the reason as its tooltip, its
+shortcut is appended to that tooltip, and clicking it runs the command through
+the registry, so the bar can never do something a menu would not.
 `Window::RefreshSelectionBar` fills it from the same state the status bar reads,
 on every `ShowFrame`.
 
@@ -490,23 +590,30 @@ is still shown and protected. Selecting an entry in the package tree prints
 `Document::Fields` into that table as it always did.
 
 
-**Start screen.** With no IFS open the centre of the window shows
-`Editor::StartScreen` instead of the stage (both live in one `centre_stack`
-`QStackedWidget`). It carries Open IFS, Open project and New project as buttons
-over the same commands the File menu runs, the recent files, the game install
-card and a line saying that without an install everything but the picture still
-works. A recent file opened from the list opens the IFS, or the project folder
-if that is what was remembered. `Window::RememberRecent` keeps the last eight
-paths in `recent/files`, newest first, with each one's animation count in
+**Start screen.** With no IFS open the window's central widget shows
+`Editor::StartScreen` instead of the whole dock manager (both are pages of one
+`centre_stack` `QStackedWidget`), so the welcome fills everything between the
+top bar and the status bar the way the design has it. It is three columns:
+"IFS editor" over the accent Open IFS button (with its `Ctrl O` chip) and Open
+project, then a dashed drop zone; the recent files; and a 320 px preview card.
+The buttons run the same commands the File menu runs. A recent row
+(`recent_row`, 56 px, a thumbnail, the file name, its folder and animation
+count, an amber project badge when a project folder sits beside it, and how
+long ago it was touched) opens the IFS, or the project folder if that is what
+was remembered. `Window::RememberRecent` keeps the last eight paths in
+`recent/files`, newest first, with each one's animation count in
 `recent/animations` taken from the package as it is opened, so the start screen
 never parses a package to draw itself. `Window::RefreshStartScreen` reads them
 back, drops what is no longer on disk, and marks the ones that have a project
-folder beside them; a path remembered before the count was kept simply shows
-no count. The
-card says where the game install is, how the build is named and whether the
-preview is running. Packages have no thumbnail on this screen: the picture of
-an animation comes from the preview host, which is not up while the start
-screen is.
+folder beside them; a path remembered before the count was kept simply shows no
+count. With nothing remembered the list is a single "Nothing opened yet"
+(`recent_empty`). The card says where the game install is (`start_install`),
+whether the preview is running (a green or grey dot and `start_running`), how
+the build is named (`start_build`), and carries Change install and the line
+that without an install everything except the picture still works. Packages
+have no thumbnail on this screen: the picture of an animation comes from the
+preview host, which is not up while the start screen is, so the rows and the
+card use the design's stripe placeholder (`Rows::Stripes`).
 
 The window takes drops anywhere (`Window::dropEvent`): an `.ifs` file opens as
 a package, a folder opens as a project, and anything else is refused by name.
@@ -527,15 +634,29 @@ no longer asks how many frames to make: it makes one as long as the clip it was
 asked from.
 
 **Package panel.** The panel is three tabs over the same package
-(`Window::BuildPackageTabs`). Animations lists every animation with its frame
-count, stage size and frame rate, and ends with a `+ New animation` row that
-makes one when it is double-clicked. Images lists the package's textures with
-their size and a thumbnail decoded through `Document::File::ReadImage`; an
-image the decoder cannot read keeps its row and loses only the size and the
-picture. Files is the raw entry tree with its filter box, unchanged, and still
-the one named `package`. Every row of every tab carries the same entry path, so
-choosing one selects it in the Files tree (`Window::ChooseEntryFrom` through
-`Window::SelectEntry`) and the same context menu opens over it.
+(`Window::BuildPackageTabs`), drawn as the design's 30 px strip: an
+`Editor::PanelTabs` whose `PanelTabBar` paints each tab's name with its count
+beside it in faint 11 px and a 2 px accent underline under the current one
+(`PanelTabs::ShowCount`, filled as the rows are), and a corner widget with the
+plus (a new animation, or an image from a file on the Images tab) and the
+`...` that opens the package menu. Each tab is a filter field with the search
+glyph over the list (`WithFilter`).
+
+Animations lists every animation as a 40 px row: a thumbnail, the name, and
+"1440 frames, 1280 x 720, 60 fps" under it, and ends with a `+ New animation`
+row that makes one when it is double-clicked. Images lists the package's
+textures the same way, with a thumbnail decoded through
+`Document::File::ReadImage` and its size under the name; an image the decoder
+cannot read keeps its row and loses only the size and the picture. Both are
+`QTreeWidget`s with their header hidden and every column but the first hidden,
+painted by `Rows::Delegate` (`editor/src/editor_rows.cpp`), which draws the
+decoration pixmap, the name, and `Rows::kDetailRole` under it. The hidden
+columns still carry the frame count, stage size and rate as text, which is what
+the panel tests read. Files is the raw entry tree with its filter box,
+unchanged, and still the one named `package`. Every row of every tab carries
+the same entry path, so choosing one selects it in the Files tree
+(`Window::ChooseEntryFrom` through `Window::SelectEntry`) and the same context
+menu opens over it.
 
 An animation row is renamed by typing over it: `Window::RenameEntryRow` sends
 the typed name to `Window::ApplyAnimationRename`, the half of
@@ -567,18 +688,21 @@ resize uses), up to the stage's own size or the fitted size when that is
 larger. Past that the game's pixels are shown enlarged, which is what the game
 would draw, rather than a render the game never makes.
 
-**Stage bar and tool strip.** `Editor::StageBar` sits above the viewport and
-`Editor::ToolStrip` down its left edge. Both are views over the registry built
-after `BuildMenus` has registered the commands, so a button is a `QToolButton`
-that runs a command id and, for the checkable ones, follows its action's
-`toggled`. The bar carries the clip breadcrumb on the left (the file, the
-animation and each clip entered, each a button that opens that clip, rebuilt
+**Stage bar and tool strip.** `Editor::StageBar` (36 px) sits above the
+viewport and `Editor::ToolStrip` (40 px) down its left edge. Both are views
+over the registry built after `BuildMenus` has registered the commands, so a
+button is a `QToolButton` that runs a command id and, for the checkable ones,
+follows its action's `toggled`; a checkable one carries a `Toggling` icon, so
+it turns `#9cc8ff` on the chosen blue when it is on. The bar carries the clip
+breadcrumb on the left (the file, the animation and each clip entered, each a
+button that opens that clip, the last one in text white and semibold, rebuilt
 only when the crumbs change so seeking does not churn the layout), then the
-overlay toggles (Snap, Rulers, Onion, Path, Background), the zoom control (a
-minus, the current percentage in `stage_zoom`, a plus), Fit and Picture. The
-minus and plus run `view.zoom_out` and `view.zoom_in` (Ctrl+- and Ctrl++),
-which step `Viewport::ZoomStep` by the same 1.25 a wheel notch uses, around the
-middle of the view rather than the pointer.
+overlay toggles as 28 px icon buttons (rulers, snap, onion, path, background),
+a divider, the zoom chip (`stage_zoom`: the current percentage in the mono font
+with a chevron, opening a menu with zoom in, zoom out and fit), then Fit and
+the save-the-frame icon. Zoom in and out (Ctrl+- and Ctrl++) step
+`Viewport::ZoomStep` by the same 1.25 a wheel notch uses, around the middle of
+the view rather than the pointer.
 
 The strip holds the five tools, one at a time: Select (V), Anchor (A), Pan (H),
 Zoom (Z) and Motion sketch (Y). They are ordinary commands made checkable and
@@ -602,7 +726,15 @@ each render the window asks the host for the previous and next frames of what
 it has loaded (`Window::ShowGhostsAround`), seeks it back to the frame shown,
 and hands the two pictures to the viewport (`Viewport::ShowGhosts`); a new
 frame clears them, so a ghost never outlives the frame it belonged to. Playback
-skips them, since every step would cost two more renders. The live window test
+skips them, since every step would cost two more renders, and so does a window
+with no animation open: `ShowGhostsAround` returns at once while
+`animation_name_` is empty, because the host cannot seek what it has not
+loaded. Without that guard, starting the editor with a game install set and
+onion skin remembered on put "Seek failed: seeking failed" on screen before
+anything was open: the boot renders one frame through `DrawBackground`, and
+that render asked for the ghosts, whose seek back the host refused. The live
+test "Starting with onion skin on and no file open says nothing about seeking"
+builds exactly that window and fails on the message box. The live window test
 turns it on at frame 401, sees the picture change, and checks a later render
 that does not seek still shows frame 401; it also sees the picture come back
 when onion skin is turned off. Leaving out the seek back, the ghost renders,
@@ -993,16 +1125,22 @@ selection outline in the picture was seen to pass even with the filter
 switched off, so both pictures are taken with no depth selected.
 
 **Timeline bar.** Above the timeline, `Editor::TimelineBar`
-(`editor_timeline_bar.cpp`) holds the transport and what the playhead is on:
-first frame, previous frame, play, next frame, last frame, previous and next
-change on the depth and loop, each running its registry command, then a spin box
-with the frame (typing one seeks there), the clip's last frame, the time in
-seconds from the animation's own rate, the label at or before the playhead, the
-work area with buttons to start it, end it and clear it, a Timeline and Graph
-switch that brings that panel's tab to the front, a + Depth button running
-`depth.add`, and the timeline zoom: minus, a slider in pixels a frame, plus. `Window::RefreshTimelineBar` fills it on every seek, work area change
-and clip change, from `shown_labels_` and `shown_rate_`, which
-`ShowClipTimeline` caches so a scrub costs no read.
+(`editor_timeline_bar.cpp`) is 36 px and follows the design: the transport
+icons sit in a 276 px block over the timeline's own depth column (first frame,
+previous frame, play on its own darker plate, next frame, last frame, previous
+and next change on the depth, and loop as a checkable that turns blue), then
+the frame spin box in the mono font (typing one seeks there), `/ 1439`, the
+time in seconds from the animation's own rate, the label at or before the
+playhead behind an amber keyframe glyph, and the work area ("Work area",
+"420 to 600" or "none", and the cross that clears it). On the right, the
+Timeline and Graph switch in one bordered pair brings that panel's tab to the
+front, and the timeline zoom is a minus icon, a slider in pixels a frame and a
+plus icon. `Window::RefreshTimelineBar` fills it on every seek, work area
+change and clip change, from `shown_labels_` and `shown_rate_`, which
+`ShowClipTimeline` caches so a scrub costs no read. Setting and clearing the
+work area (`clip.work_start`, `clip.work_end`) and adding a depth
+(`depth.add`) are in the Clip and Depth menus, which is where the design keeps
+them.
 
 The labels on the bar have fixed widths. They used to be sized to their text,
 and because the bar sets the timeline panel's minimum width, a longer label
@@ -1060,9 +1198,23 @@ only one shown. Dragging a row by its depth number onto another row moves that
 depth's span there (`Timeline::DepthDragged`, then `Window::MoveSpanOntoDepth`),
 with the target row outlined while the drag lasts, which is the direct gesture
 that replaces the "Move to another depth" question; the menu item still asks, for
-a depth that is not on screen. The gutter grew from 56 to 64 pixels to fit the
-third switch, and the widget tests' `kTimelineWidth` grew by the same 8 pixels so
-the frame area keeps its width and their frame positions still line up.
+a depth that is not on screen.
+
+The gutter is 276 pixels, the width of the package panel beside it, so the
+design's depth column reads as one column with the panel above it: the three
+switches at 8, 27 and 46, the depth number right-aligned at 104 in the mono
+font, and the name of what the depth places from 112, taken from the span under
+the playhead (`Timeline::RowName`) and elided. The ruler is 30 pixels with the
+scripts lane's 22 under it, and a row is 22. Those sizes and every colour live
+in `editor_timeline_metrics.h`, which the widget tests include: their
+`kTimelineWidth`, `kDepthRowY`, the property lanes and `FrameX` are all derived
+from them, so a metric change moves the tests with it instead of breaking them.
+The colours are the design's: the gutter and ruler `#1a1c20`, the frame area
+`#141518` with a gridline `#1a1c20` at each ruler tick, rows separated by
+`#141518`, the chosen row tinted `#1b3350` at a third, an image bar `#2f557c`
+under a `#5d8fc4` top edge, a shape `#2b6a5b` under `#4fb59c`, a sprite
+`#5a4787` under `#9179d1`, the playhead `#ff5d5d` and the work area a `#4c9dff`
+wash over the frames and a stronger band on the ruler.
 
 `editor_timeline.cpp` was 963 lines, so its painting moved to
 `editor_timeline_paint.cpp` and the sizes and colours both halves share moved to

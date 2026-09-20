@@ -10,6 +10,7 @@
 #include "editor_popover.h"
 #include "editor_selection_bar.h"
 #include "editor_stage_bar.h"
+#include "editor_theme.h"
 #include "editor_start_screen.h"
 #include "editor_tool_strip.h"
 
@@ -95,10 +96,14 @@ constexpr int kNameRole = Qt::UserRole + 2;
 constexpr int kThumbnailSide = 24;
 constexpr int kEditsRole = Qt::UserRole + 1;
 constexpr int kResizeDelayMs = 120;
-constexpr int kStageShare = 620;
+constexpr int kNoticeMs = 5000;
+constexpr int kProblemMs = 15000;
+constexpr int kStageShare = 592;
 constexpr int kTimelineShare = 340;
-constexpr int kPackageShare = 300;
-constexpr int kLibraryShare = 300;
+constexpr int kPackageShare = 262;
+constexpr int kLibraryShare = 330;
+constexpr int kStageWidth = 1280;
+constexpr int kInspectorWidth = 320;
 
 ads::CDockWidget* MakePanel(const QString& title, QWidget* content) {
     auto* dock = new ads::CDockWidget(title);
@@ -171,7 +176,7 @@ Window::Window() {
     RestoreLayout(*this, *docks_);
     const QString game_dir = QSettings().value(kGameDirKey).toString();
     if (game_dir.isEmpty()) {
-        statusBar()->showMessage(tr("No preview host running"));
+        RefreshStatus();
         RefreshStartScreen();
         return;
     }
@@ -183,7 +188,16 @@ Window::Window() {
 Window::~Window() = default;
 
 void Window::BuildPanels() {
+    ads::CDockManager::setConfigFlag(ads::CDockManager::ActiveTabHasCloseButton, false);
+    ads::CDockManager::setConfigFlag(ads::CDockManager::AllTabsHaveCloseButton, false);
+    ads::CDockManager::setConfigFlag(ads::CDockManager::DockAreaHasCloseButton, false);
+    ads::CDockManager::setConfigFlag(ads::CDockManager::DockAreaHasUndockButton, false);
+    ads::CDockManager::setConfigFlag(ads::CDockManager::DockAreaHasTabsMenuButton, false);
+    ads::CDockManager::setConfigFlag(ads::CDockManager::DockAreaHideDisabledButtons, true);
+    ads::CDockManager::setConfigFlag(ads::CDockManager::HideSingleCentralWidgetTitleBar, true);
+    ads::CDockManager::setConfigFlag(ads::CDockManager::FocusHighlighting, false);
     docks_ = new ads::CDockManager(this);
+    docks_->setStyleSheet(Theme::DockStyle());
     commands_ = new Commands(this);
 
     viewport_ = new Viewport;
@@ -307,31 +321,36 @@ void Window::BuildPanels() {
     stage_layout->addLayout(under_bar, 1);
     stage_layout->addWidget(notices_);
     stage_layout->addWidget(selection_bar_);
-    centre_ = new QStackedWidget;
-    centre_->setObjectName("centre_stack");
-    centre_->addWidget(start_);
-    centre_->addWidget(stage);
-    ads::CDockAreaWidget* centre = docks_->setCentralWidget(MakePanel(tr("Stage"), centre_));
+    ads::CDockAreaWidget* centre = docks_->setCentralWidget(MakePanel(tr("Stage"), stage));
+    ads::CDockAreaWidget* package_area = docks_->addDockWidget(
+        ads::LeftDockWidgetArea, MakePanel(tr("Package"), BuildPackageTabs()), centre);
+    ads::CDockAreaWidget* library_area = docks_->addDockWidget(
+        ads::BottomDockWidgetArea, MakePanel(tr("Library"), BuildLibraryPanel()), package_area);
+    timeline_dock_ = MakePanel(tr("Timeline"), timeline_panel);
+    ads::CDockAreaWidget* timing_area =
+        docks_->addDockWidget(ads::BottomDockWidgetArea, timeline_dock_);
+    graph_dock_ = MakePanel(tr("Graph"), BuildGraphPanel());
+    docks_->addDockWidget(ads::CenterDockWidgetArea, graph_dock_, timing_area);
+    timeline_dock_->setAsCurrentTab();
     ads::CDockWidget* inspector_dock = MakePanel(tr("Inspector"), inspector_panel_);
     ads::CDockAreaWidget* inspector_area =
         docks_->addDockWidget(ads::RightDockWidgetArea, inspector_dock);
     history_dock_ = MakePanel(tr("History"), BuildHistory());
     docks_->addDockWidget(ads::CenterDockWidgetArea, history_dock_, inspector_area);
     inspector_dock->setAsCurrentTab();
-    timeline_dock_ = MakePanel(tr("Timeline"), timeline_panel);
-    ads::CDockAreaWidget* timing_area =
-        docks_->addDockWidget(ads::BottomDockWidgetArea, timeline_dock_, centre);
-    graph_dock_ = MakePanel(tr("Graph"), BuildGraphPanel());
-    docks_->addDockWidget(ads::CenterDockWidgetArea, graph_dock_, timing_area);
-    timeline_dock_->setAsCurrentTab();
-    ads::CDockAreaWidget* package_area = docks_->addDockWidget(
-        ads::LeftDockWidgetArea, MakePanel(tr("Package"), BuildPackageTabs()), centre);
-    docks_->addDockWidget(ads::BottomDockWidgetArea, MakePanel(tr("Library"), BuildLibraryPanel()),
-                          package_area);
+    package_area->setDockAreaFlag(ads::CDockAreaWidget::HideSingleWidgetTitleBar, true);
+    library_area->setDockAreaFlag(ads::CDockAreaWidget::HideSingleWidgetTitleBar, true);
     package_filter_->setObjectName("package_filter");
     library_filter_->setObjectName("library_filter");
     docks_->setSplitterSizes(timing_area, {kStageShare, kTimelineShare});
     docks_->setSplitterSizes(package_area, {kPackageShare, kLibraryShare});
+    docks_->setSplitterSizes(inspector_area, {kStageWidth, kInspectorWidth});
+
+    centre_ = new QStackedWidget;
+    centre_->setObjectName("centre_stack");
+    centre_->addWidget(start_);
+    centre_->addWidget(docks_);
+    setCentralWidget(centre_);
 }
 
 void Window::OpenDropped(const QString& path) {
@@ -387,10 +406,11 @@ void Window::StartHost(const QString& game_dir) {
     QApplication::restoreOverrideCursor();
     if (!started) {
         ReportProblem(QString::fromStdString(started.error()));
-        statusBar()->showMessage(tr("No preview host running"));
+        RefreshStatus();
         return;
     }
-    statusBar()->showMessage(tr("Preview host running on %1").arg(game_dir));
+    statusBar()->clearMessage();
+    RefreshStatus();
     DrawBackground(background_action_->isChecked());
     if (!animation_name_.empty()) ShowAnimation(animation_name_);
 }
@@ -433,12 +453,13 @@ void Window::OpenDocument(const QString& path) {
         SelectEntry(QString::fromStdString(first->path));
     const std::vector<std::string>& problems = file_->Problems();
     if (problems.empty()) {
-        statusBar()->showMessage(tr("%1 entries").arg(CountNodes(file_->Nodes())));
+        statusBar()->showMessage(tr("%1 entries").arg(CountNodes(file_->Nodes())), kNoticeMs);
         return;
     }
     statusBar()->showMessage(tr("%1 problems in the package, the first is: %2")
                                  .arg(problems.size())
-                                 .arg(QString::fromStdString(problems.front())));
+                                 .arg(QString::fromStdString(problems.front())),
+                             kProblemMs);
 }
 
 void Window::FillTree() {

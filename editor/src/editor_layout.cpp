@@ -14,7 +14,7 @@ namespace {
 constexpr const char* kGeometryKey = "window/geometry";
 constexpr const char* kStateKey = "window/state";
 constexpr const char* kDocksKey = "window/docks";
-constexpr int kDocksVersion = 4;
+constexpr int kDocksVersion = 5;
 
 }
 

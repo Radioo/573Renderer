@@ -2,7 +2,11 @@
 
 #include "editor_files.h"
 #include "editor_filter.h"
+#include "editor_icons.h"
+#include "editor_panel_tabs.h"
+#include "editor_rows.h"
 #include "editor_start_screen.h"
+#include "editor_theme.h"
 
 #include "document/animation_settings.h"
 #include "document/document.h"
@@ -22,7 +26,9 @@
 #include <QStackedWidget>
 #include <QStringList>
 #include <QString>
+#include <QHBoxLayout>
 #include <QTabWidget>
+#include <QToolButton>
 #include <QTreeWidget>
 #include <QTreeWidgetItem>
 #include <QWidget>
@@ -37,7 +43,8 @@ namespace {
 
 constexpr int kPathRole = Qt::UserRole;
 constexpr int kNameRole = Qt::UserRole + 2;
-constexpr int kThumbnailSide = 24;
+constexpr int kPanelIcon = 16;
+constexpr int kPanelButton = 26;
 constexpr int kRecentKept = 8;
 
 }
@@ -97,8 +104,13 @@ QWidget* Window::BuildPackageTabs() {
     images_tree_->setObjectName("package_images");
     images_tree_->setHeaderLabels({tr("Image"), tr("Size")});
     images_tree_->setRootIsDecorated(false);
-    images_tree_->setIconSize(QSize(kThumbnailSide, kThumbnailSide));
     for (QTreeWidget* tree : {animations_tree_, images_tree_}) {
+        tree->setHeaderHidden(true);
+        tree->setIconSize(QSize(Rows::kThumbWidth, Rows::kThumbHeight));
+        tree->setItemDelegate(new Rows::Delegate(tree));
+        tree->setMouseTracking(true);
+        for (int column = 1; column < tree->columnCount(); column++)
+            tree->setColumnHidden(column, true);
         tree->setContextMenuPolicy(Qt::CustomContextMenu);
         connect(tree, &QTreeWidget::customContextMenuRequested, this,
                 [this, tree](const QPoint& at) {
@@ -115,12 +127,52 @@ QWidget* Window::BuildPackageTabs() {
                 if (item->data(0, kPathRole).toString().isEmpty()) AddNewAnimation();
             });
 
-    auto* tabs = new QTabWidget;
-    tabs->setObjectName("package_tabs");
-    tabs->addTab(animations_tree_, tr("Animations"));
-    tabs->addTab(images_tree_, tr("Images"));
-    tabs->addTab(WithFilter(package_tree_, package_filter_ = new QLineEdit), tr("Files"));
-    return tabs;
+    package_tabs_ = new PanelTabs;
+    package_tabs_->setObjectName("package_tabs");
+    package_tabs_->addTab(
+        WithFilter(animations_tree_, animations_filter_ = new QLineEdit, tr("Filter animations")),
+        tr("Animations"));
+    package_tabs_->addTab(
+        WithFilter(images_tree_, images_filter_ = new QLineEdit, tr("Filter images")),
+        tr("Images"));
+    package_tabs_->addTab(
+        WithFilter(package_tree_, package_filter_ = new QLineEdit, tr("Filter files")),
+        tr("Files"));
+    package_tabs_->setCornerWidget(BuildPackageActions(), Qt::TopRightCorner);
+    return package_tabs_;
+}
+
+QWidget* Window::BuildPackageActions() {
+    auto* corner = new QWidget;
+    auto* line = new QHBoxLayout(corner);
+    line->setContentsMargins(0, 0, 4, 0);
+    line->setSpacing(0);
+    auto* adding = new QToolButton;
+    adding->setObjectName("package_add");
+    adding->setProperty("panel_icon", true);
+    adding->setIcon(Icons::Of(Icons::Glyph::Plus, Theme::kSoft, kPanelIcon));
+    adding->setIconSize(QSize(kPanelIcon, kPanelIcon));
+    adding->setFixedSize(kPanelButton, kPanelButton);
+    adding->setToolTip(tr("New animation, add image"));
+    connect(adding, &QToolButton::clicked, this, [this] {
+        if (package_tabs_->currentIndex() == 1) {
+            AddImageFromFile();
+            return;
+        }
+        AddNewAnimation();
+    });
+    line->addWidget(adding);
+    auto* more = new QToolButton;
+    more->setObjectName("package_more");
+    more->setProperty("panel_icon", true);
+    more->setIcon(Icons::Of(Icons::Glyph::Dots, Theme::kSoft, kPanelIcon));
+    more->setIconSize(QSize(kPanelIcon, kPanelIcon));
+    more->setFixedSize(kPanelButton, kPanelButton);
+    more->setToolTip(tr("Package actions"));
+    connect(more, &QToolButton::clicked, this,
+            [this, more] { ShowPackageMenu(more->mapToGlobal(QPoint(0, more->height()))); });
+    line->addWidget(more);
+    return corner;
 }
 
 void Window::ChooseEntryFrom(QTreeWidget& tree) {
@@ -147,6 +199,7 @@ void Window::RenameEntryRow(QTreeWidgetItem* item) {
 void Window::FillAnimationRows() {
     if (animations_tree_ == nullptr) return;
     animations_tree_->clear();
+    int seed = 0;
     for (const Document::Node& node : file_->Nodes()) {
         for (const Document::Node& child : node.children) {
             if (child.role != Document::Role::Animation) continue;
@@ -155,19 +208,28 @@ void Window::FillAnimationRows() {
             row->setData(0, kPathRole, QString::fromStdString(child.path));
             row->setData(0, kNameRole, QString::fromStdString(child.name));
             row->setFlags(row->flags() | Qt::ItemIsEditable);
+            row->setIcon(0, QIcon(Rows::Stripes(Rows::kThumbWidth, Rows::kThumbHeight, seed++)));
             const auto animation = file_->ReadAnimation(child.path);
             if (!animation) continue;
             row->setText(1, QString::number(animation->root.frames.size()));
             const Document::StageSize stage = Document::StageSizeOf(*animation);
             row->setText(2, tr("%1x%2").arg(stage.width).arg(stage.height));
-            row->setText(3, QString::number(Document::FrameRate(*animation), 'g', 4));
+            const QString rate = QString::number(Document::FrameRate(*animation), 'g', 4);
+            row->setText(3, rate);
+            row->setData(0, Rows::kDetailRole,
+                         tr("%1 frames, %2 %5 %3, %4 fps")
+                             .arg(animation->root.frames.size())
+                             .arg(stage.width)
+                             .arg(stage.height)
+                             .arg(rate)
+                             .arg(QChar(0x00D7)));
         }
     }
     auto* adding = new QTreeWidgetItem(animations_tree_);
     adding->setText(0, tr("+ New animation"));
     adding->setFlags(Qt::ItemIsEnabled);
-    for (int column = 0; column < animations_tree_->columnCount(); column++)
-        animations_tree_->resizeColumnToContents(column);
+    if (package_tabs_ != nullptr)
+        package_tabs_->ShowCount(0, animations_tree_->topLevelItemCount() - 1);
 }
 
 void Window::FillImageRows() {
@@ -183,15 +245,16 @@ void Window::FillImageRows() {
             const auto pixels = file_->ReadImage(child.name);
             if (!pixels) continue;
             row->setText(1, tr("%1x%2").arg(pixels->width).arg(pixels->height));
+            row->setData(0, Rows::kDetailRole,
+                         tr("%1 %3 %2").arg(pixels->width).arg(pixels->height).arg(QChar(0x00D7)));
             const QImage picture(pixels->bgra.data(), static_cast<int>(pixels->width),
                                  static_cast<int>(pixels->height), QImage::Format_ARGB32);
-            row->setIcon(0, QIcon(QPixmap::fromImage(picture.scaled(kThumbnailSide, kThumbnailSide,
-                                                                    Qt::KeepAspectRatio,
-                                                                    Qt::SmoothTransformation))));
+            row->setIcon(0, QIcon(QPixmap::fromImage(
+                                picture.scaled(Rows::kThumbWidth, Rows::kThumbHeight,
+                                               Qt::KeepAspectRatio, Qt::SmoothTransformation))));
         }
     }
-    for (int column = 0; column < images_tree_->columnCount(); column++)
-        images_tree_->resizeColumnToContents(column);
+    if (package_tabs_ != nullptr) package_tabs_->ShowCount(1, images_tree_->topLevelItemCount());
 }
 
 }

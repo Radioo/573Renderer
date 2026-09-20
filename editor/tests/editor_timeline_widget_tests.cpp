@@ -87,7 +87,7 @@ TEST_CASE("Holding Shift snaps a dragged bar's ends to other spans and the clip'
     const auto ghost_reaches = [&timeline](double x) {
         const QImage drawn = timeline.grab().toImage();
         for (int y = 40; y < 40 + 16; y++) {
-            if (drawn.pixelColor(static_cast<int>(x), y) == QColor(240, 190, 80)) return true;
+            if (drawn.pixelColor(static_cast<int>(x), y) == Editor::kCameraMark) return true;
         }
         return false;
     };
@@ -148,8 +148,8 @@ TEST_CASE("A label dragged along the ruler asks to move there, and a click on it
     Send(timeline, QEvent::MouseButtonPress, {FrameX(3) + 2, kRulerY}, Qt::LeftButton);
     Send(timeline, QEvent::MouseMove, {FrameX(7), kRulerY}, Qt::LeftButton);
     const QImage drawn = timeline.grab().toImage();
-    CHECK(drawn.pixelColor(static_cast<int>(FrameX(7)), 2) == QColor(220, 180, 90));
-    CHECK(drawn.pixelColor(static_cast<int>(FrameX(3)), 2) != QColor(220, 180, 90));
+    CHECK(drawn.pixelColor(static_cast<int>(FrameX(7)), 2) == Editor::kLabelMark);
+    CHECK(drawn.pixelColor(static_cast<int>(FrameX(3)), 2) != Editor::kLabelMark);
     Send(timeline, QEvent::MouseButtonRelease, {FrameX(7), kRulerY}, Qt::NoButton);
     REQUIRE(moved.size() == 1);
     CHECK(moved[0].first == "loop");
@@ -282,11 +282,12 @@ TEST_CASE("The gutter switches solo a depth and dragging a row moves it to anoth
     QObject::connect(&timeline, &Editor::Timeline::DepthDragged,
                      [&moved](uint16_t depth, uint16_t onto) { moved.emplace_back(depth, onto); });
 
-    Click(timeline, {33, kDepthRowY});
+    Click(timeline, {Editor::kSoloLeft + 6, kDepthRowY});
     REQUIRE(soloed.size() == 1);
     CHECK(soloed.front() == 3);
 
-    Drag(timeline, {48, kDepthRowY}, {48, kDepthRowY + 16});
+    Drag(timeline, {Editor::kNumberLeft + 8, kDepthRowY},
+         {Editor::kNumberLeft + 8, kDepthRowY + Editor::kRowHeight});
     REQUIRE(moved.size() == 1);
     CHECK(moved.front().first == 3);
     CHECK(moved.front().second == 2);
@@ -299,15 +300,15 @@ TEST_CASE("The gutter switches solo a depth and dragging a row moves it to anoth
 TEST_CASE("The scripts lane marks the frames carrying one and its button asks for a camera") {
     Editor::Timeline timeline;
     ShowScene(timeline);
-    constexpr int kNoteY = 33;
+    constexpr int kNoteY = Editor::kRulerHeight + (Editor::kNotesHeight / 2);
     const QImage plain = timeline.grab().toImage();
     timeline.SetFrameNotes({Document::FrameNote{.frame = 2, .script = true, .camera = false},
                             Document::FrameNote{.frame = 6, .script = false, .camera = true}});
     const QImage marked = timeline.grab().toImage();
     CHECK(marked != plain);
-    CHECK(marked.pixelColor(static_cast<int>(FrameX(2)), kNoteY) == QColor(150, 200, 240));
-    CHECK(marked.pixelColor(static_cast<int>(FrameX(6)) - 2, kNoteY - 2) == QColor(240, 190, 80));
-    CHECK(marked.pixelColor(static_cast<int>(FrameX(4)), kNoteY) != QColor(150, 200, 240));
+    CHECK(marked.pixelColor(static_cast<int>(FrameX(2)), kNoteY) == Editor::kScriptMark);
+    CHECK(marked.pixelColor(static_cast<int>(FrameX(6)) - 2, kNoteY - 2) == Editor::kCameraMark);
+    CHECK(marked.pixelColor(static_cast<int>(FrameX(4)), kNoteY) != Editor::kScriptMark);
 
     std::vector<uint32_t> sought;
     int cameras = 0;

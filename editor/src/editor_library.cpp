@@ -1,6 +1,10 @@
 #include "editor_window.h"
 
 #include "editor_filter.h"
+#include "editor_icons.h"
+#include "editor_panel_tabs.h"
+#include "editor_rows.h"
+#include "editor_theme.h"
 #include "editor_mime.h"
 
 #include "document/characters.h"
@@ -20,6 +24,7 @@
 #include <QByteArray>
 #include <QList>
 #include <QHBoxLayout>
+#include <QLabel>
 #include <QVBoxLayout>
 #include <QToolButton>
 #include <QIcon>
@@ -82,6 +87,9 @@ protected:
 };
 
 constexpr int kTileSide = 32;
+constexpr int kChipHeight = 22;
+constexpr int kPanelIcon = 16;
+constexpr int kPanelButton = 26;
 
 std::optional<uint16_t> SpriteOf(const QTreeWidgetItem* item) {
     if (item == nullptr) return std::nullopt;
@@ -98,7 +106,7 @@ QWidget* Window::BuildLibraryPanel() {
                       Document::CharacterKind::Shape, Document::CharacterKind::Imported};
     auto* kinds = new QWidget;
     auto* row = new QHBoxLayout(kinds);
-    row->setContentsMargins(4, 2, 4, 2);
+    row->setContentsMargins(8, 6, 8, 2);
     row->setSpacing(4);
     for (const auto& [name, text, kind] :
          {std::tuple{QStringLiteral("library_sprites"), tr("Sprites"),
@@ -111,7 +119,9 @@ QWidget* Window::BuildLibraryPanel() {
                      Document::CharacterKind::Imported}}) {
         auto* button = new QToolButton;
         button->setObjectName(name);
+        button->setProperty("chip", true);
         button->setText(text);
+        button->setFixedHeight(kChipHeight);
         button->setCheckable(true);
         button->setChecked(true);
         connect(button, &QToolButton::toggled, this, [this, kind](bool on) {
@@ -123,12 +133,35 @@ QWidget* Window::BuildLibraryPanel() {
     }
     row->addStretch();
 
-    auto* panel = new QWidget;
-    auto* layout = new QVBoxLayout(panel);
+    auto* inside = new QWidget;
+    auto* layout = new QVBoxLayout(inside);
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(0);
     layout->addWidget(kinds);
-    layout->addWidget(WithFilter(library, library_filter_ = new QLineEdit), 1);
+    layout->addWidget(WithFilter(library, library_filter_ = new QLineEdit, tr("Filter characters")),
+                      1);
+
+    auto* corner = new QWidget;
+    auto* beside = new QHBoxLayout(corner);
+    beside->setContentsMargins(0, 0, 4, 0);
+    beside->setSpacing(6);
+    library_of_ = new QLabel;
+    library_of_->setObjectName("library_of");
+    beside->addWidget(library_of_);
+    auto* fresh = new QToolButton;
+    fresh->setObjectName("library_add");
+    fresh->setProperty("panel_icon", true);
+    fresh->setIcon(Icons::Of(Icons::Glyph::Plus, Theme::kSoft, kPanelIcon));
+    fresh->setIconSize(QSize(kPanelIcon, kPanelIcon));
+    fresh->setFixedSize(kPanelButton, kPanelButton);
+    fresh->setToolTip(tr("New empty sprite"));
+    connect(fresh, &QToolButton::clicked, this, [this] { NewEmptySprite(); });
+    beside->addWidget(fresh);
+
+    auto* panel = new PanelTabs;
+    panel->setObjectName("library_tabs");
+    panel->addTab(inside, tr("Library"));
+    panel->setCornerWidget(corner, Qt::TopRightCorner);
     return panel;
 }
 
@@ -150,7 +183,11 @@ QTreeWidget* Window::BuildLibrary() {
     tree->on_return = [this](const QTreeWidgetItem* item) {
         PlaceLibraryCharacter(static_cast<uint16_t>(item->data(0, kIdRole).toUInt()));
     };
-    library_->setIconSize(QSize(kTileSide, kTileSide));
+    library_->setHeaderHidden(true);
+    library_->setColumnHidden(1, true);
+    library_->setMouseTracking(true);
+    library_->setItemDelegate(new Rows::Delegate(library_));
+    library_->setIconSize(QSize(Rows::kThumbWidth, Rows::kThumbHeight));
     return library_;
 }
 
@@ -196,12 +233,17 @@ void Window::FillLibrary(const AfpAnimation::Animation& animation,
         item->setData(0, kIdRole, one.id);
         item->setData(0, kKindRole, static_cast<int>(one.kind));
         item->setIcon(0, LibraryTile(images, one.id));
+        item->setData(0, Rows::kDetailRole,
+                      count == 0 ? tr("unused")
+                                 : tr("used %n time(s)", "", static_cast<int>(count)));
         if (count == 0) {
             item->setForeground(0, unused);
             item->setForeground(1, unused);
         }
     }
-    library_->resizeColumnToContents(0);
+    library_of_->setText(animation_name_.empty()
+                             ? QString()
+                             : tr("of %1").arg(QString::fromStdString(animation_name_)));
     ShowLibraryKinds();
 }
 

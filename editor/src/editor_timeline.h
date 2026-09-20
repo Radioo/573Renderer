@@ -158,6 +158,9 @@ private:
     [[nodiscard]] QString SpanName(const Document::DepthRow& row, const Document::Span& span) const;
     [[nodiscard]] QColor BarColour(const Document::DepthRow& row, const Document::Span& span,
                                    bool hidden) const;
+    [[nodiscard]] QColor BarTop(const Document::DepthRow& row, const Document::Span& span,
+                                bool hidden) const;
+    [[nodiscard]] QString RowName(const Document::DepthRow& row) const;
     void DrawSpanMarks(QPainter& painter, uint16_t depth, const Document::Span& span,
                        const QRect& bar) const;
     void DrawSpanName(QPainter& painter, const QString& name, const QRect& bar) const;

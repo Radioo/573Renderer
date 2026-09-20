@@ -94,26 +94,28 @@ void Window::RefreshSelectionBar() {
             key_property_.isEmpty() ? tr("keyframes") : key_property_.toLower();
         selection_bar_->Show(keys == 1 ? tr("1 keyframe, %1").arg(property)
                                        : tr("%1 keyframes, %2").arg(keys).arg(property),
+                             tr("frame %1").arg(frame_),
                              {"key.hold", "key.ease", "key.reverse", "key.stretch", "key.wiggle",
                               "key.simplify", "edit.copy", "edit.delete"});
         return;
     }
     if (chosen.size() > 1) {
-        selection_bar_->Show(tr("%1 depths chosen").arg(chosen.size()),
+        selection_bar_->Show(tr("%1 depths chosen").arg(chosen.size()), tr("frame %1").arg(frame_),
                              {"depth.align_left", "depth.align_centre", "depth.align_top",
                               "depth.spread_across", "depth.sequence", "depth.remove"});
         return;
     }
     if (chosen.empty()) {
-        selection_bar_->Show(tr("Nothing chosen"), {});
+        selection_bar_->Show(tr("Nothing chosen"), QString(), {});
         return;
     }
     const bool owned = AuthoredAt(chosen.front(), frame_) != nullptr;
-    selection_bar_->Show(tr("Depth %1").arg(chosen.front()),
-                         {"depth.fit", "depth.centre_anchor", "depth.flip_across",
-                          "depth.flip_over", "depth.forward", "depth.backward", "depth.split",
-                          "depth.duplicate", "depth.group",
-                          owned ? QString("depth.detach") : QString("depth.own"), "depth.remove"});
+    selection_bar_->Show(
+        tr("Depth %1").arg(chosen.front()),
+        owned ? tr("owned, frame %1").arg(frame_) : tr("baked, frame %1").arg(frame_),
+        {"depth.fit", "depth.centre_anchor", "depth.flip_across", "depth.flip_over",
+         "depth.forward", "depth.backward", "depth.split", "depth.duplicate", "depth.group",
+         owned ? QString("depth.detach") : QString("depth.own"), "depth.remove"});
 }
 
 void Window::ShowInspectorExtras(const AfpAnimation::Animation& animation, uint16_t depth,

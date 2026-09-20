@@ -6,7 +6,7 @@
 #include <vector>
 
 class QLabel;
-class QListWidget;
+class QVBoxLayout;
 
 namespace Editor {
 
@@ -39,8 +39,13 @@ signals:
 
 private:
     Commands& commands_;
-    QListWidget* recent_;
+    QWidget* recent_;
+    QVBoxLayout* rows_ = nullptr;
     QLabel* host_;
+    QLabel* install_;
+    QLabel* running_;
+    QLabel* build_;
+    QLabel* dot_;
 };
 
 }

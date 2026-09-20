@@ -1,6 +1,7 @@
 #pragma once
 
 #include "editor_timeline.h"
+#include "editor_timeline_metrics.h"
 
 #include "document/keyframes.h"
 #include "document/timeline.h"
@@ -38,13 +39,13 @@ inline void Drag(QWidget& widget, QPointF from, QPointF to,
     Send(widget, QEvent::MouseButtonRelease, to, Qt::NoButton, modifiers);
 }
 
-inline constexpr int kTimelineWidth = 665;
-inline constexpr int kDepthRowY = 48;
-inline constexpr int kFirstPropertyY = 64;
-inline constexpr int kSecondPropertyY = 80;
+inline constexpr int kTimelineWidth = Editor::kGutterWidth + 601;
+inline constexpr int kDepthRowY = Editor::kRowsTop + (Editor::kRowHeight / 2);
+inline constexpr int kFirstPropertyY = kDepthRowY + Editor::kRowHeight;
+inline constexpr int kSecondPropertyY = kFirstPropertyY + Editor::kRowHeight;
 
 inline double FrameX(uint32_t frame) {
-    return 64.0 + (60.0 * frame);
+    return Editor::kGutterWidth + (60.0 * frame);
 }
 
 inline Document::Keyframe Key(uint32_t frame) {

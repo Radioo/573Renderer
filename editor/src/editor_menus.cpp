@@ -31,6 +31,7 @@ namespace Editor {
 
 QMenu* Window::AddMenu(QMenu* parent, const QString& title) {
     QMenu* menu = parent != nullptr ? parent->addMenu(title) : menuBar()->addMenu(title);
+    if (parent == nullptr) menus_.push_back(menu);
     commands_->ShowAvailabilityIn(menu);
     return menu;
 }

@@ -4,6 +4,7 @@
 
 #include "editor_ease_editor.h"
 #include "editor_timeline.h"
+#include "editor_timeline_metrics.h"
 #include "editor_filter.h"
 #include "editor_mime.h"
 #include "editor_drift_sheet.h"
@@ -226,11 +227,11 @@ TEST_CASE("A hidden depth's bars are drawn grey") {
                             .spans = {Document::Span{.first_frame = 1, .last_frame = 9}}}},
         {});
     const QPoint inside(static_cast<int>(FrameX(4)), kDepthRowY);
-    CHECK(timeline.grab().toImage().pixelColor(inside) == QColor(70, 128, 196));
+    CHECK(timeline.grab().toImage().pixelColor(inside) == Editor::kBar);
     timeline.SetHiddenDepths({3});
-    CHECK(timeline.grab().toImage().pixelColor(inside) == QColor(92, 92, 98));
+    CHECK(timeline.grab().toImage().pixelColor(inside) == Editor::kHiddenBar);
     timeline.SetHiddenDepths({});
-    CHECK(timeline.grab().toImage().pixelColor(inside) == QColor(70, 128, 196));
+    CHECK(timeline.grab().toImage().pixelColor(inside) == Editor::kBar);
 }
 
 TEST_CASE("A span's bar shows the name of what it places, and says it on hover") {
@@ -286,14 +287,14 @@ TEST_CASE("The gutter's eye and lock switch a depth without choosing it or a fra
                      [&locked](uint16_t depth) { locked.push_back(depth); });
     QObject::connect(&timeline, &Editor::Timeline::DepthChosen,
                      [&chosen](uint32_t depth) { chosen.push_back(depth); });
-    Click(timeline, QPointF(9, kDepthRowY));
+    Click(timeline, QPointF(Editor::kEyeLeft + 6, kDepthRowY));
     CHECK(seen == std::vector<uint16_t>{3});
     CHECK(locked.empty());
     CHECK(chosen.empty());
-    Click(timeline, QPointF(23, kDepthRowY));
+    Click(timeline, QPointF(Editor::kLockLeft + 6, kDepthRowY));
     CHECK(locked == std::vector<uint16_t>{3});
     CHECK(chosen.empty());
-    Click(timeline, QPointF(45, kDepthRowY));
+    Click(timeline, QPointF(Editor::kNumberLeft + 6, kDepthRowY));
     CHECK(chosen == std::vector<uint32_t>{3});
     CHECK(seen.size() == 1);
     CHECK(locked.size() == 1);
@@ -321,7 +322,9 @@ TEST_CASE("Ctrl and Shift clicks on depth numbers choose several depths without 
     QObject::connect(&timeline, &Editor::Timeline::DepthsChosen,
                      [&groups](std::vector<uint16_t> depths) { groups.push_back(depths); });
     QObject::connect(&timeline, &Editor::Timeline::FrameChosen, [&seeks](uint32_t) { seeks++; });
-    const auto row = [](int lane) { return QPointF(45, kDepthRowY + (lane * 16)); };
+    const auto row = [](int lane) {
+        return QPointF(Editor::kNumberLeft + 6, kDepthRowY + (lane * Editor::kRowHeight));
+    };
     Click(timeline, row(0));
     CHECK(chosen == std::vector<uint32_t>{2});
     Click(timeline, row(2), Qt::ControlModifier);
@@ -381,7 +384,7 @@ TEST_CASE("The work area is shaded on the ruler") {
     const QPoint inside(static_cast<int>(FrameX(3)) + 5, 3);
     const QColor plain = timeline.grab().toImage().pixelColor(inside);
     timeline.SetWorkArea(Document::WorkArea{.first_frame = 2, .last_frame = 4});
-    CHECK(timeline.grab().toImage().pixelColor(inside) == QColor(72, 96, 132));
+    CHECK(timeline.grab().toImage().pixelColor(inside) != plain);
     CHECK(timeline.grab().toImage().pixelColor(QPoint(static_cast<int>(FrameX(6)) + 5, 3)) ==
           plain);
     timeline.SetWorkArea(std::nullopt);

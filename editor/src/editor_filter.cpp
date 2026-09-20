@@ -1,5 +1,8 @@
 #include "editor_filter.h"
 
+#include "editor_icons.h"
+#include "editor_theme.h"
+
 #include <QLineEdit>
 #include <QObject>
 #include <QString>
@@ -11,6 +14,9 @@
 namespace Editor {
 
 namespace {
+
+constexpr int kFilterIcon = 13;
+constexpr int kFilterHeight = 26;
 
 bool Show(QTreeWidgetItem& item, const QString& text, bool ancestor_matched) {
     const bool matched = ancestor_matched || item.text(0).contains(text, Qt::CaseInsensitive);
@@ -29,17 +35,26 @@ void ApplyFilter(QTreeWidget& tree, const QString& text) {
         Show(*tree.topLevelItem(top), text, false);
 }
 
-QWidget* WithFilter(QTreeWidget* tree, QLineEdit* filter) {
-    filter->setPlaceholderText(QObject::tr("Search"));
+QWidget* WithFilter(QTreeWidget* tree, QLineEdit* filter, const QString& placeholder) {
+    filter->setObjectName("filter_field");
+    filter->setPlaceholderText(placeholder);
     filter->setClearButtonEnabled(true);
+    filter->addAction(Icons::Of(Icons::Glyph::Search, Theme::kFaint, kFilterIcon),
+                      QLineEdit::LeadingPosition);
+    filter->setFixedHeight(kFilterHeight);
     QObject::connect(filter, &QLineEdit::textChanged, tree,
                      [tree](const QString& text) { ApplyFilter(*tree, text); });
+    auto* around = new QWidget;
+    auto* margins = new QVBoxLayout(around);
+    margins->setContentsMargins(8, 6, 8, 2);
+    margins->setSpacing(0);
+    margins->addWidget(filter);
     auto* panel = new QWidget;
     auto* layout = new QVBoxLayout(panel);
     layout->setContentsMargins(0, 0, 0, 0);
-    layout->setSpacing(2);
-    layout->addWidget(filter);
-    layout->addWidget(tree);
+    layout->setSpacing(0);
+    layout->addWidget(around);
+    layout->addWidget(tree, 1);
     return panel;
 }
 

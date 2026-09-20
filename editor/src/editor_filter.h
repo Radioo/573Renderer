@@ -10,6 +10,6 @@ namespace Editor {
 
 void ApplyFilter(QTreeWidget& tree, const QString& text);
 
-[[nodiscard]] QWidget* WithFilter(QTreeWidget* tree, QLineEdit* filter);
+[[nodiscard]] QWidget* WithFilter(QTreeWidget* tree, QLineEdit* filter, const QString& placeholder);
 
 }

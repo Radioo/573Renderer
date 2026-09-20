@@ -2,6 +2,10 @@
 
 #include "editor_mime.h"
 
+#include "editor_icons.h"
+#include "editor_rows.h"
+#include "editor_theme.h"
+
 #include "document/blend_modes.h"
 
 #include "document/inspector_view.h"
@@ -21,6 +25,7 @@
 #include <QPainter>
 #include <QPaintEvent>
 #include <QScrollArea>
+#include <QSizePolicy>
 #include <QSignalBlocker>
 #include <QSpinBox>
 #include <QString>
@@ -39,7 +44,18 @@ namespace Editor {
 
 namespace {
 
-constexpr int kLabelWidth = 86;
+constexpr int kLabelWidth = 84;
+constexpr int kSectionHeight = 28;
+constexpr int kSectionIcon = 12;
+constexpr int kBoxWidth = 58;
+constexpr int kKeyingRoom = 28;
+constexpr int kAxisWidth = 12;
+constexpr int kWideBox = 74;
+constexpr int kHexWidth = 62;
+constexpr int kAlphaWidth = 48;
+constexpr int kBoxHeight = 22;
+constexpr int kSubjectThumb = 44;
+constexpr int kTitleSize = 15;
 constexpr int kScrubStep = 4;
 constexpr int kSwatch = 20;
 constexpr double kColourHighest = 255.0;
@@ -88,16 +104,25 @@ QWidget* Section(const QString& title, QVBoxLayout*& body) {
     auto* layout = new QVBoxLayout(holder);
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(2);
-    auto* heading = new QLabel(title);
+    auto* heading = new QWidget;
     heading->setObjectName("section_" + title.toLower());
-    QFont bold = heading->font();
-    bold.setBold(true);
-    heading->setFont(bold);
+    heading->setProperty("section", true);
+    heading->setFixedHeight(kSectionHeight);
+    auto* named = new QHBoxLayout(heading);
+    named->setContentsMargins(10, 0, 10, 0);
+    named->setSpacing(6);
+    auto* mark = new QLabel;
+    mark->setPixmap(Icons::Drawn(Icons::Glyph::Chevron, Theme::kSoft, kSectionIcon));
+    named->addWidget(mark);
+    auto* said = new QLabel(title);
+    said->setProperty("section_name", true);
+    named->addWidget(said);
+    named->addStretch();
     layout->addWidget(heading);
     auto* rows = new QWidget;
     body = new QVBoxLayout(rows);
-    body->setContentsMargins(0, 0, 0, 0);
-    body->setSpacing(2);
+    body->setContentsMargins(10, 0, 10, 8);
+    body->setSpacing(3);
     layout->addWidget(rows);
     return holder;
 }
@@ -162,9 +187,11 @@ Inspector::Inspector(QWidget* parent)
       raw_(new QTableWidget(0, 2)) {
     title_->setObjectName("inspector_title");
     detail_->setObjectName("inspector_detail");
+    for (QLabel* said : {title_, detail_})
+        said->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
     badge_->setObjectName("inspector_badge");
-    QFont big = title_->font();
-    big.setPointSizeF(big.pointSizeF() + 2);
+    QFont big(Theme::SansFamily());
+    big.setPixelSize(kTitleSize);
     big.setBold(true);
     title_->setFont(big);
 
@@ -237,11 +264,18 @@ Inspector::Inspector(QWidget* parent)
     auto* layout = new QVBoxLayout(inside);
     layout->setContentsMargins(8, 8, 8, 8);
     layout->setSpacing(8);
-    auto* heading = new QVBoxLayout;
-    heading->setSpacing(1);
-    heading->addWidget(title_);
-    heading->addWidget(detail_);
-    heading->addWidget(badge_);
+    auto* heading = new QHBoxLayout;
+    heading->setSpacing(10);
+    thumbnail_ = new QLabel;
+    thumbnail_->setObjectName("inspector_thumbnail");
+    thumbnail_->setFixedSize(kSubjectThumb, kSubjectThumb);
+    heading->addWidget(thumbnail_);
+    auto* named = new QVBoxLayout;
+    named->setSpacing(1);
+    named->addWidget(title_);
+    named->addWidget(detail_);
+    heading->addLayout(named, 1);
+    heading->addWidget(badge_, 0, Qt::AlignTop);
     layout->addLayout(heading);
     layout->addWidget(content_);
     layout->addWidget(transform_);
@@ -312,8 +346,12 @@ void Inspector::ShowEase(const std::optional<EaseView>& ease) {
 }
 
 void Inspector::ShowSubject(const InspectorSubject& subject) {
+    thumbnail_->setVisible(subject.depth_chosen);
+    if (subject.depth_chosen)
+        thumbnail_->setPixmap(Rows::Stripes(kSubjectThumb, kSubjectThumb, subject.title.size()));
     title_->setText(subject.title);
-    detail_->setText(subject.detail);
+    detail_->setText(
+        detail_->fontMetrics().elidedText(subject.detail, Qt::ElideRight, detail_->width()));
     badge_->setText(!subject.depth_chosen ? QString()
                     : subject.owned       ? tr("KEYED, edited through its keyframes")
                                           : tr("BAKED"));
@@ -341,7 +379,7 @@ void Inspector::AddRow(QVBoxLayout* into, const Document::ViewRow& row, uint32_t
     auto* heading = new QHBoxLayout(left);
     heading->setContentsMargins(0, 0, 0, 0);
     heading->setSpacing(4);
-    left->setFixedWidth(kLabelWidth + 42);
+    left->setFixedWidth(kLabelWidth + kKeyingRoom);
 
     if (row.keying != Document::Keying::Baked) {
         auto* keying = new QToolButton;
@@ -387,11 +425,16 @@ QWidget* Inspector::NumberBoxes(const Document::ViewRow& row) {
         box->setDecimals(2);
         box->setRange(-1e9, 1e9);
         box->setSuffix(UnitSuffix(row.unit));
+        box->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+        box->setButtonSymbols(QAbstractSpinBox::NoButtons);
+        box->setFixedSize(row.values.size() == 1 ? kWideBox : kBoxWidth, kBoxHeight);
+        box->setProperty("value_box", true);
         box->setValue(row.values[i]);
         box->setKeyboardTracking(false);
         boxes.push_back(box);
         if (!axes.at(static_cast<int>(i)).isEmpty()) {
             auto* axis = new ScrubLabel(axes.at(static_cast<int>(i)));
+            axis->setFixedWidth(kAxisWidth);
             connect(axis, &ScrubLabel::Scrubbed, box,
                     [box](int steps) { box->setValue(box->value() + steps); });
             layout->addWidget(axis);
@@ -429,6 +472,8 @@ QWidget* Inspector::ColourBoxes(const Document::ViewRow& row) {
     auto* hex = new QLineEdit(HexOf(row.values));
     hex->setObjectName("hex_" + label);
     hex->setMaxLength(6);
+    hex->setProperty("value_box", true);
+    hex->setFixedSize(kHexWidth, kBoxHeight);
     layout->addWidget(hex);
 
     auto* alpha = new QSpinBox;
@@ -436,7 +481,12 @@ QWidget* Inspector::ColourBoxes(const Document::ViewRow& row) {
     alpha->setRange(0, static_cast<int>(kColourHighest));
     alpha->setValue(static_cast<int>(row.values.at(3)));
     alpha->setKeyboardTracking(false);
+    alpha->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    alpha->setButtonSymbols(QAbstractSpinBox::NoButtons);
+    alpha->setProperty("value_box", true);
+    alpha->setFixedSize(kAlphaWidth, kBoxHeight);
     layout->addWidget(alpha);
+    layout->addStretch();
 
     const auto edited = [this, label, hex, alpha] {
         bool read = false;

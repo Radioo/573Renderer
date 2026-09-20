@@ -146,9 +146,11 @@ TEST_CASE("The timeline names what each depth places") {
     Open(opened, true);
     auto* timeline = opened.window.findChild<Editor::Timeline*>();
     REQUIRE(timeline != nullptr);
+    WidenTimeline(*timeline);
     const int first_frame = Editor::kGutterWidth + 4;
-    CHECK(timeline->SpanNameAt(QPoint(first_frame, 48)).contains("dot"));
-    CHECK(timeline->SpanNameAt(QPoint(first_frame, 64)).isEmpty());
+    const int first_row = Editor::kRowsTop + (Editor::kRowHeight / 2);
+    CHECK(timeline->SpanNameAt(QPoint(first_frame, first_row)).contains("dot"));
+    CHECK(timeline->SpanNameAt(QPoint(first_frame, first_row + Editor::kRowHeight)).isEmpty());
 }
 
 TEST_CASE("A character dragged from the library lands on a new depth where it is dropped") {

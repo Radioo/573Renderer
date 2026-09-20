@@ -42,6 +42,7 @@
 namespace Editor {
 
 void Window::ShowGhostsAround(uint32_t frame) {
+    if (animation_name_.empty()) return;
     std::vector<QImage> ghosts;
     for (const int64_t step : {int64_t{-1}, int64_t{1}}) {
         const int64_t neighbour = static_cast<int64_t>(frame) + step;

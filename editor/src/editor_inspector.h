@@ -104,6 +104,7 @@ private:
     [[nodiscard]] QWidget* ColourBoxes(const Document::ViewRow& row);
 
     QLabel* title_;
+    QLabel* thumbnail_ = nullptr;
     QLabel* detail_;
     QLabel* badge_;
     QWidget* transform_;

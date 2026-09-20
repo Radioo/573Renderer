@@ -25,7 +25,8 @@
             "widgets"
           ]
         },
-        "qt-advanced-docking-system"
+        "qt-advanced-docking-system",
+        "qtsvg"
       ]
     },
     "renderer": {

@@ -6,7 +6,7 @@
 #include <vector>
 
 class QHBoxLayout;
-class QLabel;
+class QToolButton;
 
 namespace Editor {
 
@@ -35,7 +35,7 @@ private:
     Commands& commands_;
     QHBoxLayout* buttons_;
     QHBoxLayout* crumbs_;
-    QLabel* zoom_;
+    QToolButton* zoom_;
     std::vector<Crumb> shown_;
 };
 

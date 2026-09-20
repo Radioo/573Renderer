@@ -8,6 +8,7 @@
 #include "editor_commands.h"
 #include "editor_popover.h"
 #include "editor_timeline.h"
+#include "editor_timeline_metrics.h"
 #include "editor_viewport.h"
 #include "editor_window.h"
 #include "sample_package.h"
@@ -29,6 +30,7 @@
 #include <QPixmap>
 #include <QtGlobal>
 #include <QApplication>
+#include <QScrollArea>
 #include <QByteArray>
 #include <QColorDialog>
 #include <QColor>
@@ -452,15 +454,38 @@ inline QString RefusalOf(QWidget& window, const QString& id) {
     return refused.Problems().front();
 }
 
-struct Opened {
+inline constexpr int kWindowWidth = 1600;
+inline constexpr int kWindowHeight = 1000;
+inline constexpr int kFrameRoom = 600;
+inline constexpr int kTimelineRoom = 200;
+
+struct WithoutHost {
+    WithoutHost() { QSettings().remove("game/directory"); }
+};
+
+struct Opened : WithoutHost {
     QTemporaryDir dir;
     Editor::Window window;
     QTreeWidget* tree = nullptr;
     QTableWidget* inspector = nullptr;
 };
 
+inline void WidenTimeline(Editor::Timeline& timeline) {
+    const int wide = Editor::kGutterWidth + kFrameRoom;
+    QWidget* held = timeline.parentWidget();
+    QWidget* area = held != nullptr ? held->parentWidget() : nullptr;
+    if (auto* scrolled = qobject_cast<QScrollArea*>(area)) scrolled->resize(wide, kTimelineRoom);
+    QApplication::processEvents();
+    if (timeline.width() < wide) {
+        if (held != nullptr) held->resize(wide, kTimelineRoom);
+        timeline.resize(wide, kTimelineRoom);
+        QApplication::processEvents();
+    }
+}
+
 inline void Open(Opened& opened, bool with_image = false) {
     REQUIRE(opened.dir.isValid());
+    opened.window.resize(kWindowWidth, kWindowHeight);
     opened.window.OpenDocument(WritePackage(opened.dir, with_image));
     opened.tree = opened.window.findChild<QTreeWidget*>("package");
     opened.inspector = opened.window.findChild<QTableWidget*>();

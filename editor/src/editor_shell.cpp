@@ -1,7 +1,9 @@
 #include "editor_window.h"
 
 #include "editor_commands.h"
+#include "editor_icons.h"
 #include "editor_search.h"
+#include "editor_theme.h"
 #include "editor_timeline.h"
 #include "editor_viewport.h"
 
@@ -16,11 +18,15 @@
 #include <QAction>
 #include <QDesktopServices>
 #include <QDir>
+#include <QFont>
+#include <QHBoxLayout>
 #include <QFileInfo>
 #include <QIcon>
 #include <QKeySequence>
 #include <QLabel>
 #include <QMenu>
+#include <QPushButton>
+#include <QMenuBar>
 #include <QSizePolicy>
 #include <QStatusBar>
 #include <QString>
@@ -43,6 +49,22 @@
 namespace Editor {
 
 namespace {
+
+QWidget* Divider() {
+    auto* line = new QWidget;
+    line->setObjectName("divider");
+    line->setFixedSize(1, 20);
+    return line;
+}
+
+QWidget* Margin(int left, int right, QWidget* inside) {
+    auto* held = new QWidget;
+    auto* line = new QHBoxLayout(held);
+    line->setContentsMargins(left, 0, right, 0);
+    line->setSpacing(0);
+    line->addWidget(inside);
+    return held;
+}
 
 QWidget* Spacer() {
     auto* spacer = new QWidget;
@@ -77,13 +99,42 @@ void AddAnimations(const std::vector<Document::Node>& nodes, std::vector<Documen
     }
 }
 
+constexpr int kDotSide = 7;
+constexpr int kStatusGap = 12;
+
 QLabel* StatusLabel(const QString& name) {
     auto* label = new QLabel;
     label->setObjectName(name);
-    label->setContentsMargins(8, 0, 8, 0);
+    label->setContentsMargins(0, 0, 8, 0);
     return label;
 }
 
+}
+
+QWidget* Window::BuildSearchField() {
+    auto* field = new QPushButton;
+    field->setObjectName("search");
+    field->setCursor(Qt::PointingHandCursor);
+    field->setFixedSize(Theme::kSearchWidth, Theme::kBarControl);
+    connect(field, &QPushButton::clicked, this, [this] { commands_->Run("edit.search"); });
+
+    auto* line = new QHBoxLayout(field);
+    line->setContentsMargins(10, 0, 10, 0);
+    line->setSpacing(8);
+    auto* glass = new QLabel;
+    glass->setPixmap(Icons::Drawn(Icons::Glyph::Search, Theme::kFaint, 14));
+    auto* said = new QLabel(tr("Search commands, depths and animations"));
+    said->setObjectName("search_text");
+    auto* chip = new QLabel(
+        QKeySequence(Qt::CTRL | Qt::Key_K).toString(QKeySequence::NativeText).replace("+", " "));
+    chip->setObjectName("search_chip");
+    QFont mono(Theme::MonoFamily());
+    mono.setPixelSize(11);
+    chip->setFont(mono);
+    line->addWidget(glass);
+    line->addWidget(said, 1);
+    line->addWidget(chip);
+    return field;
 }
 
 void Window::BuildTopBar() {
@@ -91,37 +142,73 @@ void Window::BuildTopBar() {
     bar->setObjectName("top_bar");
     bar->setMovable(false);
     bar->setFloatable(false);
-    bar->setToolButtonStyle(Qt::ToolButtonIconOnly);
+    bar->setFixedHeight(Theme::kBarHeight);
+    menuBar()->setVisible(false);
     addToolBar(Qt::TopToolBarArea, bar);
 
-    undo_action_->setIcon(QIcon::fromTheme(QIcon::ThemeIcon::EditUndo));
-    redo_action_->setIcon(QIcon::fromTheme(QIcon::ThemeIcon::EditRedo));
+    auto* logo = new QLabel(tr("IFS"));
+    logo->setObjectName("logo");
+    logo->setAlignment(Qt::AlignCenter);
+    logo->setFixedSize(22, 22);
+    QFont chipped(Theme::MonoFamily());
+    chipped.setPixelSize(10);
+    chipped.setBold(true);
+    logo->setFont(chipped);
+    logo->setContentsMargins(0, 0, 0, 0);
+    bar->addWidget(Margin(4, 8, logo));
+
+    for (QMenu* menu : menus_) {
+        auto* opens = new QToolButton;
+        opens->setObjectName("menu_button");
+        opens->setText(menu->title());
+        opens->setMenu(menu);
+        opens->setPopupMode(QToolButton::InstantPopup);
+        opens->setToolButtonStyle(Qt::ToolButtonTextOnly);
+        opens->setFixedHeight(Theme::kBarControl);
+        bar->addWidget(opens);
+    }
+    bar->addWidget(Divider());
+
+    undo_action_->setIcon(Icons::Of(Icons::Glyph::Undo, Theme::kSoft));
+    redo_action_->setIcon(Icons::Of(Icons::Glyph::Redo, Theme::kSoft));
     QAction* history = commands_->Action("view.history");
-    history->setIcon(QIcon::fromTheme(QIcon::ThemeIcon::DocumentOpenRecent));
-    bar->addAction(undo_action_);
-    bar->addAction(redo_action_);
-    bar->addAction(history);
+    history->setIcon(Icons::Of(Icons::Glyph::Clock, Theme::kSoft));
+    for (QAction* action : {undo_action_, redo_action_, history}) {
+        auto* button = new QToolButton;
+        button->setObjectName("bar_icon");
+        button->setDefaultAction(action);
+        button->setToolButtonStyle(Qt::ToolButtonIconOnly);
+        button->setFixedSize(Theme::kBarControl, Theme::kBarControl);
+        bar->addWidget(button);
+    }
+
+    bar->addWidget(Spacer());
+    bar->addWidget(BuildSearchField());
     bar->addWidget(Spacer());
 
-    auto* find = new QToolButton;
-    find->setObjectName("search");
-    find->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
-    find->setIcon(QIcon::fromTheme(QIcon::ThemeIcon::EditFind));
-    find->setText(tr("Search commands, depths and animations   %1")
-                      .arg(QKeySequence(Qt::CTRL | Qt::Key_K).toString(QKeySequence::NativeText)));
-    connect(find, &QToolButton::clicked, this, [this] { commands_->Run("edit.search"); });
-    bar->addWidget(find);
-    bar->addWidget(Spacer());
-
+    auto* trailing = new QWidget;
+    trailing->setObjectName("trailing");
+    auto* trailing_line = new QHBoxLayout(trailing);
+    trailing_line->setContentsMargins(0, 0, 0, 0);
+    trailing_line->setSpacing(6);
+    document_icon_ = new QLabel;
+    document_icon_->setPixmap(Icons::Drawn(Icons::Glyph::File, Theme::kSoft, 14));
+    trailing_line->addWidget(document_icon_);
     document_state_ = new QLabel;
     document_state_->setObjectName("document_state");
-    document_state_->setContentsMargins(8, 0, 8, 0);
-    bar->addWidget(document_state_);
+    trailing_line->addWidget(document_state_);
+    document_edits_ = new QLabel;
+    document_edits_->setObjectName("document_edits");
+    trailing_line->addWidget(document_edits_);
+    trailing_line->addWidget(Divider());
+    trailing_ = bar->addWidget(trailing);
 
     project_button_ = new QToolButton;
     project_button_->setObjectName("project");
     project_button_->setPopupMode(QToolButton::InstantPopup);
-    project_button_->setToolButtonStyle(Qt::ToolButtonTextOnly);
+    project_button_->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+    project_button_->setIcon(Icons::Of(Icons::Glyph::Folder, Theme::kSoft, 14));
+    project_button_->setFixedHeight(Theme::kBarControl);
     auto* project_menu = new QMenu(project_button_);
     commands_->ShowAvailabilityIn(project_menu);
     project_menu->addAction(commands_->Action("project.show_folder"));
@@ -133,7 +220,8 @@ void Window::BuildTopBar() {
     export_button_ = new QToolButton;
     export_button_->setObjectName("export");
     export_button_->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
-    export_button_->setIcon(QIcon::fromTheme(QIcon::ThemeIcon::DocumentSend));
+    export_button_->setIcon(Icons::Of(Icons::Glyph::Upload, Theme::kAmber, 15));
+    export_button_->setFixedHeight(Theme::kBarControl);
     connect(export_button_, &QToolButton::clicked, this,
             [this] { commands_->Run("project.export"); });
     export_button_action_ = bar->addWidget(export_button_);
@@ -142,9 +230,10 @@ void Window::BuildTopBar() {
     save->setObjectName("save");
     save->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
     QAction* save_action = commands_->Action("file.save");
-    save_action->setIcon(QIcon::fromTheme(QIcon::ThemeIcon::DocumentSave));
+    save_action->setIcon(Icons::Of(Icons::Glyph::Save, Theme::kOnAccent, 15));
     save->setDefaultAction(save_action);
-    bar->addWidget(save);
+    save->setFixedHeight(Theme::kBarControl);
+    save_ = bar->addWidget(save);
 }
 
 void Window::BuildStatusBar() {
@@ -154,8 +243,31 @@ void Window::BuildStatusBar() {
     chosen_status_ = StatusLabel("chosen_status");
     snap_status_ = StatusLabel("snap_status");
     zoom_status_ = StatusLabel("zoom_status");
-    for (QLabel* label :
-         {host_status_, stage_status_, frame_status_, chosen_status_, snap_status_, zoom_status_})
+    statusBar()->setFixedHeight(Theme::kStatusHeight);
+    statusBar()->setSizeGripEnabled(false);
+
+    auto* left = new QWidget;
+    left->setObjectName("status_left");
+    auto* line = new QHBoxLayout(left);
+    line->setContentsMargins(4, 0, 0, 0);
+    line->setSpacing(6);
+    host_dot_ = new QLabel;
+    host_dot_->setObjectName("host_dot");
+    host_dot_->setFixedSize(kDotSide, kDotSide);
+    line->addWidget(host_dot_);
+    auto* named = new QLabel(tr("Preview host"));
+    named->setObjectName("host_named");
+    line->addWidget(named);
+    line->addWidget(host_status_);
+    line->addSpacing(kStatusGap);
+    line->addWidget(stage_status_);
+    line->addSpacing(kStatusGap);
+    line->addWidget(frame_status_);
+    statusBar()->addWidget(left);
+    connect(statusBar(), &QStatusBar::messageChanged, left,
+            [left](const QString& message) { left->setVisible(message.isEmpty()); });
+
+    for (QLabel* label : {chosen_status_, snap_status_, zoom_status_})
         statusBar()->addPermanentWidget(label);
     connect(commands_->Action("view.snap"), &QAction::toggled, this, [this] { RefreshStatus(); });
 }
@@ -235,20 +347,26 @@ void Window::ShowProjectFolder() {
 
 void Window::RefreshTopBar() {
     if (document_state_ == nullptr) return;
+    trailing_->setVisible(file_.has_value());
+    save_->setVisible(file_.has_value());
     if (!file_) {
         document_state_->clear();
+        document_edits_->clear();
     } else {
-        const QString name = QFileInfo(document_path_).fileName();
+        document_state_->setText(QFileInfo(document_path_).fileName());
         const std::optional<std::size_t> steps = history_.StepsFromSaved();
         if (steps == std::size_t{0}) {
-            document_state_->setText(tr("%1, saved").arg(name));
+            document_edits_->setText(tr("saved"));
         } else if (steps == std::size_t{1}) {
-            document_state_->setText(tr("%1, unsaved, 1 edit").arg(name));
+            document_edits_->setText(tr("unsaved, 1 edit"));
         } else if (steps) {
-            document_state_->setText(tr("%1, unsaved, %2 edits").arg(name).arg(*steps));
+            document_edits_->setText(tr("unsaved, %1 edits").arg(*steps));
         } else {
-            document_state_->setText(tr("%1, unsaved").arg(name));
+            document_edits_->setText(tr("unsaved"));
         }
+        document_edits_->setStyleSheet(
+            QString("color: %1;")
+                .arg((steps == std::size_t{0} ? Theme::kFaint : Theme::kAmber).name()));
     }
     project_button_action_->setVisible(project_.has_value());
     export_button_action_->setVisible(project_.has_value());
@@ -266,8 +384,10 @@ void Window::RefreshTopBar() {
 
 void Window::RefreshStatus() {
     if (host_status_ == nullptr) return;
-    host_status_->setText(host_.Running() ? tr("Preview host ready, %1 ms a frame").arg(render_ms_)
-                                          : tr("No preview host"));
+    host_status_->setText(host_.Running() ? tr("ready, %1 ms a frame").arg(render_ms_)
+                                          : tr("not running"));
+    host_dot_->setStyleSheet(
+        QString("background: %1;").arg((host_.Running() ? Theme::kGreen : Theme::kEdge).name()));
     snap_status_->setText(commands_->Action("view.snap")->isChecked() ? tr("Snap on")
                                                                       : tr("Snap off"));
     const double scale = viewport_->StageScale();

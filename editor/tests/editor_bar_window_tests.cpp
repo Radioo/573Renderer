@@ -76,7 +76,7 @@ TEST_CASE("The stage bar zoom control steps the stage and Fit puts it back") {
         REQUIRE(found != nullptr);
         return found;
     };
-    auto* shown = opened.window.findChild<QLabel*>("stage_zoom");
+    auto* shown = opened.window.findChild<QToolButton*>("stage_zoom");
     REQUIRE(shown != nullptr);
     viewport->resize(960, 540);
     QImage frame(1920, 1080, QImage::Format_ARGB32);
@@ -88,16 +88,16 @@ TEST_CASE("The stage bar zoom control steps the stage and Fit puts it back") {
         return QString("%1%").arg(std::lround(viewport->StageScale() * 100));
     };
 
-    button("stage_view.zoom_in")->click();
+    REQUIRE(RunCommand(opened.window, "view.zoom_in").isEmpty());
     QApplication::processEvents();
     CHECK(viewport->StageScale() > plain);
     CHECK(shown->text() == percent());
 
-    button("stage_view.zoom_out")->click();
+    REQUIRE(RunCommand(opened.window, "view.zoom_out").isEmpty());
     QApplication::processEvents();
     CHECK_THAT(viewport->StageScale(), Catch::Matchers::WithinAbs(plain, 1e-9));
 
-    button("stage_view.zoom_in")->click();
+    REQUIRE(RunCommand(opened.window, "view.zoom_in").isEmpty());
     button("stage_view.fit_stage")->click();
     QApplication::processEvents();
     CHECK_THAT(viewport->StageScale(), Catch::Matchers::WithinAbs(plain, 1e-9));
@@ -157,11 +157,14 @@ TEST_CASE("The gutter's column headers show every hidden depth and unlock every 
 
 TEST_CASE("The timeline zoom slider shows the fit and cannot zoom out past it") {
     Opened opened;
-    Open(opened);
     auto* timeline = opened.window.findChild<Editor::Timeline*>();
-    auto* slider = opened.window.findChild<QSlider*>("timeline_zoom");
     REQUIRE(timeline != nullptr);
+    WidenTimeline(*timeline);
+    Open(opened);
+    auto* slider = opened.window.findChild<QSlider*>("timeline_zoom");
     REQUIRE(slider != nullptr);
+    RunCommand(opened.window, "view.timeline_out");
+    QApplication::processEvents();
     const auto shown = [&timeline] {
         return static_cast<int>(std::lround(timeline->ZoomPixels()));
     };
@@ -210,6 +213,7 @@ TEST_CASE("A sprite opens by double-clicking its bar, and Escape leaves it") {
     auto* timeline = opened.window.findChild<Editor::Timeline*>();
     REQUIRE(timeline != nullptr);
     CHECK(RefusalOf(opened.window, "clip.leave") == "The root is already open");
+    WidenTimeline(*timeline);
 
     emit timeline->DepthChosen(1);
     {

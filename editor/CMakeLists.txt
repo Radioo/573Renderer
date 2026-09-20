@@ -20,7 +20,7 @@ list(TRANSFORM R573_EDITOR_FORMATS_SOURCES PREPEND "${R573_ROOT}/")
 list(TRANSFORM R573_EDITOR_DOCUMENT_SOURCES PREPEND "${R573_ROOT}/")
 list(TRANSFORM R573_EDITOR_PREVIEW_SOURCES PREPEND "${R573_ROOT}/")
 
-find_package(Qt6 CONFIG REQUIRED COMPONENTS Widgets)
+find_package(Qt6 CONFIG REQUIRED COMPONENTS Widgets Svg)
 find_package(qtadvanceddocking-qt6 CONFIG REQUIRED)
 find_package(tl-expected CONFIG REQUIRED)
 find_package(unofficial-hash-library CONFIG REQUIRED)
@@ -62,8 +62,7 @@ target_link_libraries(editor_shared
         nlohmann_json::nlohmann_json
 )
 
-add_executable(ifs_editor WIN32
-    src/editor_main.cpp
+set(R573_EDITOR_APP_SOURCES
     src/editor_window.cpp
     src/editor_commands.cpp
     src/editor_menus.cpp
@@ -77,6 +76,10 @@ add_executable(ifs_editor WIN32
     src/editor_notices.cpp
     src/editor_package_panel.cpp
     src/editor_stage_bar.cpp
+    src/editor_theme.cpp
+    src/editor_icons.cpp
+    src/editor_rows.cpp
+    src/editor_panel_tabs.cpp
     src/editor_start_screen.cpp
     src/editor_tool_strip.cpp
     src/editor_timeline_bar.cpp
@@ -106,8 +109,13 @@ add_executable(ifs_editor WIN32
     src/editor_timeline_paint.cpp
     src/editor_viewport.cpp
 )
+
+add_executable(ifs_editor WIN32
+    src/editor_main.cpp
+    ${R573_EDITOR_APP_SOURCES}
+)
 target_include_directories(ifs_editor PRIVATE src)
-target_link_libraries(ifs_editor PRIVATE editor_shared Qt6::Widgets ads::qtadvanceddocking-qt6
+target_link_libraries(ifs_editor PRIVATE editor_shared Qt6::Widgets Qt6::Svg ads::qtadvanceddocking-qt6
                                        d3d9.lib)
 
 set(R573_VCPKG_EXE "${R573_ROOT}/vendor/vcpkg/vcpkg.exe")
@@ -131,6 +139,19 @@ endfunction()
 r573_deploy_qt_plugin(ifs_editor Qt6::QWindowsIntegrationPlugin)
 r573_deploy_qt_plugin(ifs_editor Qt6::QModernWindowsStylePlugin)
 r573_deploy_qt_plugin(ifs_editor Qt6::QJpegPlugin)
+r573_deploy_qt_plugin(ifs_editor Qt6::QSvgPlugin)
+r573_deploy_qt_plugin(ifs_editor Qt6::QSvgIconPlugin)
+
+add_executable(ifs_editor_shot
+    src/editor_shot_main.cpp
+    ${R573_EDITOR_APP_SOURCES}
+)
+target_include_directories(ifs_editor_shot PRIVATE src)
+target_link_libraries(ifs_editor_shot PRIVATE editor_shared Qt6::Widgets Qt6::Svg ads::qtadvanceddocking-qt6
+                                            d3d9.lib)
+r573_deploy_qt_plugin(ifs_editor_shot Qt6::QJpegPlugin)
+r573_deploy_qt_plugin(ifs_editor_shot Qt6::QSvgPlugin)
+r573_deploy_qt_plugin(ifs_editor_shot Qt6::QSvgIconPlugin)
 
 add_executable(editor_widget_tests
     tests/editor_widget_tests.cpp
@@ -141,6 +162,9 @@ add_executable(editor_widget_tests
     src/editor_search.cpp
     src/editor_inspector.cpp
     src/editor_filter.cpp
+    src/editor_icons.cpp
+    src/editor_theme.cpp
+    src/editor_rows.cpp
     src/editor_graph.cpp
     src/editor_timeline.cpp
     src/editor_timeline_paint.cpp
@@ -149,9 +173,12 @@ add_executable(editor_widget_tests
     src/editor_ease_editor.cpp
 )
 target_include_directories(editor_widget_tests PRIVATE src)
-target_link_libraries(editor_widget_tests PRIVATE editor_shared Qt6::Widgets Catch2::Catch2)
+target_link_libraries(editor_widget_tests PRIVATE editor_shared Qt6::Widgets Qt6::Svg
+                                                   Catch2::Catch2)
 r573_deploy_qt_plugin(editor_widget_tests Qt6::QMinimalIntegrationPlugin)
 r573_deploy_qt_plugin(editor_widget_tests Qt6::QJpegPlugin)
+r573_deploy_qt_plugin(editor_widget_tests Qt6::QSvgPlugin)
+r573_deploy_qt_plugin(editor_widget_tests Qt6::QSvgIconPlugin)
 
 add_executable(editor_window_tests
     tests/editor_window_tests.cpp
@@ -178,6 +205,10 @@ add_executable(editor_window_tests
     src/editor_notices.cpp
     src/editor_package_panel.cpp
     src/editor_stage_bar.cpp
+    src/editor_theme.cpp
+    src/editor_icons.cpp
+    src/editor_rows.cpp
+    src/editor_panel_tabs.cpp
     src/editor_start_screen.cpp
     src/editor_tool_strip.cpp
     src/editor_timeline_bar.cpp
@@ -208,7 +239,9 @@ add_executable(editor_window_tests
     src/editor_viewport.cpp
 )
 target_include_directories(editor_window_tests PRIVATE src "${R573_ROOT}/tests/document")
-target_link_libraries(editor_window_tests PRIVATE editor_shared Qt6::Widgets
+target_link_libraries(editor_window_tests PRIVATE editor_shared Qt6::Widgets Qt6::Svg
                                                   ads::qtadvanceddocking-qt6 d3d9.lib Catch2::Catch2)
 r573_deploy_qt_plugin(editor_window_tests Qt6::QMinimalIntegrationPlugin)
 r573_deploy_qt_plugin(editor_window_tests Qt6::QJpegPlugin)
+r573_deploy_qt_plugin(editor_window_tests Qt6::QSvgPlugin)
+r573_deploy_qt_plugin(editor_window_tests Qt6::QSvgIconPlugin)

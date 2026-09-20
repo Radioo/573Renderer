@@ -2,6 +2,8 @@
 
 #include "document/playback.h"
 
+#include "editor_icons.h"
+
 #include <QString>
 #include <QWidget>
 
@@ -41,7 +43,8 @@ signals:
     void ZoomAsked(double pixels);
 
 private:
-    [[nodiscard]] QToolButton* AddCommand(const QString& id, const QString& text);
+    [[nodiscard]] QToolButton* AddCommand(const QString& id, Icons::Glyph glyph);
+    [[nodiscard]] QToolButton* ZoomStep(const QString& id, Icons::Glyph glyph);
 
     Commands& commands_;
     QSpinBox* frame_;

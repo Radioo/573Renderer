@@ -3,6 +3,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "editor_timeline.h"
+#include "editor_timeline_metrics.h"
 #include "editor_viewport.h"
 #include "editor_window.h"
 #include "sample_package.h"
@@ -729,20 +730,19 @@ TEST_CASE("The timeline gutter hides and locks a depth") {
     CHECK(offers("Hide depth 1 in the view"));
     CHECK(offers("Lock depth 1 on stage"));
     const auto click = [&](int x) {
-        QMouseEvent press(QEvent::MouseButtonPress, QPointF(x, 48),
-                          timeline->mapToGlobal(QPointF(x, 48)), Qt::LeftButton, Qt::LeftButton,
-                          Qt::NoModifier);
+        const QPointF at(x, Editor::kRowsTop + (Editor::kRowHeight / 2));
+        QMouseEvent press(QEvent::MouseButtonPress, at, timeline->mapToGlobal(at), Qt::LeftButton,
+                          Qt::LeftButton, Qt::NoModifier);
         QApplication::sendEvent(timeline, &press);
-        QMouseEvent release(QEvent::MouseButtonRelease, QPointF(x, 48),
-                            timeline->mapToGlobal(QPointF(x, 48)), Qt::LeftButton, Qt::NoButton,
-                            Qt::NoModifier);
+        QMouseEvent release(QEvent::MouseButtonRelease, at, timeline->mapToGlobal(at),
+                            Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
         QApplication::sendEvent(timeline, &release);
     };
-    click(9);
+    click(Editor::kEyeLeft + 6);
     CHECK(offers("Show depth 1 in the view"));
-    click(23);
+    click(Editor::kLockLeft + 6);
     CHECK(offers("Unlock depth 1 on stage"));
-    click(9);
+    click(Editor::kEyeLeft + 6);
     CHECK(offers("Hide depth 1 in the view"));
 }
 
