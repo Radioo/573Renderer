@@ -332,6 +332,17 @@ so the two buttons look alike. The artboards draw them directionally, with the
 same shapes as previous and next frame, which is ambiguous in the other
 direction. Neither is settled.
 
+**A crash leaves a stack.** Both the editor and the shot harness call
+`Support::InstallCrashReporter()` before anything else, which is the same
+vectored handler the renderer has always used: on an access violation it logs
+the fault address and module, then a symbolised frame list from the PDBs through
+`Support::CaptureStackTrace`. The editor had never installed it, so an editor
+crash printed nothing at all and left nothing to go on. The handler now flushes
+every stream before returning, because without a sink `Log::Write` goes to
+`std::printf` and a redirected stdout is block buffered: the report was being
+written and then thrown away with the process. That is why the first attempts at
+the thumbnail crash below produced an empty terminal.
+
 `build-editor/ifs_editor_shot.exe` (`editor/src/editor_shot_main.cpp`) is how
 the window is looked at:
 
@@ -1465,6 +1476,34 @@ image to place with the same `ChoosePlaceable` list the timeline menu uses, then
 puts it on the next free depth from the playhead to the clip's last frame. The
 window test places one, sees the timeline picture change, and undoes it back to
 what it was.
+
+**A thumbnail owns its pixels** (`editor/src/editor_thumbnail.h`). The library
+tiles and the image rows both come from `Document::File::ReadImage`, whose
+pixels live in a buffer that dies with the call. Both used to wrap that buffer
+in a `QImage` with the raw-data constructor and return `scaled(...)` of it, on
+the assumption that scaling always allocates. It does not: `QImage::scaled`
+returns `*this` when the size it works out matches the size it already has, so
+an image whose constrained side is exactly the thumbnail side came back still
+pointing at the freed buffer. The editor then crashed inside
+`QPixmap::fromImage`, in `convertARGBToARGB32PM_avx2` reading off the end of
+memory that was no longer there, at the moment `FillLibrary` built the icons.
+
+It was flaky and package dependent for the reason dangling reads always are: it
+only matters when the freed pages have been reused or unmapped. Measured on IIDX
+33's `arena.ifs` with the preview host attached it faulted 5 times in 40 runs,
+and never once on `result.ifs`, which has no image that lands on the tile size.
+`Thumbnail(bgra, width, height, into)` scales, then compares the result's
+`constBits` with the borrowed image's: equal means `scaled` handed back the same
+image and the pixels must be copied, different means it already allocated its
+own and nothing more is needed. So what it returns always owns its pixels, and
+the copy only happens on the path that would otherwise dangle rather than on
+every character. It also refuses a buffer too small for the size it was given
+rather than reading past it. `A thumbnail keeps its pixels when the
+buffer it was read from is gone` in
+`editor/tests/editor_thumbnail_widget_tests.cpp` fills a 32x32 buffer, takes a
+32x32 thumbnail, clears the buffer and requires the thumbnail to be unchanged;
+against the old code it reads back as zeros. After the fix the repro ran 60
+times without a fault.
 
 **The scripts lane.** Between the ruler and the rows, `Timeline::DrawNotes`
 draws one lane for what a frame carries besides placements: a dot on every frame

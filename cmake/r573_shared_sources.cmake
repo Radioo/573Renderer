@@ -1,5 +1,7 @@
 set(R573_EDITOR_SUPPORT_SOURCES
     src/support/log.cpp
+    src/support/crash_report.cpp
+    src/support/stack_trace.cpp
     src/support/dll_loader.cpp
     src/support/env.cpp
     src/support/math/float_trig.cpp

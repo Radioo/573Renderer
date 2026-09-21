@@ -8,6 +8,7 @@
 
 #include <array>
 #include <cstdint>
+#include <cstdio>
 
 namespace Support {
 namespace {
@@ -49,6 +50,7 @@ LONG CALLBACK CrashHandler(PEXCEPTION_POINTERS ep) {
     LOG("CRASH", "code=0x%08lx at 0x%llx module=%s base=0x%llx off=0x%llx data=0x%llx", code,
         (unsigned long long)fault_addr, base, (unsigned long long)module_addr, off, data);
     LogStackTrace("CRASH", CaptureStackTrace(ep));
+    std::fflush(nullptr);
     return EXCEPTION_CONTINUE_SEARCH;
 }
 

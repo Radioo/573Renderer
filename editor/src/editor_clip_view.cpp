@@ -1,5 +1,7 @@
 #include "editor_clip_view.h"
 
+#include "editor_thumbnail.h"
+
 #include "document/playback.h"
 
 #include <algorithm>
@@ -18,9 +20,8 @@ QImage TileFor(Document::File& file, const std::map<uint16_t, std::string>& imag
     if (named == images.end()) return {};
     const auto pixels = file.ReadImage(named->second);
     if (!pixels) return {};
-    const QImage picture(pixels->bgra.data(), static_cast<int>(pixels->width),
-                         static_cast<int>(pixels->height), QImage::Format_ARGB32);
-    return picture.scaled(kTileSide, kTileSide, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+    return Thumbnail(pixels->bgra, static_cast<int>(pixels->width),
+                     static_cast<int>(pixels->height), QSize(kTileSide, kTileSide));
 }
 
 }

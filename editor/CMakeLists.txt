@@ -58,6 +58,7 @@ target_link_libraries(editor_shared
     PUBLIC
         tl::expected
         flatbuffers::flatbuffers
+        dbghelp.lib
     PRIVATE
         unofficial::hash-library
         nlohmann_json::nlohmann_json
@@ -81,6 +82,7 @@ set(R573_EDITOR_APP_SOURCES
     src/editor_theme.cpp
     src/editor_icons.cpp
     src/editor_rows.cpp
+    src/editor_thumbnail.cpp
     src/editor_panel_tabs.cpp
     src/editor_busy.cpp
     src/editor_open.cpp
@@ -171,6 +173,7 @@ add_executable(editor_widget_tests
     tests/editor_panel_tabs_widget_tests.cpp
     tests/editor_icons_widget_tests.cpp
     tests/editor_controls_widget_tests.cpp
+    tests/editor_thumbnail_widget_tests.cpp
     src/editor_panel_tabs.cpp
     src/editor_search.cpp
     src/editor_inspector.cpp
@@ -178,6 +181,7 @@ add_executable(editor_widget_tests
     src/editor_icons.cpp
     src/editor_theme.cpp
     src/editor_rows.cpp
+    src/editor_thumbnail.cpp
     src/editor_graph.cpp
     src/editor_timeline.cpp
     src/editor_timeline_paint.cpp
@@ -225,6 +229,7 @@ add_executable(editor_window_tests
     src/editor_theme.cpp
     src/editor_icons.cpp
     src/editor_rows.cpp
+    src/editor_thumbnail.cpp
     src/editor_panel_tabs.cpp
     src/editor_busy.cpp
     src/editor_open.cpp

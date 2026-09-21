@@ -2,6 +2,7 @@
 
 #include "editor_files.h"
 #include "editor_rows.h"
+#include "editor_thumbnail.h"
 
 #include "document/animation_settings.h"
 #include "document/playback.h"
@@ -71,10 +72,9 @@ ImageRow ReadImageRow(Document::File& file, const Document::Node& node) {
     row.size = QObject::tr("%1x%2").arg(pixels->width).arg(pixels->height);
     row.detail =
         QObject::tr("%1 %3 %2").arg(pixels->width).arg(pixels->height).arg(QChar(kCrossGlyph));
-    const QImage picture(pixels->bgra.data(), static_cast<int>(pixels->width),
-                         static_cast<int>(pixels->height), QImage::Format_ARGB32);
-    row.picture = picture.scaled(Rows::kThumbWidth, Rows::kThumbHeight, Qt::KeepAspectRatio,
-                                 Qt::SmoothTransformation);
+    row.picture =
+        Thumbnail(pixels->bgra, static_cast<int>(pixels->width), static_cast<int>(pixels->height),
+                  QSize(Rows::kThumbWidth, Rows::kThumbHeight));
     return row;
 }
 

@@ -2,10 +2,13 @@
 
 #include "editor_theme.h"
 
+#include "support/crash_report.h"
+
 #include <QApplication>
 #include <QStringList>
 
 int main(int argc, char** argv) {
+    Support::InstallCrashReporter();
     QApplication app(argc, argv);
     QApplication::setApplicationName("IFS Editor");
     QApplication::setOrganizationName("573Renderer");

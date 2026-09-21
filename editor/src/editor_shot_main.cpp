@@ -9,6 +9,8 @@
 #include "editor_theme.h"
 #include "editor_timeline.h"
 
+#include "support/crash_report.h"
+
 #include <QApplication>
 #include <QByteArray>
 #include <QDir>
@@ -50,6 +52,7 @@ QString Taken(const QString& key, const QStringList& arguments, const QString& f
 }
 
 int main(int argc, char** argv) {
+    Support::InstallCrashReporter();
     QByteArray platform("windows");
     for (int at = 1; at + 1 < argc; at++) {
         if (QByteArray(argv[at]) == "--platform") platform = argv[at + 1];
