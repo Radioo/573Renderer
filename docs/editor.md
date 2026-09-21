@@ -218,10 +218,22 @@ away from that ink rather than always toward white, `QuietOnAccent` is the ink
 blended back toward the accent as far as 5:1 allows (the `Ctrl O` chip),
 `Chosen` is the page blended a quarter of the way to the accent (selected rows,
 checked chips, the timeline's chosen lane) and `OnChosen` is the accent lifted
-toward the text and then pushed further until it clears 4.5:1 on `Chosen`. An
-accent that cannot carry either ink is darkened or lightened until it can
-(`Fitted`), so a mid-grey system accent still reads. The accent is read once in
-`Theme::Apply`, at startup.
+toward the text and then pushed further until it clears 4.5:1 on `Chosen`.
+
+`Fitted` holds the accent to two bars at once: it must carry readable ink
+(4.5:1 for `OnAccent`) and it must be visible as a mark on the interface
+(`Theme::kLeastMark`, 3:1 against `kField`), because the accent is a focus
+ring, a tab underline and a slider fill as much as it is a button. It only ever
+LIFTS, `lighter` by 15 percent a step, keeping the hue, and blends toward the
+text once `lighter` has nothing left to give. It used to darken an accent whose
+lightness was under half, which met the ink bar by making the mark disappear:
+Windows's own default blue `#0078d4` came out as `#0068b8`, 2.98:1 against a
+field, and a dark navy accent came out at 1.05:1, invisible. The editor's CI
+job caught it, because a runner reports the default blue where this machine
+reports something brighter.
+
+`Theme::Apply` reads the accent once at startup, and takes one as an argument
+so a test can pin it; without it the system's is used.
 
 `editor/src/editor_theme.{h,cpp}` holds the design's other tokens once: the colours
 (page `#0c0d0f`, panel `#141518`, field `#1a1c20`, line `#282b31`, edge

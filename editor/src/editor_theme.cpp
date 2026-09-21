@@ -31,11 +31,11 @@ constexpr double kLiftMix = 0.12;
 constexpr double kQuietStep = 0.08;
 constexpr double kQuietFloor = 5.0;
 constexpr int kQuietSteps = 12;
-constexpr int kFitSteps = 8;
+constexpr int kFitSteps = 24;
 constexpr int kReadSteps = 16;
 constexpr double kReadStep = 0.1;
 constexpr int kFitPercent = 115;
-constexpr int kMidLightness = 128;
+constexpr double kLiftStep = 0.12;
 constexpr int kTopChannel = 255;
 constexpr uint kRedByte = 16;
 constexpr uint kGreenByte = 8;
@@ -90,9 +90,11 @@ QColor Readable(const QColor& from, const QColor& toward, const QColor& behind) 
 QColor Fitted(const QColor& accent) {
     QColor fitted = accent;
     for (int step = 0; step < kFitSteps; step++) {
-        if (Contrast(Ink(fitted), fitted) >= kLeastContrast) break;
-        fitted = fitted.lightness() < kMidLightness ? fitted.darker(kFitPercent)
-                                                    : fitted.lighter(kFitPercent);
+        const bool carries = Contrast(Ink(fitted), fitted) >= kLeastContrast;
+        const bool shows = Contrast(fitted, kField) >= kLeastMark;
+        if (carries && shows) break;
+        const QColor brighter = fitted.lighter(kFitPercent);
+        fitted = brighter == fitted ? Blend(fitted, kText, kLiftStep) : brighter;
     }
     return fitted;
 }
@@ -130,8 +132,7 @@ double Contrast(const QColor& text, const QColor& behind) {
 }
 
 std::vector<QColor> InkColours() {
-    return {kText,    kSoft,      kFaint,     kAmber,   kGreen,
-            Accent(), OnAccent(), OnChosen(), Lifted(), QuietOnAccent()};
+    return {kText, kSoft, kFaint, kAmber, kGreen, OnAccent(), OnChosen(), QuietOnAccent()};
 }
 
 std::optional<QColor> AccentFromDwm(quint32 packed, bool reversed) {
@@ -240,8 +241,8 @@ ads--CTitleBarButton:hover { background: %field; }
         .replace("%text", Hex(kText));
 }
 
-void Apply(QApplication& app) {
-    UseAccent(SystemAccent().value_or(kDesignAccent));
+void Apply(QApplication& app, const std::optional<QColor>& accent) {
+    UseAccent(accent.value_or(SystemAccent().value_or(kDesignAccent)));
     QFont base(SansFamily());
     base.setPixelSize(kBaseSize);
     QApplication::setFont(base);

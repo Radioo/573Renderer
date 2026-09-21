@@ -468,6 +468,31 @@ its platform plugin is missing, which no compile step would catch. The
 artefact carries the exe, its pdb, the Qt DLLs and the plugin directories,
 around 32 MB, so it can be run as it is.
 
+### What the contrast gate counts as ink
+
+`Theme::InkColours` lists the colours the interface paints WORDS with, and
+nothing else. The accent and its hover shade are not in it: the stylesheet uses
+them for a background, a 1 px focus border, a 2 px tab underline and a slider
+fill, never for text (`PanelTabBar::paintEvent`'s `fillRect` is the only
+painted use outside the sheet). While they were in the list, the pixel walk
+reported the worst-contrast token inside a widget's rect, so a focus ring made
+it say `search_query "depth" #806226 on #1a1c20 is 3.00:1` about a word that is
+painted in `kText`. The claim was false and the bar was the wrong one: WCAG
+asks 4.5:1 of text and 3:1 of a non-text mark.
+
+The marks are checked instead by `Theme::kLeastMark` (3:1) in the accent sweep,
+against the page, a panel and a field, for every accent in the list.
+
+That gap only showed when the editor started building in CI: the walk measures
+whatever accent the host reports, the runner reports the Windows default blue,
+and `Fitted` used to DARKEN a dark accent so that white text on it would read,
+which drove the mark itself to 2.98:1 against a field. `Fitted` now lifts
+instead, until the accent both carries readable ink and clears 3:1 on a field,
+and `Every word stays readable whatever accent Windows reports` pins two
+accents (the Windows default, and an olive that lands between the two bars) and
+walks the window under each, so the machine's own accent can no longer decide
+whether the gate passes.
+
 ## Running everything locally
 
 ```

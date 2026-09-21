@@ -207,6 +207,29 @@ TEST_CASE("Every colour the panels paint their own text with is readable on its 
     CHECK(faint.join("; ").toStdString() == std::string());
 }
 
+TEST_CASE("Every word stays readable whatever accent Windows reports") {
+    const std::vector<QColor> accents{QColor(0x00, 0x78, 0xd4), QColor(0x80, 0x62, 0x26)};
+    for (const QColor& accent : accents) {
+        Editor::Theme::Apply(*qApp, accent);
+        Opened opened;
+        ShowOffScreen(opened.window);
+        Open(opened, true);
+        QApplication::processEvents();
+        CHECK(FaintText(opened.window).join("; ").toStdString() == std::string());
+
+        REQUIRE(CommandsOf(opened.window).Run("edit.search"));
+        auto* search = opened.window.findChild<QWidget*>("command_search");
+        REQUIRE(search != nullptr);
+        auto* query = search->findChild<QLineEdit*>("search_query");
+        REQUIRE(query != nullptr);
+        query->setText("depth");
+        QApplication::processEvents();
+        CHECK(FaintText(*search).join("; ").toStdString() == std::string());
+        search->hide();
+    }
+    Editor::Theme::Apply(*qApp);
+}
+
 TEST_CASE("The accent comes from Windows and keeps every pair it colours readable") {
     const QColor was = Theme::Accent();
     const std::vector<QColor> accents{Theme::kDesignAccent,     QColor(0x9e, 0xb6, 0x50),
@@ -229,6 +252,19 @@ TEST_CASE("The accent comes from Windows and keeps every pair it colours readabl
             if (ratio >= Theme::kLeastContrast) continue;
             faint.append(QString("%1 %2 on %3 (accent %4) is %5:1")
                              .arg(what, ink.name(), behind.name(), accent.name())
+                             .arg(ratio, 0, 'f', 2));
+        }
+        const std::vector<std::tuple<QString, QColor, QColor>> marks{
+            {"the accent on the page", Theme::Accent(), Theme::kPage},
+            {"the accent on a panel", Theme::Accent(), Theme::kPanel},
+            {"the accent on a field", Theme::Accent(), Theme::kField},
+            {"the hovered accent on a panel", Theme::Lifted(), Theme::kPanel},
+        };
+        for (const auto& [what, mark, behind] : marks) {
+            const double ratio = Theme::Contrast(mark, behind);
+            if (ratio >= Theme::kLeastMark) continue;
+            faint.append(QString("%1 %2 on %3 (accent %4) is %5:1")
+                             .arg(what, mark.name(), behind.name(), accent.name())
                              .arg(ratio, 0, 'f', 2));
         }
     }

@@ -39,6 +39,7 @@ inline constexpr int kStageIconSide = 16;
 inline constexpr int kStageButtonSide = 28;
 inline constexpr int kPanelStripHeight = 30;
 
+inline constexpr double kLeastMark = 3.0;
 inline constexpr double kLeastContrast = 4.5;
 
 [[nodiscard]] double Contrast(const QColor& text, const QColor& behind);
@@ -67,7 +68,7 @@ void UseAccent(const QColor& accent);
 
 [[nodiscard]] QString MonoFamily();
 
-void Apply(QApplication& app);
+void Apply(QApplication& app, const std::optional<QColor>& accent = std::nullopt);
 
 [[nodiscard]] QString DockStyle();
 
