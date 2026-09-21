@@ -246,6 +246,50 @@ the dock manager needs. Panels key off object names and properties
 (`QToolButton[transport="true"]`, `QWidget[section="true"]`, ...) rather than
 inline styles, so a colour exists in one place.
 
+**Every control says what kind of control it is.** A dropdown carries a chevron
+on its right and a spin box carries a stacked plus and minus. Qt makes this a
+thing you have to do on purpose: once a stylesheet gives a `QComboBox` a border,
+a background or padding, `QStyleSheetStyle` stops asking the base style for the
+arrow, so a sheet that styles the box and says nothing about `::down-arrow`
+leaves a dropdown that is pixel for pixel a `QLineEdit`. This sheet did exactly
+that, and set `QSpinBox::up-button { width: 0px }` besides, so neither control
+could be told from a plain field.
+
+A checkbox is the same story: `QCheckBox::indicator` had no rule at all, so a
+ticked box and an empty one were the same empty square. Unchecked is now an
+outlined field-coloured box and checked is filled with the accent and carries a
+tick.
+
+The marks come from the vendored icon set, not from hand-drawn paths, but a
+stylesheet `image:` cannot be recoloured the way `Icons::Drawn` recolours a
+pixmap, so `chevron-down`, `plus` and `minus` each have a `-faint` copy beside
+them whose `stroke` is the faint token instead of `currentColor`. The tick has
+two copies, `check-ink` and `check-text`, because it sits on the accent and the
+accent follows the user's Windows colour: `Theme::Sheet` substitutes `%tick`
+with whichever one matches `OnAccent()`, the same choice the sheet already makes
+for `%onaccent`. All of them are the Lucide artwork with one attribute changed.
+
+Two tests in `editor/tests/editor_controls_widget_tests.cpp` hold this. `A
+dropdown and a spin box carry a mark a plain field does not` renders a blank
+`QLineEdit`, `QComboBox` and `QSpinBox` and counts pixels in the right sixth of
+each that differ from the field colour; the two with an affordance must beat the
+plain field by ten. `A ticked checkbox does not look like an empty one` does the
+same over the indicator on the left. Take the images back out and every
+difference falls to zero.
+
+**A control's own icon is centred by the control, so nothing else may resize
+it.** The filter fields put their magnifier in through
+`QLineEdit::addAction(..., LeadingPosition)`, which Qt draws in an internal
+`QToolButton`. The sheet's blanket `QToolButton { padding: 0px 8px;
+min-height: 26px; }` was hitting that button and pushing the icon four pixels
+below the centre line of a 26px field, which is what a person sees as "the
+search icon is off-centre". `QLineEdit QToolButton` now clears the padding and
+the minimum, and the icon is built at 16px rather than 13 so the pixmap Qt asks
+for is one it actually has instead of a rescale. `The search icon sits on the
+filter field's centre line` builds a real `WithFilter` field and requires the
+ink's midpoint to be within a pixel of the field's; it reads 4px out with the
+blanket rule back in.
+
 The icons are Lucide, vendored as SVG files under `editor/icons/` from
 `lucide-static` 1.47.0 with its ISC licence beside them
 (`editor/icons/LICENSE`), compiled into the binary by `editor/icons/icons.qrc`
@@ -307,11 +351,25 @@ shows the first one), `--clip N` descends into a clip of it by its index in
 `Document::Clips`, 0 being the root, which is the breadcrumb the stage bar
 draws, `--depth N` and `--frame N` choose one
 (so the inspector, the selection bar and the timeline have something to show),
-`--game <dir>` points at an install, `--hover <objectName>` puts the named
-widget under the pointer, `--report <file>` writes a text line per named widget
+`--game <dir>` points at an install, `--panel <title>` brings that dock tab to
+the front, `--hover <objectName>` puts the named widget under the pointer, `--report <file>` writes a text line per named widget
 (object name, class, position in the window, size, size hint, font size and
-whether it is shown) next to the PNG, `--size WxH` (default 1600x1000, the
+whether it is shown) next to the PNG, `--input <name>` selects that row of the
+Inputs panel, `--number <value>` types it into the panel's Number box and
+presses Enter, `--enter <character>` double-clicks the first Library row whose
+label starts with that text, which descends into a sprite the way a
+double-click does (`--enter "Sprite 18"` is how the timeline shows what a clip
+holds), `--spread <n>` sets the panel's digit count and presses
+"Make it a number", `--dump <file>` writes a tab separated line per row of every
+tree in the window (the tree's object name, the row's text and its detail
+line), `--size WxH` (default 1600x1000, the
 artboard's size), `--platform <name>` and `--keep-settings`.
+
+`--dump` answers questions about lists the same way `--report` answers
+questions about layout. `--input score_this --number 1234 --grab viewport`
+against IIDX 33's `result.ifs` is what proved the digit places reach the
+screen: the SCORE row of the rendered frame reads 1234 while MISS COUNT still
+reads 0000.
 
 `--report` is how a layout question gets an answer instead of a guess. Reading
 a screenshot tells you two things overlap; the report tells you the label sits
@@ -2072,6 +2130,135 @@ message saying "Sprite". Opening a clip shows that sprite's depths,
 labels and frames on the timeline and its placements and cameras in the
 inspector. Placement fields, library call arguments, cameras, labels and the
 structure edits all apply to the clip that is open.
+
+**The Inputs panel.** A third tab beside Inspector and History
+(`editor_inputs.cpp`) lists what a game can address inside the open animation.
+An IFS has no text object and takes no values: a game resolves a clip by the
+instance name the author gave a placement, then swaps its texture, shows or
+hides it, or jumps it to a frame or a frame label. The addressable surface is
+therefore in the file, and `Document::Inputs` (`document/inputs.h`) reads it:
+every named placement in the root and in every sprite, with the clip that holds
+it, its depth, the character it draws, and how many frames that character has.
+One frame means the value is chosen by swapping the texture; more than one
+means it is chosen by seeking. A name placed on several depths is one input,
+because the game writes it once and afp walks the same-name siblings. Frame
+labels are listed under their own group, since jumping to a label is the other
+channel. The evidence for all of this is in the repo notes under
+`IIDX/afp_input_surface.md`; the panel is what the file says, not what any
+particular game does with it.
+
+The surface comes off the clip view job (`ClipView::inputs`), so reading it
+never runs on the window's thread. Clicking a row goes to that input: the clip
+if it is not already open, then the frame, then the depth, so the inspector
+fills with the placement the name refers to. The panel does not say what an
+input MEANS. `score_this_0100` is the hundreds digit of this play's score only
+to a reader; that mapping lives in the game binary and is deliberately out of
+scope here.
+
+**Setting an input.** Under the list is a form (`Window::BuildInputValue`) that
+fills in for whatever row is current. It names the input, says in a line what
+this row takes, and offers the two writes the file supports.
+
+A row that draws a picture gets **Picture**, an editable combo of every image in
+the package. Picking one swaps what that clip draws.
+
+A name with SEVERAL digit places gets **Number**. `Document::Numbers` (see
+`docs/document.md`) folds `score_this_0001`, `_0010`, `_0100` and `_1000` into
+one number, so the panel shows a single `score_this` row reading "a number of 4
+digits" with the four places nested under it. Typing `1234` and pressing Enter
+writes a glyph into each place: `score_this_1000` gets the `1` picture of its
+own family, `_0100` the `2`, and so on. The box reads back the number the places
+currently spell, so it shows what is on screen rather than what was last typed.
+Selecting one of the places shows the same Number box, because setting the
+hundreds digit alone is almost never what a person means; the place's own
+Picture combo is there for when it is. A value too wide for its places is
+refused by name ("score_this has 4 digit places in the file, so it cannot show
+55555") instead of being truncated into a wrong number.
+
+A name with ONE place is not a number yet, however digit-shaped its picture is.
+Writing a name writes one clip, so one place can only ever show one glyph. Its
+row says what it really is, "Sprite 18, one of dead_0 to dead_9", the form says
+so in a line, and under it sits a **Make it a number** block.
+
+That row is how a one-place name becomes a real number, and it is an edit, not a
+preview trick. afp's C interface has no call that creates a movie clip (see
+`docs/document.md`), so more digits can only come from more places in the file.
+`Window::SpreadChosenInput` runs `Document::SpreadIntoPlaces` through
+`EditAnimation`, so it lands in the history with everything else and Ctrl+Z
+takes it back. When it returns, `deadpoint` is four places, the panel shows one
+`deadpoint` row reading "a number of 4 digits", and typing 1234 into it works
+exactly like `score_this`. The new row is selected for you rather than leaving
+you to find it.
+
+The three things that block asks for are the three the layout needs, and they
+are asked rather than guessed because the game keeps them in a font table built
+at boot that no package can see (`IIDX/afp_input_surface.md` reads the drawer).
+**Digits** is the cell count. **px** is the advance, prefilled with the anchor's
+own drawn width measured from its stage outline. **Growing right** or **growing
+left** decides whether the anchor is the most significant place with the rest to
+its right, or the ones place with the rest to its left. Right is the default: an
+authored placeholder usually sits just after its label, and growing left from
+there draws the number over the label, which is exactly what the first version of
+this did.
+
+A number also carries **Blank leading zeros**. The game's drawer multiplies the
+clip's alpha by a per-font factor once the rest of the value is zero, so some
+fonts show `12` in a four cell field and others show `0012`; which one is in that
+same runtime table. Ticking the box hides the places above the most significant
+digit through the preview host's visibility channel, and their row shows an empty
+picture slot so the list says so too.
+
+**The form never scrolls sideways.** The panel is a side dock and a person can
+drag it narrow, so every control in the form is full width with its caption on
+its own line above it, and the only pair that shares a line is the two small
+spin boxes. Each control is built through `Shrinkable`, which gives it an
+`Ignored` horizontal policy and a 40px floor, and the combo boxes also get
+`AdjustToMinimumContentsLengthWithIcon` so a package with a thousand image names
+does not set the panel's width. The two wrapped labels go through `Wrapping`,
+which keeps `heightForWidth` while letting the width shrink. Without that the
+form demanded 320px and ADS, which wraps a dock's widget in a scroll area by
+default, answered with a horizontal scrollbar. `The value form fits a narrow
+panel instead of growing a sideways scrollbar` in
+`editor/tests/editor_inputs_window_tests.cpp` holds the form's own
+`minimumSizeHint` under 200px for both the picture and the number cases; it fails
+at 232 if any one control stops being shrinkable.
+
+Nothing in any of this knows about a game. The rule is: the picture belongs to a
+complete ten, the name says how many places there are, and the layout choices the
+file cannot answer are put in front of a person instead of guessed.
+
+"Put it back" drops the overrides for the whole number, or for the one input
+when it is not part of one, and the preview goes back to what the file draws.
+
+**How the list is drawn.** The panel is a flat list, not a nested tree: the
+clip that owns a group of inputs is a section header (`Rows::kHeaderRole`, drawn
+by `Rows::Delegate::PaintHeader` as small spaced capitals with a hairline under
+them), and every input sits at the left margin under it. Indentation is 16 and
+is spent only on the places of a number, which hang under their number row and
+open with a click; the row draws its own disclosure mark (`Rows::kOpenRole`)
+since the tree's own decoration is off.
+
+The column at the left of each row is the picture the input draws, looked up in
+the package by name (`Window::InputPicture`). A number shows its current value
+there instead, in a chip (`Rows::kChipRole`), so a glance down the list reads
+what is on screen rather than a column of names. Rows whose input draws nothing
+the package can show keep the empty slot so the names stay on one line.
+`Window::RefreshInputRows` re-reads the chips and pictures after every value
+change, so the list and the stage never disagree.
+
+The list is rebuilt only when the surface or the package images actually change.
+It used to be rebuilt whenever the clip view reloaded, which is every time a
+click opened the clip an input lives in, and that threw the selection away: the
+first click on an input in a nested sprite cleared itself and you had to click
+again. `Clicking an input keeps it selected while the clip it lives in opens`
+in `editor/tests/editor_inputs_window_tests.cpp` builds a package with a named
+placement inside a sprite and holds the panel to it.
+
+Values live in `Window::input_values_` as a path to picture map and are sent to
+the preview host with `SetInputs` (`docs/preview_host.md`), which re-applies
+them after every reload, so they survive seeking, switching clip and reloading
+the package. They are a preview state, not an edit: nothing is written to the
+IFS and the document is not marked dirty.
 
 **Editing a clip in place.** `Clip > Edit a clip in place on the root`
 (`clip.in_context`, remembered, on by default) keeps the root on screen while a

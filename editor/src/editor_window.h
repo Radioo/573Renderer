@@ -42,6 +42,7 @@
 #include <functional>
 #include <map>
 #include <optional>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -51,11 +52,13 @@ class CDockWidget;
 }
 
 class QAction;
+class QCheckBox;
 class QComboBox;
 class QLabel;
 class QToolButton;
 class QMenu;
 class QScrollArea;
+class QSpinBox;
 class QWidget;
 class QPoint;
 class QTableWidget;
@@ -414,6 +417,34 @@ private:
     void AddCharacterDepth(uint16_t depth, uint16_t character, uint32_t first, uint32_t last);
     [[nodiscard]] QTreeWidget* BuildLibrary();
     [[nodiscard]] QListWidget* BuildHistory();
+    [[nodiscard]] QWidget* BuildInputsPanel();
+    [[nodiscard]] QWidget* BuildInputValue();
+    [[nodiscard]] QWidget* BuildInputSpread();
+    void ShowInputValue(QTreeWidgetItem* item);
+    void ShowInputNumber();
+    [[nodiscard]] QString InputHint(const Document::InputSlot* slot) const;
+    [[nodiscard]] const Document::InputNumber* ChosenNumber() const;
+    void ShowInputTexture(const Document::InputSlot* slot);
+    void MarkInput(QTreeWidgetItem* row, const Document::InputSlot& slot, const QString& detail,
+                   int number);
+    void FillInputLabels(const Document::InputSurface& surface);
+    void AddInputHeader(const QString& text);
+    void RefreshInputRows();
+    [[nodiscard]] QIcon InputPicture(const QString& texture) const;
+    void SpreadChosenInput();
+    void SelectInputNamed(const QString& name);
+    [[nodiscard]] double InputAdvance(const Document::InputSlot& slot) const;
+    [[nodiscard]] QString InputTextureOf(const Document::InputSlot& slot) const;
+    [[nodiscard]] const Document::InputSlot* InputNamed(const QString& name) const;
+    [[nodiscard]] QString InputNumberShown(const Document::InputNumber& number) const;
+    void SetInputNumber();
+    void SetInputTexture();
+    void ClearInputValue();
+    void ApplyInputValues();
+    void FillInputs(const Document::InputSurface& surface,
+                    const std::map<uint16_t, QString>& names);
+    void ShowInputCount(const Document::InputSurface& surface);
+    void ShowInputAt(int clip, uint16_t depth, uint32_t frame);
     void FillHistory();
     void JumpInHistory(int row);
     void FillLibrary(const std::vector<LibraryRow>& characters);
@@ -476,6 +507,27 @@ private:
     StartScreen* start_ = nullptr;
     PanelTabs* package_tabs_ = nullptr;
     PanelTabs* library_tabs_ = nullptr;
+    QTreeWidget* inputs_ = nullptr;
+    QLineEdit* inputs_filter_ = nullptr;
+    QWidget* input_value_ = nullptr;
+    QLabel* input_chosen_ = nullptr;
+    QLabel* input_hint_ = nullptr;
+    QLabel* input_number_row_ = nullptr;
+    QLabel* input_texture_row_ = nullptr;
+    QLineEdit* input_number_ = nullptr;
+    QWidget* input_spread_row_ = nullptr;
+    QSpinBox* input_spread_ = nullptr;
+    QSpinBox* input_step_ = nullptr;
+    QComboBox* input_grows_ = nullptr;
+    QCheckBox* input_blank_ = nullptr;
+    QComboBox* input_texture_ = nullptr;
+    QString input_chosen_name_;
+    int input_chosen_number_ = -1;
+    std::map<QString, QString> input_values_;
+    std::set<QString> input_hidden_;
+    Document::InputSurface shown_inputs_;
+    std::vector<Document::InputNumber> input_numbers_;
+    std::vector<std::string> input_images_;
     QLineEdit* animations_filter_ = nullptr;
     QLineEdit* images_filter_ = nullptr;
     QLabel* library_of_ = nullptr;

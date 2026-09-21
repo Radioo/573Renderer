@@ -1,7 +1,10 @@
 <RCC>
     <qresource prefix="/icons">
         <file>camera.svg</file>
+        <file>check-ink.svg</file>
+        <file>check-text.svg</file>
         <file>chevron-down.svg</file>
+        <file>chevron-down-faint.svg</file>
         <file>circle-dot.svg</file>
         <file>crosshair.svg</file>
         <file>diamond.svg</file>
@@ -17,10 +20,12 @@
         <file>magnet.svg</file>
         <file>maximize.svg</file>
         <file>minus.svg</file>
+        <file>minus-faint.svg</file>
         <file>monitor-play.svg</file>
         <file>mouse-pointer-2.svg</file>
         <file>play.svg</file>
         <file>plus.svg</file>
+        <file>plus-faint.svg</file>
         <file>redo-2.svg</file>
         <file>repeat.svg</file>
         <file>ruler.svg</file>

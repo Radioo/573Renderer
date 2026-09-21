@@ -24,6 +24,12 @@ struct Label {
     uint32_t frame = 0;
 };
 
+struct InputValue {
+    std::string path;
+    std::string texture;
+    bool hidden = false;
+};
+
 struct Loaded {
     uint32_t frame_count = 0;
     std::vector<Label> labels;
@@ -61,6 +67,8 @@ public:
     [[nodiscard]] Support::Expected<Loaded, std::string> SelectAnimation(const std::string& name);
 
     [[nodiscard]] Support::Expected<Loaded, std::string> ShowSymbol(const std::string& name);
+    [[nodiscard]] Support::Expected<void, std::string>
+    SetInputs(const std::vector<InputValue>& values);
 
     [[nodiscard]] Support::Expected<void, std::string> Seek(uint32_t frame);
 

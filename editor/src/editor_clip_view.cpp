@@ -55,6 +55,7 @@ ClipView ReadClipView(Document::File& file, const std::string& animation_path,
         view.kinds.emplace(one.id, one.kind);
     }
 
+    view.inputs = Document::Inputs(*animation, images);
     view.depths = details->depths;
     std::ranges::sort(view.depths, std::ranges::greater{}, &Document::DepthRow::depth);
     if (const AfpAnimation::Container* shown = Document::FindClip(*animation, clip)) {

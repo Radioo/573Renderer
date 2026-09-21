@@ -171,6 +171,11 @@ Support::Expected<void, std::string> KeyPart(AuthoredDepth& authored, const Bake
 
 }
 
+Support::Expected<void, std::string> ShiftPlacement(AfpAnimation::Placement& placement,
+                                                    StageOffset offset) {
+    return Shift(placement, offset);
+}
+
 Support::Expected<void, std::string> MoveBakedDepth(AfpAnimation::Animation& animation, ClipId clip,
                                                     uint16_t depth, uint32_t frame,
                                                     StageOffset offset) {

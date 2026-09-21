@@ -4,6 +4,7 @@
 #include "document/clip.h"
 #include "document/document.h"
 #include "document/frame_notes.h"
+#include "document/inputs.h"
 #include "document/outline.h"
 #include "document/timeline.h"
 
@@ -37,6 +38,7 @@ struct ClipView {
     std::vector<Document::DepthRow> depths;
     std::map<uint16_t, std::vector<uint32_t>> marks;
     std::vector<Document::FrameNote> notes;
+    Document::InputSurface inputs;
     uint32_t model_frames = 0;
 };
 

@@ -6,6 +6,8 @@
 #include <QIcon>
 #include <QPainter>
 #include <QPen>
+#include <QPoint>
+#include <QPolygon>
 #include <QRect>
 #include <QString>
 
@@ -17,6 +19,11 @@ constexpr int kLeft = 8;
 constexpr int kGap = 9;
 constexpr int kNameSize = 12;
 constexpr int kDetailSize = 11;
+constexpr int kHeaderSize = 10;
+constexpr int kChipSize = 13;
+constexpr int kChipRound = 4;
+constexpr int kMarkSide = 5;
+constexpr int kMarkRight = 14;
 constexpr int kStripeStep = 7;
 constexpr int kStripeWidth = 2;
 constexpr QColor kStripeBack(0x2f, 0x55, 0x7c);
@@ -43,7 +50,53 @@ QPixmap Stripes(int width, int height, int seed) {
 Delegate::Delegate(QObject* parent) : QStyledItemDelegate(parent) {}
 
 QSize Delegate::sizeHint(const QStyleOptionViewItem& option, const QModelIndex& index) const {
-    return {QStyledItemDelegate::sizeHint(option, index).width(), kHeight};
+    const int tall = index.data(kHeaderRole).toBool() ? kHeaderHeight : kHeight;
+    return {QStyledItemDelegate::sizeHint(option, index).width(), tall};
+}
+
+void Delegate::PaintHeader(QPainter* painter, const QRect& rect, const QString& text) const {
+    painter->fillRect(rect, Theme::kPanel);
+    QFont heading(Theme::SansFamily());
+    heading.setPixelSize(kHeaderSize);
+    heading.setBold(true);
+    heading.setLetterSpacing(QFont::AbsoluteSpacing, 1);
+    painter->setFont(heading);
+    painter->setPen(Theme::kFaint);
+    painter->drawText(rect.adjusted(kLeft, 0, -kLeft, 0), Qt::AlignLeft | Qt::AlignVCenter,
+                      painter->fontMetrics().elidedText(text.toUpper(), Qt::ElideRight,
+                                                        rect.width() - (2 * kLeft)));
+    painter->setPen(Theme::kLine);
+    painter->drawLine(rect.left() + kLeft, rect.bottom(), rect.right() - kLeft, rect.bottom());
+}
+
+void Delegate::PaintChip(QPainter* painter, const QRect& box, const QString& text) const {
+    painter->setPen(Qt::NoPen);
+    painter->setBrush(Theme::kField);
+    painter->drawRoundedRect(box, kChipRound, kChipRound);
+    QFont figures(Theme::MonoFamily());
+    figures.setPixelSize(kChipSize);
+    painter->setFont(figures);
+    painter->setPen(Theme::kText);
+    painter->drawText(box, Qt::AlignCenter,
+                      painter->fontMetrics().elidedText(text, Qt::ElideLeft, box.width() - kGap));
+}
+
+void Delegate::PaintMark(QPainter* painter, const QRect& rect, bool open) const {
+    const int middle = rect.center().y();
+    const int right = rect.right() - kMarkRight;
+    QPolygon mark;
+    if (open) {
+        mark << QPoint(right - kMarkSide, middle - (kMarkSide / 2))
+             << QPoint(right + kMarkSide, middle - (kMarkSide / 2))
+             << QPoint(right, middle + kMarkSide);
+    } else {
+        mark << QPoint(right - (kMarkSide / 2), middle - kMarkSide)
+             << QPoint(right - (kMarkSide / 2), middle + kMarkSide)
+             << QPoint(right + kMarkSide, middle);
+    }
+    painter->setPen(Qt::NoPen);
+    painter->setBrush(Theme::kFaint);
+    painter->drawPolygon(mark);
 }
 
 void Delegate::paint(QPainter* painter, const QStyleOptionViewItem& option,
@@ -51,15 +104,40 @@ void Delegate::paint(QPainter* painter, const QStyleOptionViewItem& option,
     const bool chosen = (option.state & QStyle::State_Selected) != 0;
     const bool under = (option.state & QStyle::State_MouseOver) != 0;
     painter->save();
+    painter->setRenderHint(QPainter::Antialiasing, true);
+    if (index.data(kHeaderRole).toBool()) {
+        PaintHeader(painter, option.rect, index.data(Qt::DisplayRole).toString());
+        painter->restore();
+        return;
+    }
     painter->fillRect(option.rect,
                       chosen ? Theme::Chosen() : (under ? Theme::kField : Theme::kPanel));
     QRect left = option.rect.adjusted(kLeft, 0, 0, 0);
+    const QString chip = index.data(kChipRole).toString();
     const QPixmap thumbnail =
         qvariant_cast<QIcon>(index.data(Qt::DecorationRole)).pixmap(kThumbWidth, kThumbHeight);
-    if (!thumbnail.isNull()) {
-        const int top = left.top() + (left.height() - thumbnail.height()) / 2;
-        painter->drawPixmap(left.left(), top, thumbnail);
+    const bool slotted =
+        index.data(kChipRole).isValid() || index.data(Qt::DecorationRole).isValid();
+    if (slotted) {
+        const int top = left.top() + ((left.height() - kThumbHeight) / 2);
+        if (!chip.isEmpty()) {
+            PaintChip(painter, QRect(left.left(), top, kThumbWidth, kThumbHeight), chip);
+        } else if (!thumbnail.isNull()) {
+            const int middle = left.top() + ((left.height() - thumbnail.height()) / 2);
+            painter->drawPixmap(left.left() + ((kThumbWidth - thumbnail.width()) / 2), middle,
+                                thumbnail);
+        } else {
+            painter->setPen(Qt::NoPen);
+            painter->setBrush(Theme::kField);
+            painter->drawRoundedRect(QRect(left.left(), top, kThumbWidth, kThumbHeight), kChipRound,
+                                     kChipRound);
+        }
         left.setLeft(left.left() + kThumbWidth + kGap);
+    }
+    const QVariant open = index.data(kOpenRole);
+    if (open.isValid()) {
+        PaintMark(painter, option.rect, open.toBool());
+        left.setRight(left.right() - (2 * kMarkRight));
     }
     const QString detail = index.data(kDetailRole).toString();
     QFont named(Theme::SansFamily());

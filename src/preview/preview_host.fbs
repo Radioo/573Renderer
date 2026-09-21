@@ -36,7 +36,17 @@ table BackgroundFill {
   drawn:bool;
 }
 
-union Request { Boot, LoadPackage, SelectAnimation, Seek, Resize, Render, ShowSymbol, BackgroundFill }
+table InputValue {
+  path:string;
+  texture:string;
+  hidden:bool;
+}
+
+table SetInputs {
+  values:[InputValue];
+}
+
+union Request { Boot, LoadPackage, SelectAnimation, Seek, Resize, Render, ShowSymbol, BackgroundFill, SetInputs }
 
 table RequestMessage {
   request:Request;

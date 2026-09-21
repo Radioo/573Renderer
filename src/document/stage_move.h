@@ -18,6 +18,9 @@ struct StageOffset {
 };
 
 [[nodiscard]] Support::Expected<void, std::string>
+ShiftPlacement(AfpAnimation::Placement& placement, StageOffset offset);
+
+[[nodiscard]] Support::Expected<void, std::string>
 MoveBakedDepth(AfpAnimation::Animation& animation, ClipId clip, uint16_t depth, uint32_t frame,
                StageOffset offset);
 

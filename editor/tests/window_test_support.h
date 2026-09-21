@@ -19,6 +19,7 @@
 #include "document/outline.h"
 #include "document/stage_bounds.h"
 #include "document/frame_edit.h"
+#include "document/group_sprite.h"
 #include "document/place_image.h"
 #include "document/tags.h"
 #include "document/timeline.h"
@@ -73,6 +74,7 @@
 #include <cstdint>
 #include <deque>
 #include <span>
+#include <variant>
 #include <functional>
 #include <optional>
 #include <string>
@@ -231,7 +233,8 @@ inline Script::Step AcceptInput() {
     };
 }
 
-inline QString WritePackage(const QTemporaryDir& dir, bool with_image = false) {
+inline QString WritePackage(const QTemporaryDir& dir, bool with_image = false,
+                            const QString& named_depth = QString()) {
     const auto bytes = Ifs::Write(SamplePackage::SampleArchive());
     REQUIRE(bytes.has_value());
     auto file = Document::File::Open(*bytes);
@@ -256,6 +259,16 @@ inline QString WritePackage(const QTemporaryDir& dir, bool with_image = false) {
         Document::InsertTag(placed->root, 2, AfpAnimation::Tag{moved});
         REQUIRE(file->WriteAnimation(path, *placed).has_value());
     }
+    if (!named_depth.isEmpty()) {
+        auto shown = file->ReadAnimation(path);
+        REQUIRE(shown.has_value());
+        AfpAnimation::Placement told;
+        told.flags = kUpdateMatrix;
+        told.depth = 1;
+        told.name = Document::InternString(*shown, named_depth.toStdString());
+        Document::InsertTag(shown->root, 0, AfpAnimation::Tag{told});
+        REQUIRE(file->WriteAnimation(path, *shown).has_value());
+    }
     const auto encoded = file->Encode();
     REQUIRE(encoded.has_value());
     const QString out = dir.filePath("sample.ifs");
@@ -264,6 +277,103 @@ inline QString WritePackage(const QTemporaryDir& dir, bool with_image = false) {
     written.write(QByteArray(reinterpret_cast<const char*>(encoded->data()),
                              static_cast<qsizetype>(encoded->size())));
     return out;
+}
+
+inline QString WriteDigitPlaces(const QTemporaryDir& dir, const QString& lone = QString()) {
+    const auto bytes = Ifs::Write(SamplePackage::SampleArchive());
+    REQUIRE(bytes.has_value());
+    auto file = Document::File::Open(*bytes);
+    REQUIRE(file.has_value());
+    const std::string path = "afp/" + SamplePackage::HashPath("intro");
+    for (uint32_t digit = 0; digit < 10; digit++) {
+        REQUIRE(file->AddImage("num" + std::to_string(digit) + "_flat", 4, 3,
+                               std::vector<uint8_t>(48, 0x40))
+                    .has_value());
+    }
+    auto animation = file->ReadAnimation(path);
+    REQUIRE(animation.has_value());
+    animation->name = Document::InternString(*animation, "intro");
+    REQUIRE(file->WriteAnimation(path, *animation).has_value());
+    const std::array<std::string, 4> named{"score_0001", "score_0010", "score_0100", "score_1000"};
+    for (uint16_t place = 0; place < named.size(); place++) {
+        const Document::DepthSpan span{.clip = {},
+                                       .depth = static_cast<uint16_t>(2 + place),
+                                       .first_frame = 0,
+                                       .last_frame = 2};
+        REQUIRE(Document::PlaceImage(*file, path, "num0_flat", span).has_value());
+        auto placed = file->ReadAnimation(path);
+        REQUIRE(placed.has_value());
+        for (AfpAnimation::Tag& tag : placed->root.tags) {
+            auto* one = std::get_if<AfpAnimation::Placement>(&tag.body);
+            if (one == nullptr || one->depth != span.depth || !one->character) continue;
+            one->name = Document::InternString(*placed, named[place]);
+        }
+        REQUIRE(file->WriteAnimation(path, *placed).has_value());
+    }
+    if (!lone.isEmpty()) {
+        const Document::DepthSpan span{.clip = {}, .depth = 6, .first_frame = 0, .last_frame = 2};
+        REQUIRE(Document::PlaceImage(*file, path, "num0_flat", span).has_value());
+        auto placed = file->ReadAnimation(path);
+        REQUIRE(placed.has_value());
+        for (AfpAnimation::Tag& tag : placed->root.tags) {
+            auto* one = std::get_if<AfpAnimation::Placement>(&tag.body);
+            if (one == nullptr || one->depth != span.depth || !one->character) continue;
+            one->name = Document::InternString(*placed, lone.toStdString());
+        }
+        REQUIRE(file->WriteAnimation(path, *placed).has_value());
+    }
+    const auto encoded = file->Encode();
+    REQUIRE(encoded.has_value());
+    const QString out = dir.filePath("digits.ifs");
+    QFile written(out);
+    REQUIRE(written.open(QIODevice::WriteOnly));
+    written.write(QByteArray(reinterpret_cast<const char*>(encoded->data()),
+                             static_cast<qsizetype>(encoded->size())));
+    return out;
+}
+
+inline QString WriteNamedInSprite(const QTemporaryDir& dir, const QString& name) {
+    const auto bytes = Ifs::Write(SamplePackage::SampleArchive());
+    REQUIRE(bytes.has_value());
+    auto file = Document::File::Open(*bytes);
+    REQUIRE(file.has_value());
+    const std::string path = "afp/" + SamplePackage::HashPath("intro");
+    auto animation = file->ReadAnimation(path);
+    REQUIRE(animation.has_value());
+    animation->name = Document::InternString(*animation, "intro");
+    REQUIRE(Document::AddDepth(*animation, {}, 1, 7, 0, 2).has_value());
+    const auto grouped = Document::GroupIntoSprite(
+        *animation,
+        Document::GroupRange{
+            .clip = {}, .first_depth = 1, .last_depth = 1, .first_frame = 0, .last_frame = 2});
+    REQUIRE(grouped.has_value());
+    AfpAnimation::Container* sprite =
+        Document::FindClip(*animation, Document::ClipId{.sprite = *grouped});
+    REQUIRE(sprite != nullptr);
+    bool marked = false;
+    for (AfpAnimation::Tag& tag : sprite->tags) {
+        auto* one = std::get_if<AfpAnimation::Placement>(&tag.body);
+        if (one == nullptr || !one->character || marked) continue;
+        one->name = Document::InternString(*animation, name.toStdString());
+        marked = true;
+    }
+    REQUIRE(marked);
+    REQUIRE(file->WriteAnimation(path, *animation).has_value());
+    const auto encoded = file->Encode();
+    REQUIRE(encoded.has_value());
+    const QString out = dir.filePath("nested.ifs");
+    QFile written(out);
+    REQUIRE(written.open(QIODevice::WriteOnly));
+    written.write(QByteArray(reinterpret_cast<const char*>(encoded->data()),
+                             static_cast<qsizetype>(encoded->size())));
+    return out;
+}
+
+inline QTreeWidgetItem* InputNamed(QTreeWidget& inputs, const QString& name) {
+    for (QTreeWidgetItemIterator it(&inputs); *it != nullptr; ++it) {
+        if ((*it)->text(0) == name) return *it;
+    }
+    return nullptr;
 }
 
 inline Script::Step PickFile(const QString& path) {

@@ -73,6 +73,12 @@ Support::Expected<void, std::string> Host::Seek(uint32_t frame) {
     return host_->Seek(frame);
 }
 
+Support::Expected<void, std::string>
+Host::SetInputs(const std::vector<PreviewClient::InputValue>& values) {
+    if (host_ == nullptr) return Support::Unexpected(std::string("no preview host is running"));
+    return host_->SetInputs(values);
+}
+
 Support::Expected<void, std::string> Host::Resize(uint32_t width, uint32_t height) {
     if (host_ == nullptr) return Support::Unexpected(std::string("no preview host is running"));
     return host_->Resize(width, height);

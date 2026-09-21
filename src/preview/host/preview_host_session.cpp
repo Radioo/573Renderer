@@ -132,9 +132,29 @@ std::vector<uint8_t> Session::Handle(std::span<const uint8_t> request) {
         AfpManager::SetBackgroundDrawn(g_afp, background_drawn_);
         return Done();
     }
+    if (const auto* told = message->request_as_SetInputs()) {
+        inputs_.clear();
+        if (told->values() != nullptr) {
+            for (const auto* value : *told->values()) {
+                if (value->path() == nullptr || value->texture() == nullptr) continue;
+                inputs_.push_back(HeldInput{.path = value->path()->str(),
+                                            .texture = value->texture()->str(),
+                                            .hidden = value->hidden()});
+            }
+        }
+        ApplyInputs();
+        return Done();
+    }
     if (const auto* resize = message->request_as_Resize()) return Resize(*resize);
     if (message->request_as_Render() != nullptr) return Render();
     return Failure("unknown request");
+}
+
+void Session::ApplyInputs() const {
+    for (const HeldInput& held : inputs_) {
+        if (!held.texture.empty()) AfpManager::SetInputTexture(g_afp, held.path, held.texture);
+        AfpManager::SetInputShown(g_afp, held.path, !held.hidden);
+    }
 }
 
 std::vector<uint8_t> Session::Boot(const PreviewProtocol::Boot& boot) {
@@ -223,7 +243,10 @@ bool Session::LoadContent(const std::vector<uint8_t>& ifs, const std::string& pa
 }
 
 std::vector<uint8_t> Session::Loaded(std::vector<uint8_t> reply) const {
-    if (!IsFailure(reply)) AfpManager::SetBackgroundDrawn(g_afp, background_drawn_);
+    if (!IsFailure(reply)) {
+        AfpManager::SetBackgroundDrawn(g_afp, background_drawn_);
+        ApplyInputs();
+    }
     return reply;
 }
 

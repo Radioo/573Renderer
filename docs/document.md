@@ -239,6 +239,80 @@ a numeric argument is written through the smallest push type that holds it,
 which is what the shipped data uses. An argument the editor did not model, such
 as the `this` the calls pass, keeps its original item.
 
+## The input surface (`document/inputs.h`)
+
+`Inputs(animation)` returns the names a game can address: every placement that
+carries an instance name, plus every frame label, each with the clip it belongs
+to. A placement's `name` is exactly the string `afp_mc_get_id_by_path` resolves
+at run time, so this is the file's whole contract with the game. The same name
+on several placements is folded into one entry with a `places` count, because
+afp writes all same-name siblings in one call. `driven` is `Frames` when the
+character placed is a sprite with more than one frame and `Texture` otherwise,
+which is the difference between a value chosen by seeking and one chosen by
+swapping the picture. Checked against IIDX 33's `result.ifs`: `score_info_1p`
+reports 42 names, the same number a separate parse of the file found.
+
+`Numbers(surface, images)` folds the digit places of that surface into numbers.
+An input draws a digit when the picture it ends up drawing is one of a complete
+ten: for every position in the picture's name that holds a digit, the function
+replaces it with `0` through `9` and asks whether all ten names are images of
+this package. `dead_0` qualifies through `dead_0`..`dead_9`, and so does
+`score0_color` through `score0_color`..`score9_color`, which is why the digit is
+looked for at every position and not only at the end of the name. Inputs whose
+name ends in a power of ten (`score_this_0001`, `_0010`, `_0100`, `_1000`) share
+a stem and become one `InputNumber` carrying that stem, the position of the
+digit inside the picture name, and the places ordered most significant first
+with their weights. An input with no such suffix stands alone with weight 1: it
+is one place, and one place draws one glyph, because writing a name writes that
+clip. `Digit(texture, at, digit)` builds the
+name of another glyph in the same family and `DigitOf` reads the digit back out,
+so a value can be written into the places and read back from them.
+
+Nothing here says which name means what. `score_this_0100` is the hundreds digit
+of this play's score only to a reader; the mapping lives in the game binary.
+What is derivable is that the four names form one number, and that is what the
+editor sets in one go.
+
+## Making a number out of one place (`document/number_places.h`)
+
+A name is one clip, so writing it swaps one picture. A file that carries a
+single digit place under a name can therefore never show more than one digit,
+whatever a tool does at run time: afp's C interface has no call that creates a
+movie clip, so nothing can multiply the place while the stream is playing.
+(`duplicateMovieClip` and `createEmptyMovieClip` exist in afp-core only as
+method names inside its own ActionScript interpreter, not as exports.) The only
+way to end up with more digits is for the file to hold more places, which is an
+edit, and this is the operation that makes it.
+
+`SpreadIntoPlaces(animation, spread)` takes the clip, the anchor's name, its
+depth and frame, how many places to end up with, the advance in stage pixels
+between them, and which way the number runs. For each place other than the
+anchor's own it finds a free depth, duplicates the whole span onto it with
+`DuplicateSpan`, names the new span's create tag with that place's power of ten
+and shifts every positioned placement on it by whole advances. Duplicating the
+span rather than making a fresh placement is what keeps the keyframes: a place
+that fades or slides carries that animation into every digit.
+
+`grows` decides which cell the anchor becomes, and it exists because the game
+does both. Its number drawer places cell `n` at `x - n * advance` or at
+`x + (cells - n - 1) * advance` depending on a flag in a font table that is
+built at boot, so a package cannot say which one a figure wants (the read is in
+`IIDX/afp_input_surface.md`). `NumberGrows::Right`, the default, keeps the
+anchor as the MOST significant place and runs the rest to its right, which is
+what an author's placeholder sitting just after a label needs;
+`NumberGrows::Left` makes the anchor the ones place and runs the rest to its
+left.
+
+Two rules keep the result honest. Only the CREATE tag of each place takes the
+name, because that is what the shipped files do and what `Inputs` counts, so a
+span of eleven keyframes stays one input rather than eleven. And a keyframe that
+sets no position is left alone instead of being given one, because writing a
+translation there would pin a placement that was inheriting its position.
+
+The names it writes are the same power-of-ten convention `Numbers` already
+reads, so nothing downstream needs a special case: the moment the edit lands,
+the surface reports one number of that many digits.
+
 ## Structure edits (`document/frame_edit.h`)
 
 A clip stores its tags in one flat list and each frame names a range into it, so

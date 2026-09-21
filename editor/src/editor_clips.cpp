@@ -458,6 +458,7 @@ void Window::ApplyClipView(ClipView view) {
     shown_labels_ = view.labels;
     shown_rate_ = view.rate;
     FillLibrary(view.characters);
+    FillInputs(view.inputs, view.names);
     timeline_->SetCharacterNames(std::move(view.names));
     timeline_->SetCharacterKinds(std::move(view.kinds));
     std::vector<uint16_t> keyed;

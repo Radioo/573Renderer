@@ -19,6 +19,7 @@ Windows named pipe (ADR 0007).
 | `Render` | none |
 | `ShowSymbol` | the export name of a symbol in the loaded animation |
 | `BackgroundFill` | whether the animation's background is drawn |
+| `SetInputs` | the whole set of input overrides, each a clip path, the picture it should draw and whether it is hidden |
 
 A reply is a `ReplyMessage` holding `Done`, `Loaded` (frame count and labels),
 `Frame` (the shared texture handle as a u64, its size, the frame drawn, and
@@ -70,6 +71,7 @@ unloads and exits with code 0.
 | `Render` | draws one frame at the game's render size, copies it into the shared texture (scaled when the viewport size differs) | `Frame` |
 | `ShowSymbol` | `AttachSymbol`: attaches the named symbol onto the root movie clip, so the root clip now plays that symbol from frame 0 | `Loaded` |
 | `BackgroundFill` | `SetBackgroundDrawn`: sets or clears movie flag `0x20` on the stream, and remembers the choice so every later load, reload, animation switch and symbol applies it again | `Done` |
+| `SetInputs` | remembers the whole set and applies each one with `SetInputTexture`, then re-applies it after every later load | `Done` |
 
 `Loaded` carries the root clip's frame count and labels read back from
 afp-core. `Frame` carries the root clip's current frame. A request the host
@@ -122,7 +124,7 @@ destructor closes the pipe, gives the host five seconds to exit and terminates
 it if it does not.
 
 One method per request: `Boot`, `LoadPackage`, `SelectAnimation`, `Seek`,
-`Resize`, `Render`, `ShowSymbol`, `SetBackgroundDrawn`. Each builds its FlatBuffer, calls through
+`Resize`, `Render`, `ShowSymbol`, `SetBackgroundDrawn`, `SetInputs`. Each builds its FlatBuffer, calls through
 `PreviewChannel::Client` and decodes the reply into a plain struct
 (`Loaded{frame_count, labels}`,
 `Frame{shared_handle, width, height, frame, stage_width, stage_height}`).
@@ -137,6 +139,37 @@ Test: the `local_dll` case in `tests/local/preview_host_process_tests.cpp`
 drives a real host through the client end to end, and two smaller cases check
 that a refused request surfaces the host's message with the request name, and
 that starting against a missing executable fails instead of hanging.
+
+## Writing an input (`SetInputs`)
+
+The editor's Inputs panel lets a person say what a named clip should draw, and
+`SetInputs` carries that to the host. The message is the WHOLE set, not a delta:
+the host replaces what it holds, so clearing an override is the same message
+with that entry gone and nothing has to be un-done.
+
+An entry carries a picture, a hidden flag, or both. `SetInputShown` is the other
+half of the same walk: it writes `_visible` (`0x1007`) and then invalidates over
+the same-name sibling chain, which is what the game's own show-one-hide-the-rest
+helper does. The editor uses it to leave the leading zeros of a number blank,
+because the game's number drawer does the equivalent by multiplying their alpha
+by a per-font factor that is usually zero.
+
+`AfpManager::SetInputTexture(path, texture)` is the game's own write, in the
+game's own order. It resolves the path with `afp_mc_get_id_by_path`, then for
+that clip and every same-name sibling after it
+(`afp_mc_get_relative_id(mc, 6)`, up to `kMostSiblings`) it calls
+`afp_play_work_load_bitmap(mc, texture, 0)` and then reads property `0x101E`
+back to invalidate, which is what makes the change reach the screen on the next
+render. That loop is `BM2D::CMovieClip::SetTexture` in IIDX 33's `bm2dx.dll`;
+the repo notes under `IIDX/afp_input_surface.md` show the pseudocode and how to
+find it again after a build bump. Walking the siblings matters because a value
+that appears twice on a screen is authored as two clips with the same name and
+the game sets both in one call.
+
+`Session::ApplyInputs` runs from `Session::Loaded`, so overrides survive a
+reload, an animation switch and a symbol attach. A path that no longer resolves
+after a switch is skipped rather than failing the request, because the editor
+keeps the set while the person moves between animations.
 
 ## Reading the frame back (`SharedTexture::Reader`)
 

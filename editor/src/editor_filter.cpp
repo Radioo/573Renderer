@@ -15,7 +15,7 @@ namespace Editor {
 
 namespace {
 
-constexpr int kFilterIcon = 13;
+constexpr int kFilterIcon = 16;
 constexpr int kFilterHeight = 26;
 
 bool Show(QTreeWidgetItem& item, const QString& text, bool ancestor_matched) {

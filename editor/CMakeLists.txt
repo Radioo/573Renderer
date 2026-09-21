@@ -104,6 +104,7 @@ set(R573_EDITOR_APP_SOURCES
     src/editor_images.cpp
     src/editor_library.cpp
     src/editor_history.cpp
+    src/editor_inputs.cpp
     src/editor_filter.cpp
     src/editor_graph.cpp
     src/editor_animations.cpp
@@ -169,6 +170,7 @@ add_executable(editor_widget_tests
     tests/editor_search_widget_tests.cpp
     tests/editor_panel_tabs_widget_tests.cpp
     tests/editor_icons_widget_tests.cpp
+    tests/editor_controls_widget_tests.cpp
     src/editor_panel_tabs.cpp
     src/editor_search.cpp
     src/editor_inspector.cpp
@@ -195,6 +197,7 @@ add_executable(editor_window_tests
     icons/icons.qrc
     tests/editor_window_tests.cpp
     tests/editor_live_window_tests.cpp
+    tests/editor_inputs_window_tests.cpp
     tests/editor_panel_window_tests.cpp
     tests/editor_key_window_tests.cpp
     tests/editor_depth_window_tests.cpp
@@ -245,6 +248,7 @@ add_executable(editor_window_tests
     src/editor_images.cpp
     src/editor_library.cpp
     src/editor_history.cpp
+    src/editor_inputs.cpp
     src/editor_filter.cpp
     src/editor_graph.cpp
     src/editor_animations.cpp

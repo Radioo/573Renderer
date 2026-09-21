@@ -53,6 +53,7 @@ set(R573_EDITOR_DOCUMENT_SOURCES
     src/document/group_sprite.cpp
     src/document/hidden_depths.cpp
     src/document/image_shape.cpp
+    src/document/inputs.cpp
     src/document/inspector.cpp
     src/document/keyframe_edit.cpp
     src/document/keyframes.cpp
@@ -85,6 +86,7 @@ set(R573_EDITOR_DOCUMENT_SOURCES
     src/document/sprite_preview.cpp
     src/document/sprite_exports.cpp
     src/document/stage_bounds.cpp
+    src/document/number_places.cpp
     src/document/stage_move.cpp
     src/document/transform_parts.cpp
     src/document/inspector_view.cpp

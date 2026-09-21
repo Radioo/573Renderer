@@ -1,7 +1,11 @@
 #include "editor_window.h"
 
 #include "editor_hover.h"
+#include "editor_rows.h"
 #include "editor_stage_bar.h"
+
+#include <DockManager.h>
+#include <DockWidget.h>
 #include "editor_theme.h"
 #include "editor_timeline.h"
 
@@ -12,6 +16,9 @@
 #include <QEvent>
 #include <QFile>
 #include <QImage>
+#include <QLineEdit>
+#include <QPushButton>
+#include <QSpinBox>
 #include <QList>
 #include <QSettings>
 #include <QSize>
@@ -104,6 +111,66 @@ int main(int argc, char** argv) {
         while (window.Loading() && entering.elapsed() < kLongestWaitMs)
             QApplication::processEvents();
     }
+    const QString panel = Taken("--panel", arguments, QString());
+    if (!panel.isEmpty()) {
+        if (auto* docks = window.findChild<ads::CDockManager*>()) {
+            if (ads::CDockWidget* shown = docks->findDockWidget(panel)) shown->setAsCurrentTab();
+        }
+        QApplication::processEvents();
+    }
+    const QString input = Taken("--input", arguments, QString());
+    const auto choose = [&window](const QString& wanted) {
+        if (wanted.isEmpty()) return;
+        if (auto* listed = window.findChild<QTreeWidget*>("inputs")) {
+            for (QTreeWidgetItemIterator row(listed); *row != nullptr; ++row) {
+                if ((*row)->text(0) != wanted) continue;
+                listed->setCurrentItem(*row);
+                break;
+            }
+        }
+        QApplication::processEvents();
+    };
+    choose(input);
+    const QString spread = Taken("--spread", arguments, QString());
+    if (!spread.isEmpty()) {
+        if (auto* places = window.findChild<QSpinBox*>("input_spread")) {
+            places->setValue(spread.toInt());
+            if (auto* go = window.findChild<QPushButton*>("input_spread_go")) go->click();
+        }
+        QElapsedTimer spreading;
+        spreading.start();
+        while (window.Loading() && spreading.elapsed() < kLongestWaitMs)
+            QApplication::processEvents();
+        QApplication::processEvents();
+        choose(input);
+    }
+    const QString entered = Taken("--enter", arguments, QString());
+    if (!entered.isEmpty()) {
+        if (auto* listed = window.findChild<QTreeWidget*>("library")) {
+            for (QTreeWidgetItemIterator row(listed); *row != nullptr; ++row) {
+                if (!(*row)->text(0).startsWith(entered)) continue;
+                emit listed->itemDoubleClicked(*row, 0);
+                break;
+            }
+        }
+        QElapsedTimer opening;
+        opening.start();
+        while (window.Loading() && opening.elapsed() < kLongestWaitMs)
+            QApplication::processEvents();
+        QApplication::processEvents();
+    }
+    const QString numbered = Taken("--number", arguments, QString());
+    if (!numbered.isEmpty()) {
+        if (auto* box = window.findChild<QLineEdit*>("input_number")) {
+            box->setText(numbered);
+            emit box->returnPressed();
+        }
+        QElapsedTimer setting;
+        setting.start();
+        while (window.Loading() && setting.elapsed() < kLongestWaitMs)
+            QApplication::processEvents();
+        QApplication::processEvents();
+    }
     const QString depth = Taken("--depth", arguments, QString());
     if (!depth.isEmpty()) {
         if (auto* timeline = window.findChild<Editor::Timeline*>()) {
@@ -129,6 +196,18 @@ int main(int argc, char** argv) {
                       << one->sizeHint().width() << 'x' << one->sizeHint().height() << " font "
                       << one->font().pixelSize() << " shown " << (one->isVisible() ? 1 : 0)
                       << Qt::endl;
+            }
+        }
+    }
+    const QString dumped = Taken("--dump", arguments, QString());
+    if (!dumped.isEmpty()) {
+        QFile writing(QDir(out).filePath(dumped));
+        if (writing.open(QIODevice::WriteOnly | QIODevice::Text)) {
+            QTextStream lines(&writing);
+            for (QTreeWidget* tree : window.findChildren<QTreeWidget*>()) {
+                for (QTreeWidgetItemIterator row(tree); *row != nullptr; ++row)
+                    lines << tree->objectName() << '	' << (*row)->text(0) << '	'
+                          << (*row)->data(0, Editor::Rows::kDetailRole).toString() << Qt::endl;
             }
         }
     }

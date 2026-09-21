@@ -109,6 +109,10 @@ struct ChildClip {
 
 int GetRootMcId(const AfpFuncs& afp);
 
+bool SetInputTexture(const AfpFuncs& afp, const std::string& path, const std::string& texture);
+
+bool SetInputShown(const AfpFuncs& afp, const std::string& path, bool shown);
+
 std::vector<ChildClip> EnumerateChildClips(const AfpFuncs& afp, bool want_positions = true,
                                            bool* ok = nullptr);
 }

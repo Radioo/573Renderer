@@ -20,6 +20,11 @@
 
 namespace {
 
+constexpr uint32_t kVisible = 0x1007;
+constexpr uint32_t kInvalidate = 0x101E;
+constexpr int kNextSameName = 6;
+constexpr int kMostSiblings = 64;
+
 constexpr uint32_t kDrawBackground = 0x20;
 
 }
@@ -137,6 +142,47 @@ void AfpManager::SetStreamPaused(const AfpFuncs& afp, bool paused) {
 
 int AfpManager::GetRootMcId(const AfpFuncs& afp) {
     return ReferRootMcId(afp);
+}
+
+bool AfpManager::SetInputTexture(const AfpFuncs& afp, const std::string& path,
+                                 const std::string& texture) {
+    if (afp.afp_mc_get_id_by_path == nullptr || afp.afp_play_work_load_bitmap == nullptr)
+        return false;
+    int mc_id = afp.afp_mc_get_id_by_path(g_engine.stream_id, path.c_str());
+    if (mc_id < 0) {
+        LOG("AFP", "SetInputTexture('%s'): no clip by that name", path.c_str());
+        return false;
+    }
+    bool wrote = false;
+    for (int walked = 0; mc_id >= 0 && walked < kMostSiblings; walked++) {
+        const int rc = afp.afp_play_work_load_bitmap(mc_id, texture.c_str(), 0);
+        if (rc < 0) {
+            LOG("AFP", "SetInputTexture('%s') texture '%s' -> %d", path.c_str(), texture.c_str(),
+                rc);
+        } else {
+            wrote = true;
+            if (afp.afp_mc_get != nullptr) afp.afp_mc_get(mc_id, kInvalidate, 1);
+        }
+        if (afp.afp_mc_get_relative_id == nullptr) break;
+        mc_id = afp.afp_mc_get_relative_id(mc_id, kNextSameName);
+    }
+    return wrote;
+}
+
+bool AfpManager::SetInputShown(const AfpFuncs& afp, const std::string& path, bool shown) {
+    if (afp.afp_mc_get_id_by_path == nullptr || afp.afp_mc_get == nullptr) return false;
+    int mc_id = afp.afp_mc_get_id_by_path(g_engine.stream_id, path.c_str());
+    if (mc_id < 0) {
+        LOG("AFP", "SetInputShown('%s'): no clip by that name", path.c_str());
+        return false;
+    }
+    for (int walked = 0; mc_id >= 0 && walked < kMostSiblings; walked++) {
+        afp.afp_mc_get(mc_id, kVisible, shown ? 1 : 0);
+        afp.afp_mc_get(mc_id, kInvalidate, 1);
+        if (afp.afp_mc_get_relative_id == nullptr) break;
+        mc_id = afp.afp_mc_get_relative_id(mc_id, kNextSameName);
+    }
+    return true;
 }
 
 std::vector<AfpManager::ChildClip> AfpManager::EnumerateChildClips(const AfpFuncs& afp,

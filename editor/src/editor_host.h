@@ -33,6 +33,9 @@ public:
 
     [[nodiscard]] Support::Expected<void, std::string> Seek(uint32_t frame);
 
+    [[nodiscard]] Support::Expected<void, std::string>
+    SetInputs(const std::vector<PreviewClient::InputValue>& values);
+
     [[nodiscard]] Support::Expected<void, std::string> Resize(uint32_t width, uint32_t height);
 
     [[nodiscard]] Support::Expected<PreviewClient::Frame, std::string> Render();

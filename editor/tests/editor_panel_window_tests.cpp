@@ -3,6 +3,7 @@
 #include <DockWidget.h>
 
 #include "editor_files.h"
+#include "editor_rows.h"
 #include "editor_mime.h"
 #include "editor_timeline.h"
 #include "editor_timeline_metrics.h"
@@ -909,4 +910,62 @@ TEST_CASE("The library places on Enter, filters by kind, and drops onto the Char
     emit timeline->DepthChosen(1);
     QApplication::processEvents();
     CHECK(RowValue(*opened.inspector, "Character") != before);
+}
+
+TEST_CASE("The inputs panel lists every named placement and goes to the one that is clicked") {
+    Opened opened;
+    opened.window.resize(kWindowWidth, kWindowHeight);
+    opened.window.OpenDocument(WritePackage(opened.dir, true, "clear_lamp"));
+    WaitForOpen(opened.window);
+    ShowOffScreen(opened.window);
+    QWidget* panel = Panel(opened.window, "Inputs")->widget();
+    REQUIRE(panel != nullptr);
+    auto* inputs = panel->findChild<QTreeWidget*>("inputs");
+    auto* filter = panel->findChild<QLineEdit*>("inputs_filter");
+    auto* timeline = opened.window.findChild<Editor::Timeline*>();
+    REQUIRE(inputs != nullptr);
+    REQUIRE(filter != nullptr);
+    REQUIRE(timeline != nullptr);
+
+    QTreeWidgetItem* lamp = nullptr;
+    for (QTreeWidgetItemIterator row(inputs); *row != nullptr; ++row) {
+        if ((*row)->text(0) == "clear_lamp") lamp = *row;
+    }
+    REQUIRE(lamp != nullptr);
+    CHECK(lamp->parent() == nullptr);
+    CHECK(filter->placeholderText().toStdString() == std::string("Filter 2 inputs"));
+    QStringList headings;
+    QStringList after_labels;
+    bool labelled = false;
+    for (int top = 0; top < inputs->topLevelItemCount(); top++) {
+        QTreeWidgetItem* row = inputs->topLevelItem(top);
+        if (row->data(0, Editor::Rows::kHeaderRole).toBool()) {
+            headings.append(row->text(0));
+            labelled = row->text(0) == "Frame labels";
+            continue;
+        }
+        if (labelled) after_labels.append(row->text(0));
+    }
+    CHECK(headings == QStringList{"Root", "Frame labels"});
+    CHECK(after_labels == QStringList{"loop"});
+
+    emit timeline->DepthChosen(2);
+    QApplication::processEvents();
+    auto* chosen = opened.window.findChild<QLabel*>("chosen_status");
+    REQUIRE(chosen != nullptr);
+    CHECK(chosen->text() == QString("Depth 2 chosen"));
+    emit inputs->itemClicked(lamp, 0);
+    REQUIRE(Settle([chosen] { return chosen->text() == QString("Depth 1 chosen"); }));
+    lamp = nullptr;
+    for (QTreeWidgetItemIterator row(inputs); *row != nullptr; ++row) {
+        if ((*row)->text(0) == "clear_lamp") lamp = *row;
+    }
+    REQUIRE(lamp != nullptr);
+
+    filter->setText("nothing matches this");
+    QApplication::processEvents();
+    CHECK(lamp->isHidden());
+    filter->setText("clear");
+    QApplication::processEvents();
+    CHECK_FALSE(lamp->isHidden());
 }

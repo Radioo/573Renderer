@@ -302,6 +302,7 @@ QToolButton#bar_icon { padding: 0px; }
 QPushButton#search { background: %field; border: 1px solid %edge; padding: 0px; }
 QPushButton#search:hover { background: %line; }
 QLabel#search_chip { color: %soft; border: 1px solid %edge; padding: 1px 5px; }
+QLabel[caption="true"] { color: %faint; }
 QLabel#document_state { color: %text; }
 QLabel#document_edits { color: %amber; }
 QToolButton#project { color: %soft; padding: 0px 8px; }
@@ -407,6 +408,10 @@ QToolButton {
     min-height: 26px;
 }
 QToolButton:hover { background: %field; color: %text; }
+QLineEdit QToolButton, QComboBox QToolButton {
+    padding: 0px; min-height: 0px; min-width: 0px; background: transparent;
+}
+QLineEdit QToolButton:hover, QComboBox QToolButton:hover { background: transparent; }
 QToolButton:pressed { background: %line; }
 QToolButton:checked { background: %chosen; color: %text; }
 QToolButton:disabled { color: %faint; }
@@ -416,9 +421,26 @@ QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox, QPlainTextEdit, QTextEdit {
     padding: 0px 6px; min-height: 24px; selection-background-color: %chosen;
 }
 QLineEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus, QComboBox:focus { border-color: %accent; }
-QSpinBox::up-button, QSpinBox::down-button,
-QDoubleSpinBox::up-button, QDoubleSpinBox::down-button { width: 0px; border: 0px; }
-QComboBox::drop-down { border: 0px; width: 16px; }
+QSpinBox, QDoubleSpinBox { padding-right: 20px; }
+QSpinBox::up-button, QDoubleSpinBox::up-button {
+    subcontrol-origin: border; subcontrol-position: top right;
+    width: 18px; border: 0px; background: transparent;
+    image: url(:/icons/plus-faint.svg);
+}
+QSpinBox::down-button, QDoubleSpinBox::down-button {
+    subcontrol-origin: border; subcontrol-position: bottom right;
+    width: 18px; border: 0px; background: transparent;
+    image: url(:/icons/minus-faint.svg);
+}
+
+QComboBox { padding-right: 20px; }
+QComboBox::drop-down {
+    subcontrol-origin: padding; subcontrol-position: center right;
+    width: 18px; border: 0px; background: transparent;
+}
+QComboBox::down-arrow { image: url(:/icons/chevron-down-faint.svg); width: 11px; height: 11px; }
+QComboBox::down-arrow:on { top: 1px; }
+QComboBox:hover { border-color: %edge; }
 QComboBox QAbstractItemView { background: %panel; border: 1px solid %edge;
                               selection-background-color: %chosen; }
 
@@ -462,7 +484,18 @@ QSlider::sub-page:horizontal { background: %accent; height: 2px; }
 QSplitter::handle { background: %page; }
 QDialog { background: %page; }
 QScrollArea { border: 0px; background: %page; }
-QCheckBox, QRadioButton { color: %text; spacing: 6px; }
+QCheckBox, QRadioButton { color: %text; spacing: 7px; }
+QCheckBox::indicator, QRadioButton::indicator {
+    width: 14px; height: 14px; border: 1px solid %edge; background: %field;
+}
+QCheckBox::indicator { border-radius: 2px; }
+QRadioButton::indicator { border-radius: 8px; }
+QCheckBox::indicator:hover, QRadioButton::indicator:hover { border-color: %accent; }
+QCheckBox::indicator:checked {
+    background: %accent; border-color: %accent; image: url(%tick);
+}
+QRadioButton::indicator:checked { background: %accent; border: 4px solid %field; }
+QCheckBox::indicator:disabled, QRadioButton::indicator:disabled { border-color: %line; }
 QLabel { background: transparent; }
 )")
                           .replace("%page", Hex(kPage))
@@ -475,6 +508,8 @@ QLabel { background: transparent; }
                           .replace("%faint", Hex(kFaint))
                           .replace("%accent", Hex(Accent()))
                           .replace("%onaccent", Hex(OnAccent()))
+                          .replace("%tick", OnAccent() == kText ? ":/icons/check-text.svg"
+                                                                : ":/icons/check-ink.svg")
                           .replace("%chosen", Hex(Chosen()))
                           .replace("%amber", Hex(kAmber))
                           .replace("%mono", MonoFamily())

@@ -369,6 +369,10 @@ void Window::BuildPanels() {
         docks_->addDockWidget(ads::RightDockWidgetArea, inspector_dock);
     history_dock_ = MakePanel(tr("History"), BuildHistory());
     docks_->addDockWidget(ads::CenterDockWidgetArea, history_dock_, inspector_area);
+    QWidget* inputs_panel = BuildInputsPanel();
+    inputs_panel->setMinimumWidth(kLeastSideWidth);
+    docks_->addDockWidget(ads::CenterDockWidgetArea, MakePanel(tr("Inputs"), inputs_panel),
+                          inspector_area);
     inspector_dock->setAsCurrentTab();
     package_area->setDockAreaFlag(ads::CDockAreaWidget::HideSingleWidgetTitleBar, true);
     library_area->setDockAreaFlag(ads::CDockAreaWidget::HideSingleWidgetTitleBar, true);

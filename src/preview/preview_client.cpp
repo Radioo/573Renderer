@@ -211,6 +211,25 @@ Support::Expected<void, std::string> Host::SetBackgroundDrawn(bool drawn) {
     return {};
 }
 
+Support::Expected<void, std::string> Host::SetInputs(const std::vector<InputValue>& values) {
+    flatbuffers::FlatBufferBuilder builder;
+    std::vector<flatbuffers::Offset<PreviewProtocol::InputValue>> written;
+    written.reserve(values.size());
+    for (const InputValue& value : values) {
+        written.push_back(
+            PreviewProtocol::CreateInputValue(builder, builder.CreateString(value.path),
+                                              builder.CreateString(value.texture), value.hidden));
+    }
+    const auto told = PreviewProtocol::CreateSetInputs(builder, builder.CreateVector(written));
+    builder.Finish(PreviewProtocol::CreateRequestMessage(
+        builder, PreviewProtocol::Request::SetInputs, told.Union()));
+    auto reply = Call(Finished(builder), "SetInputs");
+    if (!reply) return Support::Unexpected(reply.error());
+    auto message = Decode(*reply, "SetInputs");
+    if (!message) return Support::Unexpected(message.error());
+    return {};
+}
+
 Support::Expected<Frame, std::string> Host::Render() {
     flatbuffers::FlatBufferBuilder builder;
     const auto render = PreviewProtocol::CreateRender(builder);

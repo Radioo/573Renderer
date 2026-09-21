@@ -8,6 +8,7 @@
 #include <optional>
 #include <span>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace PreviewProtocol {
@@ -43,8 +44,17 @@ private:
 
     HWND window_ = nullptr;
     bool booted_ = false;
+    void ApplyInputs() const;
+
     bool package_loaded_ = false;
     bool background_drawn_ = false;
+    struct HeldInput {
+        std::string path;
+        std::string texture;
+        bool hidden = false;
+    };
+
+    std::vector<HeldInput> inputs_;
     std::vector<uint8_t> texture_bytes_;
     std::optional<uint32_t> resume_frame_;
     std::optional<SharedFrame::Target> frame_;
