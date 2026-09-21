@@ -53,6 +53,12 @@ shell with no Visual Studio environment fails at the compiler check with
 `LNK1104: cannot open file 'kernel32.lib'`, which is what the batch file
 exists to prevent.
 
+CI builds the same preset and runs both suites on every push and pull request
+to master (`.github/workflows/build-editor.yml`; the cache and the checks it
+makes are in docs/gates.md). A build that only works locally is a build that
+drifts: the runner has its own MSVC, so `CMAKE_COMPILE_WARNING_AS_ERROR` from
+the `base` preset is checked against a second compiler there.
+
 ## Widget tests
 
 `build-editor/editor_widget_tests.exe` drives the timeline, the viewport, the

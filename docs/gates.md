@@ -435,6 +435,39 @@ Local run: `pip install clang-tidy==21.1.6`, then `python
 tools/ci/run_tidy.py` (or `clang-tidy -p build --quiet <file>` for one
 file).
 
+## The editor is built and tested in CI
+
+`.github/workflows/build-editor.yml` (the `windows` job) configures with the
+`editor` preset, builds every editor target and runs both suites the way
+`tools/checks.sh` does: `editor_widget_tests.exe` then
+`editor_window_tests.exe`, each as one process rather than through ctest. The
+editor's cases are not registered with `catch_discover_tests`, because
+discovery would launch a process per case and every window case builds a whole
+`Editor::Window`; one process for the file is seconds instead of minutes. The
+live cases skip themselves, since `R573_IIDX_DIR` is not set on a runner.
+
+It is a separate workflow from `build-renderer.yml` because it needs a
+different dependency set: the `editor` feature of `vcpkg.json` with
+`VCPKG_MANIFEST_NO_DEFAULT_FEATURES`, so no ffmpeg and no imgui, and the
+dynamic `x64-windows` triplet where the renderer uses `x64-windows-static`.
+Its vcpkg archive cache therefore has its own key
+(`vcpkg-archives-editor-...`) and cannot collide with the renderer's.
+
+**The first run on a cold cache builds Qt from source**, which is the bulk of
+the job; every run after it restores qtbase, qtsvg and the docking system from
+the archive cache, which is roughly 400 MB for this triplet. Two things evict
+it: a bump of the vcpkg submodule or of `vcpkg.json` (both are in the key), and
+GitHub's own 7-day idle eviction and 10 GB per-repository limit, which this
+cache shares with the renderer's. A run that suddenly takes hours is that
+cache, not the code.
+
+The job also checks what the build deployed: `ifs_editor.exe` exists, is over
+1 MB, is a PE with machine 0x8664, and the `qwindows`, `qjpeg` and `qsvg`
+plugins sit beside it. A Qt application links and then fails at startup when
+its platform plugin is missing, which no compile step would catch. The
+artefact carries the exe, its pdb, the Qt DLLs and the plugin directories,
+around 32 MB, so it can be run as it is.
+
 ## Running everything locally
 
 ```
