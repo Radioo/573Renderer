@@ -77,6 +77,12 @@ void GraphEditor::ShowTracks(std::vector<Document::Track> tracks, std::vector<st
     Fit(keys_only_);
 }
 
+void GraphEditor::SetFrame(uint32_t frame) {
+    if (playhead_ == frame) return;
+    playhead_ = frame;
+    update();
+}
+
 std::vector<std::size_t> GraphEditor::Drawn() const {
     std::vector<std::size_t> drawn;
     for (std::size_t at = 0; at < tracks_.size(); at++) {

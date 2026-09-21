@@ -23,8 +23,12 @@
 #include <QSlider>
 #include <QString>
 #include <QToolButton>
+#include <QTreeWidget>
+#include <QTreeWidgetItem>
 
 #include <cmath>
+#include <cstdint>
+#include <optional>
 #include <vector>
 
 #include "window_test_support.h"
@@ -299,4 +303,34 @@ TEST_CASE("A drag inside a clip shown in place is mapped through the clip's own 
     const double moved = after.section(',', 0, 0).trimmed().toDouble() -
                          before.section(',', 0, 0).trimmed().toDouble();
     CHECK_THAT(moved, Catch::Matchers::WithinAbs(200, 1));
+}
+
+TEST_CASE("A shape double-clicked on the stage says where its keyframes are") {
+    Opened opened;
+    Open(opened, true);
+    auto* timeline = opened.window.findChild<Editor::Timeline*>();
+    auto* viewport = opened.window.findChild<Editor::Viewport*>();
+    auto* library = opened.window.findChild<QTreeWidget*>("library");
+    REQUIRE(timeline != nullptr);
+    REQUIRE(viewport != nullptr);
+    REQUIRE(library != nullptr);
+    std::optional<uint16_t> dot;
+    for (int at = 0; at < library->topLevelItemCount(); at++) {
+        const QTreeWidgetItem* row = library->topLevelItem(at);
+        if (row->text(0).contains("dot"))
+            dot = static_cast<uint16_t>(row->data(0, Qt::UserRole).toUInt());
+    }
+    REQUIRE(dot.has_value());
+    emit timeline->FrameChosen(0);
+    emit viewport->CharacterDropped(dot.value_or(0), 500, 300);
+    QApplication::processEvents();
+
+    emit viewport->EnterAsked(501, 301);
+    QApplication::processEvents();
+
+    CHECK(OpenClip(opened.window).isEmpty());
+    const QString said = LastNotice(opened.window);
+    CHECK_FALSE(said.contains("Sprite"));
+    CHECK(said.contains("Shape"));
+    CHECK(said.contains("depth 3"));
 }

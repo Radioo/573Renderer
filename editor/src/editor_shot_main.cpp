@@ -1,6 +1,7 @@
 #include "editor_window.h"
 
 #include "editor_hover.h"
+#include "editor_stage_bar.h"
 #include "editor_theme.h"
 #include "editor_timeline.h"
 
@@ -17,6 +18,9 @@
 #include <QString>
 #include <QStringList>
 #include <QTextStream>
+#include <QTreeWidget>
+#include <QTreeWidgetItem>
+#include <QTreeWidgetItemIterator>
 #include <QWidget>
 
 namespace {
@@ -78,6 +82,28 @@ int main(int argc, char** argv) {
                waited.elapsed() < kLongestWaitMs)
             QApplication::processEvents();
     }
+    const QString animation = Taken("--animation", arguments, QString());
+    if (!animation.isEmpty()) {
+        if (auto* tree = window.findChild<QTreeWidget*>("package_animations")) {
+            for (QTreeWidgetItemIterator row(tree); *row != nullptr; ++row) {
+                if ((*row)->text(0) != animation) continue;
+                tree->setCurrentItem(*row);
+                break;
+            }
+        }
+        QElapsedTimer showing;
+        showing.start();
+        while (window.Loading() && showing.elapsed() < kLongestWaitMs)
+            QApplication::processEvents();
+    }
+    const QString clip = Taken("--clip", arguments, QString());
+    if (!clip.isEmpty()) {
+        if (auto* bar = window.findChild<Editor::StageBar*>()) emit bar->ClipAsked(clip.toInt());
+        QElapsedTimer entering;
+        entering.start();
+        while (window.Loading() && entering.elapsed() < kLongestWaitMs)
+            QApplication::processEvents();
+    }
     const QString depth = Taken("--depth", arguments, QString());
     if (!depth.isEmpty()) {
         if (auto* timeline = window.findChild<Editor::Timeline*>()) {
@@ -106,12 +132,17 @@ int main(int argc, char** argv) {
             }
         }
     }
+    QWidget* taken = &window;
+    const QString only = Taken("--grab", arguments, QString());
+    if (!only.isEmpty()) {
+        if (QWidget* one = window.findChild<QWidget*>(only)) taken = one;
+    }
     QImage shot;
     for (int pass = 0; pass < 8; pass++) {
-        const QSize settled = window.size();
+        const QSize settled = taken->size();
         QApplication::processEvents();
-        shot = window.grab().toImage();
-        if (window.size() == settled) break;
+        shot = taken->grab().toImage();
+        if (taken->size() == settled) break;
     }
     window.hide();
     const QString path = QDir(out).filePath(name + ".png");

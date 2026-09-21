@@ -1,5 +1,6 @@
 #include <catch2/catch_test_macros.hpp>
 
+#include "editor_graph.h"
 #include "editor_timeline.h"
 #include "editor_viewport.h"
 #include "editor_window.h"
@@ -613,4 +614,70 @@ TEST_CASE("A motion sketch plays the animation while the drag is held and keys w
     REQUIRE(Settle([&opening] { return !opening.Problems().isEmpty(); }));
     CHECK(opening.Problems().front().contains("outside"));
     CHECK(action("&Pause") == nullptr);
+}
+
+TEST_CASE("The graph's playhead keeps up while the animation plays") {
+    const QString game = qEnvironmentVariable("R573_IIDX_DIR");
+    if (game.isEmpty()) SKIP("R573_IIDX_DIR not set");
+    const QString title = game + "/data/graphic/1/title.ifs";
+    QSettings().setValue("game/directory", game);
+    Editor::Window window;
+    QSettings().remove("game/directory");
+    window.resize(1600, 900);
+    window.show();
+    Script opening({});
+    window.OpenDocument(title);
+    WaitForOpen(window);
+    REQUIRE(opening.Problems().isEmpty());
+    const std::optional<uint16_t> widest = WidestTitleDepth(title);
+    REQUIRE(widest.has_value());
+    if (!widest) return;
+    auto* timeline = window.findChild<Editor::Timeline*>();
+    REQUIRE(timeline != nullptr);
+    Editor::GraphEditor* graph = nullptr;
+    for (QWidget* widget : QApplication::allWidgets()) {
+        if (auto* found = qobject_cast<Editor::GraphEditor*>(widget)) graph = found;
+    }
+    REQUIRE(graph != nullptr);
+
+    Panel(window, "Graph")->setAsCurrentTab();
+    QApplication::processEvents();
+    REQUIRE(graph->width() > 0);
+    const QImage empty = Picture(*graph);
+
+    QTemporaryDir dir;
+    REQUIRE(dir.isValid());
+    QAction* project = nullptr;
+    for (QAction* one : window.findChildren<QAction*>()) {
+        if (one->text() == "&New project...") project = one;
+    }
+    REQUIRE(project != nullptr);
+    {
+        Script made({PickFile(dir.path())});
+        project->trigger();
+        REQUIRE(Settle([&made] { return made.Finished(); }));
+        CHECK(made.Problems().isEmpty());
+    }
+    emit timeline->FrameChosen(kPreviewFrame);
+    emit timeline->DepthChosen(*widest);
+    {
+        Script owned({Choose(QString("Let the project own depth %1 from here").arg(*widest))});
+        emit timeline->MenuRequested(QPoint(4, 4), kPreviewFrame, QString());
+        REQUIRE(Settle([&owned] { return owned.Finished(); }));
+        CHECK(owned.Problems().isEmpty());
+    }
+    emit timeline->DepthChosen(*widest);
+    QApplication::processEvents();
+    const QImage still = Picture(*graph);
+    REQUIRE(still != empty);
+    QImage playing = still;
+    RunCommand(window, "play.toggle");
+    QElapsedTimer played;
+    played.start();
+    while (played.elapsed() < kPlayForMs && playing == still) {
+        QApplication::processEvents();
+        playing = graph->grab().toImage();
+    }
+    RunCommand(window, "play.toggle");
+    CHECK(playing != still);
 }

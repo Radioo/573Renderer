@@ -300,7 +300,17 @@ void Window::EnterSpriteAt(double x, double y) {
     for (const auto& [at, shown] : row->shows) {
         if (at <= frame_) character = shown;
     }
-    if (character) EnterSprite(*character);
+    if (!character) return;
+    if (timeline_->IsSprite(*character)) {
+        EnterSprite(*character);
+        return;
+    }
+    ChooseDepth(*depth);
+    const QString label = timeline_->CharacterLabel(*character);
+    ShowResult(tr("%1 has no timeline of its own: its keyframes are on depth %2")
+                   .arg(label.isEmpty() ? tr("Character %1").arg(*character) : label)
+                   .arg(*depth),
+               false);
 }
 
 void Window::LeaveClip() {
@@ -659,6 +669,7 @@ void Window::SeekTo(uint32_t frame) {
     RefreshTimelineBar();
     if (sketch_) sketch_->offsets[frame] = sketch_->latest;
     timeline_->SetFrame(frame);
+    graph_->SetFrame(frame);
     if (!clip_.sprite || symbol_shown_) SeekViewport(frame);
     if (!Playing()) ShowFrame();
 }

@@ -283,7 +283,11 @@ PNG into the given directory (`screenshots/` is gitignored). The window is a
 `Qt::Tool` with `WindowDoesNotAcceptFocus` and `WA_ShowWithoutActivating`
 moved to -32000, so it never takes focus or interrupts anything on screen, and
 it clears its own `QSettings` first so the shot is the same every time.
-Options: `--ifs <file>` opens a package, `--depth N` and `--frame N` choose one
+Options: `--ifs <file>` opens a package, `--animation <name>` picks that
+animation out of the Animations list the way a click does (without it the shot
+shows the first one), `--clip N` descends into a clip of it by its index in
+`Document::Clips`, 0 being the root, which is the breadcrumb the stage bar
+draws, `--depth N` and `--frame N` choose one
 (so the inspector, the selection bar and the timeline have something to show),
 `--game <dir>` points at an install, `--hover <objectName>` puts the named
 widget under the pointer, `--report <file>` writes a text line per named widget
@@ -1812,6 +1816,19 @@ only: rebuilding the list from inside its own `itemChanged` would delete the
 item whose signal is running, which crashed the window test, so the list is
 rebuilt only when the track names themselves change.
 
+`Window::SeekTo` moves both playheads: `Timeline::SetFrame` and
+`GraphEditor::SetFrame`. The graph used to learn the frame only from
+`ShowTracks`, which `RefreshGraphTracks` calls when the chosen depth, the
+property list or the document changes. A seek looked fine because `SeekTo` ends
+in `ShowFrame` and that refreshes the keys, but playback skips it
+(`if (!Playing()) ShowFrame();`), so while the animation played the timeline's
+playhead ran and the graph's stood still. `The graph's playhead keeps up while
+the animation plays` in `editor/tests/editor_live_window_tests.cpp` owns a
+depth of `title.ifs`, brings the Graph tab to the front, grabs the widget,
+plays, and grabs again until the picture changes. It is a live case because
+`TogglePlay` refuses when `frame_count_` is 0, and that count comes from the
+preview host, so nothing plays without a game install.
+
 Fit all and Fit keys (`graph.fit_all`, `graph.fit_keys`, on the panel and in the
 View menu) set the value range `GraphEditor::Fit` works out: every sampled frame
 of the shown tracks, or only their keyframes. A bezier ease can overshoot
@@ -2012,7 +2029,24 @@ that clip. A clip is entered by double-clicking its bar on the timeline
 counts), by double-clicking the object itself on stage (`Viewport::EnterAsked`,
 `Window::EnterSpriteAt` picks the depth under the point and enters what it
 places) or by double-clicking it in the library. Escape leaves it
-(`clip.leave`, refused at the root). Opening a clip shows that sprite's depths,
+(`clip.leave`, refused at the root).
+
+Only a sprite has a timeline of its own. The timeline's own double-click
+already checked that (`SpriteAt` returns nothing for a shape, an image or an
+imported asset), but the stage's did not: it handed whatever the depth placed
+to `EnterSprite`, which looked it up in `clips_`, missed, and said "Sprite 67 is
+not a clip of this animation" about a character that is a shape. A user
+double-clicked a character on IIDX 33's `x_logo_loop`, read that, and went
+looking for a sprite that does not exist. `EnterSpriteAt` now asks
+`Timeline::IsSprite` first: a sprite is entered, and anything else chooses that
+depth and says "Shape 67: 33title_chara_01 has no timeline of its own: its
+keyframes are on depth 7", which is where they are. Those two characters are
+shapes placed straight onto root depths 7 and 6, re-placed nearly every frame,
+so the bob is a row of marks on the root row, not a nested clip.
+`A shape double-clicked on the stage...` in
+`editor/tests/editor_bar_window_tests.cpp` drops the sample's dot shape, double
+clicks it and checks the notice names a shape and its depth; it caught the old
+message saying "Sprite". Opening a clip shows that sprite's depths,
 labels and frames on the timeline and its placements and cameras in the
 inspector. Placement fields, library call arguments, cameras, labels and the
 structure edits all apply to the clip that is open.

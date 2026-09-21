@@ -60,6 +60,8 @@ public:
     void SetFrameNotes(std::vector<Document::FrameNote> notes);
     void SetKeyedDepths(std::vector<uint16_t> depths);
     [[nodiscard]] QString SpanNameAt(QPoint at) const;
+    [[nodiscard]] bool IsSprite(uint16_t character) const;
+    [[nodiscard]] QString CharacterLabel(uint16_t character) const;
     void SetWorkArea(std::optional<Document::WorkArea> area);
     void Clear();
     void Waiting(const QString& what);

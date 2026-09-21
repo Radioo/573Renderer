@@ -28,6 +28,7 @@ public:
                    uint32_t playhead);
     void ShowTracks(std::vector<Document::Track> tracks, std::vector<std::string> shown,
                     uint32_t first_frame, uint32_t last_frame, uint32_t playhead);
+    void SetFrame(uint32_t frame);
     [[nodiscard]] std::optional<QPointF> KeyPoint(uint32_t frame, std::size_t component) const;
     [[nodiscard]] static QColor ColourOf(std::size_t track);
     void Fit(bool keys_only);

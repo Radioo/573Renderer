@@ -459,6 +459,16 @@ QString Timeline::SpanName(const Document::DepthRow& row, const Document::Span& 
     return name == names_.end() ? QString() : name->second;
 }
 
+bool Timeline::IsSprite(uint16_t character) const {
+    const auto kind = kinds_.find(character);
+    return kind != kinds_.end() && kind->second == Document::CharacterKind::Sprite;
+}
+
+QString Timeline::CharacterLabel(uint16_t character) const {
+    const auto name = names_.find(character);
+    return name == names_.end() ? QString() : name->second;
+}
+
 std::optional<uint16_t> Timeline::SpriteAt(QPoint at) const {
     const std::optional<std::size_t> lane = LaneAt(at.y());
     if (!lane) return std::nullopt;
@@ -469,9 +479,7 @@ std::optional<uint16_t> Timeline::SpriteAt(QPoint at) const {
     if (row == rows_.end() || !span) return std::nullopt;
     const auto shown = row->shows.find(span->first_frame);
     if (shown == row->shows.end()) return std::nullopt;
-    const auto kind = kinds_.find(shown->second);
-    if (kind == kinds_.end() || kind->second != Document::CharacterKind::Sprite)
-        return std::nullopt;
+    if (!IsSprite(shown->second)) return std::nullopt;
     return shown->second;
 }
 

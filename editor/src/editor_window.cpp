@@ -253,6 +253,7 @@ void Window::BuildPanels() {
             [this](const QPoint& at) { ShowInspectorMenu(at); });
 
     timeline_ = new Timeline;
+    timeline_->setObjectName("timeline");
     connect(timeline_, &Timeline::FrameChosen, this, &Window::SeekTo);
     connect(timeline_, &Timeline::DepthChosen, this, &Window::ChooseDepth);
     connect(timeline_, &Timeline::DepthsChosen, this, &Window::ChooseDepths);
