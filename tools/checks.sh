@@ -31,6 +31,9 @@ rm -f "$EDITOR_LOG"
 "$ROOT/build-editor/editor_widget_tests.exe"
 "$ROOT/build-editor/editor_window_tests.exe"
 
+uv run --project "$ROOT/tools/ci" python "$ROOT/tools/ci/stage_editor.py"     --editor "$ROOT/build-editor" --host "$ROOT/build" --into "$ROOT/dist"
+uv run --project "$ROOT/tools/ci" python "$ROOT/tools/ci/check_editor_starts.py" --dist "$ROOT/dist"
+
 CTEST_EXE="ctest"
 if [ -f build/CMakeCache.txt ]; then
     CMAKE_EXE="$(grep -m1 '^CMAKE_COMMAND:INTERNAL=' build/CMakeCache.txt | cut -d= -f2-)"

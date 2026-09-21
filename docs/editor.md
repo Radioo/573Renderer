@@ -54,8 +54,8 @@ shell with no Visual Studio environment fails at the compiler check with
 exists to prevent.
 
 CI builds the same preset and runs both suites on every push and pull request
-to master (`.github/workflows/build-editor.yml`; the cache and the checks it
-makes are in docs/gates.md). A build that only works locally is a build that
+to master (the `editor` job of `.github/workflows/build-renderer.yml`; the
+cache, the packaging and the checks it makes are in docs/gates.md). A build that only works locally is a build that
 drifts: the runner has its own MSVC, so `CMAKE_COMPILE_WARNING_AS_ERROR` from
 the `base` preset is checked against a second compiler there.
 
@@ -669,7 +669,11 @@ holds before it can take new bytes under a new name.
 
 `FindPreviewHost` looks for `preview_host.exe` next to the editor first and
 then in the renderer's `build/` directory, so a developer with both projects
-built needs no copying. The application starts the host on the install it
+built needs no copying. The editor's own build tree never holds one: the host
+is renderer-side (`r573_afp_host` and the render stack, loading the game's avs2
+and afp DLLs through D3D9), and the `editor` preset turns the renderer off.
+Anything shipped to someone else therefore has to be staged from both trees,
+which `tools/ci/stage_editor.py` does. The application starts the host on the install it
 remembers, or on the one the user picks from the File menu, and stops it on
 close; a host that fails to start or refuses a request shows in a warning box
 and leaves the window and its document alone.

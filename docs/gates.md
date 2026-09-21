@@ -435,9 +435,9 @@ Local run: `pip install clang-tidy==21.1.6`, then `python
 tools/ci/run_tidy.py` (or `clang-tidy -p build --quiet <file>` for one
 file).
 
-## The editor is built and tested in CI
+## The editor is built, tested and packaged in CI
 
-`.github/workflows/build-editor.yml` (the `windows` job) configures with the
+The `editor` job of `.github/workflows/build-renderer.yml` configures with the
 `editor` preset, builds every editor target and runs both suites the way
 `tools/checks.sh` does: `editor_widget_tests.exe` then
 `editor_window_tests.exe`, each as one process rather than through ctest. The
@@ -446,11 +446,10 @@ discovery would launch a process per case and every window case builds a whole
 `Editor::Window`; one process for the file is seconds instead of minutes. The
 live cases skip themselves, since `R573_IIDX_DIR` is not set on a runner.
 
-It is a separate workflow from `build-renderer.yml` because it needs a
-different dependency set: the `editor` feature of `vcpkg.json` with
-`VCPKG_MANIFEST_NO_DEFAULT_FEATURES`, so no ffmpeg and no imgui, and the
-dynamic `x64-windows` triplet where the renderer uses `x64-windows-static`.
-Its vcpkg archive cache therefore has its own key
+It needs a different dependency set from the renderer job: the `editor` feature
+of `vcpkg.json` with `VCPKG_MANIFEST_NO_DEFAULT_FEATURES`, so no ffmpeg and no
+imgui, and the dynamic `x64-windows` triplet where the renderer uses
+`x64-windows-static`. Its vcpkg archive cache therefore has its own key
 (`vcpkg-archives-editor-...`) and cannot collide with the renderer's.
 
 **The first run on a cold cache builds Qt from source**, which is the bulk of
@@ -461,12 +460,35 @@ GitHub's own 7-day idle eviction and 10 GB per-repository limit, which this
 cache shares with the renderer's. A run that suddenly takes hours is that
 cache, not the code.
 
-The job also checks what the build deployed: `ifs_editor.exe` exists, is over
-1 MB, is a PE with machine 0x8664, and the `qwindows`, `qjpeg` and `qsvg`
-plugins sit beside it. A Qt application links and then fails at startup when
-its platform plugin is missing, which no compile step would catch. The
-artefact carries the exe, its pdb, the Qt DLLs and the plugin directories,
-around 32 MB, so it can be run as it is.
+### The artefact is a folder that runs
+
+`preview_host.exe` is renderer-side: it loads the game's own avs2 and afp DLLs
+and draws through D3D9, so it links `r573_afp_host` and the render stack, and
+the editor preset (`R573_BUILD_RENDERER=OFF`) returns from the top-level
+`CMakeLists.txt` before that target exists. `FindPreviewHost` looks for it
+beside the editor and then in the renderer's `build/`, which is why a developer
+with both projects built never notices, and why the editor's own build
+directory has no copy.
+
+So the `editor` job `needs` the renderer `windows` job and downloads its
+artefact, which now carries `preview_host.exe` as well as the renderer, and
+`tools/ci/stage_editor.py` merges the two build trees into `dist/`: the editor,
+the host, the Qt DLLs and the plugin folders. That folder is the artefact, so
+extracting it gives something that runs.
+
+`tools/ci/check_editor_starts.py` then runs the staged `ifs_editor.exe` under
+`QT_QPA_PLATFORM=minimal` for six seconds and fails if it exits. A missing DLL
+exits instantly (`0xc0000135`), which no file listing would have told us. It
+runs from a temporary working directory, so the editor's own log and `dev/`
+folder do not end up inside the artefact. `tools/checks.sh` runs both scripts
+after the editor suites, so the packaging is checked locally as well.
+
+The first editor artefact was a hand-written list of paths: the exe, the Qt
+DLLs, the plugin folders. It was missing `preview_host.exe`, so the download
+started and then said "preview_host.exe was not found next to the editor" as
+soon as a game install was set. The list looked complete and was not, which is
+the argument for staging through a script that names what it requires and for
+starting the result rather than counting its files.
 
 ### What the contrast gate counts as ink
 
