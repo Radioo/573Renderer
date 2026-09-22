@@ -197,6 +197,15 @@ TEST_CASE("Every colour the panels paint their own text with is readable on its 
         {"name on a shape bar", kBarText, kShapeBar},
         {"name on a sprite bar", kBarText, kSpriteBar},
         {"name on a hidden bar", kBarText, kHiddenBar},
+        {"a script refused", Theme::kWrong, Theme::kPanel},
+        {"a script written", Theme::kGreen, Theme::kPanel},
+        {"script line number", Theme::kFaint, Theme::kCodeMargin},
+        {"script under the caret", Theme::kText, Theme::kCodeLine},
+        {"Compile once it can run", Theme::OnAccent(), Theme::Accent()},
+        {"Compile with nothing to write", Theme::kFaint, Theme::kPanel},
+        {"a frame label badge", Theme::kInk, Theme::kGreen},
+        {"a clip name badge", Theme::kInk, Theme::kViolet},
+        {"the open script's tab", Theme::kText, Theme::kPage},
     };
     QStringList faint;
     for (const auto& [what, ink, behind] : painted) {

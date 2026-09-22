@@ -23,6 +23,10 @@ inline const QColor kAmber(0xf2, 0xb8, 0x4b);
 inline const QColor kGreen(0x3e, 0xcf, 0x8e);
 inline const QColor kDesignAccent(0x4c, 0x9d, 0xff);
 inline const QColor kInk(0x06, 0x12, 0x1f);
+inline const QColor kViolet(0xc7, 0x92, 0xea);
+inline const QColor kWrong(0xff, 0x80, 0x80);
+inline const QColor kCodeLine(0x15, 0x17, 0x1c);
+inline const QColor kCodeMargin(0x10, 0x11, 0x14);
 
 inline constexpr int kBaseSize = 12;
 inline constexpr int kBarHeight = 44;

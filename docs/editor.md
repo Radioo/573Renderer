@@ -363,14 +363,21 @@ shows the first one), `--clip N` descends into a clip of it by its index in
 draws, `--depth N` and `--frame N` choose one
 (so the inspector, the selection bar and the timeline have something to show),
 `--game <dir>` points at an install, `--panel <title>` brings that dock tab to
-the front, `--hover <objectName>` puts the named widget under the pointer, `--report <file>` writes a text line per named widget
+the front, `--hover <objectName>` puts the named widget under the pointer,
+`--press <objectName>` clicks the named button (which is how the script IDE gets
+screenshotted, by pressing `script_place`), `--report <file>` writes a text line per named widget
 (object name, class, position in the window, size, size hint, font size and
 whether it is shown) next to the PNG, `--input <name>` selects that row of the
 Inputs panel, `--number <value>` types it into the panel's Number box and
 presses Enter, `--enter <character>` double-clicks the first Library row whose
 label starts with that text, which descends into a sprite the way a
 double-click does (`--enter "Sprite 18"` is how the timeline shows what a clip
-holds), `--spread <n>` sets the panel's digit count and presses
+holds), `--notes <file>` writes a line per frame note of the open clip (its frame, whether
+it carries a script or a camera, and the x the lane draws it at), which is how
+the mark-picking bug above was measured rather than guessed from a screenshot,
+`--frame <n>` seeks there on its own (with `--depth` it picks that depth too,
+without it the depth selection is cleared so a frame script shows),
+`--spread <n>` sets the panel's digit count and presses
 "Make it a number", `--dump <file>` writes a tab separated line per row of every
 tree in the window (the tree's object name, the row's text and its detail
 line), `--size WxH` (default 1600x1000, the
@@ -1515,6 +1522,228 @@ so adding or removing the camera at the playhead does not need the context menu.
 `ShowClipTimeline` fills the lane with the clip it is showing, so entering a
 sprite shows that sprite's scripts.
 
+Clicking a script mark emits `ScriptChosen`, and the window answers by seeking
+to that frame, clearing the depth selection and bringing the Inspector to the
+front, because a panel that is behind another tab is the same as no panel at
+all. The lane used to only seek, and nothing anywhere showed a frame's script:
+the inspector read `clip_actions` off the selected placement and never looked at
+the frame's own `Action` tag, so the marks pointed at something with no way in.
+
+Two things about the lane itself were wrong and are fixed with them. It took the
+FIRST mark within `kNoteReach` rather than the nearest, so on a long clip, where
+marks sit a few pixels apart, clicking one mark jumped the playhead to its
+neighbour: `reward_result` in IIDX 33's `arena.ifs` has scripts on frames 89 and
+119, and clicking 119 chose 89. `LabelNear` and `KeyNear` had always tracked the
+nearest; the notes loop now does too. A click in the lane that hits no mark
+still does nothing, which is deliberate and has its own case in that file: the
+lane is a strip of marks, not a second ruler.
+
+**The Script section is a code editor** (`Editor::ScriptEditor`,
+editor/src/editor_script_editor.h). It appears whenever the playhead is on a
+frame that holds an `Action`. `Document::FrameScriptTag(clip, frame)` finds the
+tag, the same way `CameraTag` finds a camera, and
+`Document::ScriptSourceText` turns its bytecode into source. Because that
+translation is total (docs/document.md, Script source), every script in the
+shipped data opens, including the register shapes that used to show as a
+read-only listing.
+
+The widget is QScintilla, added to `vcpkg.json` under the `editor` feature and
+linked as `unofficial::qscintilla::qscintilla`. It brings the gutter, the caret
+line, wrapping, selection and the completion list, so none of that is
+hand-rolled. What is ours is the lexer (`Editor::ScriptLexer`) and the
+completion vocabulary, and both are fed from the compiler's own lists:
+`Document::ScriptCalls`, `ScriptInstructions` and `ScriptWords`. A word the
+compiler would refuse is painted in the wrong-word red as you type, so the
+highlighting cannot drift from what will compile.
+
+**Completion is synchronous on purpose.** QScintilla's `QsciAPIs` prepares its
+word list on a worker thread and posts the result back; with a panel that is
+rebuilt whenever the playhead moves, that worker outlived its object and
+crashed inside `QsciAPIs::event`. The editor uses `showUserList` instead, which
+is the same library's list widget without the thread. Inside a quoted argument
+the list offers the package's own names, from `Document::Inputs`: every frame
+label and every placement instance name. Outside one it offers the language.
+
+**Open full replaces the whole view with the script IDE** (`Editor::ScriptIde`,
+editor/src/editor_script_ide.h), the window on the left of the design canvas. It
+is a page of `centre_`, the same `QStackedWidget` that swaps between the start
+screen, the docks and the Busy page, so opening it takes over everything below
+the menu bar and `Close` puts the docks back.
+
+It has three columns. On the left, every script in the animation, from
+`Document::ScriptsIn`: the root's frame scripts first, then one group per
+placement that carries `clip_actions`, each row a frame number (or `load` for a
+placement), a dot coloured by what the script is, and the first line of its
+source. The dot is the design's four: blue when every line is a call
+(`Document::ScriptIsCalls`), violet when the script binds registers or falls
+back to instruction lines, red when it cannot be read as source at all, and
+amber on the one script the editor is holding unsaved edits to. The filter box
+narrows the list, and the footer is the legend for the dots plus the count. In the middle, a tab for the open script, the editor
+itself, the Problems pane and a status line carrying the line and byte counts
+and the caret position. On the right, the names panel: every frame label, every
+clip instance name and every call this animation's own scripts make
+(`Document::CallsIn`), each with the badge the design gives it, all read out of
+the open package rather than hardcoded. The calls are the ones used here rather
+than the 1693 names afp-core knows, which would bury the handful that matter;
+completion still offers the whole vocabulary.
+
+`Document::ScriptsIn` and `ScriptAt` (src/document/script_index.h) are the
+document half: one walks every clip and frame collecting what carries a script,
+the other fetches one back by the same `ScriptPlace`, so the list and the editor
+cannot disagree about what a row points at.
+
+**The metrics come off the artboards rather than from the widget defaults.**
+The top bar is 44px with the 22px rounded IFS badge, the breadcrumb runs
+package, animation, clip, then the script in the brighter ink, and Compile
+carries its `Ctrl+B` in the mono face beside the word. The scripts list is
+274px: 40px rows of a right aligned frame number, a 6px dot and the first line
+of the source in the mono face, under 10px letter spaced group headings ruled
+off from each other, with the count in the filter's placeholder. The names
+panel is 268px of 13px badges, mono names and where each one lives. The code is
+13px on 22px lines in the window and 12px on 20px in the dock, which Scintilla
+does through `SCI_SETEXTRAASCENT` and `SCI_SETEXTRADESCENT` rather than through
+the font. A lexer font must carry a point size: QScintilla reads `pointSize()`
+when it hands the font to Scintilla, so a font built with `setPixelSize` arrives
+as size -1 and the code renders at a few pixels tall.
+
+Three things are deliberately not what the artboards draw. The accent is the
+one Windows is set to, not the artboard's blue, because the editor follows the
+system accent everywhere; the gutter numbers are `kFaint` rather than the
+artboard's `#4f545e`, which is 2.48:1 and fails the contrast gate; and the top
+bar carries a Close button the artboard has no room for, because the window
+covers everything below the menu bar and there has to be a way back.
+
+The counts read the way the design writes them: `3 calls` when every line of the
+script is a call the compiler knows and `3 lines` when it is not, and `42 bytes`
+rather than Qt's `%n byte(s)` idiom, which renders the brackets when no
+translation is installed. `ScriptEditor::Counted` and `ScriptEditor::Bytes` are
+the one place that wording lives, and the window's status line and the docked
+header both use them.
+
+**The docked Script section keeps the compact editor** for a quick look and a
+one-line change, with `Open full` beside its title. A 300px column is no place
+to write code, so that button is how you get to the window above. The two are
+the same widget class: `ScriptEditor::Place` decides only whether it carries its
+own title and buttons (docked) or leaves them to the window around it, and what
+its children are named, so a test can tell `script_text` from `script_ide_text`.
+
+**A project-owned depth's script uses the same editor too.** `EditOwnedScript`
+opened a bare `QInputDialog` text box; it now opens a dialog holding a
+`ScriptEditor` in its `Window` place, fed the package's names, so an owned
+script gets the same highlighting, completion and wrong-name marking as every
+other. Saving still goes through `EditAuthored`, and a depth whose baked data
+carries no clip actions still refuses to be given a script, because what makes
+the game run one has not been measured.
+
+**A placement's own script edits the same way.** The list shows one group per
+placement that carries `clip_actions`, and choosing one loads it into the same
+editor. `Window::CompileIdeScript` routes by whether the chosen place has a
+depth: `Document::WriteFrameScript` for a frame's `Action`, and
+`Document::WritePlacementScript` for the first event of a placement's clip
+actions. Both compile against a copy first, so a refusal reaches the Problems
+pane instead of a dialog and the typed text is left alone.
+
+**The Problems pane, and what sits beside it.** The pane carries the three tabs
+the design gives it. **Problems** is recomputed on every keystroke by
+`Document::ScriptProblems` (src/document/script_problems.h): it reads each
+quoted argument and, when the open package holds no such name, says so and
+offers the nearest one it does hold. The nearest match comes from
+`rapidfuzz-cpp`, added to `vcpkg.json` rather than hand-rolling an edit
+distance. A problem also marks the script itself: the Lucide `triangle-alert`
+in the marker margin on that line, and a dotted red indicator under the name.
+**Bytes** is the compiled bytecode as hex, and **History** is the document's own
+undo steps with the ones already applied in the brighter ink. The status line
+under them carries the line and byte counts, `round trips to the original` in
+green when recompiling the shown source reproduces the stored instructions
+exactly, the caret position, and the object every call goes through.
+
+**Completion is the editor's own widget, not Scintilla's.** `ScriptOffers`
+(editor/src/editor_script_offers.h) is the list the design draws: a 366px frame
+of 28px rows, each one a kind badge, the name in the mono face, and where it
+lives on the right, over a footer that counts what matched. Beside it sits a
+second frame that describes whatever row is current, which is the part a real
+IDE has and the artboard does not. Scintilla's own `showUserList` cannot draw
+any of that: it takes one flat list of strings with no per-row colour, no right
+hand column and no footer. The popup is a child of the editor rather than a
+top-level window, so it needs no screen and shows up in an off-screen shot.
+
+**It opens on the first letter, which needed the caret timing fixed.**
+`textChanged` is emitted from Scintilla's modification notification, which
+arrives *before* the caret has moved onto the character just typed. Reading the
+prefix there gave the text one character behind: at the first letter the prefix
+was empty and nothing was ever offered, at the second it filtered on the first.
+`Rethink` now defers the work to the next turn of the event loop
+(`QTimer::singleShot(0, ...)`, coalesced by a flag), so `Typing` reads a settled
+caret. That is what makes a single keystroke offer anything at all.
+
+**The panel teaches, because the reader may never have seen AFP.**
+`Document::ScriptWordDoc` (src/document/script_docs.h) answers with a signature,
+a plain-language description, one entry per argument (its name, what type it is
+read as, and what it is for), what the call gives back, and the builtin id. The
+aeplib entries are the ones read out of afp-core, so they say real things: that
+a frame argument counts from 1 and text is a label, that `goto_play` is the one
+family counting from 0, that `aep_set_frame_control` keeps a depth out of the
+picture until its own playhead reaches a frame. Where the game was not read, the
+entry says so rather than inventing: the four numbers of `aep_set_rect_mask`
+are described as unread, and a call with no measured entry says that what it
+does has not been read out of the game yet. `docs/formats.md` holds the table
+those entries come from.
+
+**Every word carries a description.** `Document::ScriptWordHelp` names what each
+word of the language does (`let` binds a call's result to a register, `store`
+copies the top of the stack into a register, and so on). A call gets its builtin
+id (`builtin_0x442`), because the id is what afp-core resolves and what the
+bytes will hold; what a KONAMI builtin *does* is not something the editor may
+invent. Inside quotes the description is where the name lives, the same text the
+row and the names panel show.
+
+**Call tips come from the package.** Typing a call's opening bracket shows
+*another real call to that name in this animation*, so the tip is measured
+rather than invented, with the arguments highlighted the way the design
+highlights them; a call with no other example in the package gets no tip. The
+tip is a Scintilla popup and needs a screen, so `Hint` returns early when the
+editor is off-screen: Scintilla asks `QGuiApplication::screenAt` for the caret
+and dereferences the answer without checking it, which crashes an off-screen
+window.
+
+**Ctrl+click a name the package does hold to go to it.** The editor filters its
+own viewport for a control-click, asks Scintilla which character is under the
+pointer, and reads the quoted name around it (`ScriptEditor::QuotedAt`). When
+that name is one of the ones the package holds, it emits `NameChosen` instead of
+moving the caret, and the window looks it up in `Document::Inputs`: a frame
+label seeks the timeline to its frame, a clip instance name selects its depth.
+The IDE closes first when it is open, because going to the timeline is not
+something you can watch from a window that covers it. A name the package does
+not hold is left alone, so the click stays an ordinary click.
+
+**A name the package does not hold is painted as wrong.** `ScriptLexer::KnowNames`
+takes the same list the completion uses, and a quoted argument that is not one
+of those names is painted in the wrong-word red, so a mistyped frame label shows
+up as you type rather than as a script that compiles and then does nothing. The
+marking only runs once the names are known, so a lexer with no package behind it
+leaves every string alone.
+
+**The gutter does not use the artboard's own colour.** The design canvas paints
+line numbers `#4f545e` on `#101114`, which is 2.48:1 and fails even the 3:1 mark
+rule, let alone the 4.5:1 the contrast gate holds text to. They are painted in
+`Theme::kFaint` instead, and the pair is in the painted-pairs case. The same
+went for the disabled Compile button, which sits on `kPanel` rather than `kLine`
+so its label clears the bar.
+
+**Nothing reaches the file unless it compiles.** `Compile` (or Ctrl+Return)
+emits the source; `Window::CompileFrameScript` compiles it against a copy of the
+animation first, and a refusal is shown in the status strip under the buttons
+rather than as a dialog, leaving the typed text alone so it can be fixed. Only a
+source that compiled goes through `EditAnimation`, named after the frame rather
+than a depth, so undo covers it. `Revert` puts back the script the animation
+holds. The strip says how many bytes were written when it worked, and both
+colours are in the contrast gate.
+
+`InspectFrame` also grows the same rows under the name `Script on frame`, with
+`EditTarget::FrameCallArgument`, for the raw fields table. They only appear when
+no depth is selected, so they can never collide with a placement's own call
+argument rows, which keep their names and their own edit target.
+
 The ruler's gutter carries the column headers: an eye that runs
 `depth.show_all` and a padlock that runs `depth.unlock_all`
 (`Window::UnlockEveryDepth`), each lit while anything is hidden or locked, so
@@ -1686,7 +1915,8 @@ step as everything else, named after the frame instead of the depth.
 When the selected placement carries a script, the inspector shows it under the
 placement fields. A script that is one `aeplib` call reads as the call and one
 row per argument, and those rows are editable; anything else is one read-only
-row per instruction. Every edit, a field or a label or a call argument, goes
+row per instruction. The frame's own script, by contrast, opens in the code
+editor described above. Every edit, a field or a label or a call argument, goes
 through the same `EditAnimation` step: read the animation, apply the change,
 record the history, write it back, reload.
 

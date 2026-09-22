@@ -11,6 +11,8 @@
 #include "editor_viewport.h"
 #include "widget_test_support.h"
 
+#include "support/crash_report.h"
+
 #include "document/key_selection.h"
 #include "document/keyframes.h"
 #include "document/stage_bounds.h"
@@ -936,6 +938,7 @@ TEST_CASE("A clip shown in place dims the stage around it and draws its edge") {
 }
 
 int main(int argc, char** argv) {
+    Support::InstallCrashReporter();
     qputenv("QT_QPA_PLATFORM", "minimal");
     const QApplication app(argc, argv);
     return Catch::Session().run(argc, argv);

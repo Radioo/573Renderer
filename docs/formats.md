@@ -414,6 +414,113 @@ operand length, the end opcode, and the scripts the reader must refuse;
 install, requires all of them to write back byte for byte, and re-measures the
 opcode and call counts the notes record.
 
+### What the interpreter does with the stack
+
+The five opcodes that consume pushed values are read from afp-core's own action
+interpreter, not assumed from Flash. Find the interpreter by its error strings
+`execute function src script not find.` and `unknown action(0x%02x:%s)`; the
+switch inside it is the opcode dispatch, and each case hands the stack to a
+handler.
+
+| Opcode | Reads, from the top down | Pops | Leaves |
+|---|---|---|---|
+| `CALL_FUNCTION` | name, argument count, then that many arguments | count + 2 | the result |
+| `CALL_METHOD` | name, object, argument count, then that many arguments | count + 3 | the result |
+| `SET_MEMBER` | value, member name, object | 3 | nothing |
+| `STORE_REGISTER` | the top value, copied into each register named | 0 | the value |
+| `PUSH` | nothing | 0 | its items, first item deepest |
+
+The argument count is read through the variant-to-integer conversion, which
+names itself in its own error calls (`afp_variant_get_integer`), and the pop
+count is the argument the handler passes to the stack's drop helper: for
+`CALL_FUNCTION` that is `count + 2`, which is what proves the name and the count
+are two separate slots above the arguments.
+
+The arguments are pushed last one first, so the argument written first in source
+is the one nearest the top of the stack. A call's arguments do not have to be
+pushed by their own `PUSH`: one `PUSH` can carry the operands of a whole chain,
+and the shipped data does exactly that (see the register statements in
+`docs/document.md`).
+
+### What the aeplib calls do
+
+The calls the shipped scripts make were read out of afp-core rather than assumed
+from Flash. Two dispatchers exist and the object decides which one runs: the
+method handler switches on the object's class, and the aeplib object takes its
+own path (an if-chain and a jump table keyed by the call id), while a clip takes
+the clip-method path. Find them from the CALL_METHOD handler and follow the
+class switch; the aeplib branch is the one whose unknown-id case logs
+`callMethod at aeplib [name:id] unsupported variable nr(N)`.
+
+Every aeplib handler tests its argument count exactly and does nothing at all on
+a mismatch, so the counts below are hard. The first argument is always the clip,
+which is why the data reads `aep_set_set_frame(this, 30)`. None of them write a
+result: the value each one leaves on the stack is the empty variant the caller
+started with, which is why the compiler writes a `pop` after a call.
+
+| Call | Id | Takes | Does |
+|---|---|---|---|
+| `stop` / `play` | 0x440 / 0x441 | clip | sets or clears the "does not advance" bit on that one clip, and on the composition it wraps when the clip is an `aep_dummy` |
+| `gotoAndPlay` / `gotoAndStop` | 0x442 / 0x443 | clip, frame | seeks, then plays or stops, then pulls nested AEP compositions to the matching frame |
+| `deepPlay` / `deepStop` | 0x813 / 0x814 | clip | the same bit, applied down the whole subtree |
+| `deepGotoAndPlay` / `deepGotoAndStop` | 0x815 / 0x816 | clip, frame | recursive seek, then plays or stops the subtree |
+| `deep_goto_play_label` / `deep_goto_stop_label` | 0x837 / 0x838 | clip, frame | the same implementation as the deep pair above, under another name |
+| `goto_play_label` / `goto_stop_label` | 0x839 / 0x83a | clip, label | always a label lookup, even when the text reads as a number |
+| `goto_play` / `goto_stop` | 0x83b / 0x83c | clip, frame | a raw frame index, the only family that counts from 0 |
+| `aep_set_frame_control` | 0x832 | parent, depth, frame | gates the child at that depth: while its own playhead sits before `frame - 1` the draw dispatcher skips it. Re-checked on every seek |
+| `aep_set_rect_mask` | 0x833 | clip, four numbers | stores four floats on the clip (or on its `aep_dummy` child) and sets the rect-mask flag |
+| `aep_set_set_frame` | 0x836 | clip, value | stores the value in a member slot and does nothing else inside afp-core |
+| `getInstanceAtDepth` | 0x465 | depth | a CLIP method, not an aeplib call: returns the instance at that depth, or undefined |
+
+**How a frame argument is read** differs per family, and it is the thing most
+worth knowing. `gotoAndPlay`, `gotoAndStop` and the deep pair take a number as a
+frame counted from 1 (the runtime subtracts one) and anything that is not a
+number as a frame label; `goto_play` and `goto_stop` take the number as a raw
+index counted from 0; the `*_label` names always look the text up as a label. A
+label the clip does not carry warns and the seek is abandoned.
+
+**Two things are measured as unresolved and must not be filled in by guessing.**
+The four numbers `aep_set_rect_mask` stores have no reader inside afp-core (the
+immediate scans for the member slot and the flag find only the writers), so
+which edge or size each one is belongs to the renderer, not to this table. The
+value `aep_set_set_frame` stores likewise has no reader that was found, which is
+not the same as having no effect.
+
+### The builtin name table
+
+afp-core resolves a builtin by id and carries the names for them. Three tables
+do it: a blob of NUL-terminated strings on a four-byte stride, a `uint16` slot
+table, and a table of 16-id blocks holding `{first id, one past the last id,
+slot shift}`. A name is `blob + 4 * slots[id + shift - first]`, and an id whose
+block says it is past the end has no name.
+
+`src/formats/afp_script_names_data.h` is that table read out of the DLL: 1877
+ids between `0x100` and `0xd0f`, stored as runs of consecutive ids so the header
+stays a few hundred lines rather than two thousand. `AfpScript::BuiltinName`,
+`BuiltinNamed` and `BuiltinNames` are the lookups over it.
+
+The names are the AVM ones (`_x`, `_alpha`, `blendMode`, `gotoAndPlay`,
+`getInstanceAtDepth`) plus KONAMI's own `aeplib` calls, and the ids are part of
+the compiled bytecode rather than of one build, so the table is data about the
+format and not about a version. Not all of them are identifiers: the table also
+holds `$version`, `flash.display`, `FSCommand:quit`, `/` and `..`, which is why
+the source language filters what it will spell as a name.
+
+To read the table out of a newer DLL, find the variant-to-integer conversion by
+its `afp_variant_get_integer` error string; its branch for a builtin-name
+variant calls the name lookup, and that function's three globals are the blob,
+the slot table and the block table, in the order they appear in the expression
+it returns. Then:
+
+```bash
+uv run afp_builtin_names.py --dll "<game>/modules/afp-core.dll" --names 0x... --index 0x... --blocks 0x...
+```
+
+`tools/local/afp_builtin_names.py` walks the blocks, writes the header, and
+refuses to write anything unless the nine names that were known by hand before
+the table was found come back right, so a wrong address leaves the header alone
+instead of filling it with nonsense.
+
 ## GE2D shapes (`ge2d_shape.h`)
 
 `geo/<animation>_shape<N>` files hold the meshes `AP2_SHAPE` tags draw.

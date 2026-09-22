@@ -24,6 +24,7 @@
 #include "document/tags.h"
 #include "document/timeline.h"
 #include "formats/afp_animation.h"
+#include "formats/afp_script.h"
 #include "formats/ifs_archive.h"
 
 #include <QAction>
@@ -362,6 +363,87 @@ inline QString WriteNamedInSprite(const QTemporaryDir& dir, const QString& name)
     const auto encoded = file->Encode();
     REQUIRE(encoded.has_value());
     const QString out = dir.filePath("nested.ifs");
+    QFile written(out);
+    REQUIRE(written.open(QIODevice::WriteOnly));
+    written.write(QByteArray(reinterpret_cast<const char*>(encoded->data()),
+                             static_cast<qsizetype>(encoded->size())));
+    return out;
+}
+
+inline AfpAnimation::Bytecode FrameCall(AfpAnimation::Animation& animation,
+                                        const QString& argument) {
+    AfpAnimation::Bytecode code;
+    code.strings = std::vector<AfpAnimation::StringId>{
+        Document::InternString(animation, argument.toStdString()),
+        Document::InternString(animation, "play")};
+    AfpScript::Script script;
+    AfpScript::Instruction push;
+    push.opcode = AfpScript::Op::kPush;
+    push.items = {AfpScript::Item{.type = AfpScript::PushType::kShortString, .operand = {0}},
+                  AfpScript::Item{.type = AfpScript::PushType::kByte, .operand = {1}},
+                  AfpScript::Item{.type = 19, .operand = {0}}};
+    AfpScript::Instruction get;
+    get.opcode = AfpScript::Op::kGetVariable;
+    AfpScript::Instruction method;
+    method.opcode = AfpScript::Op::kPush;
+    method.items = {AfpScript::Item{.type = 39, .operand = {0}}};
+    AfpScript::Instruction call;
+    call.opcode = AfpScript::Op::kCallMethod;
+    AfpScript::Instruction stop;
+    stop.opcode = AfpScript::Op::kEnd;
+    script.instructions = {push, get, method, call, stop};
+    const auto written = AfpScript::Write(script);
+    REQUIRE(written.has_value());
+    code.code = *written;
+    return code;
+}
+
+inline QString WriteFrameScript(const QTemporaryDir& dir, const QString& argument) {
+    const auto bytes = Ifs::Write(SamplePackage::SampleArchive());
+    REQUIRE(bytes.has_value());
+    auto file = Document::File::Open(*bytes);
+    REQUIRE(file.has_value());
+    const std::string path = "afp/" + SamplePackage::HashPath("intro");
+    auto animation = file->ReadAnimation(path);
+    REQUIRE(animation.has_value());
+    animation->name = Document::InternString(*animation, "intro");
+    AfpAnimation::Action action;
+    action.bytecode = FrameCall(*animation, argument);
+    Document::InsertTag(animation->root, 1, AfpAnimation::Tag{action});
+    REQUIRE(file->WriteAnimation(path, *animation).has_value());
+    const auto encoded = file->Encode();
+    REQUIRE(encoded.has_value());
+    const QString out = dir.filePath("scripted.ifs");
+    QFile written(out);
+    REQUIRE(written.open(QIODevice::WriteOnly));
+    written.write(QByteArray(reinterpret_cast<const char*>(encoded->data()),
+                             static_cast<qsizetype>(encoded->size())));
+    return out;
+}
+
+inline QString WritePlacementScript(const QTemporaryDir& dir, const QString& argument) {
+    const auto bytes = Ifs::Write(SamplePackage::SampleArchive());
+    REQUIRE(bytes.has_value());
+    auto file = Document::File::Open(*bytes);
+    REQUIRE(file.has_value());
+    const std::string path = "afp/" + SamplePackage::HashPath("intro");
+    auto animation = file->ReadAnimation(path);
+    REQUIRE(animation.has_value());
+    animation->name = Document::InternString(*animation, "intro");
+    AfpAnimation::Placement placement;
+    placement.depth = 4;
+    placement.end_frame = 1;
+    placement.character = uint16_t{5};
+    AfpAnimation::ClipEvent event;
+    event.triggers = 0x20000;
+    event.bytecode = FrameCall(*animation, argument);
+    placement.clip_actions =
+        AfpAnimation::ClipActions{.unread_value = 0, .unread_word = 0, .events = {event}};
+    Document::InsertTag(animation->root, 1, AfpAnimation::Tag{placement});
+    REQUIRE(file->WriteAnimation(path, *animation).has_value());
+    const auto encoded = file->Encode();
+    REQUIRE(encoded.has_value());
+    const QString out = dir.filePath("placement.ifs");
     QFile written(out);
     REQUIRE(written.open(QIODevice::WriteOnly));
     written.write(QByteArray(reinterpret_cast<const char*>(encoded->data()),

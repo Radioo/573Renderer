@@ -46,7 +46,6 @@ struct Counts {
     std::size_t sourced = 0;
     std::size_t recompiled = 0;
     std::size_t recompile_differs = 0;
-    std::size_t same_code = 0;
     std::map<std::string, std::size_t> trailing;
     std::string first_difference;
     std::size_t unreadable = 0;
@@ -78,6 +77,8 @@ std::string Named(const AfpAnimation::Animation& animation, const AfpAnimation::
     return "type " + std::to_string(item.type);
 }
 
+constexpr std::size_t kSdvxScripts = 211761;
+
 const std::map<std::string, std::size_t> kExpectedCalls{
     {"builtin 0x390.builtin 0x440", 263},   {"builtin 0x390.builtin 0x442", 3323},
     {"builtin 0x390.builtin 0x443", 20},    {"builtin 0x390.builtin 0x814", 117},
@@ -97,29 +98,6 @@ void CountCall(const AfpAnimation::Animation& animation, const AfpAnimation::Byt
         const AfpScript::Item& object = object_push.items.back();
         counts.calls[Named(animation, code, object) + "." + Named(animation, code, method)]++;
     }
-}
-
-bool SameApartFromNumberWidth(const std::vector<uint8_t>& mine,
-                              const std::vector<uint8_t>& theirs) {
-    const auto one = AfpScript::Read(mine);
-    const auto other = AfpScript::Read(theirs);
-    if (!one || !other) return false;
-    if (one->instructions.size() != other->instructions.size()) return false;
-    for (std::size_t i = 0; i < one->instructions.size(); i++) {
-        const AfpScript::Instruction& a = one->instructions[i];
-        const AfpScript::Instruction& b = other->instructions[i];
-        if (a.opcode != b.opcode || a.items.size() != b.items.size()) return false;
-        for (std::size_t j = 0; j < a.items.size(); j++) {
-            if (a.items[j].type == b.items[j].type) {
-                if (a.items[j].operand != b.items[j].operand) return false;
-                continue;
-            }
-            const auto mine_number = AfpScript::ItemNumber(a.items[j]);
-            const auto their_number = AfpScript::ItemNumber(b.items[j]);
-            if (!mine_number || !their_number || *mine_number != *their_number) return false;
-        }
-    }
-    return true;
 }
 
 void CountSource(const AfpAnimation::Animation& animation, const AfpAnimation::Bytecode& code,
@@ -143,10 +121,6 @@ void CountSource(const AfpAnimation::Animation& animation, const AfpAnimation::B
         return;
     }
     counts.recompile_differs++;
-    if (SameApartFromNumberWidth(again->code, instructions)) {
-        counts.same_code++;
-        return;
-    }
     if (counts.first_difference.empty()) {
         std::string mine;
         for (const uint8_t byte : again->code)
@@ -287,13 +261,7 @@ void WalkArchive(const Ifs::Archive& archive, Counts& counts) {
     }
 }
 
-}
-
-TEST_CASE("Every script in the install reads and writes back, and the counts match the survey") {
-    const std::string dir = Support::EnvVar("R573_IIDX_DIR").value_or("");
-    if (dir.empty()) SKIP("R573_IIDX_DIR not set");
-
-    Counts counts;
+std::size_t WalkInstall(const std::string& dir, Counts& counts) {
     std::size_t files = 0;
     for (const auto& entry : std::filesystem::recursive_directory_iterator(dir + "/data")) {
         if (!entry.is_regular_file() || entry.path().extension() != ".ifs") continue;
@@ -306,6 +274,40 @@ TEST_CASE("Every script in the install reads and writes back, and the counts mat
             std::cerr << std::format("[afp scripts] {} files\n", files);
         }
     }
+    return files;
+}
+
+void CheckRoundTrip(const Counts& counts) {
+    CHECK(counts.sourced == counts.scripts);
+    CHECK(counts.recompiled == counts.scripts);
+    CHECK(counts.recompile_differs == 0);
+    CHECK(counts.unreadable == 0);
+    CHECK(counts.rewritten == 0);
+}
+
+}
+
+TEST_CASE("Every script in the SDVX install reads back as source and recompiles to the bytes") {
+    const std::string dir = Support::EnvVar("R573_SDVX_DIR").value_or("");
+    if (dir.empty()) SKIP("R573_SDVX_DIR not set");
+
+    Counts counts;
+    const std::size_t files = WalkInstall(dir, counts);
+    std::cerr << std::format(
+        "[afp scripts] SDVX {} files, {} scripts, {} read back as source, {} differ\n", files,
+        counts.scripts, counts.sourced, counts.recompile_differs);
+    if (!counts.first_difference.empty())
+        std::cerr << std::format("[afp scripts] first difference: {}\n", counts.first_difference);
+    CheckRoundTrip(counts);
+    CHECK(counts.scripts == kSdvxScripts);
+}
+
+TEST_CASE("Every script in the install reads and writes back, and the counts match the survey") {
+    const std::string dir = Support::EnvVar("R573_IIDX_DIR").value_or("");
+    if (dir.empty()) SKIP("R573_IIDX_DIR not set");
+
+    Counts counts;
+    const std::size_t files = WalkInstall(dir, counts);
 
     std::cerr << std::format("[afp scripts] {} files, {} scripts, {} unreadable, {} rewritten\n",
                              files, counts.scripts, counts.unreadable, counts.rewritten);
@@ -322,9 +324,8 @@ TEST_CASE("Every script in the install reads and writes back, and the counts mat
         "[afp scripts] {} with two or more script labels, {} sorted by name, {} sorted by frame\n",
         counts.script_labelled, counts.script_by_name, counts.script_by_frame);
     std::cerr << std::format(
-        "[afp scripts] {} read back as source, {} recompile to the same bytes, {} differ, {} of "
-        "those only in the string table\n",
-        counts.sourced, counts.recompiled, counts.recompile_differs, counts.same_code);
+        "[afp scripts] {} read back as source, {} recompile to the same bytes, {} differ\n",
+        counts.sourced, counts.recompiled, counts.recompile_differs);
     std::size_t trailing_shown = 0;
     for (const auto& [shape, count] : counts.trailing) {
         if (trailing_shown++ >= 12) break;
@@ -350,8 +351,7 @@ TEST_CASE("Every script in the install reads and writes back, and the counts mat
         std::cerr << std::format("[afp scripts] shape {}: {}\n", shape, count);
     }
 
-    CHECK(counts.unreadable == 0);
-    CHECK(counts.rewritten == 0);
+    CheckRoundTrip(counts);
     CHECK(counts.scripts == 463562);
     CHECK(counts.calls == kExpectedCalls);
 }

@@ -80,6 +80,17 @@ std::vector<std::string> Positionals(std::span<const std::string> args, std::siz
     return out;
 }
 
+ToolCommand ParseTxp2Dump(std::span<const std::string> args, std::size_t i) {
+    ToolCommand c;
+    c.kind = ToolKind::Txp2Dump;
+    const std::vector<std::string> positional = Positionals(args, i);
+    std::size_t at = 0;
+    c.in_path = (at < positional.size()) ? positional[at++] : "";
+    c.arc_path = (at < positional.size()) ? positional[at++] : "";
+    c.out_path = (at < positional.size()) ? positional[at] : "txp2_dump";
+    return c;
+}
+
 ToolCommand ParsePresetJob(std::span<const std::string> args, std::size_t i, ToolKind kind) {
     ToolCommand c;
     c.kind = kind;
@@ -163,6 +174,8 @@ ToolCommand ParseToolCommand(std::span<const std::string> args) {
     if (i < args.size()) return ParsePresetJob(args, i, ToolKind::PresetExport);
     i = FindFlagWithValue(args, "--preset-test");
     if (i < args.size()) return ParsePresetJob(args, i, ToolKind::PresetTest);
+    i = FindFlagWithValue(args, "--txp2-dump");
+    if (i < args.size()) return ParseTxp2Dump(args, i);
     i = FindFlagWithValue(args, "--gc2d-sheet");
     if (i < args.size()) return ParseGc2dSheet(args, i);
     i = FindFlagWithValue(args, "--scene3d-test");

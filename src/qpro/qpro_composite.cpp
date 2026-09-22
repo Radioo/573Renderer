@@ -13,6 +13,7 @@
 #include "mc_control.h"
 #include "render_backend.h"
 #include "support/log.h"
+#include "support/png_write.h"
 
 #include <cstdint>
 #include <cstring>
@@ -112,8 +113,10 @@ void HandComposite(EngineSession& es, D3D9State& d3d, const std::string& game_di
     RenderHandProbeFrames(es, d3d, px, w, h);
 
     LOG("QproHandC", "rendered %dx%d", w, h);
-    if (w > 0 && h > 0)
-        WritePngBGRA((fs::path("screenshots") / "qphandcomposite.png").string(), px.data(), w, h);
+    if (w > 0 && h > 0) {
+        Support::WritePngBGRA((fs::path("screenshots") / "qphandcomposite.png").string(), px.data(),
+                              w, h);
+    }
 
     if (pkg != 0U) AfpManager::UnloadCompanion(es, pkg);
 }
@@ -692,8 +695,9 @@ void DumpIfs(EngineSession& es, const std::string& ifs_path) {
                 int ch = im.h;
                 std::vector<uint8_t> crop = Bgra::Crop(it->second, aw, ah, cx, cy, cw, ch);
                 if (!crop.empty()) {
-                    WritePngBGRA((fs::path("screenshots") / ("dump_" + im.name + ".png")).string(),
-                                 crop.data(), cw, ch);
+                    Support::WritePngBGRA(
+                        (fs::path("screenshots") / ("dump_" + im.name + ".png")).string(),
+                        crop.data(), cw, ch);
                 }
             }
         }

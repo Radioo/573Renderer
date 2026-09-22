@@ -40,6 +40,7 @@ find_package(FFMPEG REQUIRED COMPONENTS avcodec avformat avutil swscale)
 find_package(Catch2 3 CONFIG REQUIRED)
 find_package(tl-expected CONFIG REQUIRED)
 find_package(nlohmann_json CONFIG REQUIRED)
+find_package(rapidfuzz CONFIG REQUIRED)
 find_package(unofficial-hash-library CONFIG REQUIRED)
 
 set(R573_MSVC_WARNING_FLAGS
@@ -58,6 +59,7 @@ target_compile_options(r573_warnings INTERFACE "$<$<CXX_COMPILER_ID:MSVC>:${R573
 
 add_library(r573_support STATIC
     src/support/log.cpp
+    src/support/png_write.cpp
     src/support/dll_loader.cpp
     src/support/env.cpp
     src/support/stack_trace.cpp
@@ -68,7 +70,8 @@ if(MSVC)
         PROPERTIES COMPILE_OPTIONS "/fp:precise")
 endif()
 target_include_directories(r573_support PUBLIC src)
-target_link_libraries(r573_support PUBLIC tl::expected dbghelp.lib PRIVATE r573::warnings)
+target_link_libraries(r573_support PUBLIC tl::expected dbghelp.lib windowscodecs.lib ole32.lib
+    PRIVATE r573::warnings)
 
 add_library(r573_formats STATIC
     src/formats/ddr_arc.cpp
@@ -79,6 +82,7 @@ add_library(r573_formats STATIC
     src/formats/afp_bytecode.cpp
     src/formats/afp_byte_order.cpp
     src/formats/afp_script.cpp
+    src/formats/afp_script_names.cpp
     src/formats/afp_placement_read.cpp
     src/formats/afp_placement_write.cpp
     src/formats/avs_lz77.cpp
@@ -218,7 +222,7 @@ add_library(r573_document STATIC
 )
 target_include_directories(r573_document PUBLIC src)
 target_link_libraries(r573_document PUBLIC r573_formats
-                      PRIVATE nlohmann_json::nlohmann_json r573::warnings)
+                      PRIVATE nlohmann_json::nlohmann_json rapidfuzz::rapidfuzz r573::warnings)
 
 add_library(r573_preview_protocol STATIC
     src/preview/preview_channel.cpp
@@ -355,6 +359,9 @@ add_library(r573_app STATIC
     src/export.cpp
     src/arc_extract.cpp
     src/customize_extract.cpp
+    src/txp2_dump.cpp
+    src/afp_ddr_clips.cpp
+    src/iidx_playfield.cpp
     src/qpro/qpro_dll.cpp
     src/qpro/qpro_scan.cpp
     src/qpro/qpro_extract.cpp
@@ -437,6 +444,7 @@ target_link_libraries(r573_app
         r573_afp_host
         r573_support
         r573_formats
+        r573_document
         r573_media
         r573_cli
         r573_settings
@@ -842,6 +850,7 @@ add_executable(document_tests
     tests/document/atlas_tests.cpp
     tests/document/inputs_tests.cpp
     tests/document/number_places_tests.cpp
+    tests/document/frame_script_tests.cpp
     tests/document/blend_modes_tests.cpp
     tests/document/authored_character_tests.cpp
     tests/document/authored_control_bits_tests.cpp
@@ -880,6 +889,8 @@ add_executable(document_tests
     tests/document/project_drift_tests.cpp
     tests/document/project_export_tests.cpp
     tests/document/project_tests.cpp
+    tests/document/script_index_tests.cpp
+    tests/document/script_problems_tests.cpp
     tests/document/script_source_tests.cpp
     tests/document/span_edit_tests.cpp
     tests/document/span_arrange_tests.cpp

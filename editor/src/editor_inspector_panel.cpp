@@ -1,11 +1,21 @@
 #include "editor_window.h"
 
+#include <DockManager.h>
+#include <DockWidget.h>
+
+#include "document/clip_edit.h"
+
 #include "editor_inspector.h"
+#include "editor_script_editor.h"
+#include "editor_script_ide.h"
 #include "editor_selection_bar.h"
 #include "editor_timeline.h"
 
 #include "document/authored.h"
 #include "document/characters.h"
+#include "document/inputs.h"
+#include "document/script_index.h"
+#include "document/script_source.h"
 #include "document/clip.h"
 #include "document/inspector.h"
 #include "document/clip_edit.h"
@@ -14,14 +24,19 @@
 #include "document/span_edit.h"
 #include "document/timeline.h"
 #include "formats/afp_animation.h"
+#include "formats/afp_script.h"
 
 #include <QColor>
 #include <QColorDialog>
+#include <QStackedWidget>
+#include <QFileInfo>
 #include <QString>
+#include <QStringList>
 
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <map>
 #include <optional>
 #include <string>
 #include <vector>
@@ -44,9 +59,227 @@ std::optional<uint16_t> ShownCharacter(const AfpAnimation::Container& clip, uint
 
 }
 
+QStringList Window::NamesFor(const AfpAnimation::Animation& animation,
+                             const std::map<uint16_t, std::string>& shape_images) {
+    const Document::InputSurface surface = Document::Inputs(animation, shape_images);
+    QStringList names;
+    for (const Document::InputLabel& label : surface.labels)
+        names.append(QString::fromStdString(label.name));
+    for (const Document::InputSlot& slot : surface.names)
+        names.append(QString::fromStdString(slot.name));
+    names.removeDuplicates();
+    names.sort();
+    return names;
+}
+
+void Window::ShowScriptAt(uint32_t frame) {
+    SeekTo(frame);
+    ChooseDepths({});
+    if (docks_ == nullptr) return;
+    if (ads::CDockWidget* shown = docks_->findDockWidget(tr("Inspector"))) shown->setAsCurrentTab();
+}
+
+void Window::ShowScriptIde(bool open) {
+    if (script_ide_ == nullptr || centre_ == nullptr) return;
+    if (!open) {
+        ide_place_.reset();
+        centre_->setCurrentWidget(docks_);
+        return;
+    }
+    ide_place_ = Document::ScriptPlace{.clip = clip_, .frame = frame_, .depth = std::nullopt};
+    centre_->setCurrentWidget(script_ide_);
+    FillScriptIde();
+}
+
+void Window::ChooseIdeScript(const Document::ScriptPlace& place) {
+    ide_place_ = place;
+    FillScriptIde();
+}
+
+void Window::GoToName(const QString& name) {
+    if (!file_ || animation_path_.empty()) return;
+    const auto animation = file_->ReadAnimation(animation_path_);
+    if (!animation) return;
+    const Document::InputSurface surface =
+        Document::Inputs(*animation, file_->ShapeImages(animation_path_));
+    const std::string wanted = name.toStdString();
+    for (const Document::InputLabel& label : surface.labels) {
+        if (label.name != wanted) continue;
+        ShowScriptIde(false);
+        SeekTo(label.frame);
+        return;
+    }
+    for (const Document::InputSlot& slot : surface.names) {
+        if (slot.name != wanted) continue;
+        ShowScriptIde(false);
+        ChooseDepth(slot.depth);
+        return;
+    }
+}
+
+void Window::FillScriptIde() {
+    if (script_ide_ == nullptr || !file_ || animation_path_.empty()) return;
+    const auto animation = file_->ReadAnimation(animation_path_);
+    if (!animation) return;
+
+    script_ide_->ShowPackage(QFileInfo(document_path_).fileName(),
+                             QString::fromStdString(animation_name_));
+    script_ide_->ShowScripts(Document::ScriptsIn(*animation), ide_place_);
+
+    std::vector<IdeName> names;
+    const Document::InputSurface surface =
+        Document::Inputs(*animation, file_->ShapeImages(animation_path_));
+    for (const Document::InputLabel& label : surface.labels) {
+        names.push_back(IdeName{.kind = "L",
+                                .name = QString::fromStdString(label.name),
+                                .where = tr("frame label, %1").arg(label.frame)});
+    }
+    for (const Document::InputSlot& slot : surface.names) {
+        names.push_back(IdeName{.kind = "C",
+                                .name = QString::fromStdString(slot.name),
+                                .where = tr("depth %1").arg(slot.depth)});
+    }
+    for (const std::string& call : Document::CallsIn(*animation)) {
+        names.push_back(IdeName{.kind = "f", .name = QString::fromStdString(call), .where = {}});
+    }
+    script_ide_->ShowNames(names);
+
+    if (!ide_place_) {
+        script_ide_->ShowNothing(tr("No script"), tr("choose a script on the left"));
+        return;
+    }
+    const QString title = ide_place_->depth ? tr("depth %1 load").arg(*ide_place_->depth)
+                                            : tr("frame %1").arg(ide_place_->frame);
+    const std::optional<AfpAnimation::Bytecode> code = Document::ScriptAt(*animation, *ide_place_);
+    if (!code) {
+        script_ide_->ShowNothing(title, tr("this frame holds no script"));
+        return;
+    }
+    const std::optional<std::string> source = Document::ScriptSourceText(*animation, *code);
+    if (!source) {
+        script_ide_->ShowNothing(title,
+                                 tr("this script holds a value the editor cannot write back"));
+        return;
+    }
+    AfpAnimation::Animation trial = *animation;
+    const auto again = Document::CompileScript(trial, *source);
+    const auto read = AfpScript::Read(code->code);
+    const std::size_t slack = read ? read->trailing.size() : 0;
+    const std::vector<uint8_t> instructions(code->code.begin(),
+                                            code->code.end() - static_cast<std::ptrdiff_t>(slack));
+    const bool round_trips = again && again->code == instructions;
+    script_ide_->ShowScript(title, QString::fromStdString(*source), code->code, round_trips,
+                            *ide_place_);
+
+    script_ide_->ShowHistory(HistoryNames(), static_cast<int>(history_.Position()));
+}
+
+QStringList Window::HistoryNames() const {
+    QStringList steps;
+    for (const std::string& name : history_.Names())
+        steps.append(QString::fromStdString(name));
+    return steps;
+}
+
+void Window::CompileIdeScript(const QString& source) {
+    if (!ide_place_ || !file_ || animation_path_.empty() || script_ide_ == nullptr) return;
+    const Document::ScriptPlace place = *ide_place_;
+    const std::string wanted = source.toStdString();
+    auto written = [place, wanted](AfpAnimation::Animation& edited) {
+        if (place.depth) {
+            return Document::WritePlacementScript(edited, place.clip, *place.depth, place.frame,
+                                                  wanted);
+        }
+        return Document::WriteFrameScript(edited, place.clip, place.frame, wanted);
+    };
+
+    auto animation = file_->ReadAnimation(animation_path_);
+    if (!animation) {
+        script_ide_->ShowProblems({IdeProblem{.said = QString::fromStdString(animation.error())}});
+        return;
+    }
+    const auto tried = written(*animation);
+    if (!tried) {
+        script_ide_->ShowProblems({IdeProblem{.said = QString::fromStdString(tried.error())}});
+        return;
+    }
+    const QString named = place.depth ? tr("The script of depth %1").arg(*place.depth)
+                                      : tr("The script on frame %1").arg(place.frame);
+    if (!EditAnimation(named, written)) return;
+    FillScriptIde();
+}
+
+void Window::ShowInspectorScript(const AfpAnimation::Animation& animation,
+                                 const AfpAnimation::Container& clip) {
+    if (inspector_panel_ == nullptr) return;
+    const std::optional<std::size_t> tag = Document::FrameScriptTag(clip, frame_);
+    const auto* action = tag ? std::get_if<AfpAnimation::Action>(&clip.tags[*tag].body) : nullptr;
+    if (action == nullptr) {
+        inspector_panel_->ShowScript(ScriptView{});
+        return;
+    }
+    ScriptView view{
+        .shown = true, .title = tr("Frame %1").arg(frame_), .source = {}, .refusal = {}};
+    const std::optional<std::string> source =
+        Document::ScriptSourceText(animation, action->bytecode);
+    if (source) {
+        view.source = QString::fromStdString(*source);
+    } else {
+        view.refusal = tr("this script holds a value the editor cannot write back, so it is left "
+                          "as it is");
+    }
+    const QStringList names = NamesFor(animation, file_->ShapeImages(animation_path_));
+    inspector_panel_->ShowScript(view);
+    inspector_panel_->KnowScriptNames(names);
+}
+
+namespace {
+
+std::vector<uint8_t> FrameScriptCode(const AfpAnimation::Animation& animation,
+                                     const Document::ClipId& clip, uint32_t frame) {
+    const AfpAnimation::Container* body = Document::FindClip(animation, clip);
+    if (body == nullptr) return {};
+    const std::optional<std::size_t> tag = Document::FrameScriptTag(*body, frame);
+    if (!tag) return {};
+    const auto* action = std::get_if<AfpAnimation::Action>(&body->tags[*tag].body);
+    if (action == nullptr) return {};
+    return action->bytecode.code;
+}
+
+}
+
+void Window::CompileFrameScript(const QString& source) {
+    if (!file_ || animation_path_.empty() || inspector_panel_ == nullptr) return;
+    const Document::ClipId clip = clip_;
+    const uint32_t frame = frame_;
+    const std::string wanted = source.toStdString();
+    auto animation = file_->ReadAnimation(animation_path_);
+    if (!animation) {
+        inspector_panel_->ShowScriptProblem(QString::fromStdString(animation.error()));
+        return;
+    }
+    const std::vector<uint8_t> before = FrameScriptCode(*animation, clip, frame);
+    const auto tried = Document::WriteFrameScript(*animation, clip, frame, wanted);
+    if (!tried) {
+        const QString refused = QString::fromStdString(tried.error());
+        inspector_panel_->ShowScriptProblem(refused);
+        if (script_ide_ != nullptr) script_ide_->ShowProblems({IdeProblem{.said = refused}});
+        return;
+    }
+    const std::vector<uint8_t> after = FrameScriptCode(*animation, clip, frame);
+    if (!EditAnimation(tr("The script on frame %1").arg(frame),
+                       [clip, frame, wanted](AfpAnimation::Animation& edited) {
+                           return Document::WriteFrameScript(edited, clip, frame, wanted);
+                       })) {
+        return;
+    }
+    inspector_panel_->ShowScriptWritten(static_cast<int>(after.size()), after == before);
+}
+
 void Window::ShowInspectorSubject(const AfpAnimation::Animation& animation) {
     const AfpAnimation::Container* clip = Document::FindClip(animation, clip_);
     if (clip == nullptr || inspector_panel_ == nullptr) return;
+    ShowInspectorScript(animation, *clip);
     if (!depth_) {
         inspector_panel_->ShowSubject(
             InspectorSubject{.title = QString::fromStdString(animation_name_),

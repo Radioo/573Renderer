@@ -23,10 +23,12 @@ list(TRANSFORM R573_EDITOR_PREVIEW_SOURCES PREPEND "${R573_ROOT}/")
 
 find_package(Qt6 CONFIG REQUIRED COMPONENTS Widgets Svg Concurrent)
 find_package(qtadvanceddocking-qt6 CONFIG REQUIRED)
+find_package(unofficial-qscintilla CONFIG REQUIRED)
 find_package(tl-expected CONFIG REQUIRED)
 find_package(unofficial-hash-library CONFIG REQUIRED)
 find_package(flatbuffers CONFIG REQUIRED)
 find_package(nlohmann_json CONFIG REQUIRED)
+find_package(rapidfuzz CONFIG REQUIRED)
 find_package(Catch2 3 CONFIG REQUIRED)
 find_program(R573_FLATC flatc REQUIRED)
 
@@ -62,6 +64,7 @@ target_link_libraries(editor_shared
     PRIVATE
         unofficial::hash-library
         nlohmann_json::nlohmann_json
+        rapidfuzz::rapidfuzz
 )
 
 set(R573_EDITOR_APP_SOURCES
@@ -81,6 +84,10 @@ set(R573_EDITOR_APP_SOURCES
     src/editor_stage_bar.cpp
     src/editor_theme.cpp
     src/editor_icons.cpp
+    src/editor_script_lexer.cpp
+    src/editor_script_offers.cpp
+    src/editor_script_editor.cpp
+    src/editor_script_ide.cpp
     src/editor_rows.cpp
     src/editor_thumbnail.cpp
     src/editor_panel_tabs.cpp
@@ -126,6 +133,7 @@ add_executable(ifs_editor WIN32
 )
 target_include_directories(ifs_editor PRIVATE src)
 target_link_libraries(ifs_editor PRIVATE editor_shared Qt6::Widgets Qt6::Svg Qt6::Concurrent ads::qtadvanceddocking-qt6
+                                       unofficial::qscintilla::qscintilla
                                        d3d9.lib)
 
 set(R573_VCPKG_EXE "${R573_ROOT}/vendor/vcpkg/vcpkg.exe")
@@ -158,6 +166,7 @@ add_executable(ifs_editor_shot
 )
 target_include_directories(ifs_editor_shot PRIVATE src)
 target_link_libraries(ifs_editor_shot PRIVATE editor_shared Qt6::Widgets Qt6::Svg Qt6::Concurrent ads::qtadvanceddocking-qt6
+                                       unofficial::qscintilla::qscintilla
                                             d3d9.lib)
 r573_deploy_qt_plugin(ifs_editor_shot Qt6::QJpegPlugin)
 r573_deploy_qt_plugin(ifs_editor_shot Qt6::QSvgPlugin)
@@ -174,12 +183,17 @@ add_executable(editor_widget_tests
     tests/editor_icons_widget_tests.cpp
     tests/editor_controls_widget_tests.cpp
     tests/editor_thumbnail_widget_tests.cpp
+    tests/editor_script_widget_tests.cpp
     src/editor_panel_tabs.cpp
     src/editor_search.cpp
     src/editor_inspector.cpp
     src/editor_filter.cpp
     src/editor_icons.cpp
     src/editor_theme.cpp
+    src/editor_script_lexer.cpp
+    src/editor_script_offers.cpp
+    src/editor_script_editor.cpp
+    src/editor_script_ide.cpp
     src/editor_rows.cpp
     src/editor_thumbnail.cpp
     src/editor_graph.cpp
@@ -191,7 +205,7 @@ add_executable(editor_widget_tests
 )
 target_include_directories(editor_widget_tests PRIVATE src)
 target_link_libraries(editor_widget_tests PRIVATE editor_shared Qt6::Widgets Qt6::Svg Qt6::Concurrent
-                                                   Catch2::Catch2)
+                                                   unofficial::qscintilla::qscintilla Catch2::Catch2)
 r573_deploy_qt_plugin(editor_widget_tests Qt6::QMinimalIntegrationPlugin)
 r573_deploy_qt_plugin(editor_widget_tests Qt6::QJpegPlugin)
 r573_deploy_qt_plugin(editor_widget_tests Qt6::QSvgPlugin)
@@ -228,6 +242,10 @@ add_executable(editor_window_tests
     src/editor_stage_bar.cpp
     src/editor_theme.cpp
     src/editor_icons.cpp
+    src/editor_script_lexer.cpp
+    src/editor_script_offers.cpp
+    src/editor_script_editor.cpp
+    src/editor_script_ide.cpp
     src/editor_rows.cpp
     src/editor_thumbnail.cpp
     src/editor_panel_tabs.cpp
@@ -268,7 +286,8 @@ add_executable(editor_window_tests
 )
 target_include_directories(editor_window_tests PRIVATE src "${R573_ROOT}/tests/document")
 target_link_libraries(editor_window_tests PRIVATE editor_shared Qt6::Widgets Qt6::Svg Qt6::Concurrent
-                                                  ads::qtadvanceddocking-qt6 d3d9.lib Catch2::Catch2)
+                                                  ads::qtadvanceddocking-qt6 d3d9.lib
+                                                  unofficial::qscintilla::qscintilla Catch2::Catch2)
 r573_deploy_qt_plugin(editor_window_tests Qt6::QMinimalIntegrationPlugin)
 r573_deploy_qt_plugin(editor_window_tests Qt6::QJpegPlugin)
 r573_deploy_qt_plugin(editor_window_tests Qt6::QSvgPlugin)

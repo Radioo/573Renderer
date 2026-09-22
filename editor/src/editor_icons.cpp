@@ -76,6 +76,8 @@ QString Named(Glyph glyph) {
         return "step-back";
     case Glyph::Play:
         return "play";
+    case Glyph::Warning:
+        return "triangle-alert";
     case Glyph::Next:
         return "step-forward";
     case Glyph::Last:

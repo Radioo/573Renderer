@@ -1,5 +1,7 @@
 #include "editor_inspector.h"
 
+#include "editor_script_editor.h"
+
 #include "editor_mime.h"
 
 #include "editor_icons.h"
@@ -260,6 +262,14 @@ Inspector::Inspector(QWidget* parent)
     keyed_rows->addWidget(ease_);
     keyframes_->setVisible(false);
 
+    script_ = Section(tr("Script"), script_rows_);
+    script_editor_ = new ScriptEditor(ScriptEditor::Place::Docked);
+    connect(script_editor_, &ScriptEditor::Compiled, this, &Inspector::ScriptCompiled);
+    connect(script_editor_, &ScriptEditor::OpenAsked, this, &Inspector::ScriptOpenAsked);
+    connect(script_editor_, &ScriptEditor::NameChosen, this, &Inspector::ScriptNameChosen);
+    script_rows_->addWidget(script_editor_);
+    script_->setVisible(false);
+
     auto* inside = new QWidget;
     auto* layout = new QVBoxLayout(inside);
     layout->setContentsMargins(8, 8, 8, 8);
@@ -281,6 +291,7 @@ Inspector::Inspector(QWidget* parent)
     layout->addWidget(transform_);
     layout->addWidget(appearance_);
     layout->addWidget(keyframes_);
+    layout->addWidget(script_);
     layout->addStretch();
     raw_heading_ = new QToolButton;
     raw_heading_->setObjectName("section_raw");
@@ -501,6 +512,32 @@ QWidget* Inspector::ColourBoxes(const Document::ViewRow& row) {
     connect(hex, &QLineEdit::editingFinished, this, edited);
     connect(alpha, &QSpinBox::editingFinished, this, edited);
     return holder;
+}
+
+void Inspector::ShowScript(const ScriptView& view) {
+    script_->setVisible(view.shown);
+    if (!view.shown) return;
+    if (view.refusal.isEmpty()) {
+        script_editor_->ShowScript(view.title, view.source);
+        return;
+    }
+    script_editor_->ShowNothing(view.title, view.refusal);
+}
+
+void Inspector::ShowScriptProblem(const QString& problem) {
+    script_editor_->ShowProblem(problem);
+}
+
+void Inspector::ShowScriptWritten(int bytes, bool same) {
+    script_editor_->ShowWritten(bytes, same);
+}
+
+void Inspector::KnowScriptNames(const QStringList& names) {
+    QList<ScriptName> plain;
+    plain.reserve(names.size());
+    for (const QString& name : names)
+        plain.append(ScriptName{.name = name, .detail = {}, .kind = {}});
+    script_editor_->KnowNames(plain);
 }
 
 }

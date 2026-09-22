@@ -11,6 +11,9 @@
 
 #include "support/crash_report.h"
 
+#include <Qsci/qsciscintilla.h>
+
+#include <QAbstractButton>
 #include <QApplication>
 #include <QByteArray>
 #include <QDir>
@@ -175,10 +178,33 @@ int main(int argc, char** argv) {
         QApplication::processEvents();
     }
     const QString depth = Taken("--depth", arguments, QString());
-    if (!depth.isEmpty()) {
+    const QString frame = Taken("--frame", arguments, QString());
+    if (!depth.isEmpty() || !frame.isEmpty()) {
         if (auto* timeline = window.findChild<Editor::Timeline*>()) {
-            emit timeline->FrameChosen(Taken("--frame", arguments, "0").toUInt());
-            emit timeline->DepthChosen(depth.toInt());
+            emit timeline->FrameChosen(frame.isEmpty() ? 0 : frame.toUInt());
+            if (depth.isEmpty()) {
+                emit timeline->DepthsChosen({});
+            } else {
+                emit timeline->DepthChosen(depth.toInt());
+            }
+        }
+        QApplication::processEvents();
+    }
+    const QString pressed = Taken("--press", arguments, QString());
+    if (!pressed.isEmpty()) {
+        if (auto* button = window.findChild<QAbstractButton*>(pressed)) button->click();
+        QApplication::processEvents();
+    }
+    const QString typed = Taken("--script", arguments, QString());
+    if (!typed.isEmpty()) {
+        if (auto* area = window.findChild<QsciScintilla*>("script_ide_text")) {
+            const QString whole = QString(typed).replace(QString("\\n"), QString("\n"));
+            area->setText(whole.left(whole.size() - 1));
+            const int last = area->lines() - 1;
+            area->setCursorPosition(last, area->lineLength(last));
+            area->insert(whole.right(1));
+            const int ended = area->lines() - 1;
+            area->setCursorPosition(ended, area->lineLength(ended));
         }
         QApplication::processEvents();
     }
@@ -211,6 +237,20 @@ int main(int argc, char** argv) {
                 for (QTreeWidgetItemIterator row(tree); *row != nullptr; ++row)
                     lines << tree->objectName() << '	' << (*row)->text(0) << '	'
                           << (*row)->data(0, Editor::Rows::kDetailRole).toString() << Qt::endl;
+            }
+        }
+    }
+    const QString noted = Taken("--notes", arguments, QString());
+    if (!noted.isEmpty()) {
+        QFile writing(QDir(out).filePath(noted));
+        if (writing.open(QIODevice::WriteOnly | QIODevice::Text)) {
+            QTextStream lines(&writing);
+            if (auto* timeline = window.findChild<Editor::Timeline*>()) {
+                for (const Document::FrameNote& note : timeline->Notes()) {
+                    lines << note.frame << ' ' << (note.script ? "script" : "-") << ' '
+                          << (note.camera ? "camera" : "-") << " x "
+                          << timeline->FrameLeft(note.frame) << Qt::endl;
+                }
             }
         }
     }

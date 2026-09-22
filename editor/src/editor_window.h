@@ -8,6 +8,7 @@
 #include "document/authored.h"
 #include "document/characters.h"
 #include "document/clip.h"
+#include "document/script_index.h"
 #include "document/group_sprite.h"
 #include "document/hidden_depths.h"
 #include "document/span_clipboard.h"
@@ -131,6 +132,8 @@ class CommandSearch;
 struct SearchItem;
 class GraphEditor;
 class Timeline;
+class ScriptEditor;
+class ScriptIde;
 class Viewport;
 
 class Window : public QMainWindow {
@@ -241,6 +244,18 @@ private:
     bool ApplyKeyEdit(const QString& value);
     bool ApplyKeyFilterEdit(const QString& field, const QString& value);
     void ShowInspectorMenu(const QPoint& where);
+    void ShowScriptAt(uint32_t frame);
+    void ShowInspectorScript(const AfpAnimation::Animation& animation,
+                             const AfpAnimation::Container& clip);
+    void CompileFrameScript(const QString& source);
+    void ShowScriptIde(bool open);
+    void FillScriptIde();
+    void ChooseIdeScript(const Document::ScriptPlace& place);
+    void GoToName(const QString& name);
+    void CompileIdeScript(const QString& source);
+    [[nodiscard]] QStringList HistoryNames() const;
+    [[nodiscard]] static QStringList NamesFor(const AfpAnimation::Animation& animation,
+                                              const std::map<uint16_t, std::string>& shape_images);
     void ShowInspectorSubject(const AfpAnimation::Animation& animation);
     void RefreshSelectionBar();
     void RefreshTimelineBar();
@@ -554,6 +569,8 @@ private:
     double shown_rate_ = 0;
     QAction* background_action_ = nullptr;
     Viewport* viewport_ = nullptr;
+    ScriptIde* script_ide_ = nullptr;
+    std::optional<Document::ScriptPlace> ide_place_;
     Timeline* timeline_ = nullptr;
     GraphEditor* graph_ = nullptr;
     QListWidget* graph_properties_ = nullptr;

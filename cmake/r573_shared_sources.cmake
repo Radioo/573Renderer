@@ -16,6 +16,7 @@ set(R573_EDITOR_FORMATS_SOURCES
     src/formats/afp_bytecode.cpp
     src/formats/afp_placement_read.cpp
     src/formats/afp_script.cpp
+    src/formats/afp_script_names.cpp
     src/formats/afp_placement_write.cpp
     src/formats/avs_lz77.cpp
     src/formats/binary_xml_names.cpp
@@ -61,6 +62,9 @@ set(R573_EDITOR_DOCUMENT_SOURCES
     src/document/keyframes.cpp
     src/document/key_selection.cpp
     src/document/label_edit.cpp
+    src/document/script_index.cpp
+    src/document/script_problems.cpp
+    src/document/script_docs.cpp
     src/document/script_source.cpp
     src/document/span_edit.cpp
     src/document/span_arrange.cpp

@@ -2,12 +2,20 @@
 
 #include "editor_inspector.h"
 #include "sample_package.h"
+#include "editor_script_editor.h"
+#include "editor_theme.h"
 #include "editor_timeline.h"
 #include "editor_window.h"
 
 #include "document/keyframe_edit.h"
 
+#include <Qsci/qsciscintilla.h>
+
 #include <QApplication>
+#include <QDialog>
+#include <QDialogButtonBox>
+#include <QPushButton>
+#include <QStackedWidget>
 #include <QIODevice>
 #include <QFile>
 #include <QByteArray>
@@ -19,6 +27,7 @@
 #include <QAction>
 #include <QDoubleSpinBox>
 #include <QLabel>
+#include <QMouseEvent>
 #include <QLineEdit>
 #include <QSpinBox>
 #include <QString>
@@ -315,4 +324,330 @@ TEST_CASE("A matrix field typed into the raw table changes what the stage draws"
     emit timeline->DepthChosen(2);
     QApplication::processEvents();
     CHECK(Box(opened.window, "Scale", 0).value() == 100.0);
+}
+
+TEST_CASE("The script on a frame opens in the editor and compiles back into the animation") {
+    Opened opened;
+    opened.window.resize(kWindowWidth, kWindowHeight);
+    opened.window.OpenDocument(WriteFrameScript(opened.dir, "intro"));
+    WaitForOpen(opened.window);
+    ShowOffScreen(opened.window);
+    auto* timeline = opened.window.findChild<Editor::Timeline*>();
+    auto* section = opened.window.findChild<QWidget*>("section_script");
+    auto* title = opened.window.findChild<QLabel*>("script_title");
+    auto* area = opened.window.findChild<QsciScintilla*>("script_text");
+    auto* compile = opened.window.findChild<QPushButton*>("script_compile");
+    REQUIRE(timeline != nullptr);
+    REQUIRE(section != nullptr);
+    REQUIRE(title != nullptr);
+    REQUIRE(area != nullptr);
+    REQUIRE(compile != nullptr);
+    CHECK(section->parentWidget()->isHidden());
+
+    emit timeline->FrameChosen(1);
+    emit timeline->DepthsChosen({});
+    QApplication::processEvents();
+    REQUIRE_FALSE(section->parentWidget()->isHidden());
+    CHECK(title->text().contains("Frame 1"));
+    CHECK(area->text().contains("intro"));
+    CHECK_FALSE(compile->isEnabled());
+
+    area->setText("gotoAndPlay(\"outro\")\n");
+    QApplication::processEvents();
+    REQUIRE(compile->isEnabled());
+    {
+        Script watching({});
+        compile->click();
+        REQUIRE(Settle([&opened] { return !opened.window.Loading(); }));
+        INFO(watching.Problems().join("|").toStdString());
+        CHECK(watching.Problems().isEmpty());
+    }
+
+    auto* again = opened.window.findChild<QsciScintilla*>("script_text");
+    REQUIRE(again != nullptr);
+    CHECK(again->text().contains("outro"));
+    CHECK_FALSE(again->text().contains("intro"));
+    CHECK_FALSE(compile->isEnabled());
+}
+
+TEST_CASE("A script the compiler refuses is kept in the editor with the reason") {
+    Opened opened;
+    opened.window.resize(kWindowWidth, kWindowHeight);
+    opened.window.OpenDocument(WriteFrameScript(opened.dir, "intro"));
+    WaitForOpen(opened.window);
+    ShowOffScreen(opened.window);
+    auto* timeline = opened.window.findChild<Editor::Timeline*>();
+    REQUIRE(timeline != nullptr);
+    emit timeline->FrameChosen(1);
+    emit timeline->DepthsChosen({});
+    QApplication::processEvents();
+
+    auto* area = opened.window.findChild<QsciScintilla*>("script_text");
+    auto* compile = opened.window.findChild<QPushButton*>("script_compile");
+    auto* problem = opened.window.findChild<QLabel*>("script_status");
+    REQUIRE(area != nullptr);
+    REQUIRE(compile != nullptr);
+    REQUIRE(problem != nullptr);
+
+    area->setText("sprocket()\n");
+    QApplication::processEvents();
+    REQUIRE(compile->isEnabled());
+    compile->click();
+    REQUIRE(Settle([&opened] { return !opened.window.Loading(); }));
+
+    CHECK(area->text().contains("sprocket()"));
+    CHECK_FALSE(problem->isHidden());
+    CHECK(problem->text().contains("sprocket()"));
+}
+
+TEST_CASE("Ctrl clicking a name the package holds goes to it in the timeline") {
+    Opened opened;
+    opened.window.resize(kWindowWidth, kWindowHeight);
+    opened.window.OpenDocument(WriteFrameScript(opened.dir, "loop"));
+    WaitForOpen(opened.window);
+    ShowOffScreen(opened.window);
+    auto* timeline = opened.window.findChild<Editor::Timeline*>();
+    REQUIRE(timeline != nullptr);
+    emit timeline->FrameChosen(1);
+    emit timeline->DepthsChosen({});
+    QApplication::processEvents();
+
+    auto* area = opened.window.findChild<QsciScintilla*>("script_text");
+    auto* seeker = opened.window.findChild<QSpinBox*>("timeline_frame");
+    REQUIRE(area != nullptr);
+    REQUIRE(seeker != nullptr);
+    REQUIRE(area->text().contains("\"loop\""));
+    REQUIRE(seeker->value() == 1);
+
+    const qsizetype quote = area->text(0).indexOf(QChar('"'));
+    REQUIRE(quote >= 0);
+    const int at = area->positionFromLineIndex(0, static_cast<int>(quote) + 1);
+    const int x = static_cast<int>(
+        area->SendScintilla(QsciScintillaBase::SCI_POINTXFROMPOSITION, 0UL, static_cast<long>(at)));
+    const int y = static_cast<int>(
+        area->SendScintilla(QsciScintillaBase::SCI_POINTYFROMPOSITION, 0UL, static_cast<long>(at)));
+    QMouseEvent press(QEvent::MouseButtonPress, QPointF(x + 1, y + 2), QPointF(), Qt::LeftButton,
+                      Qt::LeftButton, Qt::ControlModifier);
+    QApplication::sendEvent(area->viewport(), &press);
+    QApplication::processEvents();
+
+    CHECK(Settle([seeker] { return seeker->value() == 2; }));
+}
+
+TEST_CASE("The script list marks the one being edited") {
+    Opened opened;
+    opened.window.resize(kWindowWidth, kWindowHeight);
+    opened.window.OpenDocument(WriteFrameScript(opened.dir, "intro"));
+    WaitForOpen(opened.window);
+    ShowOffScreen(opened.window);
+    auto* timeline = opened.window.findChild<Editor::Timeline*>();
+    REQUIRE(timeline != nullptr);
+    emit timeline->FrameChosen(1);
+    emit timeline->DepthsChosen({});
+    QApplication::processEvents();
+    auto* open = opened.window.findChild<QPushButton*>("script_place");
+    REQUIRE(open != nullptr);
+    open->click();
+    QApplication::processEvents();
+
+    const auto amber = [&opened] {
+        int many = 0;
+        for (const QLabel* dot : opened.window.findChildren<QLabel*>("ide_dot")) {
+            if (dot->styleSheet().contains(Editor::Theme::kAmber.name())) many++;
+        }
+        return many;
+    };
+    REQUIRE(!opened.window.findChildren<QLabel*>("ide_dot").isEmpty());
+    CHECK(amber() == 0);
+
+    auto* wide = opened.window.findChild<QsciScintilla*>("script_ide_text");
+    REQUIRE(wide != nullptr);
+    wide->setText("stop()\n");
+    QApplication::processEvents();
+    CHECK(amber() == 1);
+}
+
+TEST_CASE("Open full replaces the whole view with the script IDE and closes back") {
+    Opened opened;
+    opened.window.resize(kWindowWidth, kWindowHeight);
+    opened.window.OpenDocument(WriteFrameScript(opened.dir, "intro"));
+    WaitForOpen(opened.window);
+    ShowOffScreen(opened.window);
+    auto* centre = opened.window.findChild<QStackedWidget*>("centre_stack");
+    auto* ide = opened.window.findChild<QWidget*>("script_ide");
+    auto* timeline = opened.window.findChild<Editor::Timeline*>();
+    REQUIRE(centre != nullptr);
+    REQUIRE(ide != nullptr);
+    REQUIRE(timeline != nullptr);
+    CHECK(centre->currentWidget() != ide);
+
+    emit timeline->FrameChosen(1);
+    emit timeline->DepthsChosen({});
+    QApplication::processEvents();
+
+    auto* open = opened.window.findChild<QPushButton*>("script_place");
+    REQUIRE(open != nullptr);
+    open->click();
+    QApplication::processEvents();
+
+    CHECK(centre->currentWidget() == ide);
+    auto* crumb = opened.window.findChild<QLabel*>("ide_crumb");
+    auto* wide = opened.window.findChild<QsciScintilla*>("script_ide_text");
+    auto* scripts = opened.window.findChild<QTreeWidget*>("ide_scripts");
+    auto* names = opened.window.findChild<QTreeWidget*>("ide_names");
+    REQUIRE(crumb != nullptr);
+    REQUIRE(wide != nullptr);
+    REQUIRE(scripts != nullptr);
+    REQUIRE(names != nullptr);
+    CHECK(crumb->text().contains("frame 1"));
+    CHECK(wide->text().contains("intro"));
+    CHECK(scripts->topLevelItemCount() > 0);
+    CHECK(names->topLevelItemCount() > 0);
+
+    auto* close = opened.window.findChild<QPushButton*>("ide_close");
+    REQUIRE(close != nullptr);
+    close->click();
+    QApplication::processEvents();
+    CHECK(centre->currentWidget() != ide);
+}
+
+TEST_CASE("The IDE compiles the script it is showing back into the animation") {
+    Opened opened;
+    opened.window.resize(kWindowWidth, kWindowHeight);
+    opened.window.OpenDocument(WriteFrameScript(opened.dir, "intro"));
+    WaitForOpen(opened.window);
+    ShowOffScreen(opened.window);
+    auto* timeline = opened.window.findChild<Editor::Timeline*>();
+    REQUIRE(timeline != nullptr);
+    emit timeline->FrameChosen(1);
+    emit timeline->DepthsChosen({});
+    QApplication::processEvents();
+    auto* open = opened.window.findChild<QPushButton*>("script_place");
+    REQUIRE(open != nullptr);
+    open->click();
+    QApplication::processEvents();
+
+    auto* wide = opened.window.findChild<QsciScintilla*>("script_ide_text");
+    auto* compile = opened.window.findChild<QPushButton*>("ide_compile");
+    REQUIRE(wide != nullptr);
+    REQUIRE(compile != nullptr);
+    CHECK_FALSE(compile->isEnabled());
+
+    wide->setText("gotoAndPlay(\"outro\")\n");
+    QApplication::processEvents();
+    REQUIRE(compile->isEnabled());
+    {
+        Script watching({});
+        compile->click();
+        REQUIRE(Settle([&opened] { return !opened.window.Loading(); }));
+        INFO(watching.Problems().join("|").toStdString());
+        CHECK(watching.Problems().isEmpty());
+    }
+
+    auto* again = opened.window.findChild<QsciScintilla*>("script_ide_text");
+    REQUIRE(again != nullptr);
+    CHECK(again->text().contains("outro"));
+    CHECK_FALSE(again->text().contains("intro"));
+}
+
+TEST_CASE("A placement's own script opens in the IDE and compiles back") {
+    Opened opened;
+    opened.window.resize(kWindowWidth, kWindowHeight);
+    opened.window.OpenDocument(WritePlacementScript(opened.dir, "intro"));
+    WaitForOpen(opened.window);
+    ShowOffScreen(opened.window);
+    auto* timeline = opened.window.findChild<Editor::Timeline*>();
+    REQUIRE(timeline != nullptr);
+    emit timeline->FrameChosen(0);
+    emit timeline->DepthsChosen({});
+    QApplication::processEvents();
+
+    auto* open = opened.window.findChild<QPushButton*>("script_place");
+    REQUIRE(open != nullptr);
+    open->click();
+    QApplication::processEvents();
+
+    auto* scripts = opened.window.findChild<QTreeWidget*>("ide_scripts");
+    REQUIRE(scripts != nullptr);
+    QTreeWidgetItem* owned = nullptr;
+    for (QTreeWidgetItemIterator it(scripts); *it != nullptr; ++it) {
+        if ((*it)->text(1).contains("intro")) owned = *it;
+    }
+    REQUIRE(owned != nullptr);
+    scripts->setCurrentItem(owned);
+    QApplication::processEvents();
+
+    auto* wide = opened.window.findChild<QsciScintilla*>("script_ide_text");
+    auto* compile = opened.window.findChild<QPushButton*>("ide_compile");
+    REQUIRE(wide != nullptr);
+    REQUIRE(compile != nullptr);
+    CHECK(wide->text().contains("intro"));
+
+    wide->setText("gotoAndPlay(\"outro\")\n");
+    QApplication::processEvents();
+    REQUIRE(compile->isEnabled());
+    {
+        Script watching({});
+        compile->click();
+        REQUIRE(Settle([&opened] { return !opened.window.Loading(); }));
+        INFO(watching.Problems().join("|").toStdString());
+        CHECK(watching.Problems().isEmpty());
+    }
+    CHECK(wide->text().contains("outro"));
+}
+
+TEST_CASE("An owned depth's script is written in the real editor, not a bare text box") {
+    Opened opened;
+    Open(opened, true);
+    OwnDroppedDot(opened);
+    auto* timeline = opened.window.findChild<Editor::Timeline*>();
+    REQUIRE(timeline != nullptr);
+    emit timeline->FrameChosen(0);
+    emit timeline->DepthChosen(3);
+    QApplication::processEvents();
+
+    QStringList seen;
+    Script typing({[&opened, &seen] {
+        auto* asking = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+        if (asking == nullptr || asking->objectName() != QString("owned_script_dialog"))
+            return false;
+        auto* area = asking->findChild<QsciScintilla*>("script_ide_text");
+        auto* answers = asking->findChild<QDialogButtonBox*>("owned_script_answers");
+        if (area == nullptr || answers == nullptr) return false;
+        seen.append("editor");
+        seen.append(area->lexer() == nullptr ? "plain" : "highlighted");
+        answers->button(QDialogButtonBox::Cancel)->click();
+        return true;
+    }});
+    REQUIRE(RunCommand(opened.window, "depth.edit_script").isEmpty());
+    REQUIRE(Settle([&typing] { return typing.Finished(); }));
+    INFO(typing.Problems().join("|").toStdString());
+    CHECK(seen.contains("editor"));
+    CHECK(seen.contains("highlighted"));
+    CHECK(typing.Problems().isEmpty());
+}
+
+TEST_CASE("Clicking a script mark brings the inspector forward with that frame's script") {
+    Opened opened;
+    opened.window.resize(kWindowWidth, kWindowHeight);
+    opened.window.OpenDocument(WriteFrameScript(opened.dir, "intro"));
+    WaitForOpen(opened.window);
+    ShowOffScreen(opened.window);
+    ads::CDockWidget* inputs = Panel(opened.window, "Inputs");
+    REQUIRE(inputs != nullptr);
+    inputs->setAsCurrentTab();
+    QApplication::processEvents();
+    REQUIRE(inputs->isCurrentTab());
+
+    auto* timeline = opened.window.findChild<Editor::Timeline*>();
+    REQUIRE(timeline != nullptr);
+    emit timeline->ScriptChosen(1);
+    QApplication::processEvents();
+
+    ads::CDockWidget* inspector = Panel(opened.window, "Inspector");
+    REQUIRE(inspector != nullptr);
+    CHECK(inspector->isCurrentTab());
+    auto* title = opened.window.findChild<QLabel*>("script_title");
+    REQUIRE(title != nullptr);
+    CHECK(title->text().contains("Frame 1"));
 }

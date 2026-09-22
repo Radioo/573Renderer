@@ -7,6 +7,8 @@
 #include "editor_timeline_metrics.h"
 #include "editor_viewport.h"
 #include "editor_window.h"
+
+#include "support/crash_report.h"
 #include "sample_package.h"
 
 #include "document/animation_strings.h"
@@ -829,6 +831,7 @@ TEST_CASE("Stage snapping is on until it is turned off, and the choice is kept")
 }
 
 int main(int argc, char** argv) {
+    Support::InstallCrashReporter();
     if (qEnvironmentVariableIsEmpty("QT_QPA_PLATFORM")) qputenv("QT_QPA_PLATFORM", "minimal");
     QTemporaryDir settings;
     QSettings::setDefaultFormat(QSettings::IniFormat);

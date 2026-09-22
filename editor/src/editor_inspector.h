@@ -72,6 +72,15 @@ struct InspectorSubject {
     bool owned = false;
 };
 
+struct ScriptView {
+    bool shown = false;
+    QString title;
+    QString source;
+    QString refusal;
+};
+
+class ScriptEditor;
+
 class Inspector : public QWidget {
     Q_OBJECT
 
@@ -83,9 +92,17 @@ public:
     void ShowSubject(const InspectorSubject& subject);
     void ShowView(const std::optional<Document::PlacementView>& view, uint32_t frame);
     void ShowEase(const std::optional<EaseView>& ease);
+    void ShowScript(const ScriptView& view);
+    void ShowScriptProblem(const QString& problem);
+    void ShowScriptWritten(int bytes, bool same);
+    void KnowScriptNames(const QStringList& names);
+
     void ShowExtras(const std::optional<PlacementExtras>& extras);
 
 signals:
+    void ScriptCompiled(const QString& source);
+    void ScriptOpenAsked();
+    void ScriptNameChosen(const QString& name);
     void ValueEdited(const QString& label, const std::vector<double>& values);
     void KeyingToggled(const QString& label, bool animated);
     void ColourPicked(const QString& label);
@@ -110,6 +127,9 @@ private:
     QWidget* transform_;
     QWidget* appearance_;
     QWidget* keyframes_;
+    QWidget* script_ = nullptr;
+    ScriptEditor* script_editor_ = nullptr;
+    QVBoxLayout* script_rows_ = nullptr;
     EaseEditor* ease_;
     QWidget* content_;
     CharacterDrop* character_;

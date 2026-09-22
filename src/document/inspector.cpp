@@ -8,6 +8,7 @@
 #include "document/filter_values.h"
 #include "document/keyframe_edit.h"
 #include "document/keyframes.h"
+#include "document/clip_edit.h"
 #include "document/library_call.h"
 #include "document/outline.h"
 #include "document/placement_edit.h"
@@ -81,6 +82,20 @@ void AppendPlacement(std::vector<InspectedRow>& rows, const AfpAnimation::Animat
     }
 }
 
+void AppendFrameScript(std::vector<InspectedRow>& rows, const AfpAnimation::Animation& animation,
+                       const AfpAnimation::Container& clip, uint32_t frame, bool owned) {
+    const std::optional<std::size_t> tag = FrameScriptTag(clip, frame);
+    if (!tag) return;
+    const auto* action = std::get_if<AfpAnimation::Action>(&clip.tags[*tag].body);
+    if (action == nullptr) return;
+    rows.push_back(Plain("Script on frame", std::to_string(frame)));
+    for (const Field& field : ScriptFields(animation, action->bytecode)) {
+        const bool editable = !owned && CallArgumentIndex(field.name).has_value();
+        rows.push_back(InspectedRow{
+            .field = field, .edits = editable ? EditTarget::FrameCallArgument : EditTarget::None});
+    }
+}
+
 void AppendCamera(std::vector<InspectedRow>& rows, const AfpAnimation::Container& clip,
                   uint32_t frame) {
     const std::optional<std::size_t> tag = CameraTag(clip, frame);
@@ -123,6 +138,7 @@ std::vector<InspectedRow> InspectFrame(const AfpAnimation::Animation& animation,
         for (const Field& field : AnimationSettingFields(animation))
             rows.push_back(InspectedRow{.field = field, .edits = EditTarget::Animation});
     }
+    if (!selection.depth) AppendFrameScript(rows, animation, *clip, selection.frame, owned);
     AppendCamera(rows, *clip, selection.frame);
     return rows;
 }

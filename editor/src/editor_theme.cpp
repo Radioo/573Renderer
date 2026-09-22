@@ -384,6 +384,8 @@ QToolButton[selection="true"]:disabled { color: %line; }
 QWidget[section="true"] { background: %panel; border-top: 1px solid %line; }
 QWidget[section="true"] QLabel[section_name="true"] { color: %soft; font-size: 11px;
                                                       font-weight: 600; }
+QLabel#script_call { color: %faint; font-size: 11px; }
+QLabel#script_line { color: %text; font-family: "%mono"; font-size: 11px; }
 QLabel#inspector_title { color: %text; }
 QLabel#inspector_detail { color: %faint; font-size: 11px; }
 QLabel#inspector_badge { color: %soft; border: 1px solid %edge; padding: 1px 5px;

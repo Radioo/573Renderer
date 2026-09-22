@@ -9,6 +9,8 @@
 #include "editor_commands.h"
 #include "editor_host.h"
 #include "editor_inspector.h"
+#include "editor_script_editor.h"
+#include "editor_script_ide.h"
 #include "editor_notices.h"
 #include "editor_popover.h"
 #include "editor_selection_bar.h"
@@ -233,6 +235,9 @@ void Window::BuildPanels() {
     inspector_panel_ = new Inspector;
     inspector_ = inspector_panel_->Raw();
     connect(inspector_panel_, &Inspector::ValueEdited, this, &Window::ApplyViewEdit);
+    connect(inspector_panel_, &Inspector::ScriptCompiled, this, &Window::CompileFrameScript);
+    connect(inspector_panel_, &Inspector::ScriptOpenAsked, this, [this] { ShowScriptIde(true); });
+    connect(inspector_panel_, &Inspector::ScriptNameChosen, this, &Window::GoToName);
     connect(inspector_panel_, &Inspector::KeyingToggled, this, &Window::ToggleViewKeying);
     connect(inspector_panel_, &Inspector::ColourPicked, this, &Window::PickViewColour);
     connect(inspector_panel_, &Inspector::EaseChosen, this, &Window::ApplySelectedKeysEase);
@@ -256,6 +261,7 @@ void Window::BuildPanels() {
     timeline_->setObjectName("timeline");
     connect(timeline_, &Timeline::FrameChosen, this, &Window::SeekTo);
     connect(timeline_, &Timeline::DepthChosen, this, &Window::ChooseDepth);
+    connect(timeline_, &Timeline::ScriptChosen, this, &Window::ShowScriptAt);
     connect(timeline_, &Timeline::DepthsChosen, this, &Window::ChooseDepths);
     connect(timeline_, &Timeline::MenuRequested, this, &Window::ShowTimelineMenu);
     connect(timeline_, &Timeline::KeyChosen, this, &Window::FocusKey);
@@ -390,6 +396,12 @@ void Window::BuildPanels() {
     centre_->addWidget(start_);
     centre_->addWidget(docks_);
     centre_->addWidget(busy_);
+    script_ide_ = new ScriptIde;
+    connect(script_ide_, &ScriptIde::CloseAsked, this, [this] { ShowScriptIde(false); });
+    connect(script_ide_, &ScriptIde::ScriptChosen, this, &Window::ChooseIdeScript);
+    connect(script_ide_, &ScriptIde::CompileAsked, this, &Window::CompileIdeScript);
+    connect(script_ide_, &ScriptIde::NameChosen, this, &Window::GoToName);
+    centre_->addWidget(script_ide_);
     setCentralWidget(centre_);
 }
 
@@ -632,6 +644,17 @@ void Window::ApplyFieldEdit(QTableWidgetItem* item) {
         EditAnimation(name->text(), [field, value](AfpAnimation::Animation& animation) {
             return Document::SetAnimationSetting(animation, field, value);
         });
+        return;
+    }
+    if (edits == Document::EditTarget::FrameCallArgument) {
+        const std::optional<std::size_t> argument = Document::CallArgumentIndex(field);
+        if (!argument) return;
+        const std::size_t index = *argument;
+        EditAnimation(tr("%1 on frame %2").arg(name->text()).arg(frame),
+                      [clip, index, value, frame](AfpAnimation::Animation& animation) {
+                          return Document::EditFrameCallArgument(animation, clip, frame, index,
+                                                                 value);
+                      });
         return;
     }
     if (!depth_) return;

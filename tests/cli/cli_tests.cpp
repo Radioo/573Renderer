@@ -100,6 +100,15 @@ TEST_CASE("scale and afp-speed validate as floats") {
     CHECK_FALSE(Run({"--afp-speed", "17"}).ok);
 }
 
+TEST_CASE("stretch accepts 0/1 and off/on only") {
+    CHECK(Run({"--stretch", "0"}).opts.stretch_16_9 == 0);
+    CHECK(Run({"--stretch", "off"}).opts.stretch_16_9 == 0);
+    CHECK(Run({"--stretch", "1"}).opts.stretch_16_9 == 1);
+    CHECK(Run({"--stretch", "on"}).opts.stretch_16_9 == 1);
+    CHECK_FALSE(Run({"--stretch", "wide"}).ok);
+    CHECK(Run({}).opts.stretch_16_9 == -1);
+}
+
 TEST_CASE("root-loop accepts hold and force only") {
     CHECK(Run({"--root-loop", "hold"}).opts.root_loop_mode == 0);
     CHECK(Run({"--root-loop", "force"}).opts.root_loop_mode == 1);

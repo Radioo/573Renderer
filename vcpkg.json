@@ -8,6 +8,7 @@
     "flatbuffers",
     "hash-library",
     "nlohmann-json",
+    "rapidfuzz-cpp",
     "stb",
     "tl-expected"
   ],
@@ -26,6 +27,7 @@
             "widgets"
           ]
         },
+        "qscintilla",
         "qt-advanced-docking-system",
         "qtsvg"
       ]

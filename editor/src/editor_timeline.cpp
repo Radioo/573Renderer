@@ -434,10 +434,19 @@ bool Timeline::PressNotes(QPoint at) {
         emit CameraAsked();
         return true;
     }
+    const Document::FrameNote* nearest = nullptr;
+    int best = kNoteReach;
     for (const Document::FrameNote& note : notes_) {
-        if (std::abs(FrameToX(note.frame) - at.x()) > kNoteReach) continue;
-        emit FrameChosen(note.frame);
-        return true;
+        const int distance = std::abs(FrameToX(note.frame) - at.x());
+        if (distance > best) continue;
+        best = distance;
+        nearest = &note;
+    }
+    if (nearest == nullptr) return true;
+    if (nearest->script) {
+        emit ScriptChosen(nearest->frame);
+    } else {
+        emit FrameChosen(nearest->frame);
     }
     return true;
 }

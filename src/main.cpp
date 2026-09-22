@@ -1,5 +1,4 @@
 #include "state/boot_lifecycle.h"
-#include <algorithm>
 #include "gpu_context.h"
 #include "state/live_controls.h"
 #include "support/crash_report.h"
@@ -9,6 +8,11 @@
 #include "state/app_state.h"
 #include "state/commands.h"
 #include "cli/cli.h"
+#include <crtdbg.h>
+#include <stdlib.h>
+
+#include "afp_ddr.h"
+#include "iidx_playfield.h"
 #include "render/stretch.h"
 #include "settings/settings.h"
 #include "gui/gui_thread.h"
@@ -22,6 +26,7 @@
 #include "tool_commands.h"
 #include "anim_inspect.h"
 #include "qpro/qpro_extract.h"
+#include <algorithm>
 #include <atomic>
 #include <cstdlib>
 #include <string>
@@ -63,7 +68,8 @@ void SeedStateFromSettings(const Cli::Options& cli, const Settings::Config& sett
                                                          : settings.master_scale);
     App::Global().SetRenderSize(initial_rw, initial_rh);
     App::Global().SetRenderFps(cli.render_fps > 0 ? cli.render_fps : settings.render_fps);
-    App::Global().SetStretchWide(settings.stretch_16_9);
+    App::Global().SetStretchWide(cli.stretch_16_9 >= 0 ? cli.stretch_16_9 != 0
+                                                       : settings.stretch_16_9);
     App::Global().SetStretchFilter((Stretch::Filter)std::clamp(settings.stretch_filter, 0, 3));
     std::string seed_slug;
     if (!cli.game_profile.empty()) {
@@ -348,6 +354,19 @@ int RunAnimInspectAndExit(const Cli::Options& cli, bool have_gui) {
     return rc;
 }
 
+void SilenceCrashDialogs(const std::vector<std::string>& args) {
+    const bool interactive = std::ranges::none_of(
+        args, [](const std::string& arg) { return arg == "--no-gui" || arg == "--headless"; });
+    if (interactive) return;
+    SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX | SEM_NOOPENFILEERRORBOX);
+    _set_error_mode(_OUT_TO_STDERR);
+    _set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
+    _CrtSetReportMode(_CRT_ERROR, _CRTDBG_MODE_FILE);
+    _CrtSetReportFile(_CRT_ERROR, _CRTDBG_FILE_STDERR);
+    _CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_FILE);
+    _CrtSetReportFile(_CRT_ASSERT, _CRTDBG_FILE_STDERR);
+}
+
 std::vector<std::string> CollectCliArgs(int& argc, std::vector<char*>& argv_ptrs) {
     std::vector<std::string> args_utf8 = Utf8Args(argc);
     argv_ptrs.reserve(argc);
@@ -377,6 +396,25 @@ bool SeedStateAndStartGui(HINSTANCE hInstance, const Cli::Options& cli,
     return have_gui;
 }
 
+void LoadStartupBitmapSources(const Cli::Options& cli) {
+    for (const std::string& path : cli.bitmap_packages) {
+        if (!DdrAfp::LoadTxp2Bitmaps(g_avs, path)) {
+            LOG("Main", "--load-bitmaps '%s' failed", path.c_str());
+        }
+    }
+}
+
+void EnableStartupPlayfield(const Cli::Options& cli) {
+    if (cli.iidx_playfield.empty()) return;
+    IidxPlayfield::Values values;
+    std::string err;
+    if (!IidxPlayfield::Parse(cli.iidx_playfield, values, err)) {
+        LOG("Main", "--iidx-playfield: %s", err.c_str());
+        return;
+    }
+    IidxPlayfield::Enable(values);
+}
+
 void LoadStartupOverlays(App::State& state, const Cli::Options& cli) {
     for (const std::string& requested : cli.alongside_ifs) {
         bool from_arc = false;
@@ -397,6 +435,8 @@ void MountStartupContent(App::State& state, const Cli::Options& cli) {
     if (!startup_ifs.empty() && afp_ready) {
         if (MountAndLoadIfs(startup_ifs, startup_from_arc)) {
             LoadStartupOverlays(state, cli);
+            LoadStartupBitmapSources(cli);
+            EnableStartupPlayfield(cli);
             ApplyCliOverrides(cli);
         } else {
             LOG("Main", "startup IFS mount failed for '%s' - CLI overrides skipped",
@@ -415,6 +455,7 @@ int WINAPI WinMain(HINSTANCE hInstance, [[maybe_unused]] HINSTANCE hPrevInstance
     int argc = 0;
     std::vector<char*> argv_ptrs;
     std::vector<std::string> args_utf8 = CollectCliArgs(argc, argv_ptrs);
+    SilenceCrashDialogs(args_utf8);
 
     const Cli::ToolCommand tool = Cli::ParseToolCommand(args_utf8);
     if (tool.kind != Cli::ToolKind::None) {

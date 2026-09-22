@@ -19,6 +19,7 @@ enum class ToolKind : std::uint8_t {
     QproScan,
     Scene3dTest,
     Gc2dSheet,
+    Txp2Dump,
     PresetTest,
     PresetExport,
     PresetDumpDefaults,

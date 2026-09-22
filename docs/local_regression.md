@@ -389,6 +389,15 @@ on one built-in object, `aeplib`: `aep_set_set_frame` 413915,
 The gate earned its keep immediately: the first run reported 442107 scripts
 rewritten, which is how the padding after `END` was found.
 
+It also measures the source language both ways: every script is turned into
+source and compiled again, and the bytes are compared with the original. All
+463562 scripts here, and all 211761 in SDVX 7's 935
+files, read back and recompile identically, and the test asserts all three
+counts rather than only printing them. Point `R573_IIDX_DIR` at an SDVX install
+to run it over that corpus instead; the two counts baked in are IIDX 33's, so
+the script and call totals report a mismatch there while the source columns
+stay exact.
+
 ## The document model against a shipped package (`local` label)
 
 `document_outline_local_tests` (tests/local/document_outline_tests.cpp) opens
@@ -423,6 +432,44 @@ and only assert on a machine with the dumps. They were previously hidden
 `[.real]` tags, which Catch's test discovery never registers - a manual-only
 path that silently returned green without data; the SKIP form replaced it
 so a data-less run is visibly a skip, not a pass.
+
+## The AFP builtin name table
+
+`tools/local/afp_builtin_names.py` reads afp-core's own builtin name table out
+of the DLL and writes `src/formats/afp_script_names_data.h`, which is what lets
+the script language spell `getInstanceAtDepth` instead of `builtin_0x465`:
+
+```bash
+uv run afp_builtin_names.py --dll "<game>/modules/afp-core.dll" --names 0x... --index 0x... --blocks 0x...
+```
+
+Run it from `tools/local`, which is a uv project so `pefile` is there without
+installing anything. The three addresses are the blob of names, the slot table
+and the block table, read off the name lookup in a fresh IDB; `docs/formats.md`
+says how to find that function without an offset, and what the tables mean. The
+tool refuses to write unless the nine names that were known by hand come back
+right, so a wrong address leaves the header alone.
+
+The table is data about the bytecode format rather than about one build, so it
+only needs rereading when a DLL adds names. After rereading it, run the script
+survey below over both installs: a name that changed id would show up there as a
+script that no longer recompiles to its own bytes.
+
+## Every script reads back as source
+
+`tests/local/afp_script_survey_tests.cpp` has one case per install
+(`R573_IIDX_DIR` and `R573_SDVX_DIR`). Each reads every script in every `.ifs`,
+turns it into source, compiles that source again and compares the bytes:
+
+```bash
+R573_IIDX_DIR=<iidx33 install> R573_SDVX_DIR=<sdvx7 install> ./build/afp_script_survey_tests.exe
+```
+
+Both cases require every script to be sourced, every one to recompile, and none
+to differ. IIDX 33 is 6146 files and 463562 scripts, SDVX 7 is 935 files and
+211761 scripts, and the IIDX case also re-measures the opcode and call counts
+the notes record. This is the gate for any change to the source language: a
+shape that loses a byte fails here rather than in a package somebody edited.
 
 ## Scene preset sweep
 

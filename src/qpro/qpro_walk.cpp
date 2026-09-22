@@ -13,6 +13,7 @@
 #include "render_backend.h"
 #include "media_sink.h"
 #include "support/log.h"
+#include "support/png_write.h"
 
 #include <algorithm>
 #include <cstdint>
@@ -337,10 +338,10 @@ int EncodeClipFrames(const std::string& out_path, const ClipFrames& cf, const ch
         if (cf.frames[f].empty()) continue;
         if (g_clip_dump_raw && (dump_raw_prefix != nullptr) &&
             (f == 0 || f == nframes / 4 || f == nframes / 2 || f == (3 * nframes) / 4)) {
-            WritePngBGRA((fs::path("screenshots") /
-                          (std::string(dump_raw_prefix) + "_f" + std::to_string(f) + ".png"))
-                             .string(),
-                         cf.frames[f].data(), cf.cw, cf.ch);
+            Support::WritePngBGRA((fs::path("screenshots") / (std::string(dump_raw_prefix) + "_f" +
+                                                              std::to_string(f) + ".png"))
+                                      .string(),
+                                  cf.frames[f].data(), cf.cw, cf.ch);
         }
         sink.SubmitFrame(cf.frames[f].data(), captured++);
     }
@@ -497,7 +498,7 @@ bool EmitClipFrames(const ClipFrames& cf, bool anim, const std::string& path,
             }
         }
         if (last >= 0) {
-            WritePngBGRA(AvifPathToPng(path), cf.frames[last].data(), cf.cw, cf.ch);
+            Support::WritePngBGRA(AvifPathToPng(path), cf.frames[last].data(), cf.cw, cf.ch);
         }
     }
     if (anim) return EncodeClipFrames(path, cf, dump_label) > 1;

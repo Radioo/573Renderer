@@ -1076,9 +1076,11 @@ a texture already in the package rather than inventing them.
 
 ## Script source (`document/script_source.h`)
 
-The source language is not a design choice, it is what IIDX 33's own scripts
-do. Of 463562 scripts in the install, nearly all are a run of calls on the
-imported `aeplib` object, so that is the whole language: one call per line.
+The source language covers every script in the shipped data, and it does that in
+two layers rather than by guessing at what an unfamiliar shape means.
+
+**Calls.** Nearly all of the data is a run of calls on the imported `aeplib`
+object, so that is the first layer: one call per line.
 
 ```
 aep_set_set_frame(this, 30)
@@ -1086,30 +1088,107 @@ gotoAndPlay("loop")
 stop()
 ```
 
-An argument is a whole number, double-quoted text, or `this`. `this` is there
-because the data put it there: the most common call in the install passes the
-clip itself as its first argument, and leaving it out meant the compiler could
-not read back a single shipped script on the first run.
+A call is named from afp-core's own builtin name table, so what used to read as
+`builtin_0x465` now reads as `getInstanceAtDepth`; `docs/formats.md` says where
+the table comes from and how to read it out of a newer DLL. 1693 of the 1877
+names in it can be spelled here. The rest are carried as `builtin_0x2c1`: the
+ones that are not plain identifiers (`$version`, `flash.display`,
+`FSCommand:quit`, `/`), and the three that collide with a word this language
+already uses (`this`, `push`, `pop`). afp-core resolves a call by id and not by
+name, so an id with no spellable name is carried through as the number it is
+rather than given an invented one.
 
-The eight call names are the eight the survey counted, and nothing else
-compiles. The editor would otherwise have to invent a built-in id it has never
-measured, and afp-core resolves a call by id, not by name.
-
-Compiling emits the shape the data uses: for each call a `PUSH` of the
+A call written on its own compiles to the shape the data uses: a `PUSH` of the
 arguments in reverse then the count then `aeplib`, `GET_VARIABLE`, a `PUSH` of
-the method, `CALL_METHOD`, `POP`, and one `END` at the end. `AfpScript::BuiltinItem`
-turns an id back into a push item, which is the direction the reader never
-needed.
+the method, `CALL_METHOD`, `POP`. A minority of scripts leave the call's result
+on the stack instead, with no trailing `POP`, and that is written `keep
+gotoAndStop(3)`. The keyword changes nothing the game does; it exists because
+the bytes differ and this file round trips bytes.
 
-**How far this was checked.** Every script in the install was read back as
-source and compiled again: 444874 of 463562 produce source, and every one of
-those 444874 compiles to the same instructions and arguments, 381871 of them
-byte for byte. The other 63003 differ only in whether a small number was
-written in the compact one-byte form or the wide four-byte one, which is the
-original author's choice and not something source text carries. The 18688 that
-produce no source are the `getInstanceAtDepth` pattern and the variant with no
-trailing `POP`; they stay as instruction lists and are never turned into source
-on their own.
+**Register statements.** The other shape the data uses binds the result of a
+call to a register, calls a method on the register, and writes one of its
+members. afp-core's interpreter is what says how those instructions read the
+stack (the table in `docs/formats.md`), and the three statement forms follow
+from it rather than from a guess:
+
+```
+let r1 = getInstanceAtDepth(-16382)
+keep r1.gotoAndPlay(540)
+r1.frameOffset = 539
+```
+
+That is the script `arena.ifs` runs on `reward_result_bg` frame 0, and it
+compiles back to the single `PUSH 540 1 -16382 1 getInstanceAtDepth` the game
+ships. Both calls take their operands from that one push: the method call's
+argument and count sit underneath the function call's, because `STORE_REGISTER`
+copies the top of the stack without popping it, so the object the method is
+called on is the result that is already there. A `let` and a method call on the
+register it binds are therefore one statement group, and they compile as one.
+
+A method call on a register with no `let` above it is refused rather than
+guessed at, because the source would not say where the object came from. A `let`
+whose register nothing calls compiles to its own three instructions. A member
+write is a statement only when the member is a string spelling a plain
+identifier, which is what the data uses; a member pushed as a builtin id keeps
+the instruction lines, so `.name` means one encoding in both directions.
+
+**Instructions.** Anything that is not one of those is written one instruction
+per line, with the same names the disassembly uses: `push(...)`,
+`get_variable`, `call_method`, `call_function`, `store r1`, `set_member`,
+`pop`, `goto_frame2(flags)` or `goto_frame2(flags, bias)`, and `end`. This is
+what makes the language total: the reader emits a statement where the
+instructions form one and it re-encodes to the same bytes, and falls back to
+instruction lines everywhere else, so a shape nobody has classified yet still
+opens, still edits and still compiles back to itself. The script above, had its
+push been packed some other way, would read as:
+
+```
+push(540, 1, -16382, 1, getInstanceAtDepth)
+call_function
+store r1
+push(gotoAndPlay)
+call_method
+push(r1, "frameOffset", 539)
+set_member
+```
+
+**Items.** An argument or a pushed value is a whole number, double-quoted text,
+`this`, a register `r1`, a builtin `builtin_0x390`, or, when it is none of
+those, `item(51, 4059000000000000)`: the push type and its operand bytes.
+
+**The rule that keeps the bytes exact.** Each shorthand is used only when
+re-encoding it reproduces the original item byte for byte. A number is written
+`30` only if `NumberItem(30)` gives back the same push type the file used, a
+string only if the index re-encodes to the same short or long form, a builtin
+only if `BuiltinItem` gives back the same item. Everything else falls to
+`item(type, bytes)`. The author's choice between the compact one-byte and the
+wide four-byte form for a small number is therefore carried, not lost, which is
+what used to make a recompiled script differ.
+
+`goto_frame2` carries a bias exactly when bit 1 of its flags is set, because
+that is the bit the reader keys off, so source that disagrees is refused rather
+than written out as bytes the reader would then reject.
+
+**The one shape that still has no source**, deliberately: a pushed string the
+compiler could not put back in the same slot. A string item whose index is past
+the end of the script's own string list, or which spells a small index in the
+wide two-byte form the compiler never emits, or whose text carries a quote or a
+newline, makes the whole script read as no source at all. The alternative would
+be to write it as `item(8, 03)` and recompile to the same code bytes over a
+string table that no longer holds that entry, which is a broken file that passes
+a byte comparison. Neither install contains one.
+
+**How far this was checked.** Every script in both installs was read back as
+source and compiled again, and the result compared byte for byte against the
+original instructions. IIDX 33: 6146 files, 463562 scripts, all
+of them sourced, all of them recompiled to the same bytes, none differing. SDVX
+7: 935 files, 211761 scripts, the same. The survey
+(`tests/local/afp_script_survey_tests.cpp`) has a case per install and each one
+asserts those three equalities, so a translator change that loses a shape or
+moves a byte fails the local gate rather than being noticed later. That is what
+the statement forms above were held to: they were written, and then the two
+cases were run again and still reported every script sourced and none
+differing.
 
 The padding after `END` is not the script's. Scripts of 16, 17 and 18 bytes of
 instructions all end up occupying 18 bytes, so the slack belongs to the block

@@ -46,6 +46,7 @@ output path or an id, so `--preset-export-json iidx11 <id> --force` still writes
 | `--preset-export` | `<game-dir> [preset-id] [out] [frames]` | the same load, driven through the export pipeline (`--export-bg` applies). |
 | `--preset-json` | `<file.json>` | with `--preset-test` / `--preset-export`: load that document instead of a registry id. The positional preset id is then omitted. |
 | `--force` | | load a document that has validation errors anyway; the evaluator skips the offending clips. Without it, `--preset-json` refuses a document with errors. |
+| `--txp2-dump` | `<game-dir> <package.bin> <out-dir>` | writes every texture in a TXP2 package as `<name>.png`, every NAMED cell as `cell_<name>.png` cropped out of its texture, and, when the package carries afp streams, an `inputs.json` naming each animation's input surface. It boots only the engine DLLs and AVS (AVS owns the `avslz` inflate the texture payloads need), with no window and no D3D9 device, so it reads a package an AFP render cannot: the IIDX 18/19 `lane%03d.bin` covers hold one texture and one cell and no animation at all, and `LoadTxp2Package` rejects them for producing no streams. |
 | `--preset-option` | `<option-id>=<choice>` | selects an option; repeatable, one per option. The choice is a label (`mode=EXPERT`) or an index (`mode=3`). It replaced the positional option-index argument, which could only ever reach the first option. |
 
 The motion check takes its BASELINE at the first rendered frame that has any
@@ -99,6 +100,30 @@ profile comes from the document's `build` through
   modern 0xF09 / DDR afp_mc_op).
 - `--filter` = debug viewer F7 (afp-core set-filter ord 0x032, id
   0x80000000|1); `--show-mc-names` = F3 DISP MC; `--mc-name-type` = F6.
+- `--stretch <0|1>`: overrides settings.ini's `stretch_16_9` for this run
+  (tri-state, -1 = unset, the same shape as `--root-loop`). A 4:3 game is
+  PRESENTED widened on a 16:9 cabinet monitor (docs/settings.md), which is
+  right for looking at a screen and wrong for pulling an asset out of one. The
+  web UI that consumes IIDX 9-19 artwork stores it at native 640x480 and
+  applies the same widening in CSS, so extraction passes 0 and keeps the
+  horizontal resolution a 854x480 present would have thrown away. Like the
+  other startup settings it is snapshotted back into settings.ini on boot.
+- `--load-bitmaps <path>` / `--iidx-playfield <spec>`: the IIDX 18/19 play
+  frame draws its chrome and leaves every live value as an authored
+  placeholder clip whose colour transform has alpha 0, so the game never shows
+  it. The game hides the clip, reads its position, and draws the figure itself
+  out of `gameparts.bin` (`_sco00`.. for score and max combo, `_bpm00`..,
+  `_bpm_m00`.., `_par00`.. for the percent, `_gauge_normal_1p` for the bar).
+  `--load-bitmaps` mounts that second package as a bitmap source and
+  `--iidx-playfield` reproduces the drawer. The layout constants come from
+  `sub_1001F2E0` and the gauge from `sub_10058340`; the read is written up in
+  `IIDX/customize_assets.md` in the notes repo.
+- `DDR_TRACE_PRIM=1`: logs every legacy `draw_primitive` with its decoded
+  vertex layout, the position bounding box, the texture id and the modulate
+  colour, plus every `set_mask`. This is how a sprite that reaches the engine
+  but never reaches the screen gets diagnosed: the box tells you whether the
+  quad is degenerate, the mask lines tell you whether the draw was inside a
+  mask-write phase.
 - `--root-loop`: see docs/settings.md (same Hold/Force mechanism; the CLI
   value overrides settings.ini, tri-state with -1 = unset).
 - `--export-fps`: default 60; 120 is possible but needs a 120 Hz display

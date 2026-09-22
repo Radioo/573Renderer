@@ -41,6 +41,7 @@ enum class Glyph : uint8_t {
     First,
     Previous,
     Play,
+    Warning,
     Next,
     Last,
     Key,

@@ -58,6 +58,8 @@ public:
     void SetCharacterKinds(std::map<uint16_t, Document::CharacterKind> kinds);
     void SetDepthMarks(std::map<uint16_t, std::vector<uint32_t>> marks);
     void SetFrameNotes(std::vector<Document::FrameNote> notes);
+    [[nodiscard]] const std::vector<Document::FrameNote>& Notes() const { return notes_; }
+    [[nodiscard]] int FrameLeft(uint32_t frame) const { return FrameToX(frame); }
     void SetKeyedDepths(std::vector<uint16_t> depths);
     [[nodiscard]] QString SpanNameAt(QPoint at) const;
     [[nodiscard]] bool IsSprite(uint16_t character) const;
@@ -90,6 +92,7 @@ signals:
     void CharacterDropped(uint16_t character, uint32_t frame, std::optional<uint16_t> depth);
     void LabelMoved(const QString& label, uint32_t frame);
     void KeysSelected();
+    void ScriptChosen(uint32_t frame);
     void CameraAsked();
     void SpriteEntered(uint16_t character);
     void LabelAsked(uint32_t frame);

@@ -1,5 +1,7 @@
 #include "editor_window.h"
 
+#include "editor_script_editor.h"
+
 #include "editor_jobs.h"
 
 #include "editor_drift_sheet.h"
@@ -16,6 +18,9 @@
 #include "document/script_source.h"
 
 #include <QDir>
+#include <QDialog>
+#include <QDialogButtonBox>
+#include <QVBoxLayout>
 #include <QFileDialog>
 #include <QImage>
 #include <QInputDialog>
@@ -227,6 +232,9 @@ void Window::SaveProject() {
 
 namespace {
 
+constexpr int kScriptDialogWidth = 720;
+constexpr int kScriptDialogHeight = 520;
+
 Support::Expected<Document::LoadedImage, std::string> LoadImage(const QString& path) {
     QImage picture(path);
     if (picture.isNull())
@@ -305,13 +313,33 @@ void Window::EditOwnedScript() {
         }
     }
 
-    bool answered = false;
-    const QString edited = QInputDialog::getMultiLineText(
-        this, tr("The script of depth %1").arg(*depth_),
-        tr("One aeplib call per line, such as gotoAndPlay(\"loop\")"), source, &answered);
-    if (!answered) return;
+    QDialog asking(this);
+    asking.setObjectName("owned_script_dialog");
+    asking.setWindowTitle(tr("The script of depth %1").arg(*depth_));
+    asking.resize(kScriptDialogWidth, kScriptDialogHeight);
+    auto* editor = new ScriptEditor(ScriptEditor::Place::Window, &asking);
+    editor->ShowScript(tr("Depth %1").arg(*depth_), source);
+    if (const auto animation = file_->ReadAnimation(animation_path_)) {
+        QList<ScriptName> known;
+        for (const QString& name :
+             Window::NamesFor(*animation, file_->ShapeImages(animation_path_))) {
+            known.append(ScriptName{.name = name, .detail = {}, .kind = {}});
+        }
+        editor->KnowNames(known);
+    }
+    auto* answers =
+        new QDialogButtonBox(QDialogButtonBox::Save | QDialogButtonBox::Cancel, &asking);
+    answers->setObjectName("owned_script_answers");
+    connect(answers, &QDialogButtonBox::accepted, &asking, &QDialog::accept);
+    connect(answers, &QDialogButtonBox::rejected, &asking, &QDialog::reject);
+    auto* stack = new QVBoxLayout(&asking);
+    stack->setContentsMargins(12, 12, 12, 12);
+    stack->setSpacing(10);
+    stack->addWidget(editor, 1);
+    stack->addWidget(answers, 0);
+    if (asking.exec() != QDialog::Accepted) return;
 
-    const std::string taken = edited.trimmed().toStdString();
+    const std::string taken = editor->Source().trimmed().toStdString();
     if (!EditAuthored(
             tr("Script of depth %1").arg(*depth_), [&taken](Document::AuthoredDepth& one) {
                 one.script = taken.empty() ? std::nullopt : std::optional<std::string>(taken);

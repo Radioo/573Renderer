@@ -17,6 +17,7 @@ enum class EditTarget : uint8_t {
     Placement,
     Camera,
     CallArgument,
+    FrameCallArgument,
     KeyValue,
     KeyFilter,
     Animation

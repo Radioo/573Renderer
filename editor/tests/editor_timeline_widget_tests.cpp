@@ -5,6 +5,7 @@
 #include "editor_timeline_metrics.h"
 #include "widget_test_support.h"
 
+#include "document/frame_notes.h"
 #include "document/key_selection.h"
 #include "document/outline.h"
 #include "document/timeline.h"
@@ -401,4 +402,42 @@ TEST_CASE("The timeline zoom is set in pixels a frame and says when it changed")
     timeline.SetZoomPixels(0.01);
     CHECK(timeline.minimumWidth() == 0);
     CHECK(changes == 3);
+}
+
+TEST_CASE("Clicking a script mark goes to its frame and hands the frame the selection") {
+    constexpr uint32_t kFrames = 121;
+    constexpr uint32_t kScriptFrame = 60;
+    Editor::Timeline timeline;
+    timeline.resize(kTimelineWidth, 200);
+    timeline.ShowAnimation(kFrames, {}, {});
+    timeline.SetFrameNotes({Document::FrameNote{.frame = kScriptFrame, .script = true}});
+    std::vector<uint32_t> frames;
+    std::vector<uint32_t> scripts;
+    QObject::connect(&timeline, &Editor::Timeline::FrameChosen,
+                     [&frames](uint32_t frame) { frames.push_back(frame); });
+    QObject::connect(&timeline, &Editor::Timeline::ScriptChosen,
+                     [&scripts](uint32_t frame) { scripts.push_back(frame); });
+
+    const int x = FrameX(0) + ((FrameX(10) - FrameX(0)) * static_cast<int>(kScriptFrame) /
+                               static_cast<int>(kFrames - 1));
+    Click(timeline, {static_cast<double>(x), Editor::kRulerHeight + 8.0});
+
+    CHECK(scripts == std::vector<uint32_t>{kScriptFrame});
+    CHECK(frames.empty());
+}
+
+TEST_CASE("Clicking between two close marks takes the nearer one, not the first") {
+    constexpr uint32_t kFrames = 1000;
+    Editor::Timeline timeline;
+    timeline.resize(kTimelineWidth, 200);
+    timeline.ShowAnimation(kFrames, {}, {});
+    timeline.SetFrameNotes({Document::FrameNote{.frame = 89, .script = true},
+                            Document::FrameNote{.frame = 95, .script = true}});
+    std::vector<uint32_t> scripts;
+    QObject::connect(&timeline, &Editor::Timeline::ScriptChosen,
+                     [&scripts](uint32_t frame) { scripts.push_back(frame); });
+
+    Click(timeline, {static_cast<double>(timeline.FrameLeft(95)), Editor::kRulerHeight + 8.0});
+
+    CHECK(scripts == std::vector<uint32_t>{95});
 }

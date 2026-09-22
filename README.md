@@ -87,6 +87,20 @@ python tools/local/render_regression.py   # 3-game byte-compare net (machine-loc
 
 Every quality rule is machine-enforced; see `docs/gates.md`.
 
+## Reading a table out of a game DLL
+
+`tools/local/afp_builtin_names.py` writes `src/formats/afp_script_names_data.h`
+from afp-core's own builtin name table, which is what names the calls in the
+script editor. Run it from `tools/local` (a uv project, so `pefile` is already
+there):
+
+```bash
+uv run afp_builtin_names.py --dll <afp-core.dll> --names 0x... --index 0x... --blocks 0x...
+```
+
+`docs/formats.md` says how to find the three addresses in a newer DLL, and
+`docs/local_regression.md` says what to run afterwards.
+
 ## Documentation
 
 The code is comment-free by policy: all reverse-engineering knowledge and

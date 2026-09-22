@@ -4,10 +4,10 @@
 #include "document/outline.h"
 #include "formats/afp_animation.h"
 #include "formats/afp_script.h"
+#include "formats/afp_script_names.h"
 #include "support/expected.h"
 
 #include <algorithm>
-#include <array>
 #include <format>
 #include <charconv>
 #include <cstddef>
@@ -27,26 +27,9 @@ constexpr std::size_t kObjectPush = 0;
 constexpr std::size_t kMethodPush = 2;
 constexpr std::size_t kCallMethodAt = 3;
 
-struct Builtin {
-    uint16_t id;
-    std::string_view name;
-};
-
-constexpr std::array<Builtin, 9> kBuiltins{{
-    {.id = 0x390, .name = "aeplib"},
-    {.id = 0x440, .name = "stop"},
-    {.id = 0x442, .name = "gotoAndPlay"},
-    {.id = 0x443, .name = "gotoAndStop"},
-    {.id = 0x814, .name = "deepStop"},
-    {.id = 0x815, .name = "deepGotoAndPlay"},
-    {.id = 0x832, .name = "aep_set_frame_control"},
-    {.id = 0x833, .name = "aep_set_rect_mask"},
-    {.id = 0x836, .name = "aep_set_set_frame"},
-}};
-
 std::string BuiltinName(uint16_t id) {
-    const auto found = std::ranges::find(kBuiltins, id, &Builtin::id);
-    if (found != kBuiltins.end()) return std::string(found->name);
+    const std::optional<std::string_view> name = AfpScript::BuiltinName(id);
+    if (name && !name->empty()) return std::string(*name);
     return std::format("builtin {:#x}", id);
 }
 
@@ -86,6 +69,9 @@ CallArgument ArgumentOf(const AfpAnimation::Animation& animation,
     if (number) return CallArgument{.is_string = false, .text = std::to_string(*number)};
     if (item.type == AfpScript::PushType::kStoredObject)
         return CallArgument{.is_string = false, .text = "this"};
+    if (item.type == AfpScript::PushType::kRegister && item.operand.size() == 1) {
+        return CallArgument{.is_string = false, .text = "r" + std::to_string(item.operand.front())};
+    }
     const std::optional<uint16_t> id = AfpScript::BuiltinId(item);
     if (id) return CallArgument{.is_string = false, .text = BuiltinName(*id)};
     return CallArgument{.is_string = false, .text = "type " + std::to_string(item.type)};
