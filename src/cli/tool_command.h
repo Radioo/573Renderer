@@ -19,6 +19,7 @@ enum class ToolKind : std::uint8_t {
     QproScan,
     Scene3dTest,
     Gc2dSheet,
+    Txp2Dump,
     PresetTest,
     PresetExport,
     PresetDumpDefaults,
@@ -41,6 +42,10 @@ struct ToolCommand {
     std::string preset_id;
     std::string json_path;
     std::vector<std::string> options;
+    std::array<float, 2> sprite_at = {0.0F, 0.0F};
+    bool straight_alpha = false;
+    std::string parts_dir;
+    std::string playfield;
     bool force = false;
     std::string retired;
 };

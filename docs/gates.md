@@ -97,6 +97,20 @@ headless GUI suite necessarily drives ImGui directly (docs/gui_tests.md); it
 is the only test directory allowed to, and it tests the shell rather than
 violating it.
 
+### Qt isolation (`check_qt_isolation.py`)
+
+The same shape as the gui-isolation gate, for the other toolkit. Qt headers,
+`Q_OBJECT`, `Qt::` and the common `Q*` types may appear only under `editor/`;
+`src/**` and `tests/**` are scanned and must stay clean. The editor's document
+model (docs/document.md) and the preview protocol live in `src/` precisely so
+they can be tested in the renderer's `ci` suite, which links no Qt at all, and
+so the same code could serve a different front end. The gui-isolation gate now
+scans `editor/` too, so the two gates together keep ImGui out of the editor and
+Qt out of everything the renderer builds.
+
+The codebase was clean when the gate was introduced, so it starts with no
+baseline and any hit fails CI.
+
 ### Host isolation (`check_host_isolation.py`)
 
 The OPPOSITE direction to the gui-isolation gate, and a narrower claim.
@@ -421,6 +435,86 @@ Local run: `pip install clang-tidy==21.1.6`, then `python
 tools/ci/run_tidy.py` (or `clang-tidy -p build --quiet <file>` for one
 file).
 
+## The editor is built, tested and packaged in CI
+
+The `editor` job of `.github/workflows/build-renderer.yml` configures with the
+`editor` preset, builds every editor target and runs both suites the way
+`tools/checks.sh` does: `editor_widget_tests.exe` then
+`editor_window_tests.exe`, each as one process rather than through ctest. The
+editor's cases are not registered with `catch_discover_tests`, because
+discovery would launch a process per case and every window case builds a whole
+`Editor::Window`; one process for the file is seconds instead of minutes. The
+live cases skip themselves, since `R573_IIDX_DIR` is not set on a runner.
+
+It needs a different dependency set from the renderer job: the `editor` feature
+of `vcpkg.json` with `VCPKG_MANIFEST_NO_DEFAULT_FEATURES`, so no ffmpeg and no
+imgui, and the dynamic `x64-windows` triplet where the renderer uses
+`x64-windows-static`. Its vcpkg archive cache therefore has its own key
+(`vcpkg-archives-editor-...`) and cannot collide with the renderer's.
+
+**The first run on a cold cache builds Qt from source**, which is the bulk of
+the job; every run after it restores qtbase, qtsvg and the docking system from
+the archive cache, which is roughly 400 MB for this triplet. Two things evict
+it: a bump of the vcpkg submodule or of `vcpkg.json` (both are in the key), and
+GitHub's own 7-day idle eviction and 10 GB per-repository limit, which this
+cache shares with the renderer's. A run that suddenly takes hours is that
+cache, not the code.
+
+### The artefact is a folder that runs
+
+`preview_host.exe` is renderer-side: it loads the game's own avs2 and afp DLLs
+and draws through D3D9, so it links `r573_afp_host` and the render stack, and
+the editor preset (`R573_BUILD_RENDERER=OFF`) returns from the top-level
+`CMakeLists.txt` before that target exists. `FindPreviewHost` looks for it
+beside the editor and then in the renderer's `build/`, which is why a developer
+with both projects built never notices, and why the editor's own build
+directory has no copy.
+
+So the `editor` job `needs` the renderer `windows` job and downloads its
+artefact, which now carries `preview_host.exe` as well as the renderer, and
+`tools/ci/stage_editor.py` merges the two build trees into `dist/`: the editor,
+the host, the Qt DLLs and the plugin folders. That folder is the artefact, so
+extracting it gives something that runs.
+
+`tools/ci/check_editor_starts.py` then runs the staged `ifs_editor.exe` under
+`QT_QPA_PLATFORM=minimal` for six seconds and fails if it exits. A missing DLL
+exits instantly (`0xc0000135`), which no file listing would have told us. It
+runs from a temporary working directory, so the editor's own log and `dev/`
+folder do not end up inside the artefact. `tools/checks.sh` runs both scripts
+after the editor suites, so the packaging is checked locally as well.
+
+The first editor artefact was a hand-written list of paths: the exe, the Qt
+DLLs, the plugin folders. It was missing `preview_host.exe`, so the download
+started and then said "preview_host.exe was not found next to the editor" as
+soon as a game install was set. The list looked complete and was not, which is
+the argument for staging through a script that names what it requires and for
+starting the result rather than counting its files.
+
+### What the contrast gate counts as ink
+
+`Theme::InkColours` lists the colours the interface paints WORDS with, and
+nothing else. The accent and its hover shade are not in it: the stylesheet uses
+them for a background, a 1 px focus border, a 2 px tab underline and a slider
+fill, never for text (`PanelTabBar::paintEvent`'s `fillRect` is the only
+painted use outside the sheet). While they were in the list, the pixel walk
+reported the worst-contrast token inside a widget's rect, so a focus ring made
+it say `search_query "depth" #806226 on #1a1c20 is 3.00:1` about a word that is
+painted in `kText`. The claim was false and the bar was the wrong one: WCAG
+asks 4.5:1 of text and 3:1 of a non-text mark.
+
+The marks are checked instead by `Theme::kLeastMark` (3:1) in the accent sweep,
+against the page, a panel and a field, for every accent in the list.
+
+That gap only showed when the editor started building in CI: the walk measures
+whatever accent the host reports, the runner reports the Windows default blue,
+and `Fitted` used to DARKEN a dark accent so that white text on it would read,
+which drove the mark itself to 2.98:1 against a field. `Fitted` now lifts
+instead, until the accent both carries readable ink and clears 3:1 on a field,
+and `Every word stays readable whatever accent Windows reports` pins two
+accents (the Windows default, and an olive that lands between the two bars) and
+walks the window under each, so the machine's own accent can no longer decide
+whether the gate passes.
+
 ## Running everything locally
 
 ```
@@ -428,6 +522,7 @@ pip install clang-format==19.1.7 libclang==18.1.1
 python tools/ci/check_file_length.py
 python tools/ci/check_no_comments.py
 python tools/ci/check_gui_isolation.py
+python tools/ci/check_qt_isolation.py
 git ls-files '*.cpp' '*.h' '*.hpp' | xargs clang-format --dry-run --Werror
 ```
 
@@ -450,3 +545,82 @@ without the alpha test, and it broke the IIDX 17 SIRIUS title screen.
 Build the synthetic package in the test rather than reaching for real game files:
 a package is a few `SysIdx::Cell` and `SysIdx::Record` values, and a test that
 needs a game install cannot run in CI.
+
+## Crash reports carry a symbolized stack
+
+`Support::CaptureStackAddresses` walks the faulting thread with `StackWalk64`
+and `Support::DescribeAddresses` turns those addresses into
+`module+0x... Symbol (file.cpp:line)` through DbgHelp, reading the `.pdb` that
+sits next to the binary. `[CRASH]` lines and `RenderSeh`'s caught render faults
+both print one frame per line.
+
+The split exists because MSVC refuses `__try` in a function that has to unwind
+objects, so the SEH filter stores plain addresses into a fixed array on
+`FaultReport` and the symbolizing happens outside it.
+
+This was added after three rounds of diagnosing IIDX 34 faults from a bare
+`module+offset`, which took an out-of-process DbgHelp script each time to turn
+into a file and line. A fault that prints its own stack is the difference
+between one run and three.
+
+## raw-dll-offset gate
+
+`tools/ci/check_raw_dll_offsets.py` fails the build when a literal offset is
+added to a loaded DLL base, as in `(uint8_t*)afpcore + 0x377B0`. Every such
+address belongs in `AfpProfiles::DllOffsetSet`, read through `ActiveOffsets()`,
+so each game build carries its own measured value and an unknown build gets zero
+and skips the call instead of jumping into the middle of an instruction.
+
+This gate exists because four separate hardcoded afp-core addresses shipped in
+the qpro code and each one crashed IIDX 34 in a different way, one per debugging
+round: the mc-work lookup, the definition lookup, and the matrix stack's base
+and depth. They were invisible to review because they sat inside lambdas and
+static initializers rather than next to the other offsets.
+
+## Text contrast gate
+
+Nothing in either interface may draw words the reader has to squint at. Two
+test cases enforce it and both run in `tools/checks.sh`, so the gate fails
+before anything is pushed.
+
+`editor/tests/editor_contrast_window_tests.cpp` builds the real editor window
+off-screen with the theme applied, grabs it, and walks every visible, enabled
+widget that carries text. For each one it takes the most common colour inside
+the widget as the surface and looks for the theme's own ink colours
+(`Theme::InkColours`) among the widget's pixels, ignoring the surface colour
+itself; a token that covers at least a few pixels is text (or an icon) that
+was really painted there. The worst pair goes through `Theme::Contrast`, the
+WCAG relative-luminance ratio, and anything under `Theme::kLeastContrast`
+(4.5:1, the WCAG AA bar for normal text) fails the case by name, colour and
+ratio. Sampling the painted pixels rather than the palette is what makes it
+see through Qt stylesheets: a `:checked` rule's colour never reaches
+`QWidget::palette()`, and snapping to the theme's exact tokens keeps
+antialiased glyph edges from being mistaken for ink. The cases cover the start
+screen, an open animation with a depth chosen, selected keyframes, the history
+panel, the graph tab, a project's chips, the command search and a popover. A
+fourth case checks the pairs the panels paint themselves, where there is no
+widget to sample: the row delegate's names and details on a panel, a hovered
+and a chosen row, the panel tab strip, and the timeline's frame numbers, depth
+numbers, depth names and the names on each kind of bar.
+
+`tests/gui/contrast_tests.cpp` does the static half for the renderer's ImGui
+interface: it applies the style for every profile accent and checks
+`ImGuiCol_Text` against every surface text sits on (window, popup, frame,
+title, menu bar, table header, button, header and tab, in both their plain and
+hovered forms), compositing translucent surfaces over the window first.
+Disabled text is exempt in both, as WCAG exempts inactive controls.
+
+A fifth case sweeps the accent itself: the editor takes its accent from
+Windows, so the derivation in `Theme::UseAccent` runs for the design blue, the
+machine's own accent, the Windows default, a bright yellow, a near-black navy,
+a mid grey and a magenta, and every pair that accent colours (ink on it, the
+chip on it, ink on its hover, the text and detail on a chosen row, the tint on
+one) has to clear the bar for all of them. That is what forced the hover to
+tilt away from the ink instead of always toward white, and the chosen row's
+tint to be pushed until it reads.
+
+This gate exists because the start screen's "Ctrl O" chip shipped as `#8a909b`
+on the accent `#4c9dff`: a ratio of 1.16:1, which is text you can only find by
+knowing it is there. The same sweep found the row delegate drawing its detail
+line in `#8a909b` on a chosen row's `#1b3350` (4.00:1). Both are fixed; the
+gate is what keeps them fixed.

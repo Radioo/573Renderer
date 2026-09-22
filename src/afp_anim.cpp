@@ -18,6 +18,17 @@
 #include <vector>
 #include "app_globals.h"
 
+namespace {
+
+constexpr uint32_t kVisible = 0x1007;
+constexpr uint32_t kInvalidate = 0x101E;
+constexpr int kNextSameName = 6;
+constexpr int kMostSiblings = 64;
+
+constexpr uint32_t kDrawBackground = 0x20;
+
+}
+
 void AfpManager::Shutdown(EngineSession& es) {
     AfpFuncs& afp = es.afp;
     AfpuFuncs const& afpu = es.afpu;
@@ -106,6 +117,21 @@ bool AfpManager::SeekFrame(const AfpFuncs& afp, int frame) {
     return rc >= 0;
 }
 
+bool AfpManager::AttachSymbol(const AfpFuncs& afp, const std::string& name) {
+    if (afp.afp_mc_attach_movie == nullptr) return false;
+    int const mc_id = ReferRootMcId(afp);
+    if (mc_id < 0) return false;
+    int const rc = afp.afp_mc_attach_movie(mc_id, name.c_str());
+    LOG("AFP", "AttachSymbol('%s') mc=0x%08x -> %d", name.c_str(), (uint32_t)mc_id, rc);
+    return rc >= 0;
+}
+
+void AfpManager::SetBackgroundDrawn(const AfpFuncs& afp, bool drawn) {
+    if (g_engine.stream_id == Runtime::kModernNoStream || (int)g_engine.stream_id < 0) return;
+    if (afp.afp_set_flag_mask == nullptr) return;
+    afp.afp_set_flag_mask(g_engine.stream_id, kDrawBackground, drawn ? kDrawBackground : 0);
+}
+
 void AfpManager::SetStreamPaused(const AfpFuncs& afp, bool paused) {
     if (g_engine.stream_id == Runtime::kModernNoStream || (int)g_engine.stream_id < 0) return;
     if (afp.afp_stream_set_speed != nullptr)
@@ -116,6 +142,47 @@ void AfpManager::SetStreamPaused(const AfpFuncs& afp, bool paused) {
 
 int AfpManager::GetRootMcId(const AfpFuncs& afp) {
     return ReferRootMcId(afp);
+}
+
+bool AfpManager::SetInputTexture(const AfpFuncs& afp, const std::string& path,
+                                 const std::string& texture) {
+    if (afp.afp_mc_get_id_by_path == nullptr || afp.afp_play_work_load_bitmap == nullptr)
+        return false;
+    int mc_id = afp.afp_mc_get_id_by_path(g_engine.stream_id, path.c_str());
+    if (mc_id < 0) {
+        LOG("AFP", "SetInputTexture('%s'): no clip by that name", path.c_str());
+        return false;
+    }
+    bool wrote = false;
+    for (int walked = 0; mc_id >= 0 && walked < kMostSiblings; walked++) {
+        const int rc = afp.afp_play_work_load_bitmap(mc_id, texture.c_str(), 0);
+        if (rc < 0) {
+            LOG("AFP", "SetInputTexture('%s') texture '%s' -> %d", path.c_str(), texture.c_str(),
+                rc);
+        } else {
+            wrote = true;
+            if (afp.afp_mc_get != nullptr) afp.afp_mc_get(mc_id, kInvalidate, 1);
+        }
+        if (afp.afp_mc_get_relative_id == nullptr) break;
+        mc_id = afp.afp_mc_get_relative_id(mc_id, kNextSameName);
+    }
+    return wrote;
+}
+
+bool AfpManager::SetInputShown(const AfpFuncs& afp, const std::string& path, bool shown) {
+    if (afp.afp_mc_get_id_by_path == nullptr || afp.afp_mc_get == nullptr) return false;
+    int mc_id = afp.afp_mc_get_id_by_path(g_engine.stream_id, path.c_str());
+    if (mc_id < 0) {
+        LOG("AFP", "SetInputShown('%s'): no clip by that name", path.c_str());
+        return false;
+    }
+    for (int walked = 0; mc_id >= 0 && walked < kMostSiblings; walked++) {
+        afp.afp_mc_get(mc_id, kVisible, shown ? 1 : 0);
+        afp.afp_mc_get(mc_id, kInvalidate, 1);
+        if (afp.afp_mc_get_relative_id == nullptr) break;
+        mc_id = afp.afp_mc_get_relative_id(mc_id, kNextSameName);
+    }
+    return true;
 }
 
 std::vector<AfpManager::ChildClip> AfpManager::EnumerateChildClips(const AfpFuncs& afp,

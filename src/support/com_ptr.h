@@ -4,6 +4,8 @@
 #include <windows.h>
 #include <objbase.h>
 
+#include <memory>
+
 struct ComInit {
     bool inited;
     ComInit() : inited(SUCCEEDED(CoInitializeEx(nullptr, COINIT_MULTITHREADED))) {}
@@ -27,7 +29,7 @@ template <typename T> struct ComPtr {
 
     ComPtr(ComPtr&& o) noexcept : ptr(o.ptr) { o.ptr = nullptr; }
     ComPtr& operator=(ComPtr&& o) noexcept {
-        if (this != &o) {
+        if (this != std::addressof(o)) {
             Reset();
             ptr = o.ptr;
             o.ptr = nullptr;

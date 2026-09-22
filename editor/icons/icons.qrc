@@ -1,0 +1,47 @@
+<RCC>
+    <qresource prefix="/icons">
+        <file>camera.svg</file>
+        <file>check-ink.svg</file>
+        <file>check-text.svg</file>
+        <file>chevron-down.svg</file>
+        <file>chevron-down-faint.svg</file>
+        <file>circle-dot.svg</file>
+        <file>crosshair.svg</file>
+        <file>diamond.svg</file>
+        <file>ellipsis.svg</file>
+        <file>eye.svg</file>
+        <file>triangle-alert.svg</file>
+        <file>file.svg</file>
+        <file>folder.svg</file>
+        <file>hand.svg</file>
+        <file>history.svg</file>
+        <file>image.svg</file>
+        <file>layers-2.svg</file>
+        <file>lock.svg</file>
+        <file>magnet.svg</file>
+        <file>maximize.svg</file>
+        <file>minus.svg</file>
+        <file>minus-faint.svg</file>
+        <file>monitor-play.svg</file>
+        <file>mouse-pointer-2.svg</file>
+        <file>play.svg</file>
+        <file>plus.svg</file>
+        <file>plus-faint.svg</file>
+        <file>redo-2.svg</file>
+        <file>repeat.svg</file>
+        <file>ruler.svg</file>
+        <file>save.svg</file>
+        <file>search.svg</file>
+        <file>signature.svg</file>
+        <file>skip-back.svg</file>
+        <file>skip-forward.svg</file>
+        <file>spline.svg</file>
+        <file>step-back.svg</file>
+        <file>step-forward.svg</file>
+        <file>trash-2.svg</file>
+        <file>undo-2.svg</file>
+        <file>upload.svg</file>
+        <file>x.svg</file>
+        <file>zoom-in.svg</file>
+    </qresource>
+</RCC>

@@ -44,6 +44,13 @@ void PersistSetup(App::State& state, const char* dir_value) {
     App::SaveCurrentSettings();
 }
 
+void ChooseProfile(App::State& state, const GameProfile::Profile& profile) {
+    state.SetGameProfileSlug(profile.slug);
+    if (profile.default_render_w > 0 && profile.default_render_h > 0)
+        state.SetRenderSize(profile.default_render_w, profile.default_render_h);
+    PersistSetup(state, g_dir_buf);
+}
+
 void SyncDirBufFromState(const std::string& cur_dir) {
     if (g_initial_sync_done && cur_dir == g_last_state_value) return;
     size_t n = cur_dir.size();
@@ -129,10 +136,7 @@ void DrawGameProfilePicker(App::State& state) {
         }
         for (size_t i = 0; i < profiles.size(); i++) {
             bool const selected = (std::cmp_equal(sel_idx, (i + 1)));
-            if (ImGui::Selectable(profiles[i].name, selected)) {
-                state.SetGameProfileSlug(profiles[i].slug);
-                PersistSetup(state, g_dir_buf);
-            }
+            if (ImGui::Selectable(profiles[i].name, selected)) ChooseProfile(state, profiles[i]);
             if (selected) ImGui::SetItemDefaultFocus();
         }
         ImGui::EndCombo();
@@ -211,8 +215,6 @@ void DrawRenderPresetCombo(App::State& state, int rw, int rh) {
     };
     const int kPresetCount = (int)(sizeof(kPresets) / sizeof(kPresets[0]));
     const int kCustomIdx = kPresetCount - 1;
-    const int kQproIdx = kCustomIdx - 1;
-    const bool show_qpro_preset = (EffectiveSetupSlug(state) == "iidx33");
 
     static int shown_idx = -1;
     static int last_rw = -1;
@@ -235,7 +237,6 @@ void DrawRenderPresetCombo(App::State& state, int rw, int rh) {
     ImGui::SetNextItemWidth(Gui::Dpi::S(-120.0F));
     if (ImGui::BeginCombo("##render_preset", kPresets[shown_idx].label)) {
         for (int i = 0; i < kPresetCount; i++) {
-            if (i == kQproIdx && !show_qpro_preset && i != shown_idx) continue;
             bool const selected = (i == shown_idx);
             if (ImGui::Selectable(kPresets[i].label, selected)) {
                 shown_idx = i;
@@ -434,6 +435,7 @@ void DrawLoadButton(App::State& state, App::BootState bs) {
         App::Cmd::BootGame r;
         r.game_dir = g_dir_buf;
         state.GetRenderSize(r.render_width, r.render_height);
+        r.size_explicit = true;
         state.PostCommand(std::move(r));
         state.SetBootError({});
     }

@@ -428,6 +428,169 @@ Field meanings:
 fallback for code paths that need offsets but somehow run before a profile is
 set; IIDX 33 because it is the renderer's reference target.
 
+### How the IIDX 34 set was derived, and how to redo it
+
+IIDX 34 ZINRAI ships a different afp-core and afp-utils, and booting it on the
+IIDX 33 offsets crashed on every frame with an access violation inside
+afp-core. The whole chain is worth writing down because it is what the next
+build will do too.
+
+`afp_set_afp_data` starts by calling a small helper that reads slots 35 to 38
+of the struct it is handed (`a1[35]`, `a1[36]`, `a1[37]`, `a1[38]`) and stores
+them as the heap callbacks, complaining `afp_render_params.malloc_cb is NULL`
+when one is missing. The renderer passes afp-utils' own table, located by
+`afpu_data_struct`. On IIDX 34 that offset pointed at unrelated bytes, so the
+malloc slot came out as `0xFFFFFFFFFFFFFFFF` and the first allocation jumped
+through it. The reported fault address was afp-core's malloc thunk, a one
+instruction `jmp cs:<slot>`, and the `data=` field in the crash line was the
+garbage pointer itself.
+
+Both builds export the same 126 afp-core and 123 afp-utils ordinals under the
+same prefixes, so `afp_funcs.h` needed no change. Only the data moved:
+
+- `afpu_data_struct` and `afpu_render_context`: decompile afp-utils ordinal
+  `0x070`. Its first statement stores the incoming pointer into the render
+  context global, and its last is a call to afp-core's `afp_set_afp_data` with
+  the address of afp-utils' own table. Running this on IIDX 33 returns exactly
+  the constants already in `kIidx33Offsets`, which is what makes it trustworthy
+  on IIDX 34.
+- `afp_callback_table` and `afp_render_flags`: decompile afp-core ordinal
+  `0x000`. The table is the destination of its copy loop, and the flags global
+  is the dword it tests for bit `0x800`.
+- `afp_nearfar_slot` is `afp_callback_table + 0x68` by definition.
+- `afpu_set_screen_rect_fn` has exactly one reference in the whole of
+  afp-utils, and it is a data reference from `afpu_data_struct + 0x70`. So do
+  not hunt for the function: read the pointer out of slot 14 of afp-utils' own
+  table and confirm the body stores four ints from its `int*` argument into
+  four consecutive dwords, ORs 1 into a flag and zeroes another. IIDX 33 and
+  IIDX 34 match that shape instruction for instruction.
+
+The remaining six fields are logging only, and every consumer guards on the
+offset being non-zero, so IIDX 34 leaves them at 0 rather than carrying numbers
+nobody measured. `afp_table_b_count` prints a post-sweep count, the shape and
+drawn counters print a per-frame draw tally for the first ten frames, and the
+world matrix pair prints once. Nothing renders differently without them.
+
+IIDX 34's row is `dir_substring = "zinrai"`. `AutoDetect` returns the profile
+whose substring is the LONGEST match, not the first one listed, so a catch-all
+like IIDX 27-33's `"iidx"` loses to any more specific name wherever it sits in
+the registry. That is what frees registry order to be display order: the IIDX
+family reads oldest-first in the dropdown, IIDX 34+ under IIDX 27-33, and
+ZINRAI still resolves to its own profile. Ties go to the first of the longest.
+A folder not named for its game still needs the profile picking by hand, which
+is what the Setup combo is for.
+
+### IIDX 34 asserts that the packed render buffer is drained
+
+With the offsets right, IIDX 34 boots and loads, then breaks on an int3 rather
+than an access violation, naming `afpu-render-inline.h` line 27 and the
+function `afpu_render_init_frame_inline`.
+
+That helper is afp-utils' begin-frame: it asserts two globals are zero and then
+calls the render context's slot 8, which on 573Renderer is
+`AfpD3D9::BeginRender`. Line 27 checks the count of commands packed into
+afp-utils' own render buffer; line 28 checks a second flag. Ordinal `0x074`,
+`afpu_render_flush`, is the only thing that clears both: it walks the packed
+buffer dispatching each command through afp-utils' handler table, zeroes the
+count, then clears the line-28 flag. IIDX 33's afp-utils has neither assert, so
+the leftover state was simply tolerated there.
+
+573Renderer bound `afpu_render_flush` and never called it. It now calls it once
+per frame, right after `afp_do_sort_render`, on all three paths that drive a
+frame: the modern runtime, the preview host session and the qpro detail render.
+That is the pairing the asserts describe, begin-frame at the top and flush at
+the bottom, and an empty buffer makes the flush a cheap no-op.
+
+### The layer callback takes one argument, and always did
+
+With the profile right, IIDX 34 got as far as drawing and then faulted inside
+573Renderer itself, reading address `0x0b008000`. That value is a texture
+reference, `pkg=1 slot=0`, which the log had printed a few lines earlier.
+
+`AfpD3D9::SetLayer` was declared as
+`(unsigned int blend_mode, int zero, const unsigned char* hsv_desc)` and decided
+whether the third argument was a real pointer with a range check: reject below
+`0x10000` or above `0x800000000000`, otherwise `memcpy` 16 bytes from it. afp
+passes ONE argument to that slot. Both IIDX 33's and IIDX 34's afp-utils
+forwarders call the host's layer slot as `fn(a1)`, so the second and third
+parameters were always whatever the caller happened to leave in the argument
+registers. IIDX 33 survived it; on IIDX 34 the leftover register held a texture
+reference, which sailed through the range check and faulted on the `memcpy`.
+
+The signature now matches what afp calls, and a `static_assert` in
+`FillRenderContext` pins the arity of the slots whose forwarders have been read,
+so the next person to widen one gets a compile error naming the reason instead
+of an intermittent fault. The `data=` field in a `[CRASH]` line is the faulting
+ADDRESS, which is what made this findable: it was equal to a value the log had
+already printed as a texture reference.
+
+**Open question.** `g_gpu.hsv_desc_ptr` used to be set from that third argument,
+so the HSV filter path was being fed by an unvalidated register. Where the
+descriptor legitimately comes from is UNRESOLVED: the layer slot does not carry
+it, and neither does the slot at +0x28, which also takes one `unsigned int`.
+Until that is traced, the HSV path is simply never armed from this callback
+rather than being armed from garbage.
+
+### A hardcoded afp-core offset, found by the stack trace
+
+The next IIDX 34 fault was an illegal instruction inside afp-core at `+0x48ac0`,
+and the newly symbolized stack named the caller chain: `SweepOneItem` ->
+`CompositeSweepItem` -> `RenderItemComposite` -> `MountItemClip` ->
+`RenderLayerJob` -> `ProbeClipTotal` -> `ClipVisualCmdsAfterFrame0`.
+
+That last one held a raw constant:
+
+```
+auto resolve = (resolve_t)((uint8_t*)afpcore + 0x48AC0);
+```
+
+`0x48AC0` is the crash address. In IIDX 33 that offset is a small helper that
+masks an mc id with `0x3FFFF`, bounds-checks it against a count, indexes a table
+of work pointers and confirms the entry's id at `+0x138`. In IIDX 34 the same
+function lives at `0x49D60`, and `0x48AC0` lands one byte inside an unrelated
+instruction, so calling it executes a lone `0x1F` byte, which is not a valid
+opcode in 64-bit.
+
+The offset is now `DllOffsetSet::afp_mc_work_from_id`, measured per build:
+`0x48AC0` for IIDX 33, `0x49D60` for IIDX 34, and zero everywhere else. Zero
+means the probe returns "unknown" instead of calling a wild pointer, which is
+what every other profile did before this: the constant was applied whatever game
+was loaded. DDR World borrowed the IIDX 33 offsets wholesale and so inherited
+this one too, despite loading `libafp-win64.dll`, so it now has its own row with
+the field zeroed and nothing else changed.
+
+To re-find it in a future build, look for the function that masks its argument
+with `0x3FFFF` and compares the fetched entry's `+0x138` against the full id;
+afp-core's `afp_play_work_load_bitmap` (ordinal `0x087`) calls it immediately
+before logging `mc_get_play_work_body`.
+
+### The rest of the hardcoded afp-core addresses
+
+Fixing the mc-work lookup uncovered three more of the same kind, all in the qpro
+code, all reached only once the sweep got far enough to run them. They are now
+`DllOffsetSet` fields, measured in both builds, zero everywhere else:
+
+| What | IIDX 33 | IIDX 34 | How it was matched |
+|---|---|---|---|
+| `afp_mc_work_from_id` | `0x48AC0` | `0x49D60` | masks the id with `0x3FFFF`, indexes a table, checks `+0x138` |
+| `afp_mc_def_from_work` | `0x377B0` | `0x52D00` | tests `[rcx+0x20] & 0x1000000`, returns `[rcx+0x140]+0x38` or tails into the parent lookup |
+| `afp_matrix_stack` | `0xE1050` | `0xF2340` | base pointer of afp-core's 64 byte matrix stack |
+| `afp_matrix_depth` | `0xE1062` | `0xF2352` | the stack's depth counter, `stack + 0x10 + 2` in both builds |
+
+The two functions were matched by instruction sequence, not by guesswork: the
+definition lookup is byte for byte identical between the builds, and the matrix
+globals were read out of afp-core's own stack-pop helper, which shows the base,
+the stride and the depth together in one function.
+
+The `raw-dll-offset` gate now fails the build on any new literal added to a DLL
+base, so this class of bug cannot come back quietly.
+
+`Profile::has_qpro` marks the builds that ship qpro data, and
+`GameProfile::SlugHasQpro` is what the qpro panel tab asks instead of comparing
+against the literal slug `"iidx33"`. The old comparison meant the tab
+disappeared the moment IIDX 34 got a profile of its own. Resolution presets ask
+nothing: every preset is always offered.
+
 ### Diagnostic-only offsets (optional)
 
 A second group of `DllOffsetSet` fields exists purely for log-line

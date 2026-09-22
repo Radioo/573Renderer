@@ -46,6 +46,11 @@ output path or an id, so `--preset-export-json iidx11 <id> --force` still writes
 | `--preset-export` | `<game-dir> [preset-id] [out] [frames]` | the same load, driven through the export pipeline (`--export-bg` applies). |
 | `--preset-json` | `<file.json>` | with `--preset-test` / `--preset-export`: load that document instead of a registry id. The positional preset id is then omitted. |
 | `--force` | | load a document that has validation errors anyway; the evaluator skips the offending clips. Without it, `--preset-json` refuses a document with errors. |
+| `--txp2-dump` | `<game-dir> <package.bin> <out-dir>` | writes every texture in a TXP2 package as `<name>.png`, every NAMED cell as `cell_<name>.png` cropped out of its texture, and, when the package carries afp streams, an `inputs.json` naming each animation's input surface. It boots only the engine DLLs and AVS (AVS owns the `avslz` inflate the texture payloads need), with no window and no D3D9 device, so it reads a package an AFP render cannot: the IIDX 18/19 `lane%03d.bin` covers hold one texture and one cell and no animation at all, and `LoadTxp2Package` rejects them for producing no streams. |
+| `--gc2d-sheet` | `<package-dir> <out-dir> [samples]` | renders every animation and cell of a GC 2D package (IIDX 14 to 17, `system.idx` + `*.gcz`). Each animation is sampled `samples` times across its length, so `samples` at or above the animation's length writes every frame. |
+| `--gc2d-at` | `<x>,<y>` | with `--gc2d-sheet`: where to place the sprite in the 640x480 window. The default `0,0` puts its registration point at the top left corner, which is right for a full-screen background like a play frame and clips a centred effect to its lower-right quadrant. `320,240` centres it. |
+| `--gc2d-alpha` | | with `--gc2d-sheet`: write straight-alpha PNGs instead of the opaque back buffer. See below. |
+| `--gc2d-parts` | `<package-dir>` | with `--gc2d-sheet` and `--iidx-playfield`: the package the value cells come from (IIDX 17's `gameparts`). |
 | `--preset-option` | `<option-id>=<choice>` | selects an option; repeatable, one per option. The choice is a label (`mode=EXPERT`) or an index (`mode=3`). It replaced the positional option-index argument, which could only ever reach the first option. |
 
 The motion check takes its BASELINE at the first rendered frame that has any
@@ -54,6 +59,33 @@ roll shows the sky dome from frame 200) would otherwise be compared against an
 empty pose list and reported as having no 3D at all. With no visible model over
 the whole run the log says so and names the number of frames rendered, rather than
 claiming the preset contains no model.
+
+`--gc2d-sheet` with `--gc2d-parts` and `--iidx-playfield` fills a GC play frame's
+values the way the game does. A GC animation carries element records (record type
+3) whose id names a value rather than a cell; the game registers a callback that
+the engine calls with that id and the position it computed, and draws the score,
+the groove gauge and the rest there. The sheet reads the same records, so the
+positions come from the art and nothing is hardcoded per frame. It writes them to
+`elements.txt` whether or not the values are drawn. `IIDX/customize_assets.md` in
+the notes repo has the element table.
+
+`--gc2d-alpha` recovers the alpha the GC 2D renderer never writes. The sheet
+normally saves the back buffer, which is opaque, so a sprite arrives composited
+over black and a browser or an editor has nothing to key on. With the flag each
+shot is drawn twice, once over black and once over white, and the two are
+unmixed per pixel:
+
+    coverage = max over rgb of 255 - clamp(over_white - over_black, 0, 255)
+    straight = over_black * 255 / coverage
+
+It needs no knowledge of the blend mode. A normal-blend sprite gives the same
+coverage on every channel, because compositing `src` over white adds
+`255 * (1 - a)`; an additive sprite saturates the white pass, so the expression
+collapses to `max(r, g, b)` over black, which is the additive coverage the modern
+AFP backend's own pixel shader computes. Verified against two files that were
+already on the server and made independently of this renderer: SIRIUS's
+`items` `EXP0` comes out 85x103 over 9 visible frames, the size and frame count of
+`exp_0_legacy.webp`, and its `TURN_00_0000` cell matches `turn_0_legacy.png`.
 
 `--preset-tweaks` is gone with the tweak file. Naming it makes the process print
 what to do instead (export the JSON, edit it, run it with `--preset-json`) and
@@ -99,6 +131,38 @@ profile comes from the document's `build` through
   modern 0xF09 / DDR afp_mc_op).
 - `--filter` = debug viewer F7 (afp-core set-filter ord 0x032, id
   0x80000000|1); `--show-mc-names` = F3 DISP MC; `--mc-name-type` = F6.
+- `--stretch <0|1>`: overrides settings.ini's `stretch_16_9` for this run
+  (tri-state, -1 = unset, the same shape as `--root-loop`). A 4:3 game is
+  PRESENTED widened on a 16:9 cabinet monitor (docs/settings.md), which is
+  right for looking at a screen and wrong for pulling an asset out of one. The
+  web UI that consumes IIDX 9-19 artwork stores it at native 640x480 and
+  applies the same widening in CSS, so extraction passes 0 and keeps the
+  horizontal resolution a 854x480 present would have thrown away. Like the
+  other startup settings it is snapshotted back into settings.ini on boot.
+- `--load-bitmaps <path>` / `--iidx-playfield <spec>`: the IIDX 18/19 play
+  frame draws its chrome and leaves every live value as an authored
+  placeholder clip whose colour transform has alpha 0, so the game never shows
+  it. The game hides the clip, reads its position, and draws the figure itself
+  out of `gameparts.bin` (`_sco00`.. for score and max combo, `_bpm00`..,
+  `_bpm_m00`.., `_par00`.. for the percent, `_gauge_normal_1p` for the bar).
+  `--load-bitmaps` mounts that second package as a bitmap source and
+  `--iidx-playfield` reproduces the drawer. The layout constants come from
+  `sub_1001F2E0` and the gauge from `sub_10058340`; the read is written up in
+  `IIDX/customize_assets.md` in the notes repo.
+
+  The spec also carries `line_x`, `line_y`, `line_clip` and `glow_y`, which draw
+  the red judgment bar and the cyan gradient above it. Those are not in the
+  frame's art and are not a placeholder clip: the play loop draws them every
+  frame from a table in the DLL, so a frame rendered on its own has a bare lane
+  field. `line_clip` masks the bar to its first visible row, which is how IIDX 19
+  trims a 6 row cell to the 4 rows it shows. The numbers differ per version and
+  belong to the caller rather than the renderer.
+- `DDR_TRACE_PRIM=1`: logs every legacy `draw_primitive` with its decoded
+  vertex layout, the position bounding box, the texture id and the modulate
+  colour, plus every `set_mask`. This is how a sprite that reaches the engine
+  but never reaches the screen gets diagnosed: the box tells you whether the
+  quad is degenerate, the mask lines tell you whether the draw was inside a
+  mask-write phase.
 - `--root-loop`: see docs/settings.md (same Hold/Force mechanism; the CLI
   value overrides settings.ini, tri-state with -1 = unset).
 - `--export-fps`: default 60; 120 is possible but needs a 120 Hz display

@@ -8,7 +8,9 @@
 #include "afp_ddr_geo.h"
 #include "afp_ddr_render.h"
 #include "afp_ddr_render_shape.h"
+#include "afp_ddr_clips.h"
 #include "afp_ddr_txp2.h"
+#include "iidx_playfield.h"
 #include "avs_funcs.h"
 #include "avs_boot.h"
 #include "support/dll_loader.h"
@@ -45,6 +47,16 @@ struct DdrClip {
 std::vector<DdrClip> g_clips;
 std::string g_active_clip;
 Txp2Loaded g_txp2;
+
+struct BitmapSource {
+    Txp2Loaded package;
+    std::vector<int> texture_ids;
+};
+std::vector<BitmapSource> g_bitmap_sources;
+}
+
+const AfpDdrFuncs& Funcs() {
+    return s_ddr_afp;
 }
 
 void SetTimeScale(float s) {
@@ -333,32 +345,63 @@ namespace {
 
 std::vector<int> g_txp2_tex_ids;
 
-bool Txp2BitmapQuery(const char* name, unsigned* out_id, int* out_w, int* out_h, float* out_u0,
-                     float* out_u1, float* out_v0, float* out_v1) {
-    if (name == nullptr) return false;
-    const auto& pkg = g_txp2.package;
+struct CellArt {
+    unsigned texture_id;
+    int width;
+    int height;
+    float u0;
+    float u1;
+    float v0;
+    float v1;
+};
+
+bool CellLookup(const Txp2Loaded& loaded, const std::vector<int>& texture_ids, const char* name,
+                CellArt& out) {
+    const auto& pkg = loaded.package;
     for (const auto& entry : pkg.cell_names) {
         if (entry.name != name) continue;
         if (entry.cell_index >= pkg.cells.size()) return false;
         const auto& cell = pkg.cells[entry.cell_index];
-        if (cell.texture_index >= g_txp2_tex_ids.size()) return false;
-        int const tex_id = g_txp2_tex_ids[cell.texture_index];
-        if (tex_id < 0 || cell.texture_index >= g_txp2.textures.size()) return false;
-        const auto& tex = g_txp2.textures[cell.texture_index];
+        if (cell.texture_index >= texture_ids.size()) return false;
+        int const tex_id = texture_ids[cell.texture_index];
+        if (tex_id < 0 || cell.texture_index >= loaded.textures.size()) return false;
+        const auto& tex = loaded.textures[cell.texture_index];
         if (tex.width <= 0 || tex.height <= 0) return false;
 
         const auto fw = static_cast<float>(tex.width);
         const auto fh = static_cast<float>(tex.height);
-        *out_id = static_cast<unsigned>(tex_id);
-        *out_w = static_cast<int>(cell.x1 - cell.x0) / 2;
-        *out_h = static_cast<int>(cell.y1 - cell.y0) / 2;
-        *out_u0 = static_cast<float>(cell.x0) * 0.5F / fw;
-        *out_u1 = static_cast<float>(cell.x1) * 0.5F / fw;
-        *out_v0 = static_cast<float>(cell.y0) * 0.5F / fh;
-        *out_v1 = static_cast<float>(cell.y1) * 0.5F / fh;
+        out.texture_id = static_cast<unsigned>(tex_id);
+        out.width = tex.width;
+        out.height = tex.height;
+        out.u0 = static_cast<float>(cell.x0) * 0.5F / fw;
+        out.u1 = static_cast<float>(cell.x1) * 0.5F / fw;
+        out.v0 = static_cast<float>(cell.y0) * 0.5F / fh;
+        out.v1 = static_cast<float>(cell.y1) * 0.5F / fh;
         return true;
     }
     return false;
+}
+
+bool FindCellArt(const char* name, CellArt& out) {
+    if (CellLookup(g_txp2, g_txp2_tex_ids, name, out)) return true;
+    return std::ranges::any_of(g_bitmap_sources, [&](const BitmapSource& source) {
+        return CellLookup(source.package, source.texture_ids, name, out);
+    });
+}
+
+bool Txp2BitmapQuery(const char* name, unsigned* out_id, int* out_w, int* out_h, float* out_u0,
+                     float* out_u1, float* out_v0, float* out_v1) {
+    if (name == nullptr) return false;
+    CellArt art{};
+    if (!FindCellArt(name, art)) return false;
+    *out_id = art.texture_id;
+    *out_w = art.width;
+    *out_h = art.height;
+    *out_u0 = art.u0;
+    *out_u1 = art.u1;
+    *out_v0 = art.v0;
+    *out_v1 = art.v1;
+    return true;
 }
 
 void RegisterTxp2Textures() {
@@ -455,6 +498,44 @@ bool LoadTxp2(AvsFuncs& avs, const std::string& disk_path) {
     ApplyRootClipOverride(root_stream_id, root_clip_name);
     CreateRootLayer(0, root_stream_id, root_clip_name);
     return g_layer_id != 0U;
+}
+
+bool LoadTxp2Bitmaps(AvsFuncs& avs, const std::string& disk_path) {
+    if (!g_booted) {
+        LOG("DDR", "LoadTxp2Bitmaps before Boot");
+        return false;
+    }
+    std::filesystem::path const native(disk_path);
+    constexpr const char* kBitmapMount = "/pkgbmp";
+    if (avs.avs_fs_umount != nullptr) avs.avs_fs_umount(kBitmapMount);
+    if (!AvsManager::MountFsRoot(avs, kBitmapMount, native.parent_path().string())) {
+        LOG("DDR", "could not mount %s at %s", native.parent_path().string().c_str(), kBitmapMount);
+        return false;
+    }
+
+    BitmapSource source;
+    std::string err;
+    const std::string vfs = std::string(kBitmapMount) + "/" + native.filename().string();
+    if (!ReadTxp2Core(avs, vfs, source.package, err)) {
+        LOG("DDR", "bitmap source %s failed: %s", disk_path.c_str(), err.c_str());
+        return false;
+    }
+    DecodeTxp2Textures(avs, source.package);
+
+    source.texture_ids.reserve(source.package.textures.size());
+    for (const auto& t : source.package.textures) {
+        int id = -1;
+        if (t.width > 0 && t.height > 0 && !t.pixels.empty()) {
+            id = DdrRender::CreateTextureRgba(t.width, t.height, t.pixels.data(), t.pixels.size());
+        }
+        source.texture_ids.push_back(id);
+    }
+    LOG("DDR", "bitmap source %s: %zu textures, %zu named cells",
+        native.filename().string().c_str(), source.texture_ids.size(),
+        source.package.package.cell_names.size());
+    g_bitmap_sources.push_back(std::move(source));
+    DdrRender::SetBitmapQuery(Txp2BitmapQuery);
+    return true;
 }
 
 bool LoadIfs(AvsFuncs& avs, DllLoader& avs_dll, const std::string& ifs_disk_path,
@@ -657,6 +738,7 @@ void DisplayFrame(int frame, bool first) {
     } else if (g_layer_id != 0U) {
         s_ddr_afp.DisplayLayer(g_layer_id);
     }
+    DdrClips::DisplaySprites();
 }
 }
 
@@ -666,6 +748,8 @@ void RenderFrame(float dt) {
     bool const first = (frame < 2);
     DdrRender::ResetDrawCount();
     AdvanceOnce(dt);
+    DdrClips::ResetSprites();
+    IidxPlayfield::Apply();
     DumpChild(frame);
     static bool const frame_lock = Support::EnvFlag("DDR_FRAME_LOCK");
     if (frame_lock) ClearSubFrame();

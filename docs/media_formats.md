@@ -188,7 +188,8 @@ streams incl. aux items), WebM-VP9 (plus the out_width/out_height sws scaling
 path, probed at the scaled size), WebM-AV1 (libaom software), WebP (the ffmpeg
 webp DEMUXER reports 0x0 dims for animated webp, so only stream presence is
 asserted), MP4-HEVC-alpha (libx265 hvc1), PNG sequence (WIC; asserts 12
-numbered frames on disk). MP4-H264 asserts the documented
+numbered frames on disk, and reads the IHDR of one to assert it lands at the
+export size when one is asked for and at the source size when none is). MP4-H264 asserts the documented
 no-software-encoder error contract when the build lacks libx264 and NVENC is
 off; if a software H.264 encoder appears in a future ffmpeg bump the test
 passes through. Outputs go to the system temp dir, never the repo.

@@ -100,6 +100,15 @@ TEST_CASE("scale and afp-speed validate as floats") {
     CHECK_FALSE(Run({"--afp-speed", "17"}).ok);
 }
 
+TEST_CASE("stretch accepts 0/1 and off/on only") {
+    CHECK(Run({"--stretch", "0"}).opts.stretch_16_9 == 0);
+    CHECK(Run({"--stretch", "off"}).opts.stretch_16_9 == 0);
+    CHECK(Run({"--stretch", "1"}).opts.stretch_16_9 == 1);
+    CHECK(Run({"--stretch", "on"}).opts.stretch_16_9 == 1);
+    CHECK_FALSE(Run({"--stretch", "wide"}).ok);
+    CHECK(Run({}).opts.stretch_16_9 == -1);
+}
+
 TEST_CASE("root-loop accepts hold and force only") {
     CHECK(Run({"--root-loop", "hold"}).opts.root_loop_mode == 0);
     CHECK(Run({"--root-loop", "force"}).opts.root_loop_mode == 1);
@@ -214,6 +223,34 @@ TEST_CASE("ParseToolCommand recognizes ddr-test with defaults and explicit args"
     CHECK(c.arc_path.empty());
     CHECK(c.out_path == "ddr_out.png");
     CHECK(c.frames == 120);
+}
+
+TEST_CASE("gc2d-sheet draws at the origin unless --gc2d-at moves it") {
+    const std::vector<std::string> plain = {"exe", "--gc2d-sheet", "D:/items", "out", "40"};
+    Cli::ToolCommand c = Cli::ParseToolCommand(plain);
+    CHECK(c.kind == Cli::ToolKind::Gc2dSheet);
+    CHECK(c.in_path == "D:/items");
+    CHECK(c.out_path == "out");
+    CHECK(c.frames == 40);
+    CHECK(c.sprite_at[0] == 0.0F);
+    CHECK(c.sprite_at[1] == 0.0F);
+    CHECK_FALSE(c.straight_alpha);
+    CHECK(c.parts_dir.empty());
+    CHECK(c.playfield.empty());
+
+    const std::vector<std::string> placed = {
+        "exe",          "--gc2d-sheet", "D:/items",         "out",
+        "40",           "--gc2d-at",    "320,240",          "--gc2d-alpha",
+        "--gc2d-parts", "D:/gameparts", "--iidx-playfield", "score=12,percent=78"};
+    c = Cli::ParseToolCommand(placed);
+    CHECK(c.kind == Cli::ToolKind::Gc2dSheet);
+    CHECK(c.out_path == "out");
+    CHECK(c.frames == 40);
+    CHECK(c.sprite_at[0] == 320.0F);
+    CHECK(c.sprite_at[1] == 240.0F);
+    CHECK(c.straight_alpha);
+    CHECK(c.parts_dir == "D:/gameparts");
+    CHECK(c.playfield == "score=12,percent=78");
 }
 
 TEST_CASE("ParseToolCommand handles the single-path tools") {
