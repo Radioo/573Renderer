@@ -80,6 +80,15 @@ constexpr Font kPercentDpFont = {
 };
 
 constexpr int kDigitPriority = 67;
+constexpr int kJudgeLinePriority = 64;
+constexpr int kJudgeGlowPriority = 65;
+constexpr float kJudgeGlowSteadyAlpha = 50.0F;
+constexpr float kJudgeGlowPulseAlpha = 75.0F;
+constexpr int kScreenWidth = 640;
+constexpr int kScreenHeight = 480;
+constexpr const char* kJudgeLineBitmap = "_red_line";
+constexpr const char* kJudgeGlowBitmap = "_grada";
+constexpr int kAfpBlendAdd = 8;
 constexpr int kGaugeTrackPriority = 70;
 constexpr int kGaugeFillPriority = 69;
 constexpr int kGaugeThrobPriority = 68;
@@ -219,6 +228,72 @@ bool ParseInt(std::string_view text, int& out) {
     return result.ec == std::errc{} && result.ptr == text.data() + text.size();
 }
 
+void DrawJudgeLine() {
+    if (g_values.line_y == 0) return;
+    const auto x = static_cast<float>(g_values.line_x);
+
+    if (g_values.glow_y != 0) {
+        const auto glow_y = static_cast<float>(g_values.glow_y);
+        for (const float alpha : {kJudgeGlowSteadyAlpha, kJudgeGlowPulseAlpha}) {
+            const uint32_t glow =
+                DdrClips::DrawSprite(kJudgeGlowBitmap, x, glow_y, alpha, kJudgeGlowPriority);
+            DdrClips::BlendSprite(glow, kAfpBlendAdd);
+        }
+    }
+
+    const uint32_t line = DdrClips::DrawSprite(
+        kJudgeLineBitmap, x, static_cast<float>(g_values.line_y), kFullAlpha, kJudgeLinePriority);
+    if (g_values.line_clip > g_values.line_y) {
+        DdrClips::MaskSprite(line, 0, g_values.line_clip, kScreenWidth, kScreenHeight);
+    }
+}
+
+bool ApplyLayout(const std::string& key, int number, Values& out) {
+    if (key == "line_x") {
+        out.line_x = number;
+        return true;
+    }
+    if (key == "line_y") {
+        out.line_y = number;
+        return true;
+    }
+    if (key == "line_clip") {
+        out.line_clip = number;
+        return true;
+    }
+    if (key == "glow_y") {
+        out.glow_y = number;
+        return true;
+    }
+    return false;
+}
+
+bool ApplyNumber(const std::string& key, int number, Values& out, std::string& err) {
+    if (key == "score") {
+        out.score = number;
+    } else if (key == "maxcombo") {
+        out.max_combo = number;
+    } else if (key == "bpm") {
+        out.bpm = number;
+    } else if (key == "bpm_min") {
+        out.bpm_min = number;
+    } else if (key == "bpm_max") {
+        out.bpm_max = number;
+    } else if (key == "percent") {
+        out.percent = number;
+    } else if (key == "hispeed") {
+        out.hispeed = Clamp(number, 0, kHispeedSteps - 1);
+    } else if (key == "stage") {
+        out.stage = Clamp(number, 0, kStageCount - 1);
+    } else if (key == "difficulty") {
+        out.difficulty = Clamp(number, 0, kDifficultyCount - 1);
+    } else if (!ApplyLayout(key, number, out)) {
+        err = "unknown playfield key '" + key + "'";
+        return false;
+    }
+    return true;
+}
+
 bool ApplyKey(const std::string& key, const std::string& value, Values& out, std::string& err) {
     if (key == "effect") {
         out.effect = value;
@@ -248,29 +323,7 @@ bool ApplyKey(const std::string& key, const std::string& value, Values& out, std
         err = key + " expects a number, got '" + value + "'";
         return false;
     }
-    if (key == "score") {
-        out.score = number;
-    } else if (key == "maxcombo") {
-        out.max_combo = number;
-    } else if (key == "bpm") {
-        out.bpm = number;
-    } else if (key == "bpm_min") {
-        out.bpm_min = number;
-    } else if (key == "bpm_max") {
-        out.bpm_max = number;
-    } else if (key == "percent") {
-        out.percent = number;
-    } else if (key == "hispeed") {
-        out.hispeed = Clamp(number, 0, kHispeedSteps - 1);
-    } else if (key == "stage") {
-        out.stage = Clamp(number, 0, kStageCount - 1);
-    } else if (key == "difficulty") {
-        out.difficulty = Clamp(number, 0, kDifficultyCount - 1);
-    } else {
-        err = "unknown playfield key '" + key + "'";
-        return false;
-    }
-    return true;
+    return ApplyNumber(key, number, out, err);
 }
 
 }
@@ -336,6 +389,7 @@ void Apply() {
     }
 
     DrawGauge("gg_bar_1p", false);
+    DrawJudgeLine();
 
     for (const char* name :
          {"score_2p", "maxcombo_2p", "percent_2p", "gg_bar_2p", "light_2p", "hispeed_2p"})

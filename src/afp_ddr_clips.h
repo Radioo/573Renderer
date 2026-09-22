@@ -29,6 +29,8 @@ void ResetSprites();
 
 void MaskSprite(uint32_t layer_id, int x, int y, int w, int h);
 
+void BlendSprite(uint32_t layer_id, int afp_blend);
+
 [[nodiscard]] bool HasVisibleSprites();
 
 void DisplaySprites();

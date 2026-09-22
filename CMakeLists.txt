@@ -302,6 +302,7 @@ add_library(r573_app STATIC
     src/gc2d/gc_sheet.cpp
     src/gc2d/gc_render.cpp
     src/gc2d/gc_sprite.cpp
+    src/gc2d/gc_playfield.cpp
     src/game_revision.cpp
     src/backend/afp_family_backend.cpp
     src/backend/afp_family_frame.cpp

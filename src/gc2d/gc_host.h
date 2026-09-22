@@ -2,6 +2,7 @@
 
 #include "formats/gcanim.h"
 
+#include <array>
 #include <string>
 #include <vector>
 
@@ -71,6 +72,10 @@ struct DrawInfo {
 };
 
 std::vector<DrawInfo> ListDrawNodes();
+
+std::vector<GcAnim::ElementNode> ListElements();
+
+std::array<int, 2> CellSize(const std::string& asset, const std::string& cell);
 
 int AnimationLength(const std::string& animation);
 

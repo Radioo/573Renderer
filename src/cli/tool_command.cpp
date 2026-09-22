@@ -1,6 +1,7 @@
 #include "cli/tool_command.h"
 
 #include <algorithm>
+#include <array>
 #include <charconv>
 #include <cstddef>
 #include <memory>
@@ -61,6 +62,17 @@ ToolCommand ParseScene3dTest(std::span<const std::string> args, std::size_t i) {
     return c;
 }
 
+bool Mentions(std::span<const std::string> args, const std::string& flag) {
+    return std::ranges::any_of(args, [&flag](const std::string& arg) { return arg == flag; });
+}
+
+std::array<float, 2> ParsePair(const std::string& text) {
+    const std::size_t comma = text.find(',');
+    if (comma == std::string::npos) return {0.0F, 0.0F};
+    return {static_cast<float>(ParseIntAtoiLike(text.substr(0, comma))),
+            static_cast<float>(ParseIntAtoiLike(text.substr(comma + 1)))};
+}
+
 ToolCommand ParseGc2dSheet(std::span<const std::string> args, std::size_t i) {
     ToolCommand c;
     c.kind = ToolKind::Gc2dSheet;
@@ -68,6 +80,13 @@ ToolCommand ParseGc2dSheet(std::span<const std::string> args, std::size_t i) {
     c.out_path = (i + 2 < args.size() && args[i + 2][0] != '-') ? args[i + 2] : "gc2d_sheet";
     c.frames = 0;
     if (i + 3 < args.size() && args[i + 3][0] != '-') c.frames = ParseIntAtoiLike(args[i + 3]);
+    const std::size_t at = FindFlagWithValue(args, "--gc2d-at");
+    if (at < args.size()) c.sprite_at = ParsePair(args[at + 1]);
+    c.straight_alpha = Mentions(args, "--gc2d-alpha");
+    const std::size_t parts = FindFlagWithValue(args, "--gc2d-parts");
+    if (parts < args.size()) c.parts_dir = args[parts + 1];
+    const std::size_t field = FindFlagWithValue(args, "--iidx-playfield");
+    if (field < args.size()) c.playfield = args[field + 1];
     return c;
 }
 
@@ -154,10 +173,6 @@ ToolCommand Retired(const std::string& flag) {
     c.kind = ToolKind::RetiredFlag;
     c.retired = flag;
     return c;
-}
-
-bool Mentions(std::span<const std::string> args, const std::string& flag) {
-    return std::ranges::any_of(args, [&flag](const std::string& arg) { return arg == flag; });
 }
 
 }

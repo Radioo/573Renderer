@@ -79,7 +79,14 @@ struct SkipSet {
     std::span<const int> cells;
 };
 
+struct ElementNode {
+    int id = 0;
+    float x = 0.0F;
+    float y = 0.0F;
+};
+
 void Evaluate(const SysIdx::Package& pkg, size_t start_index, int frame, float ox, float oy,
-              std::vector<DrawNode>& out, const SkipSet& skip = {});
+              std::vector<DrawNode>& out, const SkipSet& skip = {},
+              std::vector<ElementNode>* elements = nullptr);
 
 }

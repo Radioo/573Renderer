@@ -34,42 +34,8 @@ namespace fs = std::filesystem;
 
 constexpr const char* kMount = "/txp2dump";
 
-int BytesPerPixel(int format) {
-    switch (format) {
-    case 15:
-        return 3;
-    case 16:
-    case 17:
-    case 21:
-    case 22:
-        return 4;
-    default:
-        return 0;
-    }
-}
-
 bool ToBgra(const DdrAfp::Txp2Texture& tex, std::vector<uint8_t>& out) {
-    const int bpp = BytesPerPixel(tex.format);
-    if (bpp == 0 || tex.width <= 0 || tex.height <= 0) return false;
-    const size_t texels = (size_t)tex.width * (size_t)tex.height;
-    if (tex.pixels.size() < texels * (size_t)bpp) return false;
-    out.assign(texels * 4, 0);
-    for (size_t i = 0; i < texels; i++) {
-        const uint8_t* s = tex.pixels.data() + (i * (size_t)bpp);
-        uint8_t* d = out.data() + (i * 4);
-        if (bpp == 3) {
-            d[0] = s[2];
-            d[1] = s[1];
-            d[2] = s[0];
-            d[3] = 0xFF;
-            continue;
-        }
-        d[0] = s[2];
-        d[1] = s[1];
-        d[2] = s[0];
-        d[3] = s[3];
-    }
-    return true;
+    return Txp2::TexelsToBgra(tex.format, tex.width, tex.height, tex.pixels, out);
 }
 
 bool WriteCrop(const std::string& path, const std::vector<uint8_t>& bgra, int src_w, int src_h,

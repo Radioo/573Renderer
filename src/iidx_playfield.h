@@ -19,6 +19,10 @@ struct Values {
     Gauge gauge = Gauge::Normal;
     bool double_play = false;
     bool key_lights = false;
+    int line_x = 0;
+    int line_y = 0;
+    int line_clip = 0;
+    int glow_y = 0;
     std::string effect;
 };
 

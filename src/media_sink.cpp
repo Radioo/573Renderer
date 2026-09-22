@@ -3,8 +3,15 @@
 #include "support/log.h"
 #include "media/media_format.h"
 #include "video_encoder.h"
+#include "video_encoder_codecs.h"
+
+extern "C" {
+#include <libavutil/pixfmt.h>
+#include <libswscale/swscale.h>
+}
 #include <system_error>
 #include <intsafe.h>
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 
@@ -14,6 +21,7 @@
 
 #include <filesystem>
 #include <string>
+#include <vector>
 
 namespace MediaSink {
 
@@ -157,6 +165,46 @@ struct Sink::Impl {
     VideoEncoder::Encoder enc;
     PngSeq png;
     std::string err;
+    SwsContext* png_sws = nullptr;
+    std::vector<uint8_t> png_buf;
+    int png_w = 0;
+    int png_h = 0;
+
+    Impl() = default;
+    Impl(const Impl&) = delete;
+    Impl& operator=(const Impl&) = delete;
+    Impl(Impl&&) = delete;
+    Impl& operator=(Impl&&) = delete;
+
+    ~Impl() { DropScaler(); }
+
+    void DropScaler() {
+        if (png_sws == nullptr) return;
+        sws_freeContext(png_sws);
+        png_sws = nullptr;
+    }
+
+    bool MakeScaler(const Params& p) {
+        DropScaler();
+        png_w = p.out_width > 0 ? p.out_width : p.src_width;
+        png_h = p.out_height > 0 ? p.out_height : p.src_height;
+        if (png_w == p.src_width && png_h == p.src_height) return true;
+        png_sws =
+            VideoEncoder::MakeSws(p.src_width, p.src_height, png_w, png_h, AV_PIX_FMT_BGRA, err);
+        if (png_sws == nullptr) return false;
+        png_buf.assign(static_cast<std::size_t>(png_w) * png_h * 4, 0);
+        return true;
+    }
+
+    const uint8_t* Scaled(const uint8_t* bgra) {
+        if (png_sws == nullptr) return bgra;
+        const uint8_t* slices[1] = {bgra};
+        const int strides[1] = {params.src_width * 4};
+        uint8_t* out_slices[1] = {png_buf.data()};
+        const int out_strides[1] = {png_w * 4};
+        sws_scale(png_sws, slices, strides, 0, params.src_height, out_slices, out_strides);
+        return png_buf.data();
+    }
 };
 
 Sink::Sink() : impl_(std::make_unique<Impl>()) {}
@@ -200,6 +248,7 @@ bool Sink::Open(const Params& p) {
             impl_->err = "PngSeq: failed to create output directory '" + p.output_path + "'";
             return false;
         }
+        if (!impl_->MakeScaler(p)) return false;
     }
     impl_->opened = true;
     return true;
@@ -217,8 +266,8 @@ bool Sink::SubmitFrame(const uint8_t* bgra, int frame_index) {
         }
         return true;
     }
-    return impl_->png.WriteFrame(frame_index, bgra, impl_->params.src_width,
-                                 impl_->params.src_height, impl_->err);
+    return impl_->png.WriteFrame(frame_index, impl_->Scaled(bgra), impl_->png_w, impl_->png_h,
+                                 impl_->err);
 }
 
 bool Sink::Finish() {
@@ -231,6 +280,7 @@ bool Sink::Finish() {
     } else {
         impl_->png.Close();
     }
+    impl_->DropScaler();
     impl_->opened = false;
     return true;
 }
@@ -245,6 +295,7 @@ void Sink::Cancel() {
         std::error_code ec;
         std::filesystem::remove(impl_->params.output_path, ec);
     }
+    impl_->DropScaler();
     impl_->opened = false;
 }
 

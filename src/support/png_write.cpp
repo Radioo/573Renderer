@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <ocidl.h>
 #include <string>
+#include <vector>
 #include <wincodec.h>
 #include <windows.h>
 
@@ -45,14 +46,15 @@ bool OpenPngFrame(WicPngTarget& t, const std::wstring& wpath) {
 }
 
 bool EncodePngPixels(WicPngTarget& t, const uint8_t* bgra, int w, int h) {
-    if (FAILED(t.frame->SetSize((UINT)w, (UINT)h))) return false;
+    if (FAILED(t.frame->SetSize(static_cast<UINT>(w), static_cast<UINT>(h)))) return false;
     WICPixelFormatGUID fmt = GUID_WICPixelFormat32bppBGRA;
     if (FAILED(t.frame->SetPixelFormat(&fmt))) return false;
-    UINT const stride = (UINT)w * 4;
-    UINT const bufsize = stride * (UINT)h;
-    if (FAILED(t.frame->WritePixels((UINT)h, stride, bufsize,
-                                    const_cast<BYTE*>(static_cast<const BYTE*>(bgra)))))
+    UINT const stride = static_cast<UINT>(w) * 4;
+    UINT const bufsize = stride * static_cast<UINT>(h);
+    std::vector<BYTE> pixels(bgra, bgra + bufsize);
+    if (FAILED(t.frame->WritePixels(static_cast<UINT>(h), stride, bufsize, pixels.data()))) {
         return false;
+    }
     if (FAILED(t.frame->Commit())) return false;
     return !FAILED(t.enc->Commit());
 }

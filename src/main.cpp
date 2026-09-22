@@ -9,7 +9,6 @@
 #include "state/commands.h"
 #include "cli/cli.h"
 #include <crtdbg.h>
-#include <stdlib.h>
 
 #include "afp_ddr.h"
 #include "iidx_playfield.h"

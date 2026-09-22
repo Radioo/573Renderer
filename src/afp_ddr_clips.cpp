@@ -17,6 +17,7 @@ namespace {
 
 constexpr uint32_t kParamVisible = 4103;
 constexpr uint32_t kParamPosition = 4104;
+constexpr uint32_t kParamBlend = 4102;
 constexpr uint32_t kParamColour = 4106;
 constexpr uint32_t kParamRegistration = 4123;
 constexpr uint32_t kParamScale = 4099;
@@ -181,6 +182,14 @@ void DisplaySprites() {
     });
     for (const PooledSprite& sprite : order)
         afp.DisplayLayer(sprite.layer);
+}
+
+void BlendSprite(uint32_t layer_id, int afp_blend) {
+    const AfpDdrFuncs& afp = DdrAfp::Funcs();
+    if (layer_id == 0U || afp.afp_mc_set_param == nullptr) return;
+    const int mc = afp.afp_layer_mc_refer(layer_id, kRootPath);
+    if (mc <= 0) return;
+    afp.afp_mc_set_param(static_cast<uint32_t>(mc), kParamBlend, afp_blend);
 }
 
 void MaskSprite(uint32_t layer_id, int x, int y, int w, int h) {
