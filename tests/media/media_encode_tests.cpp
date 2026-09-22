@@ -17,6 +17,7 @@ extern "C" {
 #include <span>
 #include <array>
 #include <fstream>
+#include <ios>
 #include <utility>
 #include <filesystem>
 #include <string>
@@ -55,12 +56,14 @@ std::vector<uint8_t> SyntheticFrame(int frame_index) {
 std::pair<int, int> PngSize(const fs::path& file) {
     std::ifstream reading(file, std::ios::binary);
     if (!reading) return {0, 0};
-    std::array<unsigned char, 24> head{};
-    reading.read(reinterpret_cast<char*>(head.data()), static_cast<std::streamsize>(head.size()));
+    std::array<char, 24> head{};
+    reading.read(head.data(), static_cast<std::streamsize>(head.size()));
     if (reading.gcount() != static_cast<std::streamsize>(head.size())) return {0, 0};
-    const auto big = [&head](std::size_t at) {
-        return (static_cast<int>(head.at(at)) << 24) | (static_cast<int>(head.at(at + 1)) << 16) |
-               (static_cast<int>(head.at(at + 2)) << 8) | static_cast<int>(head.at(at + 3));
+    const auto byte = [&head](std::size_t at) {
+        return static_cast<int>(static_cast<unsigned char>(head.at(at)));
+    };
+    const auto big = [&byte](std::size_t at) {
+        return (byte(at) << 24) | (byte(at + 1) << 16) | (byte(at + 2) << 8) | byte(at + 3);
     };
     return {big(16), big(20)};
 }
