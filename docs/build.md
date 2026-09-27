@@ -71,6 +71,25 @@ successfully; touching the source and rebuilding did not reproduce it, and the
 compiler, linker and `lib.exe` all come from the same toolset. The cause is not
 known. When it happens, delete the library named in the message and build again.
 
+### After a Visual Studio toolset update
+
+A toolset update invalidates vcpkg's binary cache for the triplet (the ffmpeg,
+aom and libvpx rebuild takes several minutes) and leaves `build/CMakeCache.txt`
+pointing at the deleted `cl.exe`. Delete `build/CMakeCache.txt` and
+`build/CMakeFiles/` so CMake detects the new compiler; `vcpkg_installed/` can
+stay.
+
+### Mutation checks: force a full link for every mutant
+
+A mutation made only in a static library (`src/document/*.cpp`) has been seen
+to compile and relink `document_tests.exe` while the test still ran the OLD
+code and passed. It stopped once the test file itself was rebuilt, and later
+attempts to reproduce it failed, so the cause is unknown (MSVC incremental
+linking and its `.ilk` are the suspect). A mutation script therefore deletes
+the target test exe and its `.ilk` (`build/document_tests.exe`/`.ilk`,
+`build-editor/editor_*_tests.exe`/`.ilk`) before building each mutant, and a
+SURVIVED result is unconfirmed until it survives a forced full link.
+
 ## Dependencies (vcpkg manifest mode)
 
 Declared in `vcpkg.json`; resolved on first configure via the vcpkg toolchain

@@ -77,3 +77,33 @@ documents, which are THE source of truth. Start here to find the right one.
 | [local_regression.md](local_regression.md) | the local byte-compare net, machine-local baselines, and the local_dll real-DLL contract suite |
 | [tidy_migration.md](tidy_migration.md) | the clang-tidy whole-tree migration (3113 -> 0 findings): method, fixit tooling, and per-check gotchas |
 | [comment_migration.md](comment_migration.md) | the comment-knowledge migration: method, the source-file-to-doc knowledge map, and the open questions it surfaced |
+
+## Writing these documents
+
+These documents must stay useful across every game build and readable without
+anything outside this repository:
+
+- Name a game function by its ROLE ("the SetLayer blend dispatch",
+  `get_index_from_mc_id`) and give a re-find recipe from durable anchors:
+  export names, export ordinals, and the DLL's own assert strings. Never write
+  decompiler auto-labels (`sub_...`, `dword_...`, `qword_...`, `nullsub_N`),
+  module-relative addresses or DLL-base offsets; they change with every build.
+- Version-stable numbers stay: export ordinals, afp opcodes and mc codes, flag
+  masks and sentinels, texture format ids, struct FIELD offsets the code reads,
+  and per-profile offset VALUES the renderer stores as its own configuration
+  (the `DllOffsetSet` constants, documented in engine_binding.md and
+  game_profiles.md).
+- State facts timelessly. No dates, "verified on", "this session" or campaign
+  logs; a negative result is kept as a fact ("X cannot replace Y because Z").
+- Reference nothing outside this repository: no other repositories, public
+  projects, web links or machine-local paths. Tests and examples use neutral
+  sample paths, never a real install location.
+- Contrast our output with "the real game", and call the game's own behaviour
+  "the game" or "the game default". User-facing strings (labels, tooltips, CLI
+  help, log lines) are professional and objective, and the documents use the
+  same terms as the strings.
+
+`tools/ci/check_machine_paths.py` enforces the path rule (drive-letter game
+folders included) and `tools/ci/check_raw_dll_offsets.py` keeps raw offsets
+out of the source. The label, date and external-reference rules are held by
+convention.

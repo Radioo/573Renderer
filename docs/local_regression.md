@@ -57,6 +57,33 @@ Temp render output goes to a `%TEMP%` work dir (deleted afterwards);
   this tool replaces it for the common "did my change perturb rendering at
   all" check against the blessed build.
 
+## Running and reading the net
+
+- A scenario that fails with a DLL-load or missing-file error (for example
+  "Failed to load libavs-win64.dll error 126"), rather than a hash mismatch,
+  almost always means the install moved or was reorganised. Check the
+  R573_*_DIR path first, before reading your diff, then re-bless against the
+  new location.
+- For the stash-dance, run `build.bat` from PowerShell (`cmd /c .\build.bat`);
+  invoked through a POSIX shell's cmd wrapper its output is swallowed.
+- IIDX 33 CLI runs that pass a RELATIVE `--ifs` wait for the background IFS
+  scan (`WaitForIfsScan`), which takes minutes on a cold disk cache. Give such
+  runs a generous timeout (the harness allows the IIDX scenario 600 s) or pass
+  an absolute path.
+- `--ddr-test` never reaches the modern HSL or additive-coverage shader arms
+  (legacy DDR HSL is the separate `Cb_SetFilter` path).
+
+## What the byte-compare cannot see
+
+- The modern HSL (YIQ hue) shader path is exercised by exactly one known
+  asset, the IIDX 33 Q-pro hand `qp_21chronicle_07_hand` (its rainbow blade).
+  The headless Q-pro composite of that item writes a near-blank AVIF, so a
+  pixel compare there proves nothing. For code motion in the HSL and
+  additive-coverage arms, prove equivalence by diffing the lifted device calls
+  against the previous source instead.
+- `LayerCommand` fires for no known content (docs/command_stream.md); verify a
+  change to it by source diff plus a no-perturbation byte-compare.
+
 ## The local_dll contract suite (P10)
 
 `local_dll_tests` (tests/local/dll_contract_tests.cpp) runs assertions against

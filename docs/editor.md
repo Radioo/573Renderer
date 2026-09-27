@@ -206,6 +206,13 @@ The window follows a design canvas (an artboard set; the link is in
 it is a hard requirement, and a behaviour test cannot see a wrong colour, font
 or metric, so every visual change is checked by looking at the running window.
 
+The interaction rule the design follows: choose the thing first, and its
+actions appear beside it (the selection bar, the inspector, popovers, command
+search). Commands do not live only in position-dependent right-click menus, and
+no dialog asks the user to type a depth or a frame number; the redesign replaced
+the earlier chains of number prompts and the raw inspector field table for that
+reason.
+
 The accent is Windows's, not the artboard's. `Theme::SystemAccent` reads
 `HKEY_CURRENT_USER\Software\Microsoft\Windows\DWM`: `AccentColor` is a DWORD
 in `0xAABBGGRR` order, `ColorizationColor` the same colour in `0xAARRGGBB`, and

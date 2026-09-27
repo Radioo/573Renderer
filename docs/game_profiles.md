@@ -182,6 +182,11 @@ no-op for a renderer.
 Packages live under `data/graph_data/sys/*.bin`, not `data/graphic/`. The
 content scan finds them either way because it walks the tree for packages.
 
+IIDX 18 and IIDX 19 ship a byte-identical `0200.bin`, and the two profiles
+render it to a byte-identical frame: a controlled check worth repeating when a
+new engine generation is added. The render-regress case `iidx18` locks the
+profile in.
+
 ## P15 split: identity vs engine config
 
 Since P15 the old flat Profile struct is TWO slug-keyed tables:

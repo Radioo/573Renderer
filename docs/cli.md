@@ -66,8 +66,7 @@ values the way the game does. A GC animation carries element records (record typ
 the engine calls with that id and the position it computed, and draws the score,
 the groove gauge and the rest there. The sheet reads the same records, so the
 positions come from the art and nothing is hardcoded per frame. It writes them to
-`elements.txt` whether or not the values are drawn. `IIDX/customize_assets.md` in
-the notes repo has the element table.
+`elements.txt` whether or not the values are drawn.
 
 `--gc2d-alpha` recovers the alpha the GC 2D renderer never writes. The sheet
 normally saves the back buffer, which is opaque, so a sprite arrives composited
@@ -119,6 +118,12 @@ profile comes from the document's `build` through
   `--animation` switch binds against the overlays already mounted (section 5
   BIND-ON-PLAY in docs/boot_and_render_loop.md); nothing happens on the DDR
   backend, which has no afpu packages.
+- `--render-size`: when omitted, the render size is the last one saved in settings.ini
+  (`main.cpp` `SeedStateAndStartGui`), not the profile's `default_render_w/h`, so after a DDR
+  session an SDVX launch comes up 1280x720 landscape. Pass it on every scripted launch, including
+  throwaway diagnostics: SDVX main screen = `1080x1920` portrait, SDVX sub monitor content =
+  `1920x1080` landscape (it runs at 60fps, see `--afp-speed`). If a dump is too big, capture fewer
+  frames or downscale only the offline analysis copy; never shrink the render.
 - `--scale`: the GUI Master-scale row; SDVX-I-IV 720x1280 select_bg
   variants need 1.5 to fill 1080x1920 (ratio's field of truth: BG entry
   payload+28 in soundvoltex.dll).
@@ -147,8 +152,7 @@ profile comes from the document's `build` through
   `_bpm_m00`.., `_par00`.. for the percent, `_gauge_normal_1p` for the bar).
   `--load-bitmaps` mounts that second package as a bitmap source and
   `--iidx-playfield` reproduces the drawer. The layout constants come from
-  `sub_1001F2E0` and the gauge from `sub_10058340`; the read is written up in
-  `IIDX/customize_assets.md` in the notes repo.
+  `sub_1001F2E0` and the gauge from `sub_10058340`.
 
   The spec also carries `line_x`, `line_y`, `line_clip` and `glow_y`, which draw
   the red judgment bar and the cyan gradient above it. Those are not in the
@@ -190,8 +194,17 @@ profile comes from the document's `build` through
 - Hot-swap/self-test options (`--swap-after-frames`, `--ifs2`,
   `--exit-after-frames`, `--screenshot-frames`) exist for --no-gui
   regression runs of the unload/load path.
-- qpro options are the CLI face of the IIDX qpro extractor (see the qpro
-  docs in the parent RE repo); `--qpro-only` takes part labels whose layer
+- Reproduce a boot or render fault with `--no-gui`, never `--headless`:
+  `--headless` creates no window and no D3D9 device and runs only the init
+  sequence, so the AFP draw path (and anything that depends on it) never
+  executes. Pass `--profile` explicitly on reproducible runs so the result
+  does not depend on a saved slug or on auto-detection.
+- 573Renderer.exe is a WIN32-subsystem binary, so a shell does not wait for
+  it: PowerShell's `& .\573Renderer.exe ...` returns at once while the render
+  thread keeps going. Pipe the call to `Out-Null` (or use
+  `Start-Process -Wait`) when a script needs the run to finish first. The log
+  is `renderer.log` in the CURRENT working directory, not next to the exe.
+- qpro options are the CLI face of the IIDX qpro extractor; `--qpro-only` takes part labels whose layer
   suffix is ignored, other parts stay in the manifest but are skipped.
 - `--dump-anim-info <out.json>`: one-shot metadata dump handled by
   `AnimInspect::Run` (src/anim_inspect.cpp) right after the startup
