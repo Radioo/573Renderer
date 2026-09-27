@@ -1,4 +1,4 @@
-name: Build renderer
+name: Build
 
 on:
   push:
@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: build-renderer-${{ github.ref }}
+  group: build-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -126,6 +126,9 @@ jobs:
 
       - name: Verify build output
         run: |
+          if (!(Test-Path "${{ matrix.build_dir }}\preview_host.exe")) {
+            throw "${{ matrix.build_dir }}\preview_host.exe not produced by build"
+          }
           $exe = "bin\${{ matrix.exe }}"
           if (!(Test-Path $exe)) {
             throw "$exe not produced by build"
@@ -151,6 +154,98 @@ jobs:
           path: |
             bin/${{ matrix.exe }}
             bin/${{ matrix.pdb }}
+            ${{ matrix.build_dir }}/preview_host.exe
+            ${{ matrix.build_dir }}/preview_host.pdb
+          if-no-files-found: error
+          retention-days: 30
+
+  editor:
+    name: Editor (Windows x64, RelWithDebInfo)
+    runs-on: windows-2022
+    needs: windows
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      VCPKG_BINARY_SOURCES: "clear;files,${{ github.workspace }}/vcpkg_cache,readwrite"
+      VCPKG_FEATURE_FLAGS: "manifests,binarycaching"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Resolve vcpkg revision
+        id: vcpkg-rev
+        run: |
+          $sha = (git -C vendor/vcpkg rev-parse HEAD).Trim()
+          "sha=$sha" >> $env:GITHUB_OUTPUT
+
+      - name: Enable MSVC dev cmd (x64)
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Cache vcpkg.exe
+        id: cache-vcpkg-bin
+        uses: actions/cache@v4
+        with:
+          path: vendor/vcpkg/vcpkg.exe
+          key: vcpkg-bin-${{ runner.os }}-${{ steps.vcpkg-rev.outputs.sha }}-${{ hashFiles('vendor/vcpkg/bootstrap-vcpkg.bat', 'vendor/vcpkg/scripts/bootstrap.ps1') }}
+
+      - name: Bootstrap vcpkg
+        if: steps.cache-vcpkg-bin.outputs.cache-hit != 'true'
+        run: .\vendor\vcpkg\bootstrap-vcpkg.bat -disableMetrics
+
+      - name: Cache vcpkg binary archives (Qt)
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/vcpkg_cache
+          key: vcpkg-archives-editor-${{ runner.os }}-x64-windows-${{ steps.vcpkg-rev.outputs.sha }}-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json') }}
+          restore-keys: |
+            vcpkg-archives-editor-${{ runner.os }}-x64-windows-${{ steps.vcpkg-rev.outputs.sha }}-
+            vcpkg-archives-editor-${{ runner.os }}-x64-windows-
+
+      - name: Configure (CMake + Ninja)
+        run: cmake --preset editor
+
+      - name: Build
+        run: cmake --build --preset editor
+
+      - name: Widget tests
+        run: |
+          .\build-editor\editor_widget_tests.exe
+          if ($LASTEXITCODE -ne 0) { throw "editor_widget_tests failed (exit $LASTEXITCODE)" }
+
+      - name: Window tests
+        run: |
+          .\build-editor\editor_window_tests.exe
+          if ($LASTEXITCODE -ne 0) { throw "editor_window_tests failed (exit $LASTEXITCODE)" }
+
+      - name: Take the preview host from the renderer build
+        uses: actions/download-artifact@v4
+        with:
+          name: renderer-win64-${{ github.sha }}
+          path: renderer-build
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: tools/ci/uv.lock
+
+      - name: Stage what ships
+        run: uv run --project tools/ci python tools/ci/stage_editor.py --editor build-editor --host renderer-build/build --into dist
+
+      - name: The staged editor starts
+        run: uv run --project tools/ci python tools/ci/check_editor_starts.py --dist dist
+
+      - name: Upload artefact
+        uses: actions/upload-artifact@v4
+        with:
+          name: editor-win64-${{ github.sha }}
+          path: dist/
           if-no-files-found: error
           retention-days: 30
 

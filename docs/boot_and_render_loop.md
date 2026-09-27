@@ -340,6 +340,12 @@ mechanism documentation below is unchanged; only file ownership moved.
    process exit just kills the detached thread mid-walk with no cleanup
    needed). If re-boot is ever added, this detach must become a tracked,
    joinable thread. CLI paths that need the list call `WaitForIfsScan`.
+   A progress bar on the boot overlay did NOT fix the stuck "Booting...": the
+   walk was still synchronous on the boot thread, and a warm disk cache hid
+   that in testing. Slow boot work has to leave the boot path, not just
+   report progress. Order in a healthy log: "Entering main loop" comes BEFORE
+   "Found N IFS files under ...". Because the log is unbuffered, the last line
+   of a hung boot's `renderer.log` names the stage that stalled.
 
 DDR .arc staging (`WriteTempIfs`): a decompressed inner .ifs is written to
 `%TEMP%/573renderer_ifs_<pid>/<basename>` before the path-based imagefs

@@ -52,7 +52,8 @@ Blend SelectBlend(uint16_t code, int alpha_a, int alpha_b) {
 }
 
 void EvaluateGroup(const SysIdx::Package& pkg, size_t start_index, int frame, const Transform& xf,
-                   int depth, const SkipSet& skip, std::vector<DrawNode>& out);
+                   int depth, const SkipSet& skip, std::vector<DrawNode>& out,
+                   std::vector<ElementNode>* elements);
 
 bool Hidden(const SysIdx::Record& rec, const SkipSet& skip) {
     if (rec.type == SysIdx::kRecNested)
@@ -116,8 +117,8 @@ DrawNode MakeNode(const SysIdx::Record& rec, const SysIdx::Cell& cell, const Sha
 }
 
 void EvaluateRecord(const SysIdx::Package& pkg, const SysIdx::Record& rec, int frame,
-                    const Transform& xf, int depth, const SkipSet& skip,
-                    std::vector<DrawNode>& out) {
+                    const Transform& xf, int depth, const SkipSet& skip, std::vector<DrawNode>& out,
+                    std::vector<ElementNode>* elements) {
     if (frame < rec.t_start || frame >= rec.t_end) return;
 
     int child_frame = rec.t_base + frame - rec.t_start;
@@ -153,7 +154,13 @@ void EvaluateRecord(const SysIdx::Package& pkg, const SysIdx::Record& rec, int f
                                   .blend_code = shade.code,
                                   .alpha_a = shade.alpha_a,
                                   .alpha_b = shade.alpha_b};
-            EvaluateGroup(pkg, (size_t)rec.id, child_frame, child, depth + 1, skip, out);
+            EvaluateGroup(pkg, (size_t)rec.id, child_frame, child, depth + 1, skip, out, elements);
+        }
+        return;
+    }
+    if (rec.type == SysIdx::kRecExternal) {
+        if (elements != nullptr) {
+            elements->push_back(ElementNode{.id = rec.id, .x = draw_x, .y = draw_y});
         }
         return;
     }
@@ -167,13 +174,14 @@ void EvaluateRecord(const SysIdx::Package& pkg, const SysIdx::Record& rec, int f
 }
 
 void EvaluateGroup(const SysIdx::Package& pkg, size_t start_index, int frame, const Transform& xf,
-                   int depth, const SkipSet& skip, std::vector<DrawNode>& out) {
+                   int depth, const SkipSet& skip, std::vector<DrawNode>& out,
+                   std::vector<ElementNode>* elements) {
     if (depth > kMaxDepth) return;
     for (size_t i = start_index; i < pkg.records.size(); i++) {
         const SysIdx::Record& rec = pkg.records[i];
         if (rec.type < 0) return;
         if (Hidden(rec, skip)) continue;
-        EvaluateRecord(pkg, rec, frame, xf, depth, skip, out);
+        EvaluateRecord(pkg, rec, frame, xf, depth, skip, out, elements);
     }
 }
 
@@ -255,15 +263,16 @@ int SampleTrack(const std::vector<SysIdx::Key>& keys, int t, int fallback_a, int
 }
 
 void Evaluate(const SysIdx::Package& pkg, size_t start_index, int frame, float ox, float oy,
-              std::vector<DrawNode>& out, const SkipSet& skip) {
+              std::vector<DrawNode>& out, const SkipSet& skip, std::vector<ElementNode>* elements) {
     out.clear();
+    if (elements != nullptr) elements->clear();
     if (start_index >= pkg.records.size()) return;
     const Transform root{.ox = ox, .oy = oy};
     for (size_t i = start_index; i < pkg.records.size(); i++) {
         const SysIdx::Record& rec = pkg.records[i];
         if (rec.type < 0) break;
         if (Hidden(rec, skip)) continue;
-        EvaluateRecord(pkg, rec, frame, root, 0, skip, out);
+        EvaluateRecord(pkg, rec, frame, root, 0, skip, out, elements);
     }
     std::ranges::reverse(out);
 }

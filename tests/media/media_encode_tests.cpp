@@ -15,6 +15,10 @@ extern "C" {
 #include <cstddef>
 #include <cstdint>
 #include <span>
+#include <array>
+#include <fstream>
+#include <ios>
+#include <utility>
 #include <filesystem>
 #include <string>
 #include <system_error>
@@ -47,6 +51,21 @@ std::vector<uint8_t> SyntheticFrame(int frame_index) {
         }
     }
     return bgra;
+}
+
+std::pair<int, int> PngSize(const fs::path& file) {
+    std::ifstream reading(file, std::ios::binary);
+    if (!reading) return {0, 0};
+    std::array<char, 24> head{};
+    reading.read(head.data(), static_cast<std::streamsize>(head.size()));
+    if (reading.gcount() != static_cast<std::streamsize>(head.size())) return {0, 0};
+    const auto byte = [&head](std::size_t at) {
+        return static_cast<int>(static_cast<unsigned char>(head.at(at)));
+    };
+    const auto big = [&byte](std::size_t at) {
+        return (byte(at) << 24) | (byte(at + 1) << 16) | (byte(at + 2) << 8) | byte(at + 3);
+    };
+    return {big(16), big(20)};
 }
 
 MediaSink::Params BaseParams(MediaSink::Format format, const std::string& name) {
@@ -198,6 +217,34 @@ TEST_CASE("KeyframeGop prefers the explicit interval and floors the fallback") {
     p.keyframe_interval = 0;
     p.fps = 1;
     CHECK(VideoEncoder::KeyframeGop(p, 2) == 2);
+}
+
+TEST_CASE("A png sequence is written at the size the export asked for") {
+    const fs::path dir = OutDir() / "png_scaled";
+    std::error_code ec;
+    fs::remove_all(dir, ec);
+    fs::create_directories(dir, ec);
+    MediaSink::Params p = BaseParams(MediaSink::Format::PNG_Sequence, "png_scaled");
+    p.out_width = 32;
+    p.out_height = 24;
+    const EncodeResult r = EncodeSynthetic(p);
+    INFO("error: " << r.error);
+    REQUIRE(r.opened);
+    REQUIRE(r.finished);
+    CHECK(PngSize(dir / "frame_000000.png") == std::pair{32, 24});
+}
+
+TEST_CASE("A png sequence with no export size keeps the source size") {
+    const fs::path dir = OutDir() / "png_native";
+    std::error_code ec;
+    fs::remove_all(dir, ec);
+    fs::create_directories(dir, ec);
+    const MediaSink::Params p = BaseParams(MediaSink::Format::PNG_Sequence, "png_native");
+    const EncodeResult r = EncodeSynthetic(p);
+    INFO("error: " << r.error);
+    REQUIRE(r.opened);
+    REQUIRE(r.finished);
+    CHECK(PngSize(dir / "frame_000000.png") == std::pair{kSrcW, kSrcH});
 }
 
 TEST_CASE("PNG sequence writes numbered frames") {

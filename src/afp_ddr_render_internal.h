@@ -73,7 +73,7 @@ void AFP_CB Cb_GetNearFar(float* nr, float* fr);
 void AFP_CB Cb_DrawPrimitive(const float* vtx, int count, int* params, void* a4);
 void AFP_CB Cb_DrawPrimitiveLegacy(const float* vtx, int count, int prim_type, unsigned attr,
                                    int a5, int a6, const float* c0, const float* c1, void* ctx);
-int __stdcall Cb_GetBitmapInfo(unsigned* out_id, int* out_w, int* out_h, float* out_u0,
-                               float* out_u1, float* out_v0, float* out_v1, const char* name);
+int AFP_CB Cb_GetBitmapInfo(unsigned* out_id, int* out_w, int* out_h, float* out_u0, float* out_u1,
+                            float* out_v0, float* out_v1, const char* name);
 
 }

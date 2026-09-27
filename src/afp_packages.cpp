@@ -387,3 +387,61 @@ void AfpManager::UnloadPackages(EngineSession& es) {
     es.anim_name.clear();
     es.pkg_id = 0;
 }
+
+namespace {
+
+int ReadPackageFromMemory(EngineSession& es, const AvsManager::MemoryIfs& ifs,
+                          const std::string& package) {
+    if (!es.afp_booted) return 0;
+    if (!AvsManager::MountMemoryIfs(es.avs, ifs)) return 0;
+    int const read = es.afpu.afpu_ngp_read_local(package.c_str(), ifs.mountpoint.c_str(), 0);
+    LOG("AFP", "ReadPackageFromMemory('%s') read -> 0x%08x", package.c_str(), (unsigned)read);
+    if (read <= 0) {
+        AvsManager::UnmountMemoryIfs(es.avs, ifs);
+        return 0;
+    }
+    for (const auto& filter : IfsInspect::ReadAtlasFilters(es.avs, ifs.mountpoint.c_str()))
+        AfpD3D9::EnqueueAtlasFilter(filter.mag_filter_d3d, filter.min_filter_d3d);
+    AvsManager::UnmountMemoryIfs(es.avs, ifs);
+    return read;
+}
+
+}
+
+bool AfpManager::LoadTexturePackageFromMemory(EngineSession& es, const AvsManager::MemoryIfs& ifs,
+                                              const std::string& package) {
+    const int boundary = AfpD3D9::PersistentBoundary();
+    int const read = ReadPackageFromMemory(es, ifs, package);
+    if (read <= 0) return false;
+    es.texture_pkg_id = static_cast<uint32_t>(read);
+    es.texture_boundary = boundary;
+    AfpD3D9::MarkPersistentBoundary();
+    return true;
+}
+
+void AfpManager::UnloadTexturePackage(EngineSession& es) {
+    if (es.texture_pkg_id == 0 || es.afpu.afpu_package_control == nullptr) return;
+    LOG("AFP", "package_control(6, 0x%x, 0) for the texture package", es.texture_pkg_id);
+    es.afpu.afpu_package_control(6, es.texture_pkg_id, nullptr);
+    es.texture_pkg_id = 0;
+    AfpD3D9::RestorePersistentBoundary(es.texture_boundary);
+}
+
+bool AfpManager::LoadPackageFromMemory(EngineSession& es, const AvsManager::MemoryIfs& ifs,
+                                       const std::string& package, const std::string& animation) {
+    int const read = ReadPackageFromMemory(es, ifs, package);
+    if (read <= 0) return false;
+    if (es.afpu.afpu_package_open_streams != nullptr)
+        es.afpu.afpu_package_open_streams(static_cast<uint32_t>(read));
+    es.pkg_id = static_cast<uint32_t>(read);
+    return SwitchAnimation(es, animation, true);
+}
+
+bool AfpManager::ReloadPackageFromMemory(EngineSession& es, const AvsManager::MemoryIfs& ifs,
+                                         const std::string& package, const std::string& animation) {
+    uint32_t frame = 0;
+    const bool had_frame = ReadMcPlayhead(es.afp, &frame, nullptr, nullptr);
+    UnloadPackages(es);
+    if (!LoadPackageFromMemory(es, ifs, package, animation)) return false;
+    return !had_frame || SeekFrame(es.afp, static_cast<int>(frame));
+}

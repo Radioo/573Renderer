@@ -132,7 +132,7 @@ void AFP_CB Cb_SetMask(int type, int level, int x, int y, int w, int h, int a7) 
         g_in_mask_write = false;
         return;
     }
-    if (g_frame == DumpFrame())
+    if (g_frame == DumpFrame() || Support::EnvFlag("DDR_TRACE_PRIM"))
         LOG("DDR-R", "  set_mask type=%d level=%d rect=(%d,%d) %dx%d", type, level, x, y, w, h);
     g_in_mask_write = (type == 0);
     int l = (type == 1) ? x : 0;
@@ -155,6 +155,7 @@ void AFP_CB Cb_SetPriority(int p) {
 }
 
 void AFP_CB Cb_SetBlend(int mode) {
+    if (Support::EnvFlag("DDR_TRACE_PRIM")) LOG("DDR-R", "  set_blend %d", mode);
     if (g_dev == nullptr) return;
     g_blend_mode = mode;
     static unsigned seen = 0;
@@ -213,6 +214,10 @@ void AFP_CB Cb_LoadMatrix(float* m2x3) {
     g_world._42 = m2x3[5];
     g_have_world = true;
     g_loadmat_count++;
+    if (Support::EnvFlag("DDR_TRACE_PRIM")) {
+        LOG("DDR-R", "  matrix [%.3f %.3f %.3f %.3f tx=%.1f ty=%.1f]", m2x3[0], m2x3[1], m2x3[2],
+            m2x3[3], m2x3[4], m2x3[5]);
+    }
     if (g_frame == DumpFrame() && g_loadmat_count <= 40) {
         LOG("DDR-R", "  load_matrix2x3 #%d [%.3f %.3f %.3f %.3f tx=%.1f ty=%.1f]", g_loadmat_count,
             m2x3[0], m2x3[1], m2x3[2], m2x3[3], m2x3[4], m2x3[5]);
@@ -285,8 +290,8 @@ void AFP_CB Cb_GetNearFar(float* nr, float* fr) {
     if (fr != nullptr) *fr = f;
 }
 
-int __stdcall Cb_GetBitmapInfo(unsigned* out_id, int* out_w, int* out_h, float* out_u0,
-                               float* out_u1, float* out_v0, float* out_v1, const char* name) {
+int AFP_CB Cb_GetBitmapInfo(unsigned* out_id, int* out_w, int* out_h, float* out_u0, float* out_u1,
+                            float* out_v0, float* out_v1, const char* name) {
     static int s_queries = 0;
     if (g_bitmap_query == nullptr || name == nullptr) {
         if (s_queries++ < 8) LOG("DDR-R", "get_bitmap_info('%s'): no provider", name ? name : "");

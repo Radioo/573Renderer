@@ -215,7 +215,7 @@ settings + orchestration; render_loop.cpp is backend-neutral except
 `Export::OnMainLoopTick(g_engine, g_d3d)` (P18 cuts it) and the inline
 `--animation-label` arm. `IGameRuntime` demoted to family-internal. The
 window+device creation moved ahead of DLL/AVS boot (documented in
-docs/backend.md). Verified byte-identical + DLL tier. The
+docs/backend.md). Verified byte-identical + DLL suite. The
 `GatherAutopilotInputs`/`AdvanceFrame`/`CallAfpUpdateGuarded` residue listed
 under P12 is now resolved (all family code).
 
@@ -229,7 +229,7 @@ time_scale) moved to the slug-keyed `AfpProfiles::AfpConfig` table
 `EngineSession::active_profile` renamed `active_cfg`
 (`AfpManager::SetActiveConfig`); `ActiveOffsets` moved to `AfpProfiles`.
 dll_contract_tests now assert backend_id. Verified byte-identical + DLL
-tier.
+suite.
 
 P16 slice 1 (capability surface): `IsDdrMode`/`SetIsDdrMode` deleted;
 `BootLifecycle::ActiveBackendId` (seeded from `Backend::Active()->Id()`) is
@@ -257,7 +257,7 @@ src/backend/afp_capture_drivers.*; `Session.ddr` deleted; export_ddr.cpp
 absorbed into the DDR driver; `export.h` lost `EngineSession&` and
 export.cpp lost every AFP and D3D9 LINK dependency (the offscreen readback
 lives in the drivers), which landed the long-deferred CaptureSource seam
-WITH its first consumer: the hosted `export_capture_tests` ci tier drives
+WITH its first consumer: the hosted `export_capture_tests` ci suite drives
 SubmitOneFrame/FinishAndEncode (blend compose + crop) from a synthetic
 frame source with a null-backend stub. Verified: pixel net byte-identical,
 live DDR authored-loop export (bg_0009, 1373 frames), modern label export

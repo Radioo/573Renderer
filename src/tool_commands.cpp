@@ -5,6 +5,7 @@
 #include "support/log.h"
 #include "afp_ddr_test.h"
 #include "gc2d/gc_sheet.h"
+#include "txp2_dump.h"
 #include "scene3d/scene3d_test.h"
 #include "preset/preset_test.h"
 #include "preset/preset_tools.h"
@@ -126,7 +127,15 @@ int Run(const Cli::ToolCommand& cmd) {
     case Cli::ToolKind::Scene3dTest:
         return Scene3dTest::Run(cmd.in_path, cmd.out_path, cmd.frames);
     case Cli::ToolKind::Gc2dSheet:
-        return Gc2dSheet::Run(cmd.in_path, cmd.out_path, cmd.frames);
+        return Gc2dSheet::Run(Gc2dSheet::Job{.package_dir = cmd.in_path,
+                                             .out_dir = cmd.out_path,
+                                             .samples = cmd.frames,
+                                             .at = cmd.sprite_at,
+                                             .straight_alpha = cmd.straight_alpha,
+                                             .parts_dir = cmd.parts_dir,
+                                             .playfield = cmd.playfield});
+    case Cli::ToolKind::Txp2Dump:
+        return Txp2Dump::Run(cmd.in_path, cmd.arc_path, cmd.out_path);
     case Cli::ToolKind::PresetTest:
         return PresetTest::Run(PresetJob(cmd));
     case Cli::ToolKind::PresetExport:

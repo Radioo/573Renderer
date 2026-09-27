@@ -10,6 +10,7 @@
 #include "qpro/qpro_walk.h"
 #include "render_backend.h"
 #include "support/log.h"
+#include "support/png_write.h"
 
 #include <cstdint>
 #include <cstdio>
@@ -213,8 +214,10 @@ void BodyOne(EngineSession& es, D3D9State& d3d, const std::string& game_dir,
     RenderFrame(es, d3d, px, w, h, false);
 
     LOG("QproBody", "rendered %dx%d (sid=0x%x)", w, h, sid);
-    if (w > 0 && h > 0)
-        WritePngBGRA((fs::path("screenshots") / "qpbodyone.png").string(), px.data(), w, h);
+    if (w > 0 && h > 0) {
+        Support::WritePngBGRA((fs::path("screenshots") / "qpbodyone.png").string(), px.data(), w,
+                              h);
+    }
 
     if (pkg != 0U) AfpManager::UnloadCompanion(es, pkg);
 }

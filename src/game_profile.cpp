@@ -4,6 +4,7 @@
 #include <system_error>
 
 #include <cctype>
+#include <cstddef>
 #include <string>
 #include <vector>
 
@@ -103,13 +104,24 @@ const std::vector<Profile> kProfiles = {
         .default_render_h = 720,
     },
     Profile{
-        .name = "IIDX 27+",
+        .name = "IIDX 27-33",
         .slug = "iidx33",
         .dir_substring = "iidx",
         .backend_id = "afp_modern",
         .game_dll = "bm2dx.dll",
         .default_render_w = 1920,
         .default_render_h = 1080,
+        .has_qpro = true,
+    },
+    Profile{
+        .name = "IIDX 34+",
+        .slug = "iidx34",
+        .dir_substring = "zinrai",
+        .backend_id = "afp_modern",
+        .game_dll = "bm2dx.dll",
+        .default_render_w = 1920,
+        .default_render_h = 1080,
+        .has_qpro = true,
     },
     Profile{
         .name = "SDVX 7 (NABLA)",
@@ -190,11 +202,17 @@ const std::vector<Profile>& All() {
 const Profile* AutoDetect(const std::string& dir) {
     if (dir.empty()) return nullptr;
     const std::string dir_lc = ToLower(dir);
+    const Profile* best = nullptr;
+    std::size_t best_len = 0;
     for (const auto& p : kProfiles) {
         if ((p.dir_substring == nullptr) || (*p.dir_substring == 0)) continue;
         std::string const needle = ToLower(p.dir_substring);
-        if (dir_lc.find(needle) != std::string::npos) return &p;
+        if (dir_lc.find(needle) == std::string::npos) continue;
+        if (needle.size() <= best_len) continue;
+        best = &p;
+        best_len = needle.size();
     }
+    if (best != nullptr) return best;
     for (const auto& p : kProfiles) {
         if (p.game_dll == nullptr) continue;
         if (GameDllPresent(dir, p.game_dll)) return &p;
@@ -208,6 +226,11 @@ const Profile* BySlug(const std::string& slug) {
         if (slug == p.slug) return &p;
     }
     return nullptr;
+}
+
+bool SlugHasQpro(const std::string& slug) {
+    const Profile* profile = BySlug(slug);
+    return profile != nullptr && profile->has_qpro;
 }
 
 }

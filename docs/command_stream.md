@@ -273,7 +273,7 @@ WARP produced different pixels than the dev machine for the identical command
 list, both internally deterministic). A missing baseline is blessed + WARNed + PASSed
 (CI runners have ephemeral workspaces, so in hosted CI the test asserts device
 replay succeeds + intra-run determinism; the hash regression gate is the
-machine-local tier, where the baseline persists across builds). On mismatch the
+machine-local suite, where the baseline persists across builds). On mismatch the
 actual frame is dumped to the build dir for review; a local hash flip with no
 code change is a Windows WARP update (review + re-bless), a flip WITH a code
 change is a regression. The RECORDER text goldens stay committed - they are

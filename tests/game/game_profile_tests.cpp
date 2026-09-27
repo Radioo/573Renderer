@@ -181,7 +181,7 @@ TEST_CASE("Profiles are listed oldest-first within the IIDX family") {
     }
     CHECK(iidx == std::vector<std::string>{"iidx09", "iidx11", "iidx12", "iidx13", "iidx17",
                                            "iidx18", "iidx19", "iidx20", "iidx24", "iidx26",
-                                           "iidx33"});
+                                           "iidx33", "iidx34"});
 }
 
 TEST_CASE("Profile order keeps the specific IIDX substrings ahead of the generic one") {
@@ -274,4 +274,98 @@ TEST_CASE("LatestRevisionDir ignores files and returns empty when nothing matche
     CHECK(GameRevision::LatestRevisionDir(t.root.string()).empty());
     CHECK(GameRevision::LatestRevisionDir((t.root / "missing").string()).empty());
     CHECK(GameRevision::LatestRevisionDir("").empty());
+}
+
+TEST_CASE("IIDX 34 is its own profile and not the IIDX 27+ catch-all") {
+    const GameProfile::Profile* zinrai = GameProfile::AutoDetect("F:/IIDX/IIDX 34 - ZINRAI");
+    REQUIRE(zinrai != nullptr);
+    CHECK(std::string(zinrai->slug) == "iidx34");
+
+    const GameProfile::Profile* older = GameProfile::AutoDetect("F:/IIDX/IIDX 33 - Sparkle Shower");
+    REQUIRE(older != nullptr);
+    CHECK(std::string(older->slug) == "iidx33");
+}
+
+TEST_CASE("IIDX 34 carries its own afp offsets") {
+    const AfpProfiles::AfpConfig* iidx34 = AfpProfiles::For("iidx34");
+    REQUIRE(iidx34 != nullptr);
+    const AfpProfiles::AfpConfig* iidx33 = AfpProfiles::For("iidx33");
+    REQUIRE(iidx33 != nullptr);
+
+    CHECK(iidx34->offsets.afp_callback_table == 0xF20A8);
+    CHECK(iidx34->offsets.afp_render_flags == 0xF23D4);
+    CHECK(iidx34->offsets.afp_nearfar_slot == iidx34->offsets.afp_callback_table + 0x68);
+    CHECK(iidx34->offsets.afpu_data_struct == 0x2B2D0);
+    CHECK(iidx34->offsets.afpu_render_context == 0x2B8B8);
+    CHECK(iidx34->offsets.afpu_set_screen_rect_fn == 0x15790);
+
+    CHECK(iidx34->offsets.afp_callback_table != iidx33->offsets.afp_callback_table);
+    CHECK(iidx34->offsets.afpu_data_struct != iidx33->offsets.afpu_data_struct);
+    CHECK(iidx34->offsets.afpu_set_screen_rect_fn != iidx33->offsets.afpu_set_screen_rect_fn);
+}
+
+TEST_CASE("Auto detect picks the most specific name, not the first one listed") {
+    const GameProfile::Profile* zinrai = GameProfile::AutoDetect("F:/IIDX/IIDX 34 - ZINRAI");
+    REQUIRE(zinrai != nullptr);
+    CHECK(std::string(zinrai->slug) == "iidx34");
+
+    const std::vector<GameProfile::Profile>& all = GameProfile::All();
+    std::size_t generic = all.size();
+    std::size_t specific = all.size();
+    for (std::size_t i = 0; i < all.size(); i++) {
+        if (std::string(all[i].slug) == "iidx33") generic = i;
+        if (std::string(all[i].slug) == "iidx34") specific = i;
+    }
+    REQUIRE(generic < all.size());
+    REQUIRE(specific < all.size());
+    CHECK(generic < specific);
+}
+
+TEST_CASE("The IIDX builds that ship qpro data say so on their profile") {
+    CHECK(GameProfile::SlugHasQpro("iidx33"));
+    CHECK(GameProfile::SlugHasQpro("iidx34"));
+    CHECK_FALSE(GameProfile::SlugHasQpro("iidx26"));
+    CHECK_FALSE(GameProfile::SlugHasQpro("sdvx7"));
+    CHECK_FALSE(GameProfile::SlugHasQpro(""));
+}
+
+TEST_CASE("The mc-work lookup is a per build offset, never a hardcoded one") {
+    const AfpProfiles::AfpConfig* iidx33 = AfpProfiles::For("iidx33");
+    const AfpProfiles::AfpConfig* iidx34 = AfpProfiles::For("iidx34");
+    REQUIRE(iidx33 != nullptr);
+    REQUIRE(iidx34 != nullptr);
+    CHECK(iidx33->offsets.afp_mc_work_from_id == 0x48AC0);
+    CHECK(iidx34->offsets.afp_mc_work_from_id == 0x49D60);
+    CHECK(iidx33->offsets.afp_mc_work_from_id != iidx34->offsets.afp_mc_work_from_id);
+
+    for (const char* slug : {"iidx26", "sdvx7", "ddrworld", "gitadora"}) {
+        const AfpProfiles::AfpConfig* other = AfpProfiles::For(slug);
+        REQUIRE(other != nullptr);
+        CHECK(other->offsets.afp_mc_work_from_id == 0);
+    }
+}
+
+TEST_CASE("Every afp-core address the qpro code pokes is a per build offset") {
+    const AfpProfiles::AfpConfig* iidx33 = AfpProfiles::For("iidx33");
+    const AfpProfiles::AfpConfig* iidx34 = AfpProfiles::For("iidx34");
+    REQUIRE(iidx33 != nullptr);
+    REQUIRE(iidx34 != nullptr);
+
+    CHECK(iidx33->offsets.afp_mc_def_from_work == 0x377B0);
+    CHECK(iidx34->offsets.afp_mc_def_from_work == 0x52D00);
+    CHECK(iidx33->offsets.afp_matrix_stack == 0xE1050);
+    CHECK(iidx34->offsets.afp_matrix_stack == 0xF2340);
+    CHECK(iidx33->offsets.afp_matrix_depth == 0xE1062);
+    CHECK(iidx34->offsets.afp_matrix_depth == 0xF2352);
+
+    CHECK(iidx33->offsets.afp_matrix_depth - iidx33->offsets.afp_matrix_stack ==
+          iidx34->offsets.afp_matrix_depth - iidx34->offsets.afp_matrix_stack);
+
+    for (const char* slug : {"iidx26", "sdvx7", "ddrworld", "gitadora"}) {
+        const AfpProfiles::AfpConfig* other = AfpProfiles::For(slug);
+        REQUIRE(other != nullptr);
+        CHECK(other->offsets.afp_mc_def_from_work == 0);
+        CHECK(other->offsets.afp_matrix_stack == 0);
+        CHECK(other->offsets.afp_matrix_depth == 0);
+    }
 }

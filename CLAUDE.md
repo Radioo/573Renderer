@@ -13,6 +13,72 @@
 - When fixing a bug with AVS/AFP instrumentation, you MUST provide proof of game pseudocode from RE to ensure the fix is correct. Attach it to docs along with a way how to find that code (remember, no raw offsets because they will change on each game version).
 - Prefer existing libraries and solutions known to work as opposed to writing code that another library can provide, adding new vcpkg dependencies for this is very welcome
 
+# A MISSING LIBRARY OR QT MODULE IS SOMETHING TO INSTALL, NEVER A REASON TO PIVOT
+
+"It is not installed" / "that plugin is not deployed" / "vcpkg did not build it" is the START of
+the job, not a finding. **Install it**: add the port to `vcpkg.json` (the `editor` feature for Qt
+things), `find_package` its component, link it, and deploy its plugins with
+`r573_deploy_qt_plugin`. Then use it. Rebuilding vcpkg takes minutes and that is fine.
+- **NEVER hand-roll a replacement for something a Qt module already does.** No painting icons by
+  hand because Qt SVG is not linked, no writing an image codec, no re-implementing a widget, no
+  "I will approximate the paths with QPainter". If Qt (or another maintained library) ships it,
+  add the dependency and use the real thing.
+- The same goes for platform plugins: if a plugin is missing from the build, check whether the port
+  ships it and enable it; only when the port genuinely does not build it (vcpkg's qtbase has no
+  `qoffscreen.dll`) is that a real constraint - say so, and pick the next real option, never a
+  hand-rolled stand-in.
+- **Say what was installed and why** in the reply. Do not silently reimplement.
+- **An icon set is a library too. NEVER type SVG path data by hand.** Vendor the real files from a
+  maintained set (the editor uses Lucide under `editor/icons/`, licence beside them) and name them
+  from code. Copying paths out of the design artboards does not count either: the artboards' icons
+  are themselves hand-drawn approximations.
+- Burned (2026-09-20): building the editor UI I needed the design's stroke icons, found no Qt SVG in
+  the build, and started writing a QPainter icon painter instead of adding `qtsvg` to `vcpkg.json`.
+  The user was rightly angry. `qtsvg` + `Qt6::Svg` + the `qsvg`/`qsvgicon` plugins took one edit and
+  renders the design's own SVG paths exactly.
+- Burned again the same day: with Qt SVG linked, I typed 37 icon path bodies into `Icons::Body`
+  instead of fetching an icon set. Several were geometrically wrong - undo drew its arrow head five
+  pixels below the tail it belonged to, which the user spotted on screen and asked whether I had
+  hallucinated the icons. I had. They are Lucide files now.
+
+# THE EDITOR'S LOOK IS CHECKED BY LOOKING AT IT
+
+The IFS editor has a design plan (a Design canvas artboard set; the link lives in
+`.scratch/ifs-editor-redesign/design.local.md`, which is gitignored). **Matching it is a hard
+requirement, not a nice-to-have.** Behaviour tests cannot see a wrong colour, a wrong font or a
+wrong layout, so:
+- **Take a screenshot and LOOK at it after every visual change.** `build-editor/ifs_editor_shot.exe`
+  builds the real window on the native Windows platform, off-screen and without stealing focus, and
+  writes a PNG into `screenshots/` (gitignored). Read the PNG back and compare it with the artboard
+  before saying anything is done.
+- Read the artboard for the exact tokens (colours, px sizes, fonts, spacing) rather than guessing;
+  they live in the canvas's `project/*.dc.html` files. `editor/src/editor_theme.h` holds the ones
+  already lifted out.
+- Never report a UI change as finished without having seen it.
+- **Every colour pair must clear 4.5:1.** Text the reader has to squint at is a
+  defect, not a style choice. The contrast gate (`editor/tests/editor_contrast_window_tests.cpp`
+  for the editor, `tests/gui/contrast_tests.cpp` for the renderer's ImGui interface) measures
+  every word the interface paints and fails the check gate below the WCAG AA bar. When adding a
+  colour, run those cases; when painting text somewhere the widget walk cannot see (a delegate,
+  a custom paintEvent), add the pair to the painted-pairs case in the same change.
+
+# THE EDITOR WINDOW NEVER BLOCKS
+
+Nothing that takes more than an instant may run on the window's thread: reading
+or writing a file, parsing or encoding a package, decoding an animation or an
+image, talking to the preview host, exporting. It goes on the window's thread pool
+through `Editor::Jobs::Start`, and the window says what it is doing while it runs.
+- **Every wait has a state.** A panel shows what it is loading, never an empty list
+  that the reader cannot tell from "there is nothing here". The Busy page
+  (`Editor::Busy`) covers document-wide work and carries a progress bar, a detail
+  line and a Stop button where the work can be stopped.
+- **Never show an empty state before the load has started.** Switch to the loading
+  state first, then start the job.
+- **Coalesce, never drop.** When a request arrives while the same kind of work is in
+  flight, keep the latest and run it when the current one finishes. Dropping it
+  leaves the screen showing something that is no longer true.
+- Anything the tests need to wait for must be visible through `Window::Loading`.
+
 # FIXING A BUG: FAILING TEST FIRST, THEN THE FIX, THEN PROVE IT PASSES
 
 Every bug fix follows this order, with no steps merged or skipped:
@@ -57,3 +123,17 @@ When testing or debugging, ALWAYS use a proper render resolution for the game so
 - DDR - 1280x720
 - GD - 3840x2160
 - JB (T44) - 1080x1920
+
+## Agent skills
+
+### Issue tracker
+
+Issues and specs live as local markdown files under `.scratch/<feature>/`. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+The five default labels: needs-triage, needs-info, ready-for-agent, ready-for-human, wontfix. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: one `CONTEXT.md` and `docs/adr/` at the repo root. See `docs/agents/domain.md`.

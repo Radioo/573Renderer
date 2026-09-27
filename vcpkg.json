@@ -5,31 +5,64 @@
   "description": "573Renderer - standalone AFP renderer + asset dumper for Konami IIDX/SDVX. vcpkg-driven dependency manifest.",
   "dependencies": [
     "catch2",
+    "flatbuffers",
+    "hash-library",
     "nlohmann-json",
-    "tl-expected",
-    {
-      "name": "imgui",
-      "default-features": false,
-      "features": [
-        "dx9-binding",
-        "test-engine",
-        "win32-binding"
+    "rapidfuzz-cpp",
+    "stb",
+    "tl-expected"
+  ],
+  "features": {
+    "editor": {
+      "description": "The Qt 6 IFS editor application",
+      "dependencies": [
+        {
+          "name": "qtbase",
+          "default-features": false,
+          "features": [
+            "concurrent",
+            "gui",
+            "jpeg",
+            "png",
+            "widgets"
+          ]
+        },
+        "qscintilla",
+        "qt-advanced-docking-system",
+        "qtsvg"
       ]
     },
-    {
-      "name": "ffmpeg",
-      "default-features": false,
-      "features": [
-        "aom",
-        "avcodec",
-        "avformat",
-        "swscale",
-        "nvcodec",
-        "vpx",
-        "webp",
-        "x265"
+    "renderer": {
+      "description": "The 573Renderer application and its tools",
+      "dependencies": [
+        {
+          "name": "imgui",
+          "default-features": false,
+          "features": [
+            "dx9-binding",
+            "test-engine",
+            "win32-binding"
+          ]
+        },
+        {
+          "name": "ffmpeg",
+          "default-features": false,
+          "features": [
+            "aom",
+            "avcodec",
+            "avformat",
+            "swscale",
+            "nvcodec",
+            "vpx",
+            "webp",
+            "x265"
+          ]
+        },
+        "dxsdk-d3dx"
       ]
-    },
-    "dxsdk-d3dx"
+    }
+  },
+  "default-features": [
+    "renderer"
   ]
 }

@@ -62,15 +62,44 @@ PNG each, so a layer can be classified by what it draws instead of by its name:
 The third argument is how many frames to sample per animation. This is a required
 step before a layer may go into a scene preset: `docs/preset_layers.md`.
 
+## The IFS editor
+
+A separate Qt 6 application for editing an IFS package's animations: the
+package, a library of characters, a stage previewed through the game's own
+engine, a timeline with keyframes and a graph editor.
+
+```bash
+editoruild.bat
+```
+
+It builds into `build-editor/` with its own vcpkg feature, so building the
+renderer never builds Qt. `build-editor/ifs_editor_shot.exe` opens the same
+window off-screen and writes a PNG, which is how a visual change is checked:
+`docs/editor.md`.
+
 ## Tests and verification
 
 ```
-ctest --test-dir build -L ci          # hosted-CI tier (no game data needed)
-ctest --test-dir build -L local_dll   # real-DLL contract tier (needs R573_*_DIR env vars)
+ctest --test-dir build -L ci          # hosted-CI suite (no game data needed)
+ctest --test-dir build -L local_dll   # real-DLL contract suite (needs R573_*_DIR env vars)
 python tools/local/render_regression.py   # 3-game byte-compare net (machine-local baselines)
 ```
 
 Every quality rule is machine-enforced; see `docs/gates.md`.
+
+## Reading a table out of a game DLL
+
+`tools/local/afp_builtin_names.py` writes `src/formats/afp_script_names_data.h`
+from afp-core's own builtin name table, which is what names the calls in the
+script editor. Run it from `tools/local` (a uv project, so `pefile` is already
+there):
+
+```bash
+uv run afp_builtin_names.py --dll <afp-core.dll> --names 0x... --index 0x... --blocks 0x...
+```
+
+`docs/formats.md` says how to find the three addresses in a newer DLL, and
+`docs/local_regression.md` says what to run afterwards.
 
 ## Documentation
 

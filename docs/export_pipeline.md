@@ -656,9 +656,9 @@ branch in the switch tables; CLI, dropdowns and the export pipeline pick it
 up for free. The Sink mirrors the original VideoEncoder::Encoder surface
 (Open/SubmitFrame/Finish/Cancel) so call sites could switch with no shape
 changes - only the type name and Open() (was Create()). Params parallels
-VideoEncoder::Params: out dims 0 = no scale; video sinks downscale via
-sws_scale, image-sequence sinks IGNORE out dims and always write
-src dimensions; quality is ignored by PNG_Sequence; output_path may be a
+VideoEncoder::Params: out dims 0 = no scale; every sink scales with the same
+sws_scale, so a PNG sequence lands at the size the export asked for just as a
+video does; quality is ignored by PNG_Sequence; output_path may be a
 single file or a directory depending on WritesDirectory(format) (see
 docs/media_formats.md).
 
@@ -670,6 +670,16 @@ PNG-sequence backend (WIC):
 - One PNG per captured frame, frame_NNNNNN.png (6-digit zero-pad so a
   directory listing sorts in capture order). Zlib compression is baked into
   WIC's PNG codec - no extra config. Pixel format 32bppBGRA.
+- Out dims are honoured. The sink builds one BGRA to BGRA sws_scale context at
+  Open (the same MakeSws the video path uses, so both scale identically) and
+  runs every frame through it before WIC writes. With no out dims, or dims that
+  match the source, no context is made and the frame is written untouched. The
+  crop runs earlier, in Export::SubmitOneFrame, so a crop plus an export size
+  means the cropped rectangle scaled to that size. This was wrong until
+  2026-09-22: the PNG path took out dims and dropped them, so --export-size was
+  silently ignored for PNG while --export-crop worked, and this file described
+  that as intended. `tests/media/media_encode_tests.cpp` now reads the IHDR of
+  the written PNG for both the scaled and the native case.
 - CoInitializeEx is called once at session start and released at session end,
   NOT per frame - per-frame COM init would pay a noticeable cost on 600-frame
   captures. (COM init is reference-counted.)

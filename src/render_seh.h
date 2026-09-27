@@ -15,6 +15,8 @@ struct FaultReport {
     uintptr_t target;
     DWORD op;
     uint64_t regs[16];
+    unsigned long long stack[24];
+    unsigned stack_frames;
 };
 
 FaultReport SafeCallUpdate(afp_do_update_t fn, float dt);

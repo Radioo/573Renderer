@@ -2,7 +2,9 @@
 
 #include "avs_funcs.h"
 #include "support/dll_loader.h"
+#include <cstdint>
 #include <string>
+#include <vector>
 
 namespace AvsManager {
 bool Boot(AvsFuncs& avs);
@@ -16,4 +18,14 @@ bool MountIfsImage(AvsFuncs& avs, const std::string& mountpoint, const std::stri
 void Shutdown(AvsFuncs& avs);
 
 bool IsBooted();
+
+struct MemoryIfs {
+    std::vector<uint8_t> bytes;
+    std::string ramfs_mountpoint;
+    std::string mountpoint;
+};
+
+bool MountMemoryIfs(AvsFuncs& avs, const MemoryIfs& ifs);
+
+void UnmountMemoryIfs(AvsFuncs& avs, const MemoryIfs& ifs);
 }
