@@ -201,10 +201,8 @@ demanded 2283 px, which pushed the stage off the edge of a 1600 px window).
 
 ## The look, and how it is checked
 
-The window follows a design canvas (an artboard set; the link is in
-`.scratch/ifs-editor-redesign/design.local.md`, which is gitignored). Matching
-it is a hard requirement, and a behaviour test cannot see a wrong colour, font
-or metric, so every visual change is checked by looking at the running window.
+A behaviour test cannot see a wrong colour, font or metric, so every visual
+change is checked by looking at the running window.
 
 The interaction rule the design follows: choose the thing first, and its
 actions appear beside it (the selection bar, the inspector, popovers, command
@@ -562,7 +560,13 @@ bar behaves like every other app: with one menu open, pointing at another title
 opens that one, and Left/Right and Alt mnemonics move between them. A tool
 button's `InstantPopup` runs its menu modally, so hovering the next title did
 nothing. `With a menu open, pointing at another title...` in
-`editor/tests/editor_shell_window_tests.cpp` covers it. The tests that walk the
+`editor/tests/editor_shell_window_tests.cpp` covers it. Menu icons are anchored
+to the item's content box (`QMenu::icon { subcontrol-origin: content; }`):
+Qt's default puts them against the menu's left border while the label still
+starts after the item's padding and the icon column, which left a wide gap
+between an icon and its own label. Anchored, the icon sits where icon-less
+menus start their text, a few pixels before its label (`A menu icon sits
+where plain menus start their text...` in the same test file). The tests that walk the
 menus as an index of the commands read `findChild<QMenuBar*>("menus")`. Left to
 right: the `IFS` logo chip, the menus, a divider, undo, redo and the
 history button (SVG icons from the design), then the command search field

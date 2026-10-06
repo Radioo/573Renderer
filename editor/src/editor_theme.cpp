@@ -281,6 +281,7 @@ QMenu { background: %panel; border: 1px solid %edge; padding: 4px 0px; }
 QMenu::item { padding: 5px 22px 5px 22px; color: %text; }
 QMenu::item:selected { background: %chosen; }
 QMenu::item:disabled { color: %faint; }
+QMenu::icon { subcontrol-origin: content; }
 QMenu::separator { height: 1px; background: %line; margin: 4px 8px; }
 
 QStatusBar { background: %panel; border-top: 1px solid %line; color: %faint; }

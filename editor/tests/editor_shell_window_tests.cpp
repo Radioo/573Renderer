@@ -19,6 +19,7 @@
 #include <QDropEvent>
 #include <QDragEnterEvent>
 #include <QComboBox>
+#include <QImage>
 #include <QLabel>
 #include <QList>
 #include <QMenu>
@@ -36,7 +37,11 @@
 #include <QAction>
 #include <QWidget>
 
+#include <algorithm>
 #include <cstdint>
+#include <cstdlib>
+#include <utility>
+#include <vector>
 
 #include "window_test_support.h"
 
@@ -72,6 +77,34 @@ void SendMouse(QWidget& widget, QEvent::Type type, const QPoint& at, Qt::MouseBu
     QMouseEvent event(type, at, widget.mapToGlobal(at), button, held, Qt::NoModifier);
     QApplication::sendEvent(&widget, &event);
     QApplication::processEvents();
+}
+
+constexpr int kMenuBorder = 2;
+constexpr int kInkDifference = 90;
+constexpr int kInkJoin = 3;
+
+std::vector<std::pair<int, int>> InkRuns(QMenu& menu, QAction* action) {
+    menu.resize(menu.sizeHint());
+    const QImage shown = menu.grab().toImage();
+    const QRect row = menu.actionGeometry(action);
+    const QColor behind = shown.pixelColor(row.right() - kMenuBorder, row.center().y());
+    std::vector<std::pair<int, int>> runs;
+    for (int x = row.left() + kMenuBorder; x < row.right() - kMenuBorder; x++) {
+        bool ink = false;
+        for (int y = row.top(); y <= row.bottom() && !ink; y++) {
+            const QColor seen = shown.pixelColor(x, y);
+            ink = std::abs(seen.red() - behind.red()) + std::abs(seen.green() - behind.green()) +
+                      std::abs(seen.blue() - behind.blue()) >
+                  kInkDifference;
+        }
+        if (!ink) continue;
+        if (!runs.empty() && x - runs.back().second <= kInkJoin) {
+            runs.back().second = x;
+            continue;
+        }
+        runs.emplace_back(x, x);
+    }
+    return runs;
 }
 
 QString LabelText(QWidget& window, const QString& name) {
@@ -339,6 +372,38 @@ TEST_CASE("With a menu open, pointing at another title on the top bar opens that
 
     edit->menu()->close();
     QApplication::processEvents();
+}
+
+TEST_CASE("A menu icon sits where plain menus start their text, just before its own label") {
+    Editor::Window window;
+    ShowOffScreen(window);
+    auto* menus = window.findChild<QMenuBar*>("menus");
+    REQUIRE(menus != nullptr);
+    QMenu* plain_menu = nullptr;
+    for (QAction* title : menus->actions()) {
+        const QList<QAction*> held = title->menu()->actions();
+        if (std::ranges::none_of(held, [](const QAction* a) { return !a->icon().isNull(); })) {
+            plain_menu = title->menu();
+            break;
+        }
+    }
+    REQUIRE(plain_menu != nullptr);
+    QAction* edit = MenuTitled(*menus, "&Edit");
+    REQUIRE(edit != nullptr);
+    QAction* undo = edit->menu()->actions().at(0);
+    REQUIRE(!undo->icon().isNull());
+
+    const auto plain = InkRuns(*plain_menu, plain_menu->actions().at(0));
+    const auto iconed = InkRuns(*edit->menu(), undo);
+    REQUIRE(!plain.empty());
+    REQUIRE(iconed.size() >= 2);
+    const int text_starts = plain.front().first;
+    const auto [icon_left, icon_right] = iconed.at(0);
+    const int label_starts = iconed.at(1).first;
+    INFO("plain text at " << text_starts << ", icon " << icon_left << ".." << icon_right
+                          << ", label at " << label_starts);
+    CHECK(std::abs(icon_left - text_starts) <= 3);
+    CHECK(label_starts - icon_right <= 12);
 }
 
 TEST_CASE("Hovering the command search lifts it without clashing with the shortcut chip") {
