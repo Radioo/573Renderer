@@ -21,6 +21,9 @@
 #include <QComboBox>
 #include <QLabel>
 #include <QList>
+#include <QMenu>
+#include <QMenuBar>
+#include <QMouseEvent>
 #include <QPoint>
 #include <QRect>
 #include <QString>
@@ -55,6 +58,20 @@ bool OnTopBar(QWidget& window, const QToolButton* button) {
         if (bar->widgetForAction(action) == button) return action->isVisible();
     }
     return false;
+}
+
+QAction* MenuTitled(const QMenuBar& menus, const QString& title) {
+    for (QAction* action : menus.actions()) {
+        if (action->menu() != nullptr && action->menu()->title() == title) return action;
+    }
+    return nullptr;
+}
+
+void SendMouse(QWidget& widget, QEvent::Type type, const QPoint& at, Qt::MouseButton button) {
+    const Qt::MouseButtons held = type == QEvent::MouseButtonPress ? button : Qt::NoButton;
+    QMouseEvent event(type, at, widget.mapToGlobal(at), button, held, Qt::NoModifier);
+    QApplication::sendEvent(&widget, &event);
+    QApplication::processEvents();
 }
 
 QString LabelText(QWidget& window, const QString& name) {
@@ -294,6 +311,34 @@ TEST_CASE("The start screen lists recent files until one is open, and a drop ope
     CHECK(rows().at(0)->findChild<QLabel*>("recent_name")->text() == "sample.ifs");
     CHECK(rows().at(0)->findChild<QLabel*>("recent_detail")->text().contains("1 animation"));
     QSettings().remove("recent/files");
+}
+
+TEST_CASE("With a menu open, pointing at another title on the top bar opens that menu instead") {
+    Editor::Window window;
+    ShowOffScreen(window);
+    auto* bar = window.findChild<QToolBar*>("top_bar");
+    REQUIRE(bar != nullptr);
+    auto* menus = bar->findChild<QMenuBar*>("menus");
+    REQUIRE(menus != nullptr);
+    CHECK(menus->isVisible());
+    QAction* file = MenuTitled(*menus, "&File");
+    QAction* edit = MenuTitled(*menus, "&Edit");
+    REQUIRE(file != nullptr);
+    REQUIRE(edit != nullptr);
+
+    SendMouse(*menus, QEvent::MouseButtonPress, menus->actionGeometry(file).center(),
+              Qt::LeftButton);
+    CHECK(file->menu()->isVisible());
+    SendMouse(*menus, QEvent::MouseButtonRelease, menus->actionGeometry(file).center(),
+              Qt::LeftButton);
+    CHECK(file->menu()->isVisible());
+
+    SendMouse(*menus, QEvent::MouseMove, menus->actionGeometry(edit).center(), Qt::NoButton);
+    CHECK(edit->menu()->isVisible());
+    CHECK_FALSE(file->menu()->isVisible());
+
+    edit->menu()->close();
+    QApplication::processEvents();
 }
 
 TEST_CASE("Hovering the command search lifts it without clashing with the shortcut chip") {

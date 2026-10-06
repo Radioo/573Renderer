@@ -30,14 +30,15 @@
 namespace Editor {
 
 QMenu* Window::AddMenu(QMenu* parent, const QString& title) {
-    QMenu* menu = parent != nullptr ? parent->addMenu(title) : menuBar()->addMenu(title);
-    if (parent == nullptr) menus_.push_back(menu);
+    QMenu* menu = parent != nullptr ? parent->addMenu(title) : menus_->addMenu(title);
     commands_->ShowAvailabilityIn(menu);
     return menu;
 }
 
 void Window::BuildMenus() {
     search_ = new CommandSearch(this);
+    menus_ = new QMenuBar(this);
+    menus_->setObjectName("menus");
     connect(commands_, &Commands::Refused, this, &Window::ShowRefusal);
     AddFileMenu();
     AddEditMenu();

@@ -32,14 +32,6 @@ things), `find_package` its component, link it, and deploy its plugins with
   maintained set (the editor uses Lucide under `editor/icons/`, licence beside them) and name them
   from code. Copying paths out of the design artboards does not count either: the artboards' icons
   are themselves hand-drawn approximations.
-- Burned (2026-09-20): building the editor UI I needed the design's stroke icons, found no Qt SVG in
-  the build, and started writing a QPainter icon painter instead of adding `qtsvg` to `vcpkg.json`.
-  The user was rightly angry. `qtsvg` + `Qt6::Svg` + the `qsvg`/`qsvgicon` plugins took one edit and
-  renders the design's own SVG paths exactly.
-- Burned again the same day: with Qt SVG linked, I typed 37 icon path bodies into `Icons::Body`
-  instead of fetching an icon set. Several were geometrically wrong - undo drew its arrow head five
-  pixels below the tail it belonged to, which the user spotted on screen and asked whether I had
-  hallucinated the icons. I had. They are Lucide files now.
 
 # THE EDITOR'S LOOK IS CHECKED BY LOOKING AT IT
 
@@ -55,6 +47,10 @@ wrong layout, so:
   they live in the canvas's `project/*.dc.html` files. `editor/src/editor_theme.h` holds the ones
   already lifted out.
 - Never report a UI change as finished without having seen it.
+- **Looking is a check for breakage, not a new task.** The screenshot answers "did my change break
+  or visibly change the screen?" If a behaviour fix shifts something by a few pixels, say so in one
+  line of the reply and STOP. Do not start matching old pixels or the artboard unless the user asked
+  for a visual change.
 - **Every colour pair must clear 4.5:1.** Text the reader has to squint at is a
   defect, not a style choice. The contrast gate (`editor/tests/editor_contrast_window_tests.cpp`
   for the editor, `tests/gui/contrast_tests.cpp` for the renderer's ImGui interface) measures
@@ -102,16 +98,11 @@ data that BOTH the renderer and the test consume (see `GcAnim::FactorsFor` and
 `GcAnim::TexelDiscarded`) so the test cannot drift from what the screen does.
 
 **Verify the test can actually see the bug.** Before trusting a pass, run the
-check against a known-broken input and confirm it fails there. Burned repeatedly
-(2026-08-14, the export rectangle): a check scanned a single pixel column, then a
-later one scanned rows for horizontal steps a full-width band cannot have. Neither
-could fail, both reported success, and the user was told "fixed" three times while
-the bug was untouched.
+check against a known-broken input and confirm it fails there.
 
 **Reproduce the user's exact path before claiming a fix.** Same settings, same
-entry point, same format. That same bug survived because every headless test
-passed a transparent background, a path the UI cannot take for that backend, so
-the broken branch was never executed once.
+entry point, same format. A headless test that takes a path the UI cannot take
+never executes the branch the user hits.
 
 # Resolutions
 

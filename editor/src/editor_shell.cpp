@@ -170,7 +170,6 @@ void Window::BuildTopBar() {
     bar->setMovable(false);
     bar->setFloatable(false);
     bar->setFixedHeight(Theme::kBarHeight);
-    menuBar()->setVisible(false);
     addToolBar(Qt::TopToolBarArea, bar);
 
     auto* logo = new QLabel(tr("IFS"));
@@ -184,16 +183,9 @@ void Window::BuildTopBar() {
     logo->setContentsMargins(0, 0, 0, 0);
     bar->addWidget(Margin(4, 8, logo));
 
-    for (QMenu* menu : menus_) {
-        auto* opens = new QToolButton;
-        opens->setObjectName("menu_button");
-        opens->setText(menu->title());
-        opens->setMenu(menu);
-        opens->setPopupMode(QToolButton::InstantPopup);
-        opens->setToolButtonStyle(Qt::ToolButtonTextOnly);
-        opens->setFixedHeight(Theme::kBarControl);
-        bar->addWidget(opens);
-    }
+    menus_->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    menus_->setFixedHeight(Theme::kBarControl);
+    bar->addWidget(menus_);
     bar->addWidget(Divider());
 
     undo_action_->setIcon(Icons::Of(Icons::Glyph::Undo, Theme::kSoft));

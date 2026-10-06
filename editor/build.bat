@@ -52,7 +52,11 @@ if exist "%ROOT%\build-editor\CMakeCache.txt" (
     )
 )
 
-cmake --build --preset editor
+if "%~1"=="" (
+    cmake --build --preset editor
+) else (
+    cmake --build --preset editor --target %*
+)
 set "BUILD_RC=%ERRORLEVEL%"
 if not "%BUILD_RC%"=="0" (
     echo Editor build FAILED with exit code %BUILD_RC%

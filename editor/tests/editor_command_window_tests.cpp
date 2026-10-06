@@ -30,6 +30,12 @@ bool InMenus(const QList<QAction*>& actions, const QAction* wanted) {
     });
 }
 
+QList<QAction*> MenusOf(const Editor::Window& window) {
+    auto* menus = window.findChild<QMenuBar*>("menus");
+    REQUIRE(menus != nullptr);
+    return menus->actions();
+}
+
 QMenu* MenuHolding(const QList<QAction*>& actions, const QAction* wanted) {
     for (const QAction* action : actions) {
         QMenu* menu = action->menu();
@@ -52,7 +58,7 @@ TEST_CASE("Every command is in a menu and no two commands share a shortcut") {
         QAction* action = commands.Action(id);
         REQUIRE(action != nullptr);
         INFO(id.toStdString());
-        CHECK(InMenus(window.menuBar()->actions(), action));
+        CHECK(InMenus(MenusOf(window), action));
         const QString keys = action->shortcut().toString();
         if (keys.isEmpty()) continue;
         const auto [at, fresh] = taken.emplace(keys, id);
@@ -132,7 +138,7 @@ TEST_CASE("A command that cannot run says why, greys out in its menu and changes
     CHECK_FALSE(commands.Run("depth.split"));
 
     QAction* split = commands.Action("depth.split");
-    QMenu* menu = MenuHolding(opened.window.menuBar()->actions(), split);
+    QMenu* menu = MenuHolding(MenusOf(opened.window), split);
     REQUIRE(menu != nullptr);
     emit menu->aboutToShow();
     CHECK_FALSE(split->isEnabled());

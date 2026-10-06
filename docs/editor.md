@@ -555,11 +555,16 @@ the window exists.
 ### Top bar
 
 A fixed tool bar (`top_bar`, `editor_shell.cpp`) is the window's only visible
-chrome above the panels. The menu bar is built as usual but hidden
-(`menuBar()->setVisible(false)`); every top-level menu is also opened by a flat
-button on the bar (`menu_button`), so the menus stay a full index of the
-commands and the tests that walk `menuBar()->actions()` still see them. Left to
-right: the `IFS` logo chip, the menu buttons, a divider, undo, redo and the
+chrome above the panels. The menus live in a real `QMenuBar` (`menus`, built in
+`BuildMenus` and placed on the bar); the window's own `menuBar()` is never
+created. A `QMenuBar` and not one `QToolButton` per menu, because only the menu
+bar behaves like every other app: with one menu open, pointing at another title
+opens that one, and Left/Right and Alt mnemonics move between them. A tool
+button's `InstantPopup` runs its menu modally, so hovering the next title did
+nothing. `With a menu open, pointing at another title...` in
+`editor/tests/editor_shell_window_tests.cpp` covers it. The tests that walk the
+menus as an index of the commands read `findChild<QMenuBar*>("menus")`. Left to
+right: the `IFS` logo chip, the menus, a divider, undo, redo and the
 history button (SVG icons from the design), then the command search field
 (`search`: a button with the search glyph, the placeholder and a `Ctrl K` chip,
 centred in what the bar has left), then the document group and the Save button.

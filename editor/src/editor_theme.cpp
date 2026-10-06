@@ -273,9 +273,10 @@ QWidget { background: %page; color: %text; }
 QMainWindow::separator { background: %page; width: 4px; height: 4px; }
 QToolTip { background: %panel; color: %text; border: 1px solid %edge; padding: 3px 6px; }
 
-QMenuBar { background: %panel; color: %soft; padding: 0px; }
+QMenuBar { background: %panel; color: %soft; padding: 0px; spacing: 2px; font-size: 13px; }
 QMenuBar::item { background: transparent; padding: 6px 8px; color: %soft; }
 QMenuBar::item:selected { background: %field; color: %text; }
+QMenuBar::item:pressed { background: %field; color: %text; }
 QMenu { background: %panel; border: 1px solid %edge; padding: 4px 0px; }
 QMenu::item { padding: 5px 22px 5px 22px; color: %text; }
 QMenu::item:selected { background: %chosen; }
@@ -295,9 +296,6 @@ QToolBar { background: %panel; border: 0px; border-bottom: 1px solid %line; spac
 QToolBar::separator { background: %edge; width: 1px; height: 20px; margin: 0px 6px; }
 QWidget#divider { background: %edge; }
 QLabel#logo { background: %accent; color: %onaccent; }
-QToolButton#menu_button { color: %soft; padding: 0px 8px; font-size: 13px; }
-QToolButton#menu_button::menu-indicator { image: none; width: 0px; }
-QToolButton#menu_button:hover { background: %field; color: %text; }
 QToolButton#bar_icon { padding: 0px; }
 QPushButton#search { background: %field; border: 1px solid %edge; padding: 0px; }
 QPushButton#search:hover { background: %line; }

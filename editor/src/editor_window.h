@@ -58,6 +58,7 @@ class QComboBox;
 class QLabel;
 class QToolButton;
 class QMenu;
+class QMenuBar;
 class QScrollArea;
 class QSpinBox;
 class QWidget;
@@ -166,7 +167,7 @@ private:
     void ShowResult(const QString& what, bool undoable);
     void BuildTopBar();
     [[nodiscard]] QWidget* BuildSearchField();
-    std::vector<QMenu*> menus_;
+    QMenuBar* menus_ = nullptr;
     void BuildStatusBar();
     void ShowProjectFolder();
     void OpenSearch();
