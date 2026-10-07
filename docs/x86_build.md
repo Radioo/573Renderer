@@ -467,12 +467,18 @@ clang-tidy runs on the x64 leg only (`run_tidy` matrix flag). The tree is
 arch-independent apart from the few `#ifdef _WIN64` sites, so running it
 twice would just double the slowest CI step.
 
-The x64 leg also checks that `bin/573Encoder.exe` is a 64-bit executable and
-uploads it with the renderer. The x86 leg cannot build it, so a 32-bit
-artefact on its own cannot export; the release merges both legs, which puts
-`573Encoder.exe` next to `573Renderer32.exe`.
+Each leg stages its artefact into a flat `artefact/` folder (the exe and its
+PDB, nothing else), so the zip opens to the files with no `bin/` or build
+folders. The x64 leg also checks that `bin/573Encoder.exe` is a 64-bit
+executable and stages it next to `573Renderer.exe`. The x86 leg cannot build
+it, so the `bundle-win32` job, after both legs, downloads the two artefacts,
+copies `573Encoder.exe` and its PDB into the x86 set and re-uploads
+`renderer-win32-*` in place (`overwrite: true`); the 32-bit zip then exports
+on its own. `preview_host.exe` is only the editor's helper and travels in
+its own `preview-host-win64-*` artefact.
 
-Releasing is a SEPARATE `release` job gated on `needs: windows` plus the
+Releasing is a SEPARATE `release` job gated on `needs: bundle-win32` plus the
 `v*` tag, which downloads both artefacts and publishes them in one release.
+Both carry the same `573Encoder.exe`, so merging them leaves one copy.
 Doing it inside the matrix would have two jobs racing to create the same
 release.

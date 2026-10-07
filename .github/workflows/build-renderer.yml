@@ -154,19 +154,64 @@ jobs:
             throw ("$exe has PE machine 0x{0:x}, expected 0x{1:x} for ${{ matrix.arch }}" -f $machine, $expected)
           }
 
+      - name: Stage artefact
+        run: |
+          New-Item -ItemType Directory -Force artefact | Out-Null
+          Copy-Item "bin\${{ matrix.exe }}", "bin\${{ matrix.pdb }}" artefact
+          if ("${{ matrix.arch }}" -eq "x64") {
+            Copy-Item "bin\573Encoder.exe", "bin\573Encoder.pdb" artefact
+          }
+          Get-ChildItem artefact | Format-Table Name, Length
+
       - name: Upload artefact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}-${{ github.sha }}
+          path: artefact/
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload the preview host for the editor
+        if: matrix.arch == 'x64'
+        uses: actions/upload-artifact@v4
+        with:
+          name: preview-host-win64-${{ github.sha }}
           path: |
-            bin/${{ matrix.exe }}
-            bin/${{ matrix.pdb }}
-            bin/573Encoder.exe
-            bin/573Encoder.pdb
             ${{ matrix.build_dir }}/preview_host.exe
             ${{ matrix.build_dir }}/preview_host.pdb
           if-no-files-found: error
           retention-days: 30
+
+  bundle-win32:
+    name: Add the 64-bit encoder to the x86 artefact
+    runs-on: ubuntu-latest
+    needs: windows
+    steps:
+      - name: Download the x86 artefact
+        uses: actions/download-artifact@v4
+        with:
+          name: renderer-win32-${{ github.sha }}
+          path: win32
+
+      - name: Download the x64 artefact
+        uses: actions/download-artifact@v4
+        with:
+          name: renderer-win64-${{ github.sha }}
+          path: win64
+
+      - name: Put 573Encoder next to 573Renderer32
+        run: |
+          cp win64/573Encoder.exe win64/573Encoder.pdb win32/
+          ls -la win32
+
+      - name: Replace the x86 artefact
+        uses: actions/upload-artifact@v4
+        with:
+          name: renderer-win32-${{ github.sha }}
+          path: win32/
+          if-no-files-found: error
+          retention-days: 30
+          overwrite: true
 
   editor:
     name: Editor (Windows x64, RelWithDebInfo)
@@ -235,8 +280,8 @@ jobs:
       - name: Take the preview host from the renderer build
         uses: actions/download-artifact@v4
         with:
-          name: renderer-win64-${{ github.sha }}
-          path: renderer-build
+          name: preview-host-win64-${{ github.sha }}
+          path: preview-host
 
       - name: Set up uv
         uses: astral-sh/setup-uv@v5
@@ -245,7 +290,7 @@ jobs:
           cache-dependency-glob: tools/ci/uv.lock
 
       - name: Stage what ships
-        run: uv run --project tools/ci python tools/ci/stage_editor.py --editor build-editor --host renderer-build/build --into dist
+        run: uv run --project tools/ci python tools/ci/stage_editor.py --editor build-editor --host preview-host --into dist
 
       - name: The staged editor starts
         run: uv run --project tools/ci python tools/ci/check_editor_starts.py --dist dist
@@ -325,7 +370,7 @@ jobs:
   release:
     name: Release (x64 + x86)
     runs-on: ubuntu-latest
-    needs: windows
+    needs: bundle-win32
     if: startsWith(github.ref, 'refs/tags/v')
     steps:
       - name: Download build artefacts
