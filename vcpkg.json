@@ -58,6 +58,7 @@
             "x265"
           ]
         },
+        "boost-interprocess",
         "dxsdk-d3dx"
       ]
     }

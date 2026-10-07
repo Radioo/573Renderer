@@ -35,6 +35,10 @@ build.bat
 CMake presets + vcpkg (manifest mode, pinned toolchain). Details, including
 the ffmpeg feature set and the x265-alpha overlay port: `docs/build.md`.
 
+`build32.bat` builds the 32-bit renderer for the 32-bit games. It exports
+through `bin/573Encoder.exe`, which `build.bat` builds, so run both
+(`docs/x86_build.md`).
+
 ## Editing a scene preset
 
 Every shipped screen is a JSON timeline document: tracks of clips on a frame axis,

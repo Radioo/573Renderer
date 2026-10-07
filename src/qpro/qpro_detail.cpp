@@ -4,6 +4,7 @@
 
 #include "avs_funcs.h"
 #include "avs_xml.h"
+#include "encode/export_encoder.h"
 #include "formats/bgra_crop.h"
 #include "mc_control.h"
 #include "media/media_format.h"
@@ -112,7 +113,7 @@ bool g_clip_dump_raw = false;
 
 bool WriteStillAvif(const std::string& path, const uint8_t* bgra, int w, int h, int quality) {
     if (w <= 0 || h <= 0) return false;
-    MediaSink::Sink sink;
+    ExportEncoder::Sink sink;
     MediaSink::Params p;
     p.output_path = path;
     p.format = MediaSink::Format::AVIF;

@@ -1,4 +1,5 @@
 #include <cstdio>
+#include "encode/export_encoder.h"
 #include "engine_session.h"
 #include "formats/bgra_crop.h"
 #include <utility>
@@ -319,7 +320,7 @@ int EncodeClipFrames(const std::string& out_path, const ClipFrames& cf, const ch
                      MediaSink::Format format) {
     if (cf.cw <= 0 || cf.ch <= 0 || cf.frames.empty()) return 0;
     int const nframes = (int)cf.frames.size();
-    MediaSink::Sink sink;
+    ExportEncoder::Sink sink;
     MediaSink::Params p;
     p.output_path = out_path;
     p.format = format;

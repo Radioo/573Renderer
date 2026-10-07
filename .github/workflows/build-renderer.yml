@@ -129,6 +129,13 @@ jobs:
           if (!(Test-Path "${{ matrix.build_dir }}\preview_host.exe")) {
             throw "${{ matrix.build_dir }}\preview_host.exe not produced by build"
           }
+          if ("${{ matrix.arch }}" -eq "x64") {
+            $encoder = [System.IO.File]::ReadAllBytes("bin\573Encoder.exe")
+            $encoderPe = [BitConverter]::ToInt32($encoder, 0x3C)
+            if ([BitConverter]::ToUInt16($encoder, $encoderPe + 4) -ne 0x8664) {
+              throw "bin\573Encoder.exe is not a 64-bit executable"
+            }
+          }
           $exe = "bin\${{ matrix.exe }}"
           if (!(Test-Path $exe)) {
             throw "$exe not produced by build"
@@ -154,6 +161,8 @@ jobs:
           path: |
             bin/${{ matrix.exe }}
             bin/${{ matrix.pdb }}
+            bin/573Encoder.exe
+            bin/573Encoder.pdb
             ${{ matrix.build_dir }}/preview_host.exe
             ${{ matrix.build_dir }}/preview_host.pdb
           if-no-files-found: error

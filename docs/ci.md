@@ -71,7 +71,9 @@ structured to pay that only when the dependency set actually changes.
 - "Verify build output" fails loudly if `bin/573Renderer.exe` is missing or
   suspiciously small (< 1 MB = the link probably failed);
   `actions/upload-artifact` would otherwise silently upload an empty
-  directory.
+  directory. On the x64 leg it also checks that `bin/573Encoder.exe` is a
+  64-bit executable; the x64 artefact carries it because the 32-bit renderer
+  encodes through it (docs/x86_build.md).
 
 ## clang-tidy legs
 

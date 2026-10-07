@@ -646,6 +646,12 @@ default) query av1_nvenc. Formats with no hardware path (WebP/VP9) still
 report based on the default probe - the GUI gates those out separately via
 format_can_use_hw.
 
+The 32-bit build runs this probe, and every encode, in `573Encoder.exe`,
+a 64-bit child, because RTX 50 cards refuse the 32-bit CUDA context NVENC
+opens. Callers reach the right one through `ExportEncoder::Sink` and
+`ExportEncoder::HardwareAvailable` (`src/encode/export_encoder.h`); see
+docs/x86_build.md, "Encoding runs in a 64-bit child".
+
 ## 10. MediaSink::Sink internals (src/media_sink.*)
 
 The unified "give me frames, I'll write them to disk" surface the Export

@@ -121,6 +121,13 @@ owns them.
   presets set `VCPKG_HOST_TRIPLET` to `x64-windows`; a build directory
   configured before that setting existed needs `cmake --preset dev` once,
   because regenerating from ninja does not re-read preset variables.
+- `boost-interprocess` (Boost Software Licence, `Boost::interprocess` through
+  `find_package(Boost REQUIRED COMPONENTS interprocess)` in
+  `cmake/r573_encode.cmake`): the shared-memory frame section between the
+  32-bit renderer and `573Encoder.exe` (`src/encode/frame_section.*`,
+  docs/x86_build.md). The same file generates `encode_host_generated.h` from
+  `src/encode/encode_host.fbs` with the port's `flatc`, and builds
+  `573Encoder.exe` into `bin/` on x64 only.
 - `vcpkg-overlays/` overrides registry ports. It ships an x265 overlay with
   `-DENABLE_ALPHA=ON` so ffmpeg's libx265 wrapper can emit HEVC-with-alpha
   (Safari-compatible transparent video); stock vcpkg x265 builds alpha OFF.

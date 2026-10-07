@@ -485,6 +485,7 @@ set_target_properties(renderer PROPERTIES
 
 enable_testing()
 include(Catch)
+include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/r573_encode.cmake")
 
 add_executable(formats_tests
     tests/formats/ddr_arc_tests.cpp
