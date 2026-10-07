@@ -48,7 +48,6 @@ int QproLimit();
 int CountWithPrefix(const TexList& tl, const char* prefix);
 int RenderClipAvif(EngineSession& es, D3D9State& d3d, const std::string& out_path, int fps,
                    const char* label, int fcx = 0, int fcy = 0, int fcw = 0, int fch = 0);
-bool WritePngBGRA(const std::string& path, const uint8_t* bgra, int w, int h);
 bool WriteStillAvif(const std::string& path, const uint8_t* bgra, int w, int h, int quality);
 std::string AvifPathToPng(const std::string& avif_path);
 int WriteStillFrameWithDump(const std::string& out_path, const ClipFrames& cf);

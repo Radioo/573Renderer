@@ -22,10 +22,12 @@ struct Options {
     std::vector<SubLayerOverride> sublayer_overrides;
     std::vector<std::string> submonitor_frames;
     std::vector<std::string> alongside_ifs;
+    std::vector<std::string> bitmap_packages;
     std::string startup_ifs;
     std::string animation_name;
     std::string animation_label;
     std::string goto_label;
+    std::string iidx_playfield;
     std::string game_dir;
     std::string game_profile;
     std::string extract_qpro_dir;
@@ -55,6 +57,7 @@ struct Options {
     float afp_speed = 0.0F;
     int continuous_loop_mode = 0;
     int root_loop_mode = -1;
+    int stretch_16_9 = -1;
     int seek_frame = -1;
     int mc_name_type = 0;
     int render_width = 0;

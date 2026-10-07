@@ -48,6 +48,17 @@ typedef int (*ddr_afp_stream_set_name_call_t)(uint32_t stream_id, const char* na
 typedef uint32_t (*ddr_afp_layer_create_t)(uint32_t stream_id, const char* layer_name);
 typedef int (*ddr_afp_check_src_t)(void* afp_data, const void* byteorder_info);
 
+typedef int (*ddr_afp_mc_set_param_t)(uint32_t mc_id, uint32_t code, ...);
+typedef int (*ddr_afp_mc_traversal_t)(int mc_id, int direction);
+typedef int (*ddr_afp_mc_search_t)(uint32_t mc_id, const char* name);
+typedef int (*ddr_afp_mc_load_bitmap_t)(uint32_t mc_id, const char* bitmap_name);
+typedef uint32_t (*ddr_afp_sprite_layer_create_t)(const char* bitmap_name, int level);
+typedef int (*ddr_afp_layer_change_sprite_t)(uint32_t layer_id, const char* bitmap_name);
+typedef void (*ddr_afp_once_sprite_layer_reset_t)();
+typedef int (*ddr_afp_layer_set_mask_t)(uint32_t layer_id, int x, int y, int w, int h);
+typedef int (*ddr_afp_layer_set_position_t)(uint32_t layer_id, const float* xy);
+typedef int (*ddr_afp_layer_set_color_t)(uint32_t layer_id, float r, float g, float b, float a);
+
 struct AfpDdrFuncs {
     ddr_afp_boot_t afp_boot = nullptr;
     ddr_afp_shutdown_t afp_shutdown = nullptr;
@@ -89,6 +100,27 @@ struct AfpDdrFuncs {
     ddr_afp_stream_set_name_call_t afp_stream_set_name_call = nullptr;
     ddr_afp_layer_create_t afp_layer_create = nullptr;
     ddr_afp_check_src_t afp_check_src = nullptr;
+
+    ddr_afp_mc_set_param_t afp_mc_set_param = nullptr;
+    ddr_afp_mc_traversal_t afp_mc_traversal = nullptr;
+    ddr_afp_mc_search_t afp_mc_search = nullptr;
+    ddr_afp_mc_load_bitmap_t afp_mc_load_bitmap = nullptr;
+    ddr_afp_sprite_layer_create_t afp_sprite_layer_create = nullptr;
+    ddr_afp_layer_change_sprite_t afp_layer_change_sprite = nullptr;
+    ddr_afp_once_sprite_layer_reset_t afp_once_sprite_layer_reset = nullptr;
+    ddr_afp_layer_set_mask_t afp_layer_set_mask = nullptr;
+    ddr_afp_layer_set_position_t afp_layer_set_position = nullptr;
+    ddr_afp_layer_set_color_t afp_layer_set_color = nullptr;
+
+    [[nodiscard]] bool HasClipControlApi() const {
+        return afp_layer_mc_refer != nullptr && afp_mc_get_param != nullptr &&
+               afp_mc_set_param != nullptr && afp_mc_traversal != nullptr;
+    }
+
+    [[nodiscard]] bool HasSpriteOverlayApi() const {
+        return afp_sprite_layer_create != nullptr && afp_layer_set_position != nullptr &&
+               afp_layer_set_mask != nullptr && afp_layer_set_priority != nullptr;
+    }
 
     [[nodiscard]] bool HasSplitRenderApi() const {
         return afp_do_render == nullptr && afp_render_all != nullptr;
@@ -180,6 +212,16 @@ struct AfpDdrFuncs {
         DDR_LOAD(loader, afp_stream_set_name_call);
         DDR_LOAD(loader, afp_layer_create);
         DDR_LOAD(loader, afp_check_src);
+        DDR_LOAD(loader, afp_mc_set_param);
+        DDR_LOAD(loader, afp_mc_traversal);
+        DDR_LOAD(loader, afp_mc_search);
+        DDR_LOAD(loader, afp_mc_load_bitmap);
+        DDR_LOAD(loader, afp_sprite_layer_create);
+        DDR_LOAD(loader, afp_layer_change_sprite);
+        DDR_LOAD(loader, afp_once_sprite_layer_reset);
+        DDR_LOAD(loader, afp_layer_set_mask);
+        DDR_LOAD(loader, afp_layer_set_position);
+        DDR_LOAD(loader, afp_layer_set_color);
 
         const bool can_render = (afp_do_render != nullptr) || (afp_render_all != nullptr);
         const bool can_display = (afp_do_display != nullptr) || (afp_display_layer != nullptr);

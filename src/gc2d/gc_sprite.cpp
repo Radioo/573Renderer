@@ -34,7 +34,8 @@ void AppendCell(const SysIdx::Package& index, const SpriteDraw& sprite, float x,
 }
 
 void AppendAnimation(const SysIdx::Package& index, const SpriteDraw& sprite, float x,
-                     std::vector<GcAnim::DrawNode>& out) {
+                     std::vector<GcAnim::DrawNode>& out,
+                     std::vector<GcAnim::ElementNode>* elements) {
     const auto it = index.animation_names.find(sprite.name);
     if (it == index.animation_names.end()) return;
     const int length = SysIdx::AnimationLength(index, it->second);
@@ -50,7 +51,7 @@ void AppendAnimation(const SysIdx::Package& index, const SpriteDraw& sprite, flo
     }
     std::vector<GcAnim::DrawNode> scratch;
     GcAnim::Evaluate(index, it->second, frame, x, sprite.y, scratch,
-                     GcAnim::SkipSet{.children = skip_children, .cells = skip_cells});
+                     GcAnim::SkipSet{.children = skip_children, .cells = skip_cells}, elements);
     out.insert(out.end(), scratch.begin(), scratch.end());
 }
 
@@ -128,11 +129,11 @@ std::vector<std::string> PartNames(const SysIdx::Package& index, const std::stri
 }
 
 void AppendNodes(const SysIdx::Package& index, const SpriteDraw& sprite, const Canvas& canvas,
-                 std::vector<GcAnim::DrawNode>& out) {
+                 std::vector<GcAnim::DrawNode>& out, std::vector<GcAnim::ElementNode>* elements) {
     const std::size_t from = out.size();
     const float x = sprite.x - ScrollOffset(sprite);
     if (sprite.animated) {
-        AppendAnimation(index, sprite, x, out);
+        AppendAnimation(index, sprite, x, out, elements);
     } else {
         AppendCell(index, sprite, x, out);
     }

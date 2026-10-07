@@ -7,8 +7,13 @@
 class DllLoader;
 struct AvsFuncs;
 struct D3D9State;
+struct AfpDdrFuncs;
 
 namespace DdrAfp {
+
+const AfpDdrFuncs& Funcs();
+
+bool LoadTxp2Bitmaps(AvsFuncs& avs, const std::string& disk_path);
 
 bool Boot(DllLoader& afp_dll, DllLoader& afpu_dll, D3D9State& d3d);
 

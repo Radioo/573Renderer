@@ -205,6 +205,38 @@ size_t WalkSections(const Reader& r, Package& out, Sections& sec) {
 
 }
 
+int BytesPerTexel(int format) {
+    switch (format) {
+    case 15:
+        return 3;
+    case 16:
+    case 17:
+    case 21:
+    case 22:
+        return 4;
+    default:
+        return 0;
+    }
+}
+
+bool TexelsToBgra(int format, int width, int height, std::span<const uint8_t> pixels,
+                  std::vector<uint8_t>& out) {
+    const int bpp = BytesPerTexel(format);
+    if (bpp == 0 || width <= 0 || height <= 0) return false;
+    const std::size_t texels = static_cast<std::size_t>(width) * static_cast<std::size_t>(height);
+    if (pixels.size() < texels * static_cast<std::size_t>(bpp)) return false;
+    out.assign(texels * 4, 0);
+    for (std::size_t i = 0; i < texels; i++) {
+        const std::size_t src = i * static_cast<std::size_t>(bpp);
+        const std::size_t dst = i * 4;
+        out[dst] = pixels[src];
+        out[dst + 1] = pixels[src + 1];
+        out[dst + 2] = pixels[src + 2];
+        out[dst + 3] = (bpp == 3) ? 0xFFU : pixels[src + 3];
+    }
+    return true;
+}
+
 uint32_t SectionDwordCount(uint32_t flag_bit) {
     for (const auto& s : kSections) {
         if (s.bit == flag_bit) return s.dwords;

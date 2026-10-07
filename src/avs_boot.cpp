@@ -6,6 +6,7 @@
 #include <cstdlib>
 #include <cstdint>
 #include <cstring>
+#include <format>
 #include <string>
 
 namespace {
@@ -17,6 +18,8 @@ static const int AVS_STD_HEAP_SIZE = 64 * 1024 * 1024;
 static const int AVS_GHEAP_SIZE = 64 * 1024 * 1024;
 namespace {
 bool g_avs_booted = false;
+bool g_ramfs_registered = false;
+constexpr std::size_t kMaxRamfsSize = 0x7FFFFFFF;
 }
 
 namespace {
@@ -212,6 +215,7 @@ void AvsManager::Shutdown(AvsFuncs& avs) {
     if (g_avs_booted) {
         avs.avs_shutdown();
         g_avs_booted = false;
+        g_ramfs_registered = false;
     }
     if (g_avs_heap != nullptr) {
         free(g_avs_heap);
@@ -221,4 +225,45 @@ void AvsManager::Shutdown(AvsFuncs& avs) {
 
 bool AvsManager::IsBooted() {
     return g_avs_booted;
+}
+
+bool AvsManager::MountMemoryIfs(AvsFuncs& avs, const MemoryIfs& ifs) {
+    if (avs.avs_filesys_ramfs == nullptr) {
+        LOG("AVS", "MountMemoryIfs: this avs2-core build has no known ramfs export");
+        return false;
+    }
+    if (ifs.bytes.empty() || ifs.bytes.size() > kMaxRamfsSize) {
+        LOG("AVS", "MountMemoryIfs: %zu bytes cannot be mapped by ramfs", ifs.bytes.size());
+        return false;
+    }
+    if (!g_ramfs_registered) {
+        int const added = avs.avs_fs_addfs(avs.avs_filesys_ramfs());
+        if (added < 0) {
+            LOG("AVS", "avs_fs_addfs(ramfs) failed: 0x%08x", (unsigned)added);
+            return false;
+        }
+        g_ramfs_registered = true;
+    }
+    const std::string options =
+        std::format("base=0x{:x},size={},mode=ro", reinterpret_cast<uintptr_t>(ifs.bytes.data()),
+                    ifs.bytes.size());
+    int const mapped = avs.avs_fs_mount(ifs.ramfs_mountpoint.c_str(), "", "ramfs", options.c_str());
+    if (mapped < 0) {
+        LOG("AVS", "ramfs mount '%s' failed: 0x%08x", ifs.ramfs_mountpoint.c_str(),
+            (unsigned)mapped);
+        return false;
+    }
+    const std::string image = ifs.ramfs_mountpoint + "/image.bin";
+    if (!MountIfsImage(avs, ifs.mountpoint, image)) {
+        avs.avs_fs_umount(ifs.ramfs_mountpoint.c_str());
+        return false;
+    }
+    return true;
+}
+
+void AvsManager::UnmountMemoryIfs(AvsFuncs& avs, const MemoryIfs& ifs) {
+    int const image = avs.avs_fs_umount(ifs.mountpoint.c_str());
+    int const mapped = avs.avs_fs_umount(ifs.ramfs_mountpoint.c_str());
+    LOG("AVS", "UnmountMemoryIfs('%s', '%s') = 0x%08x, 0x%08x", ifs.mountpoint.c_str(),
+        ifs.ramfs_mountpoint.c_str(), (unsigned)image, (unsigned)mapped);
 }

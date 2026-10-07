@@ -1,8 +1,10 @@
 #include "qpro/qpro_internal.h"
+#include "afp_boot.h"
 #include "engine_session.h"
 
 #include "avs_funcs.h"
 #include "avs_xml.h"
+#include "encode/export_encoder.h"
 #include "formats/bgra_crop.h"
 #include "mc_control.h"
 #include "media/media_format.h"
@@ -13,21 +15,19 @@
 #include "render_seh.h"
 #include "qpro/qpro_status.h"
 #include "qpro/qpro_walk.h"
-#include "support/com_ptr.h"
 #include "support/env.h"
 #include "support/log.h"
+#include "support/png_write.h"
 
 #include <cstdint>
 #include <span>
 #include <cstring>
 #include <d3d9.h>
 #include <filesystem>
-#include <ocidl.h>
 #include <string>
 #include <utility>
 #include <vector>
 #include <windows.h>
-#include <wincodec.h>
 
 namespace QproExtract::detail {
 
@@ -107,67 +107,13 @@ int CountWithPrefix(const TexList& tl, const char* prefix) {
     return count;
 }
 
-namespace {
-
-std::wstring Widen(const std::string& s) {
-    int const n = MultiByteToWideChar(CP_UTF8, 0, s.c_str(), -1, nullptr, 0);
-    std::wstring w;
-    if (n > 0) {
-        w.resize(n - 1);
-        MultiByteToWideChar(CP_UTF8, 0, s.c_str(), -1, w.data(), n);
-    }
-    return w;
-}
-
-struct WicPngTarget {
-    ComInit com;
-    ComPtr<IWICImagingFactory> factory;
-    ComPtr<IWICStream> stream;
-    ComPtr<IWICBitmapEncoder> enc;
-    ComPtr<IWICBitmapFrameEncode> frame;
-    ComPtr<IPropertyBag2> props;
-};
-
-bool OpenPngFrame(WicPngTarget& t, const std::wstring& wpath) {
-    if (FAILED(CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER,
-                                IID_PPV_ARGS(&t.factory)))) {
-        return false;
-    }
-    if (FAILED(t.factory->CreateStream(&t.stream))) return false;
-    if (FAILED(t.stream->InitializeFromFilename(wpath.c_str(), GENERIC_WRITE))) return false;
-    if (FAILED(t.factory->CreateEncoder(GUID_ContainerFormatPng, nullptr, &t.enc))) return false;
-    if (FAILED(t.enc->Initialize(t.stream, WICBitmapEncoderNoCache))) return false;
-    if (FAILED(t.enc->CreateNewFrame(&t.frame, &t.props))) return false;
-    return !FAILED(t.frame->Initialize(t.props));
-}
-
-bool EncodePngPixels(WicPngTarget& t, const uint8_t* bgra, int w, int h) {
-    if (FAILED(t.frame->SetSize((UINT)w, (UINT)h))) return false;
-    WICPixelFormatGUID fmt = GUID_WICPixelFormat32bppBGRA;
-    if (FAILED(t.frame->SetPixelFormat(&fmt))) return false;
-    UINT const stride = (UINT)w * 4;
-    UINT const bufsize = stride * (UINT)h;
-    if (FAILED(t.frame->WritePixels((UINT)h, stride, bufsize, (BYTE*)bgra))) return false;
-    if (FAILED(t.frame->Commit())) return false;
-    return !FAILED(t.enc->Commit());
-}
-
-}
-
-bool WritePngBGRA(const std::string& path, const uint8_t* bgra, int w, int h) {
-    std::wstring const wpath = Widen(path);
-    WicPngTarget t;
-    if (!OpenPngFrame(t, wpath)) return false;
-    return EncodePngPixels(t, bgra, w, h);
-}
-
 bool g_hue_scope_enabled = true;
 
 bool g_clip_dump_raw = false;
 
 bool WriteStillAvif(const std::string& path, const uint8_t* bgra, int w, int h, int quality) {
     if (w <= 0 || h <= 0) return false;
-    MediaSink::Sink sink;
+    ExportEncoder::Sink sink;
     MediaSink::Params p;
     p.output_path = path;
     p.format = MediaSink::Format::AVIF;
@@ -198,7 +144,7 @@ int WriteStillFrameWithDump(const std::string& out_path, const ClipFrames& cf) {
     int n = 0;
     if (WriteStillAvif(out_path, cf.frames[0].data(), cf.cw, cf.ch, kQproAvifQuality)) n = 1;
     if (g_clip_dump_raw) {
-        WritePngBGRA(AvifPathToPng(out_path), cf.frames[0].data(), cf.cw, cf.ch);
+        Support::WritePngBGRA(AvifPathToPng(out_path), cf.frames[0].data(), cf.cw, cf.ch);
     }
     return n;
 }

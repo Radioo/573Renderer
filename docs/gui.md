@@ -1356,10 +1356,21 @@ Other live-control semantics:
   old-era, 520x704 qpro avatar - iidx33 only) because AFP's GetScreenSize callback must
   match the offscreen RT shape or layout coords land wrong. Values clamp to 64..8192.
   640x480 carries no game name because it is the generic pre-HD arcade size rather than any
-  one title's native mode; it is listed inside the landscape group (after 1280x720) because
-  the qpro entry is located POSITIONALLY as `kCustomIdx - 1`, so any new preset must be
-  inserted before it. The export panel's output-resolution list carries the same 640x480
+  one title's native mode. The export panel's output-resolution list carries the same 640x480
   entry, in the same position relative to its trailing Custom row.
+- NO resolution preset is gated on anything. Every preset is offered for every game. The
+  qpro entry used to be hidden unless the slug was literally `iidx33`, which meant it
+  vanished the moment IIDX 34 got its own profile, and it was never the picker's business
+  to decide which sizes a user may want. A `[gui][setup]` test picks the qpro size while a
+  DDR profile is selected.
+- The resolution shown on Setup is the one Load uses. `Load` posts its BootGame with
+  `size_explicit` set, because a size sitting in the picker is a size the user chose;
+  without it `BootFromGameDir` replaced it with the profile's own default and the picker
+  was telling the user something the render never did. Picking a game profile sets the
+  resolution to that profile's default in the same click, so switching to IIDX 27+ still
+  lands on 1920x1080 and the picker keeps saying what will happen. Two `[gui][setup]`
+  tests cover it: one that Load carries the chosen 520x704 through, one that choosing a
+  profile moves the picker.
 - Settings persist to settings.ini on every change (atomic tempfile + rename).
 - The DDR-only Tools (batch .arc extractor, customize image extractor - docs/ddr.md) render
   inside the card, gated on the EFFECTIVE setup selection (explicit combo slug, else
