@@ -470,10 +470,12 @@ beside the editor and then in the renderer's `build/`, which is why a developer
 with both projects built never notices, and why the editor's own build
 directory has no copy.
 
-So the `editor` job `needs` the renderer `windows` job and downloads the x64
-leg's `preview-host-win64-*` artefact (`preview_host.exe` and its PDB, kept
-out of the renderer's own zip), and `tools/ci/stage_editor.py` merges it with
-the editor build into `dist/`: the editor,
+So the `editor` job `needs` the renderer `windows` job, which saves the x64
+`build/preview_host.exe` to the Actions cache under
+`preview-host-<os>-<sha>`. The editor job restores it to the same path
+(`fail-on-cache-miss`), so it is never an artefact of its own: on its own it
+is useless. `tools/ci/stage_editor.py` merges it with the editor build into
+`dist/`: the editor,
 the host, the Qt DLLs and the plugin folders. That folder is the artefact, so
 extracting it gives something that runs.
 

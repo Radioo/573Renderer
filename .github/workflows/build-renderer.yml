@@ -171,16 +171,12 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-      - name: Upload the preview host for the editor
+      - name: Hand the preview host to the editor job
         if: matrix.arch == 'x64'
-        uses: actions/upload-artifact@v4
+        uses: actions/cache/save@v4
         with:
-          name: preview-host-win64-${{ github.sha }}
-          path: |
-            ${{ matrix.build_dir }}/preview_host.exe
-            ${{ matrix.build_dir }}/preview_host.pdb
-          if-no-files-found: error
-          retention-days: 30
+          path: build/preview_host.exe
+          key: preview-host-${{ runner.os }}-${{ github.sha }}
 
   bundle-win32:
     name: Add the 64-bit encoder to the x86 artefact
@@ -278,10 +274,11 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "editor_window_tests failed (exit $LASTEXITCODE)" }
 
       - name: Take the preview host from the renderer build
-        uses: actions/download-artifact@v4
+        uses: actions/cache/restore@v4
         with:
-          name: preview-host-win64-${{ github.sha }}
-          path: preview-host
+          path: build/preview_host.exe
+          key: preview-host-${{ runner.os }}-${{ github.sha }}
+          fail-on-cache-miss: true
 
       - name: Set up uv
         uses: astral-sh/setup-uv@v5
@@ -290,7 +287,7 @@ jobs:
           cache-dependency-glob: tools/ci/uv.lock
 
       - name: Stage what ships
-        run: uv run --project tools/ci python tools/ci/stage_editor.py --editor build-editor --host preview-host --into dist
+        run: uv run --project tools/ci python tools/ci/stage_editor.py --editor build-editor --host build --into dist
 
       - name: The staged editor starts
         run: uv run --project tools/ci python tools/ci/check_editor_starts.py --dist dist

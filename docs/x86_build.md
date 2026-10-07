@@ -474,8 +474,8 @@ executable and stages it next to `573Renderer.exe`. The x86 leg cannot build
 it, so the `bundle-win32` job, after both legs, downloads the two artefacts,
 copies `573Encoder.exe` and its PDB into the x86 set and re-uploads
 `renderer-win32-*` in place (`overwrite: true`); the 32-bit zip then exports
-on its own. `preview_host.exe` is only the editor's helper and travels in
-its own `preview-host-win64-*` artefact.
+on its own. `preview_host.exe` is only the editor's helper: it reaches the
+editor job through the Actions cache, never as an artefact (docs/gates.md).
 
 Releasing is a SEPARATE `release` job gated on `needs: bundle-win32` plus the
 `v*` tag, which downloads both artefacts and publishes them in one release.
