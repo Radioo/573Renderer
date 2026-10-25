@@ -56,7 +56,10 @@ through `Editor::Jobs::Start`, and the window says what it is doing while it run
 
 1. **Reproduce the bug in a test, and watch it FAIL** for the reason the bug describes.
 2. **Fix the app code.**
-3. **Run the test again and confirm it now passes**, then run the full gate (`bash tools/checks.sh`).
+3. **Run the test again and confirm it now passes**, together with the other tests of the target you changed
+   and the quick CI scripts (`tools/ci/check_*.py`, `tools/ci/run_format.py`). **Never run the full gate
+   (`bash tools/checks.sh`)**: it rebuilds every configuration and runs every suite, and takes well over
+   25 minutes. The user runs it.
 
 The test stays and runs in CI under the `ci` label.
 
