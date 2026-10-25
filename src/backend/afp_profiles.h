@@ -15,6 +15,10 @@ struct DllOffsetSet {
     uintptr_t afp_callback_table;
     uintptr_t afp_render_flags;
     uintptr_t afp_nearfar_slot;
+    uintptr_t afp_mc_work_from_id;
+    uintptr_t afp_mc_def_from_work;
+    uintptr_t afp_matrix_stack;
+    uintptr_t afp_matrix_depth;
 
     uintptr_t afpu_data_struct;
     uintptr_t afpu_render_context;

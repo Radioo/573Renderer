@@ -28,9 +28,6 @@ struct Toc {
     [[nodiscard]] bool HasIfs() const;
 };
 
-[[nodiscard]] std::vector<uint8_t> Lz77Decompress(std::span<const uint8_t> src,
-                                                  std::size_t expected_size);
-
 [[nodiscard]] bool ParseToc(std::span<const uint8_t> data, Toc& out);
 
 [[nodiscard]] Support::Expected<Toc, std::string> ReadToc(const std::string& path);

@@ -33,6 +33,10 @@ The old `CMakeLists.txt` hard failure ("This project must be built as
 64-bit") is replaced by a pointer-size switch that sets `R573_ARCH_X64` and
 `R573_ARCH_SUFFIX`.
 
+`573Renderer32.exe` exports through `bin/573Encoder.exe`, which only the
+x64 build (`build.bat`) produces, so a working 32-bit setup needs both
+builds in the same `bin/`. See "Encoding runs in a 64-bit child" below.
+
 ## Configuring dev32 from an IDE (CLion): needs an x86 toolchain
 
 `base32` declares `"architecture": {"value": "x86", "strategy": "external"}`.
@@ -370,6 +374,76 @@ sites need the same slot treatment as `BuildStructs` got, all together.
 GPRs, x86 fills the 8 it has and zeroes the rest (`kRegNames` still prints
 x64 mnemonics, so the last 8 lines read as zeros on x86).
 
+## Encoding runs in a 64-bit child (573Encoder.exe)
+
+RTX 50 cards (Blackwell) and newer do not run 32-bit CUDA programs; NVIDIA's
+driver refuses them on that architecture while RTX 40 and older still accept
+them. ffmpeg's `h264_nvenc` / `av1_nvenc` open their session through CUDA
+whenever they get plain system-memory frames: `nvenc_setup_device` in
+`libavcodec/nvenc.c` only takes its Direct3D 11 branch when it is handed
+D3D11 or CUDA frames or a hardware device context, and otherwise calls
+`cuInit` and `cuDeviceGetCount`. The renderer feeds BGRA from system memory,
+so inside `573Renderer32.exe` the NVENC probe failed on an RTX 5080 and the
+export panel said "h264_nvenc unavailable" while the same build worked on an
+RTX 4070. The decision record is ADR 0008.
+
+The 32-bit build therefore never encodes in process. `ExportEncoder`
+(`src/encode/export_encoder.h`) is the one place that chooses: with
+`R573_REMOTE_ENCODER` defined (CMake defines it on `r573_encode_client` for
+the 32-bit build, and `r573_app` links that library only there) its `Sink`
+is `EncodeClient::Sink` and its `HardwareAvailable` asks the child; on x64 it
+is `MediaSink::Sink` and `VideoEncoder::HardwareAvailable` as before. The
+export session (`export_internal.h`), the export panel's hardware check and
+the Q-pro writers (`qpro_detail.cpp`, `qpro_walk.cpp`) all go through it.
+
+`EncodeClient::Host` (`src/encode/encode_client.*`) starts
+`573Encoder.exe` from the renderer's own directory the first time anything
+needs it and keeps it for the life of the renderer, so the Q-pro extractor's
+hundreds of still AVIFs do not each pay a process start. Calls are serialised
+by a mutex. If the child has exited or a call fails, the connection is
+dropped and the next call starts a fresh child; a sink that was open on the
+dead child gets "no session" from the new one and fails its export with that
+message. Hardware probe verdicts are cached per format in the `Host`, failed
+ones included, because the export panel asks every frame. The cache has its
+own lock, separate from the one that serialises calls, so the panel's
+per-frame lookup never waits behind a long encode or flush.
+
+Each sink is one numbered session. `Open` creates a Boost.Interprocess
+`windows_shared_memory` section named `Local\r573_encode_<pid>_<session>`
+sized for one source frame (`src/encode/frame_section.*`); the child opens it
+by name. `SubmitFrame` copies the frame into the section and sends `Frame`;
+the child encodes straight from the mapping. The copy uses the sink's own
+frame size, never the mapping's, because Windows can round a mapping up to a
+page. `windows_shared_memory` is the native Windows mapping, which disappears
+when its last handle closes, so a crash on either side leaves nothing behind.
+A `Section` is built in place and passed around by `unique_ptr`, never moved:
+Boost's `windows_shared_memory` move constructor swaps with a `mode_t`
+member it has not initialised, which clang-tidy's analyzer reports as an
+uninitialised read.
+
+Control messages are FlatBuffers (`src/encode/encode_host.fbs`) over the same
+length-prefixed named pipe as the preview host (`PreviewChannel`, ADR 0007):
+`Open` (every `MediaSink::Params` field plus the section name), `Frame`,
+`FinishOutput`, `Cancel` and `Probe`, answered by `Opened`
+(whether hardware is in use), `Done`, `Probed` or `Failure` (the sink's
+`LastError()` text). The finish request is not called `Finish`: flatc
+generates a builder class per table, and a table named `Finish` collides
+with the builder's own `Finish()` method. Replies have no timeout: a slow
+AV1 flush is legitimate, and a dead child closes the pipe, which ends the
+wait at once.
+
+`EncodeHost::Session` (`src/encode/host/encode_session.*`) holds one
+`MediaSink::Sink` and its section per open session. When the renderer closes
+the pipe, the child returns from `main`, and every sink still open is
+cancelled by its destructor, which removes partial output.
+
+Tests (`tests/encode/encode_host_tests.cpp`, `ci` label, x64 only because
+the child is a 64-bit build): a PNG sequence with a scaled output size and a
+VP9 WebM through the real child, a failing `Open` coming back as the sink's
+error while the child keeps serving, a missing `573Encoder.exe` named in the
+error, and the session answering a probe and refusing an unknown session.
+Replacing the child's frame handling with a bare `Done` fails the first case.
+
 ## CI
 
 `CMakePresets.json` gains `dev32` / `ci32`. `build-renderer.yml`'s `windows`
@@ -393,7 +467,18 @@ clang-tidy runs on the x64 leg only (`run_tidy` matrix flag). The tree is
 arch-independent apart from the few `#ifdef _WIN64` sites, so running it
 twice would just double the slowest CI step.
 
-Releasing is a SEPARATE `release` job gated on `needs: windows` plus the
+Each leg stages its artefact into a flat `artefact/` folder (the exe and its
+PDB, nothing else), so the zip opens to the files with no `bin/` or build
+folders. The x64 leg also checks that `bin/573Encoder.exe` is a 64-bit
+executable and stages it next to `573Renderer.exe`. The x86 leg cannot build
+it, so the `bundle-win32` job, after both legs, downloads the two artefacts,
+copies `573Encoder.exe` and its PDB into the x86 set and re-uploads
+`renderer-win32-*` in place (`overwrite: true`); the 32-bit zip then exports
+on its own. `preview_host.exe` is only the editor's helper: it reaches the
+editor job through the Actions cache, never as an artefact (docs/gates.md).
+
+Releasing is a SEPARATE `release` job gated on `needs: bundle-win32` plus the
 `v*` tag, which downloads both artefacts and publishes them in one release.
+Both carry the same `573Encoder.exe`, so merging them leaves one copy.
 Doing it inside the matrix would have two jobs racing to create the same
 release.

@@ -170,3 +170,39 @@ TEST_CASE("an animated sprite fades its nodes by the layer alpha") {
     REQUIRE(nodes.size() == 1);
     CHECK(nodes[0].alpha == Catch::Approx(0.25F));
 }
+
+TEST_CASE("an external record reports the element the game draws its own value into") {
+    SysIdx::Package pkg;
+    pkg.cells.push_back(SysIdx::Cell{.x = 0, .y = 0, .w = 32, .h = 16});
+    pkg.cell_names["PANEL"] = 0;
+
+    SysIdx::Record panel;
+    panel.type = SysIdx::kRecDrawCell;
+    panel.id = 0;
+    panel.t_start = 0;
+    panel.t_end = 10;
+    pkg.records.push_back(panel);
+
+    SysIdx::Record slot;
+    slot.type = SysIdx::kRecExternal;
+    slot.id = 109;
+    slot.t_start = 0;
+    slot.t_end = 10;
+    slot.position.push_back(SysIdx::Key{.t = 0, .a = 40, .b = 70});
+    pkg.records.push_back(slot);
+
+    SysIdx::Record end;
+    end.type = SysIdx::kRecEndAnimation;
+    pkg.records.push_back(end);
+    pkg.animation_names["SINGLE"] = 0;
+
+    std::vector<GcAnim::DrawNode> nodes;
+    std::vector<GcAnim::ElementNode> elements;
+    GcAnim::Evaluate(pkg, 0, 0, 0.0F, 0.0F, nodes, {}, &elements);
+
+    CHECK(nodes.size() == 1);
+    REQUIRE(elements.size() == 1);
+    CHECK(elements[0].id == 109);
+    CHECK(elements[0].x == Catch::Approx(40.0F));
+    CHECK(elements[0].y == Catch::Approx(70.0F));
+}

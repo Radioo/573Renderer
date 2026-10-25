@@ -205,13 +205,11 @@ bool ReadAvsFile(AvsFuncs& avs, const std::string& vfs_path, std::vector<uint8_t
     return true;
 }
 
-bool LoadTxp2Package(AvsFuncs& avs, const AfpDdrFuncs& afp, const std::string& vfs_path,
-                     int package_slot, Txp2Loaded& out, std::string& err) {
-    if (!afp.HasTxp2PackageApi()) {
-        err = "this afp build has no afp_stream_create_call / afp_layer_create";
-        return false;
-    }
+void ApplyTxp2ByteOrder(const AfpDdrFuncs& afp, Txp2Loaded& pkg) {
+    ApplyByteOrderFixups(afp, pkg);
+}
 
+bool ReadTxp2Core(AvsFuncs& avs, const std::string& vfs_path, Txp2Loaded& out, std::string& err) {
     if (!ReadAvsFile(avs, vfs_path, out.core, err)) return false;
     LOG("DDR", "read package %s (%zu bytes)", vfs_path.c_str(), out.core.size());
 
@@ -221,14 +219,29 @@ bool LoadTxp2Package(AvsFuncs& avs, const AfpDdrFuncs& afp, const std::string& v
         out.package.flags, out.package.header_size, out.package.core_size,
         out.package.big_endian ? "big" : "little", out.package.appended_block_offset,
         out.package.afp_entries.size(), out.package.textures.size(), out.package.cells.size());
+    return true;
+}
 
-    ApplyByteOrderFixups(afp, out);
+void DecodeTxp2Textures(AvsFuncs& avs, Txp2Loaded& pkg) {
+    DecodeTextures(avs, pkg);
+}
+
+bool LoadTxp2Package(AvsFuncs& avs, const AfpDdrFuncs& afp, const std::string& vfs_path,
+                     int package_slot, Txp2Loaded& out, std::string& err) {
+    if (!afp.HasTxp2PackageApi()) {
+        err = "this afp build has no afp_stream_create_call / afp_layer_create";
+        return false;
+    }
+
+    if (!ReadTxp2Core(avs, vfs_path, out, err)) return false;
+
+    ApplyTxp2ByteOrder(afp, out);
 
     if (afp.afp_set_create_level != nullptr) {
         afp.afp_set_create_level(std::min(package_slot + kCreateLevelBias, kMaxCreateLevel));
     }
 
-    DecodeTextures(avs, out);
+    DecodeTxp2Textures(avs, out);
 
     out.clips.clear();
     out.clips.reserve(out.package.afp_entries.size());

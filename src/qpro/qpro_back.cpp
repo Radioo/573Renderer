@@ -1,6 +1,8 @@
 #include <utility>
 #include "engine_session.h"
 #include "qpro/qpro_internal.h"
+
+#include "backend/afp_profiles.h"
 #include "qpro/qpro_walk.h"
 #include "qpro/qpro_extract.h"
 #include "boot.h"
@@ -369,9 +371,14 @@ int RenderBackComposite(EngineSession& es, D3D9State& d3d, const std::string& ga
 void BackComposite(EngineSession& es, D3D9State& d3d, const std::string& game_dir,
                    const std::string& back_ifs) {
     HMODULE afpcore = GetModuleHandleA("afp-core.dll");
-    auto idx = [&]() -> int { return afpcore ? *(uint16_t*)((uint8_t*)afpcore + 0xE1062) : -1; };
+    const AfpProfiles::DllOffsetSet& moff = AfpProfiles::ActiveOffsets();
+    auto idx = [&]() -> int {
+        if ((afpcore == nullptr) || moff.afp_matrix_depth == 0) return -1;
+        return *(uint16_t*)((uint8_t*)afpcore + moff.afp_matrix_depth);
+    };
     auto tbl = [&]() -> uint64_t {
-        return afpcore ? *(uint64_t*)((uint8_t*)afpcore + 0xE1050) : 0;
+        if ((afpcore == nullptr) || moff.afp_matrix_stack == 0) return 0;
+        return *(uint64_t*)((uint8_t*)afpcore + moff.afp_matrix_stack);
     };
 
     AfpManager::UmountPackagesAndData(es.avs);

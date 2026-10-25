@@ -71,7 +71,10 @@ structured to pay that only when the dependency set actually changes.
 - "Verify build output" fails loudly if `bin/573Renderer.exe` is missing or
   suspiciously small (< 1 MB = the link probably failed);
   `actions/upload-artifact` would otherwise silently upload an empty
-  directory.
+  directory. On the x64 leg it also checks that `bin/573Encoder.exe` is a
+  64-bit executable. Every renderer zip is flat (exes and PDBs, no folders),
+  and the 32-bit one gets `573Encoder.exe` from the `bundle-win32` job,
+  because the 32-bit renderer encodes through it (docs/x86_build.md).
 
 ## clang-tidy legs
 
@@ -152,17 +155,20 @@ the dependency-light pure-logic suites - `gui_tests` links `r573_app`, and with
 it FFmpeg and D3D9, so adding it there would trade a large rebuild for coverage
 of code that is not doing raw buffer decoding.
 
-## Local-only tiers
+## Local-only suites
 
 Tests that need the proprietary game DLLs or real game data can never run
 hosted. They are excluded by CTest label (`ctest -LE local_dll` in CI); the
-DLL-dependent tiers run manually on the owner machine.
+DLL-dependent suites run manually on the owner machine.
 
 ## Local aggregate gate: tools/checks.sh
 
 `bash tools/checks.sh` is the one-command local equivalent of every hosted
 gate and is the required exit criterion for any refactor slice: it runs
-build.bat (dev preset), `ctest -L ci` (locating ctest.exe next to the
+build.bat (dev preset), build32.bat, `editor\build.bat` (checked for its
+"Editor build succeeded" line), the editor's `editor_widget_tests.exe` and
+`editor_window_tests.exe`
+(docs/editor.md), `ctest -L ci` (locating ctest.exe next to the
 cmake.exe recorded in build/CMakeCache.txt, since the VS-bundled toolchain
 is not on the Git Bash PATH), then the gate scripts
 (check_file_length, check_no_comments, check_banned_chars,

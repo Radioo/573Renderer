@@ -535,7 +535,14 @@ COLOROP=BLENDCURRENTALPHA with COLORARG1=CURRENT, COLORARG2=TFACTOR,
 ALPHAOP=SELECTARG1(CURRENT). a=0 texels resolve to 1.0 (multiply no-op) and
 the falloff attenuates correctly, matching how the game (same afp-core,
 same kind=3) composites it. Stage 1 is reset to DISABLE on every SetLayer
-call so a multiply draw's program never leaks into later draws.
+call so a multiply draw's program never leaks into later draws. Fully opaque
+texels come out bit-identical to the plain multiply, so opaque multiply draws
+cannot regress; the change touched only the oval's rows of bg_bpls3 and also
+cleaned bg_bpl and bg_bpls5. Other explanations for the oval (the loop goto
+removing the sprite, a missing scissor band, a different IFS) were each
+refuted by direct test. The method that found the sprite: extract the IFS,
+match a draw's texture and UVs against texturelist.xml, then skip that draw by
+`tex_ref` to confirm.
 
 ### Table B: SetBlend blend_mode
 
@@ -625,10 +632,18 @@ common MAX alpha blend (alpha = max(cov, dst)). The later UnpremultiplyBGRA
 in the export path recovers the straight glow color (rgb / cov) with no hue
 skew; on the consumer this composites approximately as glow-over-anything.
 Black background -> a=0 (transparent); glow -> a > 0. Dead ends that were
-tried and reverted (see also memory notes): plain MAX -> black box;
-luminance alpha -> desaturated; straight-unpremult-of-luminance -> cyan;
-premultiplied-additive a=0 with premultiplied output -> invisible. State is
-reset (shader null, SRCBLEND=SRCALPHA) right after the draw.
+tried and reverted: plain MAX -> black box; luminance alpha -> under-weights
+blue, desaturated dim rays; straight-unpremult-of-luminance -> rgb/lum
+over-amplifies and clamps, cyan; premultiplied-additive a=0
+(SRCBLENDALPHA=ZERO) with premultiplied output -> invisible on a straight
+consumer. The consumer's alpha convention (straight) is what tells these
+apart, so confirm it before changing the alpha math again. State is reset
+(shader null, SRCBLEND=SRCALPHA) right after the draw. The legacy AFP 2.13.7
+backend has no equivalent shader (see docs/blend.md).
+
+To diagnose a new case of this class, `--qpro-clip-one "<ifs>:<clip>"` dumps
+the raw per-frame clip renders and `--qpro-dump <ifs>` writes the atlas
+bitmaps.
 
 ## Texture management
 

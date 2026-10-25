@@ -36,6 +36,12 @@ bool InflateAvsLz(AvsFuncs& avs, const uint8_t* blob, size_t blob_size, std::vec
 bool ReadAvsFile(AvsFuncs& avs, const std::string& vfs_path, std::vector<uint8_t>& out,
                  std::string& err);
 
+void ApplyTxp2ByteOrder(const AfpDdrFuncs& afp, Txp2Loaded& pkg);
+
+bool ReadTxp2Core(AvsFuncs& avs, const std::string& vfs_path, Txp2Loaded& out, std::string& err);
+
+void DecodeTxp2Textures(AvsFuncs& avs, Txp2Loaded& pkg);
+
 bool LoadTxp2Package(AvsFuncs& avs, const AfpDdrFuncs& afp, const std::string& vfs_path,
                      int package_slot, Txp2Loaded& out, std::string& err);
 

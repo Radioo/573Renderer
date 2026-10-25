@@ -64,6 +64,7 @@ bool DdrLoopDetector::AfpLoop(const DdrFeed& in, int cf, const SubmitFn& submit,
     const double wrap_mad = FrameDiffMad(frame0_bgra_, in.bgra);
     if (wrap_mad > kAfpCleanMad && !in.label_active) {
         wrapped_ = false;
+        root_drifted_ = true;
         return false;
     }
     afp_loop_ = true;
@@ -79,14 +80,14 @@ bool DdrLoopDetector::AfpLoop(const DdrFeed& in, int cf, const SubmitFn& submit,
     return true;
 }
 
-bool DdrLoopDetector::ContentLoop(const DdrFeed& in, double mad, const SubmitFn& submit,
-                                  DdrResult& result) {
+bool DdrLoopDetector::ContentLoop(const DdrFeed& in, double mad, bool allowed,
+                                  const SubmitFn& submit, DdrResult& result) {
     loop_max_mad_ = std::max(mad, loop_max_mad_);
     if (loop_max_mad_ > kDivergedMad) loop_diverged_ = true;
 
     const double deep = loop_max_mad_ * kDeepFraction;
-    const bool at_loop = loop_diverged_ && loop_seen_ >= kMinLoopFrames && loop_held_mad_ < deep &&
-                         mad > loop_held_mad_;
+    const bool at_loop = allowed && loop_diverged_ && loop_seen_ >= kMinLoopFrames &&
+                         loop_held_mad_ < deep && mad > loop_held_mad_;
     if (!at_loop) return false;
 
     if (++loops_done_ >= in.loop_count) {
@@ -122,7 +123,7 @@ DdrResult DdrLoopDetector::Feed(const DdrFeed& in, const SubmitFn& submit) {
     if (afp_ok && cf >= 0 && AfpLoop(in, cf, submit, result)) return result;
 
     const double mad = FrameDiffMad(frame0_bgra_, in.bgra);
-    if (!afp_loop_ && ContentLoop(in, mad, submit, result)) return result;
+    if (!afp_loop_ && ContentLoop(in, mad, !afp_ok || root_drifted_, submit, result)) return result;
 
     CaptureTail(in, mad, submit);
     return result;

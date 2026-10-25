@@ -19,6 +19,8 @@ working tree with: `git rm --cached -r . && git reset --hard`.
 |---|---|
 | `build.bat` | Local developer build: locates VS via vswhere, runs `vcvarsall x64`, bootstraps the vcpkg submodule if needed, then `cmake --preset dev` + `cmake --build --preset dev`. |
 | `CMakePresets.json` | Single source of truth for configure/build knobs. `dev` = local, `ci` = same plus `CMAKE_COMPILE_WARNING_AS_ERROR=ON`. CI and build.bat both go through presets so the two can never drift. |
+| `editor/build.bat` | Local build of the Qt editor: same vswhere + vcvarsall shape, then `cmake --preset editor` + `cmake --build --preset editor` into `build-editor/`. Target names as arguments build only those (`editor\build.bat editor_window_tests ifs_editor_shot`), which still works while `ifs_editor.exe` is running and holds its own file locked. See docs/editor.md. |
+| `editor` preset | Same project, dynamic `x64-windows` triplet, `build-editor/` binary dir, `R573_BUILD_EDITOR=ON` and `R573_BUILD_RENDERER=OFF`, and the `editor` vcpkg feature instead of the default `renderer` one. |
 | `CMakeLists.txt` | The gated libs (`r573_support`, `r573_formats`, ...), the `r573_app` static library holding everything the app is made of, the `renderer` executable (output name `573Renderer.exe`, just `src/main.cpp` linked against `r573_app`), the test targets, and the `r573::warnings` interface target. |
 
 ## Generated sources (a Python interpreter is required to configure)
@@ -59,6 +61,35 @@ depends on and is easy to find in Task Manager / shortcuts.
   LNK2038 RuntimeLibrary errors. Switching the triplet later invalidates the
   entire vcpkg binary cache for it - every dependency rebuilds from scratch.
 
+### `LNK1236` on a member of a static library
+
+Four times in one session, a link failed with `fatal error LNK1236: corrupt or
+invalid COFF sections` naming a member of `r573_document.lib` or
+`editor_shared.lib`. `dumpbin /headers` read the named object without complaint,
+and deleting only the `.lib` and building again linked the same objects
+successfully; touching the source and rebuilding did not reproduce it, and the
+compiler, linker and `lib.exe` all come from the same toolset. The cause is not
+known. When it happens, delete the library named in the message and build again.
+
+### After a Visual Studio toolset update
+
+A toolset update invalidates vcpkg's binary cache for the triplet (the ffmpeg,
+aom and libvpx rebuild takes several minutes) and leaves `build/CMakeCache.txt`
+pointing at the deleted `cl.exe`. Delete `build/CMakeCache.txt` and
+`build/CMakeFiles/` so CMake detects the new compiler; `vcpkg_installed/` can
+stay.
+
+### Mutation checks: force a full link for every mutant
+
+A mutation made only in a static library (`src/document/*.cpp`) has been seen
+to compile and relink `document_tests.exe` while the test still ran the OLD
+code and passed. It stopped once the test file itself was rebuilt, and later
+attempts to reproduce it failed, so the cause is unknown (MSVC incremental
+linking and its `.ilk` are the suspect). A mutation script therefore deletes
+the target test exe and its `.ilk` (`build/document_tests.exe`/`.ilk`,
+`build-editor/editor_*_tests.exe`/`.ilk`) before building each mutant, and a
+SURVIVED result is unconfirmed until it survives a forced full link.
+
 ## Dependencies (vcpkg manifest mode)
 
 Declared in `vcpkg.json`; resolved on first configure via the vcpkg toolchain
@@ -80,6 +111,23 @@ owns them.
   `target_include_directories(... SYSTEM ...)` explicitly - that is what lets
   `/external:W0` silence third-party headers once the warnings target is
   linked.
+- `hash-library` (zlib licence) through the `unofficial::hash-library` config
+  target: its `MD5` class computes the IFS header and `_info_` digests in
+  `r573_formats` (docs/formats.md, "IFS archives"). The port installs its
+  headers flat, so the include is `<md5.h>`.
+- `flatbuffers` (Apache 2.0): the preview host protocol (`src/preview/preview_host.fbs`,
+  docs/preview_host.md). CMake runs the port's `flatc` at build time into
+  `build/generated/preview_host_generated.h`. `flatc` is a host tool, so the
+  presets set `VCPKG_HOST_TRIPLET` to `x64-windows`; a build directory
+  configured before that setting existed needs `cmake --preset dev` once,
+  because regenerating from ninja does not re-read preset variables.
+- `boost-interprocess` (Boost Software Licence, `Boost::interprocess` through
+  `find_package(Boost REQUIRED COMPONENTS interprocess)` in
+  `cmake/r573_encode.cmake`): the shared-memory frame section between the
+  32-bit renderer and `573Encoder.exe` (`src/encode/frame_section.*`,
+  docs/x86_build.md). The same file generates `encode_host_generated.h` from
+  `src/encode/encode_host.fbs` with the port's `flatc`, and builds
+  `573Encoder.exe` into `bin/` on x64 only.
 - `vcpkg-overlays/` overrides registry ports. It ships an x265 overlay with
   `-DENABLE_ALPHA=ON` so ffmpeg's libx265 wrapper can emit HEVC-with-alpha
   (Safari-compatible transparent video); stock vcpkg x265 builds alpha OFF.

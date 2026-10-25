@@ -1,0 +1,62 @@
+namespace EncodeProtocol;
+
+table Open {
+  session:uint;
+  output_path:string;
+  format:int;
+  src_width:int;
+  src_height:int;
+  out_width:int;
+  out_height:int;
+  fps:int;
+  quality:int;
+  keyframe_interval:int;
+  prefer_hardware:bool;
+  frames:string;
+}
+
+table Frame {
+  session:uint;
+  index:int;
+}
+
+table FinishOutput {
+  session:uint;
+}
+
+table Cancel {
+  session:uint;
+}
+
+table Probe {
+  format:int;
+}
+
+union Request { Open, Frame, FinishOutput, Cancel, Probe }
+
+table RequestMessage {
+  request:Request;
+}
+
+table Opened {
+  using_hardware:bool;
+}
+
+table Done {
+}
+
+table Probed {
+  available:bool;
+}
+
+table Failure {
+  message:string;
+}
+
+union Reply { Opened, Done, Probed, Failure }
+
+table ReplyMessage {
+  reply:Reply;
+}
+
+root_type RequestMessage;

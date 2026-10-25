@@ -366,3 +366,65 @@ TEST_CASE("setup view offers the 16:9 stretch and its filter for 4:3", "[gui][se
     harness.Run(test);
     App::Global().SetStretchWide(false);
 }
+
+TEST_CASE("setup view Load keeps the resolution the user chose", "[gui][setup]") {
+    GuiTest::Harness harness;
+    App::Global().SetGameProfileSlug("iidx33");
+    App::Global().SetRenderSize(520, 704);
+
+    ImGuiTest* test = harness.NewTest("setup_load_keeps_resolution");
+    test->TestFunc = [](ImGuiTestContext* ctx) {
+        ctx->SetRef("##setup");
+        GuiTest::FocusChild(ctx, "setup_card");
+        ctx->ItemInputValue("##gamedir", "C:/games/iidx");
+        ctx->ItemClick("Load");
+    };
+    harness.Run(test);
+
+    std::optional<App::Command> slot;
+    const auto* boot = TakeAs<App::Cmd::BootGame>(slot);
+    REQUIRE(boot != nullptr);
+    CHECK(boot->render_width == 520);
+    CHECK(boot->render_height == 704);
+    CHECK(boot->size_explicit);
+}
+
+TEST_CASE("choosing a game profile shows that game's own resolution", "[gui][setup]") {
+    GuiTest::Harness harness;
+    App::Global().SetGameProfileSlug("");
+    App::Global().SetRenderSize(640, 480);
+
+    ImGuiTest* test = harness.NewTest("setup_profile_sets_resolution");
+    test->TestFunc = [](ImGuiTestContext* ctx) {
+        ctx->SetRef("##setup");
+        GuiTest::FocusChild(ctx, "setup_card");
+        ctx->ComboClick("##game_profile/IIDX 27-33");
+    };
+    harness.Run(test);
+
+    int w = 0;
+    int h = 0;
+    App::Global().GetRenderSize(w, h);
+    CHECK(w == 1920);
+    CHECK(h == 1080);
+}
+
+TEST_CASE("every render resolution preset is offered whatever the game is", "[gui][setup]") {
+    GuiTest::Harness harness;
+    App::Global().SetGameProfileSlug("ddrworld");
+    App::Global().SetRenderSize(1280, 720);
+
+    ImGuiTest* test = harness.NewTest("setup_all_resolution_presets");
+    test->TestFunc = [](ImGuiTestContext* ctx) {
+        ctx->SetRef("##setup");
+        GuiTest::FocusChild(ctx, "setup_card");
+        ctx->ComboClick("##render_preset/520x704 (qpro avatar)");
+    };
+    harness.Run(test);
+
+    int w = 0;
+    int h = 0;
+    App::Global().GetRenderSize(w, h);
+    CHECK(w == 520);
+    CHECK(h == 704);
+}

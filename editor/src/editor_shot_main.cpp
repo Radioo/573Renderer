@@ -1,0 +1,272 @@
+#include "editor_window.h"
+
+#include "editor_hover.h"
+#include "editor_rows.h"
+#include "editor_stage_bar.h"
+
+#include <DockManager.h>
+#include <DockWidget.h>
+#include "editor_theme.h"
+#include "editor_timeline.h"
+
+#include "support/crash_report.h"
+
+#include <Qsci/qsciscintilla.h>
+
+#include <QAbstractButton>
+#include <QApplication>
+#include <QByteArray>
+#include <QDir>
+#include <QElapsedTimer>
+#include <QEvent>
+#include <QFile>
+#include <QImage>
+#include <QLineEdit>
+#include <QPushButton>
+#include <QSpinBox>
+#include <QList>
+#include <QSettings>
+#include <QSize>
+#include <QString>
+#include <QStringList>
+#include <QTextStream>
+#include <QTreeWidget>
+#include <QTreeWidgetItem>
+#include <QTreeWidgetItemIterator>
+#include <QWidget>
+
+namespace {
+
+constexpr int kOffScreen = -32000;
+constexpr qint64 kLongestWaitMs = 120000;
+
+QSize SizeFrom(const QString& text) {
+    const QStringList parts = text.split('x');
+    if (parts.size() != 2) return {1600, 1000};
+    return {parts[0].toInt(), parts[1].toInt()};
+}
+
+QString Taken(const QString& key, const QStringList& arguments, const QString& fallback) {
+    const int at = arguments.indexOf(key);
+    if (at < 0 || at + 1 >= arguments.size()) return fallback;
+    return arguments[at + 1];
+}
+
+}
+
+int main(int argc, char** argv) {
+    Support::InstallCrashReporter();
+    QByteArray platform("windows");
+    for (int at = 1; at + 1 < argc; at++) {
+        if (QByteArray(argv[at]) == "--platform") platform = argv[at + 1];
+    }
+    qputenv("QT_QPA_PLATFORM", platform);
+    QApplication::setOrganizationName("573Renderer.shot");
+    QApplication::setApplicationName("IfsEditorShot");
+    QSettings::setDefaultFormat(QSettings::IniFormat);
+    const QApplication app(argc, argv);
+    Editor::Theme::Apply(const_cast<QApplication&>(app));
+    const QStringList arguments = QApplication::arguments();
+    if (!arguments.contains("--keep-settings")) QSettings().clear();
+
+    const QSize size = SizeFrom(Taken("--size", arguments, "1600x1000"));
+    const QString out = Taken("--out", arguments, "screenshots");
+    const QString name = Taken("--name", arguments, "editor");
+    const QString file = Taken("--ifs", arguments, QString());
+    const QString game = Taken("--game", arguments, QString());
+    if (!game.isEmpty()) QSettings().setValue("game/directory", game);
+    QDir().mkpath(out);
+
+    Editor::Window window;
+    window.setWindowFlag(Qt::Tool);
+    window.setWindowFlag(Qt::WindowDoesNotAcceptFocus);
+    window.setAttribute(Qt::WA_ShowWithoutActivating);
+    window.resize(size);
+    window.move(kOffScreen, kOffScreen);
+    window.show();
+    window.move(kOffScreen, kOffScreen);
+    for (int pass = 0; pass < 4; pass++)
+        QApplication::processEvents();
+    if (!file.isEmpty()) {
+        window.OpenDocument(file);
+        QElapsedTimer waited;
+        waited.start();
+        while (!arguments.contains("--busy") && window.Loading() &&
+               waited.elapsed() < kLongestWaitMs)
+            QApplication::processEvents();
+    }
+    const QString animation = Taken("--animation", arguments, QString());
+    if (!animation.isEmpty()) {
+        if (auto* tree = window.findChild<QTreeWidget*>("package_animations")) {
+            for (QTreeWidgetItemIterator row(tree); *row != nullptr; ++row) {
+                if ((*row)->text(0) != animation) continue;
+                tree->setCurrentItem(*row);
+                break;
+            }
+        }
+        QElapsedTimer showing;
+        showing.start();
+        while (window.Loading() && showing.elapsed() < kLongestWaitMs)
+            QApplication::processEvents();
+    }
+    const QString clip = Taken("--clip", arguments, QString());
+    if (!clip.isEmpty()) {
+        if (auto* bar = window.findChild<Editor::StageBar*>()) emit bar->ClipAsked(clip.toInt());
+        QElapsedTimer entering;
+        entering.start();
+        while (window.Loading() && entering.elapsed() < kLongestWaitMs)
+            QApplication::processEvents();
+    }
+    const QString panel = Taken("--panel", arguments, QString());
+    if (!panel.isEmpty()) {
+        if (auto* docks = window.findChild<ads::CDockManager*>()) {
+            if (ads::CDockWidget* shown = docks->findDockWidget(panel)) shown->setAsCurrentTab();
+        }
+        QApplication::processEvents();
+    }
+    const QString input = Taken("--input", arguments, QString());
+    const auto choose = [&window](const QString& wanted) {
+        if (wanted.isEmpty()) return;
+        if (auto* listed = window.findChild<QTreeWidget*>("inputs")) {
+            for (QTreeWidgetItemIterator row(listed); *row != nullptr; ++row) {
+                if ((*row)->text(0) != wanted) continue;
+                listed->setCurrentItem(*row);
+                break;
+            }
+        }
+        QApplication::processEvents();
+    };
+    choose(input);
+    const QString spread = Taken("--spread", arguments, QString());
+    if (!spread.isEmpty()) {
+        if (auto* places = window.findChild<QSpinBox*>("input_spread")) {
+            places->setValue(spread.toInt());
+            if (auto* go = window.findChild<QPushButton*>("input_spread_go")) go->click();
+        }
+        QElapsedTimer spreading;
+        spreading.start();
+        while (window.Loading() && spreading.elapsed() < kLongestWaitMs)
+            QApplication::processEvents();
+        QApplication::processEvents();
+        choose(input);
+    }
+    const QString entered = Taken("--enter", arguments, QString());
+    if (!entered.isEmpty()) {
+        if (auto* listed = window.findChild<QTreeWidget*>("library")) {
+            for (QTreeWidgetItemIterator row(listed); *row != nullptr; ++row) {
+                if (!(*row)->text(0).startsWith(entered)) continue;
+                emit listed->itemDoubleClicked(*row, 0);
+                break;
+            }
+        }
+        QElapsedTimer opening;
+        opening.start();
+        while (window.Loading() && opening.elapsed() < kLongestWaitMs)
+            QApplication::processEvents();
+        QApplication::processEvents();
+    }
+    const QString numbered = Taken("--number", arguments, QString());
+    if (!numbered.isEmpty()) {
+        if (auto* box = window.findChild<QLineEdit*>("input_number")) {
+            box->setText(numbered);
+            emit box->returnPressed();
+        }
+        QElapsedTimer setting;
+        setting.start();
+        while (window.Loading() && setting.elapsed() < kLongestWaitMs)
+            QApplication::processEvents();
+        QApplication::processEvents();
+    }
+    const QString depth = Taken("--depth", arguments, QString());
+    const QString frame = Taken("--frame", arguments, QString());
+    if (!depth.isEmpty() || !frame.isEmpty()) {
+        if (auto* timeline = window.findChild<Editor::Timeline*>()) {
+            emit timeline->FrameChosen(frame.isEmpty() ? 0 : frame.toUInt());
+            if (depth.isEmpty()) {
+                emit timeline->DepthsChosen({});
+            } else {
+                emit timeline->DepthChosen(depth.toInt());
+            }
+        }
+        QApplication::processEvents();
+    }
+    const QString pressed = Taken("--press", arguments, QString());
+    if (!pressed.isEmpty()) {
+        if (auto* button = window.findChild<QAbstractButton*>(pressed)) button->click();
+        QApplication::processEvents();
+    }
+    const QString typed = Taken("--script", arguments, QString());
+    if (!typed.isEmpty()) {
+        if (auto* area = window.findChild<QsciScintilla*>("script_ide_text")) {
+            const QString whole = QString(typed).replace(QString("\\n"), QString("\n"));
+            area->setText(whole.left(whole.size() - 1));
+            const int last = area->lines() - 1;
+            area->setCursorPosition(last, area->lineLength(last));
+            area->insert(whole.right(1));
+            const int ended = area->lines() - 1;
+            area->setCursorPosition(ended, area->lineLength(ended));
+        }
+        QApplication::processEvents();
+    }
+    const QString hovered = Taken("--hover", arguments, QString());
+    if (!hovered.isEmpty()) {
+        if (QWidget* under = window.findChild<QWidget*>(hovered)) Editor::Hover(*under);
+    }
+    const QString report = Taken("--report", arguments, QString());
+    if (!report.isEmpty()) {
+        QFile writing(QDir(out).filePath(report));
+        if (writing.open(QIODevice::WriteOnly | QIODevice::Text)) {
+            QTextStream lines(&writing);
+            for (QWidget* one : window.findChildren<QWidget*>()) {
+                if (one->objectName().isEmpty()) continue;
+                const QPoint at = one->mapTo(&window, QPoint(0, 0));
+                lines << one->objectName() << ' ' << one->metaObject()->className() << ' ' << at.x()
+                      << ',' << at.y() << ' ' << one->width() << 'x' << one->height() << " hint "
+                      << one->sizeHint().width() << 'x' << one->sizeHint().height() << " font "
+                      << one->font().pixelSize() << " shown " << (one->isVisible() ? 1 : 0)
+                      << Qt::endl;
+            }
+        }
+    }
+    const QString dumped = Taken("--dump", arguments, QString());
+    if (!dumped.isEmpty()) {
+        QFile writing(QDir(out).filePath(dumped));
+        if (writing.open(QIODevice::WriteOnly | QIODevice::Text)) {
+            QTextStream lines(&writing);
+            for (QTreeWidget* tree : window.findChildren<QTreeWidget*>()) {
+                for (QTreeWidgetItemIterator row(tree); *row != nullptr; ++row)
+                    lines << tree->objectName() << '	' << (*row)->text(0) << '	'
+                          << (*row)->data(0, Editor::Rows::kDetailRole).toString() << Qt::endl;
+            }
+        }
+    }
+    const QString noted = Taken("--notes", arguments, QString());
+    if (!noted.isEmpty()) {
+        QFile writing(QDir(out).filePath(noted));
+        if (writing.open(QIODevice::WriteOnly | QIODevice::Text)) {
+            QTextStream lines(&writing);
+            if (auto* timeline = window.findChild<Editor::Timeline*>()) {
+                for (const Document::FrameNote& note : timeline->Notes()) {
+                    lines << note.frame << ' ' << (note.script ? "script" : "-") << ' '
+                          << (note.camera ? "camera" : "-") << " x "
+                          << timeline->FrameLeft(note.frame) << Qt::endl;
+                }
+            }
+        }
+    }
+    QWidget* taken = &window;
+    const QString only = Taken("--grab", arguments, QString());
+    if (!only.isEmpty()) {
+        if (QWidget* one = window.findChild<QWidget*>(only)) taken = one;
+    }
+    QImage shot;
+    for (int pass = 0; pass < 8; pass++) {
+        const QSize settled = taken->size();
+        QApplication::processEvents();
+        shot = taken->grab().toImage();
+        if (taken->size() == settled) break;
+    }
+    window.hide();
+    const QString path = QDir(out).filePath(name + ".png");
+    return shot.save(path, "PNG") ? 0 : 1;
+}

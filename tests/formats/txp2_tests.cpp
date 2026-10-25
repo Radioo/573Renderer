@@ -337,3 +337,20 @@ TEST_CASE("txp2 section dword counts match the packed header layout") {
     }
     REQUIRE(total == 22);
 }
+
+TEST_CASE("a texture's texels reach a BGRA buffer in the order the engine uploads them") {
+    const std::vector<uint8_t> rgba8888 = {0x00, 0x66, 0xFF, 0xFF, 0x10, 0x20, 0x30, 0x80};
+    std::vector<uint8_t> out;
+    REQUIRE(Txp2::TexelsToBgra(16, 2, 1, rgba8888, out));
+    REQUIRE(out.size() == 8);
+    CHECK(out == rgba8888);
+
+    const std::vector<uint8_t> rgb888 = {0x00, 0x66, 0xFF, 0x10, 0x20, 0x30};
+    REQUIRE(Txp2::TexelsToBgra(15, 2, 1, rgb888, out));
+    REQUIRE(out.size() == 8);
+    const std::vector<uint8_t> expected = {0x00, 0x66, 0xFF, 0xFF, 0x10, 0x20, 0x30, 0xFF};
+    CHECK(out == expected);
+
+    CHECK_FALSE(Txp2::TexelsToBgra(99, 2, 1, rgba8888, out));
+    CHECK_FALSE(Txp2::TexelsToBgra(16, 4, 1, rgba8888, out));
+}

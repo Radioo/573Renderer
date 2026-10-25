@@ -162,6 +162,64 @@ TEST_CASE("DDR content fallback does not loop before the minimum period") {
     CHECK_FALSE(r.finished);
 }
 
+TEST_CASE("DDR content fallback waits for the authored wrap while the root has not drifted") {
+    Loop::DdrLoopDetector det;
+    FakeSink sink;
+    const int loop_label = 10;
+    auto feed = [&](int cf, uint8_t g) {
+        const std::vector<uint8_t> frame = SolidBgra(64, g);
+        const Loop::DdrFeed in{.bgra = frame,
+                               .w = 8,
+                               .h = 8,
+                               .current_frame = cf,
+                               .loop_label_frame = loop_label,
+                               .loop_count = 1,
+                               .label_active = false};
+        return det.Feed(in, std::ref(sink));
+    };
+    feed(12, 0);
+    int cf = 13;
+    for (int i = 0; i < 70; i++)
+        feed(cf++, 100);
+    feed(cf++, 0);
+    const Loop::DdrResult held_still = feed(cf++, 100);
+    CHECK_FALSE(held_still.finished);
+    for (int i = 0; i < 20; i++)
+        feed(cf++, 100);
+    const Loop::DdrResult wrap = feed(13, 0);
+    CHECK(wrap.finished);
+    CHECK(wrap.reason == Loop::DdrReason::AfpAuthoredLoop);
+}
+
+TEST_CASE("DDR content fallback runs once the root wraps without matching the first frame") {
+    Loop::DdrLoopDetector det;
+    FakeSink sink;
+    const int loop_label = 10;
+    auto feed = [&](int cf, uint8_t g) {
+        const std::vector<uint8_t> frame = SolidBgra(64, g);
+        const Loop::DdrFeed in{.bgra = frame,
+                               .w = 8,
+                               .h = 8,
+                               .current_frame = cf,
+                               .loop_label_frame = loop_label,
+                               .loop_count = 1,
+                               .label_active = false};
+        return det.Feed(in, std::ref(sink));
+    };
+    feed(12, 0);
+    for (int cf = 13; cf <= 20; cf++)
+        feed(cf, 100);
+    const Loop::DdrResult drifted_wrap = feed(13, 50);
+    CHECK_FALSE(drifted_wrap.finished);
+    int cf = 14;
+    for (int i = 0; i < 70; i++)
+        feed(cf++, 100);
+    feed(cf++, 0);
+    const Loop::DdrResult r = feed(cf++, 100);
+    CHECK(r.finished);
+    CHECK(r.reason == Loop::DdrReason::ContentLoop);
+}
+
 TEST_CASE("DDR detector stops when the sink fails") {
     Loop::DdrLoopDetector det;
     FakeSink sink;

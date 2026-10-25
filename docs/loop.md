@@ -73,6 +73,21 @@ the afp-call provenance):
    frame-vs-reference diff peaks mid-cycle and dips to a deep minimum (< 10%
    of the running peak) at the visible loop after at least 60 frames.
 
+   With afp available, the fallback may only END the export after the root has
+   wrapped at least once WITHOUT matching the reference frame (`root_drifted_`,
+   set in the authored-loop path when the wrap MAD exceeds the clean bound).
+   That unmatched wrap is the afp-state proof that the visible loop is not the
+   root loop. Until it happens, the peak and minimum are still tracked but a
+   deep minimum is not a loop, and the export waits for the authored wrap.
+   Reason: a slideshow background returns to its first picture exactly (MAD
+   0.00) when its inner slideshow finishes one pass, before the root timeline
+   wraps. DDR WORLD background_0036 (three character slides) hit the content
+   minimum at 2249 frames, while its root wraps back to the "loop" label at
+   3506 frames with a clean match, and the game shows the 3506-frame cycle.
+   background_0015, an older slideshow, is 3506 frames as well. bg_0001 is
+   unaffected: its root wraps early without a match, which arms the fallback.
+   Without afp (`loop_label_frame < 0`) the fallback behaves as before.
+
    This fallback cannot be replaced by afp state. The obvious afp-state
    replacement - detecting the loop as the joint return of every movie-clip
    playhead to its reference phase - fails in both directions, measured live

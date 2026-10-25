@@ -87,7 +87,7 @@ inline void SubmitXyzSkipQuad(float x0, float y0, float x1, float y1, uint32_t c
 }
 
 inline void DriveWideScene(uint32_t tex_ref) {
-    AfpD3D9::SetLayer(0, 0, nullptr);
+    AfpD3D9::SetLayer(0);
 
     AfpD3D9::SetBlend(2, 0, nullptr);
     SubmitColoredQuad(10.0F, 10.0F, 130.0F, 90.0F, {0xFFFFE0C0, 0xFFC0FFE0, 0xFFE0C0FF, 0xFF808080},
@@ -112,10 +112,10 @@ inline void DriveWideScene(uint32_t tex_ref) {
 
     SubmitXyzSkipQuad(230.0F, 90.0F, 300.0F, 140.0F, 0xA0FFFFFF, 0.25F);
 
-    AfpD3D9::SetLayer(3, 0, nullptr);
+    AfpD3D9::SetLayer(3);
     SubmitColoredQuad(20.0F, 60.0F, 100.0F, 140.0F,
                       {0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF}, tex_ref);
-    AfpD3D9::SetLayer(0, 0, nullptr);
+    AfpD3D9::SetLayer(0);
 }
 
 }

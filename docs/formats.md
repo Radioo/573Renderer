@@ -1,15 +1,17 @@
 # r573_formats (src/formats/)
 
-Pure, stdlib-only container/codec parsers. No AVS/AFP, no D3D9, no logging -
+Pure container/codec parsers (stdlib plus tl-expected and hash-library). No
+AVS/AFP, no D3D9, no logging -
 this module builds and unit-tests standalone (`formats_tests`, CTest label
-`ci`), and everything in it is exercised by synthetic fixtures, never by
-Konami data.
+`ci`), and everything in it is exercised by synthetic fixtures. Real game data
+only enters through the `[real]` cases and the `local` / `local_dll` test
+executables (docs/local_regression.md).
 
 ## DDR .arc container (`ddr_arc.h`)
 
-DDR World (MDX) archive reader + AVS-LZ77 decompressor. Format and codec
-were reverse-engineered from gamemdx.dll / libavs-win64.dll and verified
-byte-exact against the real game's own output.
+DDR World (MDX) archive reader. Compressed entries go through the AVS-LZ77
+codec below. Format and codec were reverse-engineered from gamemdx.dll /
+libavs-win64.dll and verified byte-exact against the real game's own output.
 
 A `.arc` is a flat container, all fields u32 little-endian:
 
@@ -38,19 +40,539 @@ past the read head produce a synthetic `<name@0xNNN>` label instead of
 failing the whole arc. `ExtractFirstIfs` likewise reads only the matched
 entry's byte range, not the whole file.
 
-### AVS-LZ77 codec
+## AVS-LZ77 codec (`avs_lz77.h`)
 
-4096-byte sliding window; write position starts at `0xFEE`; the window
-pre-history is ZERO-filled (the game allocates the context with calloc -
-back-references into untouched window bytes legitimately produce zeros).
-Stream structure: one control byte carries 8 flags, consumed LSB-first;
-flag 1 = literal byte, flag 0 = match. A match is two bytes forming
+`AvsLz77::Decompress` and `AvsLz77::Compress`, shared by the arc reader and
+IFS texture images.
+
+Stream format: 4096-byte sliding window; write position starts at `0xFEE`;
+the window pre-history is ZERO-filled (the game allocates the context with
+calloc - back-references into untouched window bytes legitimately produce
+zeros). One control byte carries 8 flags, consumed LSB-first; flag 1 =
+literal byte, flag 0 = match. A match is two bytes forming
 `token = (b1 << 8) | b2`: `distance = token >> 4` (12-bit),
 `length = (token & 0xF) + 3`, copy source = `(write_pos - distance) & 0xFFF`,
 copied byte-by-byte through the window (so overlapping matches repeat
 recent output). `distance == 0` is the end-of-stream marker. The
 `expected_size` argument stops decompression early once that many bytes are
 out; 0 means run to the end-of-stream marker.
+
+The compressor reproduces avs2-core's encoder byte for byte (cstream
+operator 1; found through the `avs-cstream-lz77` source strings and the
+cstream_create export). It is a greedy binary-tree LZSS encoder:
+
+- Window 4096, longest match 18, a match needs at least 3 bytes. The text
+  buffer is 4113 bytes; its first 17 bytes are mirrored after byte 4096 so
+  comparisons never wrap.
+- One binary search tree per first byte (256 roots). Inserting a position
+  walks the tree comparing bytes 1..17 as a signed difference (right when
+  `>= 0`), keeps the first strictly longer match on the descent path, and
+  replaces the node outright on an 18-byte match. Equal-length ties are
+  decided by that walk, not by distance, so the tree must be rebuilt exactly.
+- Before the first item, positions `0xFEE-1` down to `0xFEE-18` are
+  inserted, then `0xFEE`: that is how matches into the zero pre-history
+  arise (five zero bytes compress to `00 01 22 00 00`).
+- Each item clamps the match to the remaining lookahead, emits a literal
+  when the match is 2 bytes or shorter, and slides the window by the item
+  length, deleting the oldest position and inserting the new one. After
+  input ends the window keeps sliding without new bytes, and stale bytes
+  past the input still take part in tie breaking.
+- The stream always ends by appending two zero bytes to the pending group
+  and writing that group, even when it holds no items, so input whose item
+  count is a multiple of 8 ends in `00 00 00`.
+- avs2-core misbehaves on an empty input (its lookahead counter wraps);
+  `Compress` returns the plain end-of-stream group `00 00 00` instead, which
+  decodes to nothing.
+
+Tests: `tests/formats/avs_lz77_tests.cpp` (`ci`) holds known-answer streams
+for literals, zero pre-history, overlap and tree tie breaking, plus
+round trips; `tests/local/avs_writer_contract_tests.cpp` (`local_dll`)
+compresses the same inputs with avs2-core's own cstream compressor and
+requires identical bytes.
+
+## Binary XML (`binary_xml.h`)
+
+`BinaryXml::Type` names the node type ids the code uses (`kVoid`, `kS32`,
+`k3S32`, `k4U16`, `kAttribute`, ...); the full table of 56 ids and their sizes
+is in `binary_xml_types.cpp`.
+
+`BinaryXml::Read` and `BinaryXml::Write` convert between avs2-core's binary
+property format and a `Document` of `Node`s, byte for byte. A node holds its
+type byte (the base type id plus `kArrayFlag`), its name, its value bytes as
+stored (big-endian, without length prefixes or padding; strings keep their
+NUL), its attributes and its children. Values are never decoded or
+re-encoded, so strings that are invalid in the declared encoding survive a
+round trip.
+
+Layout, as the writer emits it:
+
+- Header: `A0`, signature (`0x42` sixbit names, `0x45` byte-string names),
+  encoding byte, its complement, big-endian u32 node section length, node
+  section, big-endian u32 data section length, data section.
+- Node section: an element is its type byte, its name, one `0x2E` byte plus a
+  name per attribute, its child elements, then `0xFE`; `0xFF` follows the
+  root. The section is padded to 4 with zeros and its length includes the
+  padding.
+- Sixbit names: a length byte (1 to 36) and the characters of
+  `0-9 : A-Z _ a-z` as 6-bit indices packed MSB first. Byte-string names: a
+  length byte `n + 63` for 1 to 64 bytes, or a big-endian u16
+  `0x8000 + n - 65` up to 4096 bytes, then the raw bytes.
+- Attributes are written sorted by name bytes, and the reader sorts them the
+  same way, because avs2-core pairs attribute values with names in sorted
+  order.
+- Data section: each element's value, then its attributes' values, then its
+  children, recursively. `s8`/`u8`/`bool` values share 4-byte slots (a new
+  slot is appended when the running byte count is 0, later bytes fill it even
+  after other data was appended); `s16`/`u16`/`2s8`/`2u8`/`2b` share slots of
+  two words the same way. `bin`, `str`, attribute values and every array are a
+  u32 byte length, the bytes and zero padding to 4. Every other type is its
+  fixed size, zero padded to 4. `void` and the array marker type 47 have no
+  data.
+
+The format was reversed from avs2-core's property reader and writer (source
+strings `property-read-binary`/`property-write-binary`, the node type name
+table next to them).
+
+Tests: `tests/formats/binary_xml_tests.cpp` (`ci`) holds known-answer
+documents for nesting, attributes, arrays, byte and word slots and long names,
+plus malformed input; `tests/local/avs_writer_contract_tests.cpp`
+(`local_dll`) has avs2-core read our output for every storable type in both
+name forms and write it back, requiring identical bytes.
+
+## IFS archives (`ifs_archive.h`)
+
+`Ifs::Read` turns an IFS file into an `Archive`; `Ifs::Write` turns an
+`Archive` back into a file avs2-core's `imagefs` driver mounts. The archive
+keeps the header flags and time, the stored tree size, the manifest's binary
+XML signature and encoding, and a tree of `Entry` values in manifest order:
+
+- Directory: an `s32` node (its time) or a `void` node (the header time).
+- File: a `3s32` node (offset, size, time) or a `2s32` node (offset, size).
+  Local files carry their bytes; a file whose `u8` child `i` is non-zero
+  lives in a `_super_` image (`Entry::super_index`), keeps its stored offset
+  and size, and carries no bytes. Other child nodes of a file are kept
+  verbatim.
+- Special: every other node, kept verbatim. That covers `_info_`, `_super_`
+  and any name the game's directory listing skips (a leading `_` followed by
+  anything other than `A`-`H`, `_` or a digit), plus nodes with attributes or
+  types imagefs rejects.
+
+Header, big-endian: `6C AD 8F 89`, u16 flags, u16 NOT flags, u32 time, u32
+tree size, u32 data offset, then a 16-byte MD5 when flags has `0x2`. The
+manifest follows the header and the data region starts at the data offset.
+
+`Read` verifies that MD5 the way avs2-core's mount does: over the region from
+the end of the header to the data offset, with any bytes missing from a
+truncated file counted as zeros (`ifs_digest.h`). A mismatch is an error,
+because the game refuses to mount such a file.
+
+What `Write` recomputes rather than copies:
+
+- File placement. When every local file still has its stored size and the
+  stored ranges do not overlap, files keep their stored offsets and the data
+  region keeps at least its stored length (this reproduces shipped files,
+  including the packer's gap filling and files with no end padding).
+  Otherwise the files are packed the way the game's main packer does it:
+  largest first (ties in manifest order), each placed at the first zero gap
+  where a 4-aligned start fits, else appended at the 16-aligned end; the
+  region ends 16-aligned. Offsets are checked in 64 bits: a stored layout
+  whose ranges would pass 4 GB is laid out again, and a data region that would
+  pass 4 GB makes `Write` return an error.
+- `_info_` at the root: its `md5` child becomes the MD5 of the data region and
+  its `size` child the region length.
+- Data offset: the manifest end aligned to 16, with zero padding.
+- Header MD5 (flag `0x2`): the MD5 of the manifest region from the end of the
+  header to the data offset, padding included, which is what avs2-core
+  verifies.
+- Tree size: the larger of the stored value and the size the manifest needs:
+  `52 * nodes + large values + 630` for sixbit names, or
+  `56 * nodes + large values + 630 + per-name bytes` for byte-string names,
+  rounded with `(size + 8) & ~7`. Large values are those longer than 4 bytes,
+  counted rounded to 2 for `bin` and to 4 otherwise; per-name bytes are each
+  name length (at least 8) rounded to 4. avs2-core only needs the value to be
+  big enough.
+
+Entries keep their stored node names. `Ifs::IsSpecialName` holds the listing
+rule above. `Ifs::EscapeName` (`ifs_names.h`) maps
+one path component to its node name the way imagefs does: letters stay, a
+leading digit gains a `_`, `_` doubles, and ` $+-.:@~` become `_A` to `_H`;
+any other character is refused (bytes of `0x80` and above make avs2-core read
+outside its table). `Ifs::HashedName` is the escaped lowercase hex MD5 of a
+logical name, which is how packages name their `tex/` images and animations.
+
+The format was reversed from avs2-core's `imagefs` driver (source string
+`vfs-driver-imagefs.c`, the driver descriptor carrying the magic
+`0xA94BEE7C`, and the mount function referencing `/imgfs`, `_super_` and
+`broken filetree: bad data offset(%x<%x)`). MD5 comes from the hash-library
+vcpkg port.
+
+Tests: `tests/formats/ifs_archive_tests.cpp` (`ci`) covers the packer, the
+header MD5, `_info_`, stored layout reuse, repacking, super image files and the
+tree size; `tests/local/ifs_round_trip_tests.cpp` (`local`, `R573_IIDX_DIR`) runs
+every IFS in the install through `Read`, `Write` and `Read` again, requires
+identical entries and binary XML entries that re-encode byte for byte, and
+reports how many files come out byte-identical.
+
+## Texture images (`texture_images.h`)
+
+`TextureImages::ReadList` reads `tex/texturelist.xml` into images: name, the
+texture's pixel format, and the size from `imgrect` (a `4u16` value, type 39,
+holding x0, x1, y0, y1 in half pixels), plus whether the list's `compress` attribute is
+`avslz`. An image's bytes live in the `tex/` entry named by
+`Ifs::HashedName(image name)`.
+
+A `texture` is an atlas: attributes for its format, filters and wrap modes, a
+`size` child, and one `image` child per image. An `image` carries `uvrect` and
+`imgrect`, both `4u16` in half pixels, where `uvrect` is the image rect inset by
+one pixel on each side. The repo notes record the shape measured over the whole
+install; the editor writes it back the same way (docs/document.md).
+
+`DecodeBlob` / `EncodeBlob` handle the three storage forms afp-utils' image
+reader accepts:
+
+- list not `avslz`: the entry is the pixels;
+- `avslz`, compressed size non-zero: big-endian u32 uncompressed size, u32
+  compressed size, then an AVS-LZ77 stream;
+- `avslz`, compressed size zero: the same header, then the pixels as they
+  are.
+
+`EncodeBlob` keeps the storage form it decoded, and recompresses with
+`AvsLz77::Compress`, which reproduces the game files byte for byte.
+
+`PixelsToBgra` / `BgraToPixels` convert stored pixels to 8-bit BGRA and back.
+Only `argb8888rev` is implemented, which is every texture IIDX 33 ships; its
+bytes already are B, G, R, A (the renderer's texture callback copies them
+straight into `D3DFMT_A8R8G8B8`). Other formats return an error naming the
+format.
+
+Tests: `tests/formats/texture_images_tests.cpp` (`ci`); the round trip gate
+(`tests/local/ifs_round_trip_tests.cpp`) decodes and re-encodes every texture
+image in the install.
+
+## AFP byte order scripts (`afp_byte_order.h`)
+
+IIDX 33 stores every animation (`afp/<name>`) big-endian, with its string
+table scrambled, next to a byte order script (`afp/bsi/<name>`). afp-core
+restores both in `afp_ext_command` op 8; `AfpByteOrder` mirrors that routine
+and its inverse.
+
+A script is an array of little-endian u16 words ending at the word `0x0000`.
+Each word holds a type in bits 13-15, loops in bits 7-12 and a skip in bits
+0-6. The cursor starts at byte 0. A word first advances it by `skip * 2` bytes.
+Type 0 then advances it by `loops * 256` more bytes; types 1, 2 and 3 reverse
+`loops + 1` consecutive elements of 2, 4 or 8 bytes; types 4 to 7 are fatal
+(`unknown byte order data type(%d).`).
+
+- `ReadScript` decodes a script into `Swap` runs (offset, element size,
+  count). `WriteScript` encodes runs the way KONAMI's converter did: adjacent
+  elements of one size merge into a run no matter which field they belong to,
+  a run splits at 64 elements or a change of size, a gap of up to 254 bytes
+  goes into the swap word's skip, a longer gap becomes one type 0 word
+  (`gap >> 8` in loops, the rest in skip), and the script ends right after the
+  last swapped element. Gaps above 16382 bytes are split into several type 0
+  words; no IIDX 33 file has one, so that part does not reproduce a known
+  converter output.
+- `Restore(stored, script)` does what op 8 does. Data whose first u32 passes
+  the little-endian magic test (`(u32 ^ 0xC1D0B2FF) & 0x7F7F7F00 == 0`), or
+  whose first three bytes are the old `PAF` magic (`50 46 41` or `D0 C6 C1`),
+  is not swapped; otherwise the byte-swapped u32 must pass
+  `& 0x7F7F7F00 == 0x41503200` (`??? this is not afp data`) and the script is
+  applied. The script is only read in that case, so native data never needs a
+  valid one. `PAF` data returns there. For `AP2` data with a data version (u16
+  at +8) other than 1, a string table starting with `0x80` is unscrambled by
+  subtracting `128 + i` from byte `i`; any other non-zero first byte is fatal
+  (`afp data string buffer unusual`). The result says whether the table was
+  scrambled.
+- `Store(native, swaps, scramble)` is the inverse: scramble a plain table if
+  asked (refused for data version 1, whose tables `Restore` never
+  unscrambles), then apply the swaps.
+
+Finders in afp-core: the swap routine references `no change byte order info`,
+`unknown byte order data type(%d).` and `??? this is not afp data`; the string
+routine references `afp data string buffer unusual`; the op 8 dispatcher is the
+export whose switch logs `%s(%d) unknown command`.
+
+Tests: `tests/formats/afp_byte_order_tests.cpp` (`ci`).
+
+## AFP animations (`afp_animation.h`)
+
+`AfpAnimation::Read` turns restored (native byte order, plain strings)
+animation data into an `Animation` that keeps no offsets, and `Write` builds
+the data again from the model while recording the byte width of every u16 and
+u32 it emits. `ReadStored` / `WriteStored` wrap both with `AfpByteOrder`, so
+they take and return the stored bytes and the script.
+
+What the model holds:
+
+- Header fields, exports, imports and the import initializer section
+  (`u16, u16 count`, then entries of `u16 tag, u16 frame, u32 code offset,
+  u32 code length`; entries with bytecode are refused as not modelled).
+- The string table in file order, including strings nothing references
+  (`aep_dummy` in almost every IIDX 33 file). Every Str field is an index into
+  it. A Str is written as `(off & 0xFFFC) | (off >> 16)` and read as
+  `(v & 0xFFFC) | ((v & 3) << 16)`.
+- Containers: labels, script labels (container flag `0x4`), frames as
+  (first tag, tag count) from the `first | count << 20` entry, and tags.
+  Container flags `0x1` and `0x2` add header fields whose layout is
+  unverified, so they are refused.
+- Typed tags: `DEFINE_SPRITE` (121, only the flags 1, offset 8 form),
+  `DO_ACTION` (122), `PLACE_OBJECT` (127), `REMOVE_OBJECT` (128), `IMAGE`
+  (131), `SHAPE` (132) and `PLACE_CAMERA` (136). Any other tag is kept as its
+  record bytes. The long tag record form (odd 22-bit size) is refused.
+- Placements follow afp-core's read order: flag word, depth, end frame, the
+  optional extended flag word, character, ratio, name, clip depth, blend,
+  align to 4, 2D matrix parts, colours in both forms, the clip action block,
+  the filter list, origin, origin z, host geometry id, short matrix forms,
+  class name, align to 4, translation z, 3x3 matrix, HSV, then the extended
+  fields (discarded words, curve set, colour controller, grid controller). A
+  field is present when its optional is set, so presence bits never disagree
+  with the data; `flags` and `extended_flags` hold only the bits that add no
+  bytes. `extended_flags` being set is what writes the extended flag word, so
+  `Write` refuses extended fields without it. The extended controller record
+  (`0x40`) is refused. afp-core's reader is found by the strings
+  `AFP_UNUSED_DEPTH used` and `place oblect class[%s] can not defined.`.
+- Bytecode stays bytes: the `0xFF` marker, flags, the optional string list,
+  then the code up to the end of its record. AP2 operands are big-endian in
+  both forms, so code is never swapped.
+- Filters: colour matrix (type 6, 84 bytes, or 88 with HSV) and lookup
+  (`0x67`, u16 length at +6 counted from +8, table from +12) are typed; any
+  other filter is kept as bytes. `Write` refuses a typed filter whose type
+  byte is wrong and an unknown filter that is empty or would read back as a
+  typed one, so every filter reads back as what was written.
+
+Bytes that must be zero (alignment, string padding, tag padding) are checked
+on read, and so are bytes no field accounts for, such as a clip action block
+or filter list longer than its events or filters. Bytes with no known meaning (`unread_*` fields, filter heads, the
+colour controller's colour) are kept as values.
+
+Writing uses one layout: the 56-byte header plus the 4-byte import
+initializer slot when there is one, exports, import headers, import entries,
+the import initializer section, the root container (header, labels, script
+labels, frames, tags with no gaps), then the string table, which must start
+with the empty string. Every tag's
+size includes its padding to 4. Offsets and sizes are all recomputed.
+
+Unknown tags and unknown filters write fine in native order, but nothing
+says which of their bytes to swap, so `Write` returns an error in
+`Native::swaps` and `WriteStored` refuses them instead of guessing.
+
+Two things in the stored form are not in the restored data, so the model
+carries them in `StoredForm`:
+
+- `strings_scrambled`: whether the table was scrambled.
+- `background_colour_swapped`: the four background colour bytes at +28 are
+  swapped as a u32 in most IIDX 33 files and left alone in the rest (every
+  animation of the numbered song packages and `qp_*` packages at the top of
+  `data/graphic`). Both forms restore to the same bytes. `ReadStored` sets it
+  from whether the script swaps +28.
+
+Tests: `tests/formats/afp_animation_tests.cpp` (`ci`); the round trip gate
+(`tests/local/ifs_round_trip_tests.cpp`) reads and rewrites every animation in
+the install.
+
+## AFP scripts (`afp_script.h`)
+
+`AfpScript::Read` walks the bytecode an `AP2_DO_ACTION` tag or a clip action
+block carries, and `AfpScript::Write` puts the instructions back. The pair is
+byte exact: every instruction keeps its operand bytes as they were, so a script
+the editor does not understand survives a round trip untouched.
+
+A script does not end at its `END` opcode. afp-core stops executing there, but
+the tag is padded after it, so `Read` keeps whatever follows as the script's
+trailing bytes and `Write` puts them back. Dropping them looks harmless and is
+not: 442107 of the install's 463562 scripts carry padding, and without it every
+one of them re-encodes a byte short.
+
+The opcode set is the one afp-core's interpreter implements, and the names are
+the ones its own action data table logs with. Anything outside that set is an
+error rather than a guess, because afp-core would skip it with
+`unknown action(0x%02x:%s)` and the editor must not write a script the game
+cannot run:
+
+| Opcode | Name | Operand |
+|---|---|---|
+| `0x00` | `END` | none; execution stops and the rest of the tag is padding |
+| `0x0D` | `POP` | none |
+| `0x0E` | `GET_VARIABLE` | none |
+| `0x1E` | `CALL_FUNCTION` | none |
+| `0x2F` | `SET_MEMBER` | none |
+| `0x32` | `CALL_METHOD` | none |
+| `0x3F` | `STORE_REGISTER` | u8 count then that many register numbers |
+| `0x43` | `PUSH` | u8 count then that many items |
+| `0x47` | `GOTO_FRAME2` | u8 flags, and a big-endian u16 frame bias when bit `0x2` is set |
+
+A PUSH item is a u8 type and a fixed number of operand bytes that depends only
+on the type. The full table is in the repo notes; what the reader needs is that
+every type has a known length, so an item whose meaning the editor does not
+model still measures the right number of bytes and writes back unchanged. The
+string types (8 and 9) index the script's own string list, which
+`AfpAnimation::Bytecode::strings` already resolves to string table ids.
+
+Tests: `tests/formats/afp_script_tests.cpp` (`ci`) covers a library call, every
+operand length, the end opcode, and the scripts the reader must refuse;
+`tests/local/afp_script_survey_tests.cpp` (`local`) reads every script in the
+install, requires all of them to write back byte for byte, and re-measures the
+opcode and call counts the notes record.
+
+### What the interpreter does with the stack
+
+The five opcodes that consume pushed values are read from afp-core's own action
+interpreter, not assumed from Flash. Find the interpreter by its error strings
+`execute function src script not find.` and `unknown action(0x%02x:%s)`; the
+switch inside it is the opcode dispatch, and each case hands the stack to a
+handler.
+
+| Opcode | Reads, from the top down | Pops | Leaves |
+|---|---|---|---|
+| `CALL_FUNCTION` | name, argument count, then that many arguments | count + 2 | the result |
+| `CALL_METHOD` | name, object, argument count, then that many arguments | count + 3 | the result |
+| `SET_MEMBER` | value, member name, object | 3 | nothing |
+| `STORE_REGISTER` | the top value, copied into each register named | 0 | the value |
+| `PUSH` | nothing | 0 | its items, first item deepest |
+
+The argument count is read through the variant-to-integer conversion, which
+names itself in its own error calls (`afp_variant_get_integer`), and the pop
+count is the argument the handler passes to the stack's drop helper: for
+`CALL_FUNCTION` that is `count + 2`, which is what proves the name and the count
+are two separate slots above the arguments.
+
+The arguments are pushed last one first, so the argument written first in source
+is the one nearest the top of the stack. A call's arguments do not have to be
+pushed by their own `PUSH`: one `PUSH` can carry the operands of a whole chain,
+and the shipped data does exactly that (see the register statements in
+`docs/document.md`).
+
+### What the aeplib calls do
+
+The calls the shipped scripts make were read out of afp-core rather than assumed
+from Flash. Two dispatchers exist and the object decides which one runs: the
+method handler switches on the object's class, and the aeplib object takes its
+own path (an if-chain and a jump table keyed by the call id), while a clip takes
+the clip-method path. Find them from the CALL_METHOD handler and follow the
+class switch; the aeplib branch is the one whose unknown-id case logs
+`callMethod at aeplib [name:id] unsupported variable nr(N)`.
+
+Every aeplib handler tests its argument count exactly and does nothing at all on
+a mismatch, so the counts below are hard. The first argument is always the clip,
+which is why the data reads `aep_set_set_frame(this, 30)`. None of them write a
+result: the value each one leaves on the stack is the empty variant the caller
+started with, which is why the compiler writes a `pop` after a call.
+
+| Call | Id | Takes | Does |
+|---|---|---|---|
+| `stop` / `play` | 0x440 / 0x441 | clip | sets or clears the "does not advance" bit on that one clip, and on the composition it wraps when the clip is an `aep_dummy` |
+| `gotoAndPlay` / `gotoAndStop` | 0x442 / 0x443 | clip, frame | seeks, then plays or stops, then pulls nested AEP compositions to the matching frame |
+| `deepPlay` / `deepStop` | 0x813 / 0x814 | clip | the same bit, applied down the whole subtree |
+| `deepGotoAndPlay` / `deepGotoAndStop` | 0x815 / 0x816 | clip, frame | recursive seek, then plays or stops the subtree |
+| `deep_goto_play_label` / `deep_goto_stop_label` | 0x837 / 0x838 | clip, frame | the same implementation as the deep pair above, under another name |
+| `goto_play_label` / `goto_stop_label` | 0x839 / 0x83a | clip, label | always a label lookup, even when the text reads as a number |
+| `goto_play` / `goto_stop` | 0x83b / 0x83c | clip, frame | a raw frame index, the only family that counts from 0 |
+| `aep_set_frame_control` | 0x832 | parent, depth, frame | gates the child at that depth: while its own playhead sits before `frame - 1` the draw dispatcher skips it. Re-checked on every seek |
+| `aep_set_rect_mask` | 0x833 | clip, four numbers | stores four floats on the clip (or on its `aep_dummy` child) and sets the rect-mask flag |
+| `aep_set_set_frame` | 0x836 | clip, value | stores the value in a member slot and does nothing else inside afp-core |
+| `getInstanceAtDepth` | 0x465 | depth | a CLIP method, not an aeplib call: returns the instance at that depth, or undefined |
+
+**How a frame argument is read** differs per family, and it is the thing most
+worth knowing. `gotoAndPlay`, `gotoAndStop` and the deep pair take a number as a
+frame counted from 1 (the runtime subtracts one) and anything that is not a
+number as a frame label; `goto_play` and `goto_stop` take the number as a raw
+index counted from 0; the `*_label` names always look the text up as a label. A
+label the clip does not carry warns and the seek is abandoned.
+
+**Two things are measured as unresolved and must not be filled in by guessing.**
+The four numbers `aep_set_rect_mask` stores have no reader inside afp-core (the
+immediate scans for the member slot and the flag find only the writers), so
+which edge or size each one is belongs to the renderer, not to this table. The
+value `aep_set_set_frame` stores likewise has no reader that was found, which is
+not the same as having no effect.
+
+### The builtin name table
+
+afp-core resolves a builtin by id and carries the names for them. Three tables
+do it: a blob of NUL-terminated strings on a four-byte stride, a `uint16` slot
+table, and a table of 16-id blocks holding `{first id, one past the last id,
+slot shift}`. A name is `blob + 4 * slots[id + shift - first]`, and an id whose
+block says it is past the end has no name.
+
+`src/formats/afp_script_names_data.h` is that table read out of the DLL: 1877
+ids between `0x100` and `0xd0f`, stored as runs of consecutive ids so the header
+stays a few hundred lines rather than two thousand. `AfpScript::BuiltinName`,
+`BuiltinNamed` and `BuiltinNames` are the lookups over it.
+
+The names are the AVM ones (`_x`, `_alpha`, `blendMode`, `gotoAndPlay`,
+`getInstanceAtDepth`) plus KONAMI's own `aeplib` calls, and the ids are part of
+the compiled bytecode rather than of one build, so the table is data about the
+format and not about a version. Not all of them are identifiers: the table also
+holds `$version`, `flash.display`, `FSCommand:quit`, `/` and `..`, which is why
+the source language filters what it will spell as a name.
+
+To read the table out of a newer DLL, find the variant-to-integer conversion by
+its `afp_variant_get_integer` error string; its branch for a builtin-name
+variant calls the name lookup, and that function's three globals are the blob,
+the slot table and the block table, in the order they appear in the expression
+it returns. Then:
+
+```bash
+uv run afp_builtin_names.py --dll "<game>/modules/afp-core.dll" --names 0x... --index 0x... --blocks 0x...
+```
+
+`tools/local/afp_builtin_names.py` walks the blocks, writes the header, and
+refuses to write anything unless the nine names that were known by hand before
+the table was found come back right, so a wrong address leaves the header alone
+instead of filling it with nonsense.
+
+## GE2D shapes (`ge2d_shape.h`)
+
+`geo/<animation>_shape<N>` files hold the meshes `AP2_SHAPE` tags draw.
+afp-core only builds that name (`%s_shape%d`, `can not find geo id [%s]`);
+afp-utils loads, swaps and draws the shapes.
+
+Byte order comes from the package, never the shape: `PackageByteOrder` reads
+the package's 4-byte `magic` file. afp-utils swaps the shapes only when those
+bytes are `NGPF`; for `FPGN` it does not swap, and for any other value it logs
+`ngp data magic error[%x]` and does not swap either, so everything but `NGPF`
+means little-endian shapes. `Read` and `Write` take that order.
+
+Layout (offsets from the file start, 0 for an absent table):
+
+| Offset | Field |
+|---|---|
+| +0 | u32 magic `GE2D` |
+| +4, +8 | u32 values with no known reader, kept as `version` and `unread_value` |
+| +12 | u32 file size |
+| +16 | u32 flags; `0x4` adds the rect |
+| +20..+28 | u16 counts: vertices, UVs, vertex colours, texture names, primitives |
+| +30 | u16 with no known reader |
+| +32..+48 | u32 table offsets in the same order |
+| +52 | rect, 4 floats (min x, max x, min y, max y), with flag `0x4` |
+
+Vertices and UVs are float pairs, vertex colours 4 raw bytes, the name table
+u32 offsets of NUL-terminated names. A primitive is 16 bytes: kind, draw
+flags, two texture indices (one byte each), u16 index count, 2 bytes with no
+known reader, 4 colour bytes, u32 index array offset. The swap routine swaps
+every u16/u32/float field and the index arrays, and leaves the colour table,
+the primitive's bytes +0..+3 and +6..+11, the names and padding alone; the
+model keeps those as bytes, so a shape reads the same in both orders.
+
+`Shape` keeps no counts, offsets or size, and floats as raw bits. Because the
+model drops the layout, `Read` refuses anything the layout would carry beyond
+the tables: a non-zero offset for an empty table or index array, tables that
+overlap or share bytes, and non-zero bytes that no table, name or index array
+covers (padding included). `Write` lays
+the file out as the converter did: header, rect, name offset table, names
+(each padded with zeros to `(length + 4) & ~3`), vertices, UVs, vertex
+colours, primitives, index arrays (each padded to `(2 * count + 3) & ~3`);
+an empty table or index array gets offset 0.
+No IIDX 33 shape has vertex colours, so their place after the UVs is the one
+order that fits both the shipped files and afp-utils' own copy routine.
+
+Finders in afp-utils: the swap routine holds the only `0x47453244` immediate
+and asserts with `afpu-swap-data.c`; the package test is next to
+`ngp data magic error[%x]`; the size and copy routines are
+`afp_bin_geo_calc_size` and `afp_bin_geo_copy`.
+
+Tests: `tests/formats/ge2d_shape_tests.cpp` (`ci`); the round trip gate reads
+and rewrites every shape in the install.
 
 ## DXT / S3TC decode (`dxt_decode.h`)
 
@@ -289,3 +811,17 @@ IIDX 10 packs several small swatches into one tile (`music`'s single 24x8
 the whole tile - the "bright cyan panels" symptom. RE evidence, the full
 per-scene survey, and how to re-find the code in a new build:
 `IIDX/model_scene_texture_atlas.md` in the notes repo.
+
+## IFS name escaping (`ifs_names.h`)
+
+`Ifs::EscapeName` maps one logical path component to its manifest node name and
+`Ifs::UnescapeName` maps it back: letters and digits stay, a leading digit gains
+a `_`, `_` doubles, and ` $+-.:@~` become `_A` to `_H`. Unescaping refuses
+anything that is not an escaped name, which includes the special names
+(`_info_`, `_super_`), so a caller that keeps the stored name on failure gets
+the right answer for those. The pair is a bijection: the leading `_` is a
+digit marker only when the next character is a digit, and `__` is the only way
+an escaped name holds a `_`.
+
+The editor's document model shows unescaped names and keys everything off
+unescaped paths (docs/document.md).

@@ -3,7 +3,7 @@
 `gui_tests` drives the real panel code with simulated mouse and keyboard input,
 in a process with no window, no D3D9 device, no Konami DLLs and no game data.
 It runs under `ctest -L ci` next to every other suite, so it is a hosted-CI
-gate, not a local-only tier.
+gate, not a local-only suite.
 
 ## 1. Why this is possible at all
 

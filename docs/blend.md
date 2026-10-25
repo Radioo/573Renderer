@@ -51,6 +51,15 @@ locks each constant to its SDK value.
   eff_a)) so straight-alpha sprites do not over-darken (the bg_air "blue oval"
   fix). DDR keeps the plain multiply - its content is game-verified without
   the weighting. See afp_d3d9_callbacks.cpp SetLayer.
+- The additive-coverage pixel shader exists ONLY on the modern backend.
+  `CompileAfpShaders` runs from afp_d3d9.cpp alone, and the legacy AFP 2.13.7
+  backend's `Cb_SetBlend` (afp_ddr_render.cpp) binds no pixel shader, so its
+  additive modes keep the plain `kAlphaCoverage` MAX alpha. Consequence (open
+  defect): a transparent-background export of an opaque-black additive sprite
+  on that backend (the IIDX 18/19 note-hit explosions) writes a black
+  rectangle over the sprite's bounding box. Porting the shader to the legacy
+  backend is not done; the fix is the same `max(r, g, b)` coverage described in
+  docs/d3d9_backend.md.
 - Modern `SetBlend` (afp-core stream-level callback) uses a DIFFERENT enum
   (0=normal, 1=additive, 2=multiply, 3=screen, 4=premultiplied-add) and is NOT
   this table - do not unify them.
