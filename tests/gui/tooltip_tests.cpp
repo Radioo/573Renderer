@@ -3,8 +3,8 @@
 #include "gui_mock_assets.h"
 
 #include "gui_icons.h"
-#include "video_encoder.h"
 #include "warp_device.h"
+#include "encode/export_encoder.h"
 #include "imgui.h"
 #include "imgui_internal.h"
 #include "imgui_te_context.h"
@@ -260,7 +260,7 @@ TEST_CASE("hardware-accel tooltip names the reason for the chosen format", "[gui
 
         for (const Case& c : cases) {
             const bool hw =
-                VideoEncoder::HardwareAvailable(MediaSink::HardwareProbeFormat(c.format));
+                ExportEncoder::HardwareAvailable(MediaSink::HardwareProbeFormat(c.format));
             const bool is_h264 = (c.format == MediaSink::Format::MP4_H264);
             const char* expect = nullptr;
             if (c.format == MediaSink::Format::MP4_HEVC_Alpha) {

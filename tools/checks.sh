@@ -4,15 +4,35 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-BUILD_LOG="$(mktemp)"
-BUILD_BAT="$(cygpath -w "$ROOT/build.bat")"
-MSYS_NO_PATHCONV=1 cmd.exe /c "$BUILD_BAT" 2>&1 | tee "$BUILD_LOG"
-if ! grep -q "Build successful" "$BUILD_LOG"; then
-    echo "checks: build.bat never reported success - build step did not run or failed"
-    rm -f "$BUILD_LOG"
+run_build() {
+    local script="$1"
+    local log
+    log="$(mktemp)"
+    MSYS_NO_PATHCONV=1 cmd.exe /c "$(cygpath -w "$ROOT/$script")" 2>&1 | tee "$log"
+    if ! grep -q "Build successful" "$log"; then
+        echo "checks: $script never reported success - build step did not run or failed"
+        rm -f "$log"
+        exit 1
+    fi
+    rm -f "$log"
+}
+
+run_build build.bat
+run_build build32.bat
+
+EDITOR_LOG="$(mktemp)"
+MSYS_NO_PATHCONV=1 cmd.exe /c "$(cygpath -w "$ROOT/editor/build.bat")" 2>&1 | tee "$EDITOR_LOG"
+if ! grep -q "Editor build succeeded" "$EDITOR_LOG"; then
+    echo "checks: editor/build.bat never reported success"
+    rm -f "$EDITOR_LOG"
     exit 1
 fi
-rm -f "$BUILD_LOG"
+rm -f "$EDITOR_LOG"
+"$ROOT/build-editor/editor_widget_tests.exe"
+"$ROOT/build-editor/editor_window_tests.exe"
+
+uv run --project "$ROOT/tools/ci" python "$ROOT/tools/ci/stage_editor.py"     --editor "$ROOT/build-editor" --host "$ROOT/build" --into "$ROOT/dist"
+uv run --project "$ROOT/tools/ci" python "$ROOT/tools/ci/check_editor_starts.py" --dist "$ROOT/dist"
 
 CTEST_EXE="ctest"
 if [ -f build/CMakeCache.txt ]; then
@@ -31,7 +51,9 @@ uv run --project tools/ci python tools/ci/check_file_length.py
 uv run --project tools/ci python tools/ci/check_no_comments.py
 uv run --project tools/ci python tools/ci/check_banned_chars.py
 uv run --project tools/ci python tools/ci/check_machine_paths.py
+uv run --project tools/ci python tools/ci/check_raw_dll_offsets.py
 uv run --project tools/ci python tools/ci/check_gui_isolation.py
+uv run --project tools/ci python tools/ci/check_qt_isolation.py
 uv run --project tools/ci python tools/ci/check_host_isolation.py
 uv run --project tools/ci python tools/ci/check_preset_layers.py
 uv run --project tools/ci python tools/ci/check_preset_states.py

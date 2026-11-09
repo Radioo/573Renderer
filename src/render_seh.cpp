@@ -2,6 +2,8 @@
 #include <excpt.h>
 #include "afp_funcs.h"
 #include "render_seh.h"
+
+#include "support/stack_trace.h"
 #include "support/log.h"
 
 #include <algorithm>
@@ -49,11 +51,18 @@ void ScreamRenderFault(const char* what, const FaultReport& r) {
     LOG("RenderSeh", "## REVERSE the faulting path and fix it ASAP.");
     LOG("RenderSeh", "## fault pc=%s+0x%llx op=%lu target=0x%llx", mod.name,
         (unsigned long long)off, (unsigned long)r.op, (unsigned long long)r.target);
+    Support::LogStackTrace("RenderSeh", Support::DescribeAddresses(r.stack, r.stack_frames));
     LOG("RenderSeh", "############################################################");
 }
 
 int CaptureFault(EXCEPTION_POINTERS* ep, FaultReport* out) {
     if (ep != nullptr && ep->ExceptionRecord != nullptr) {
+        out->stack_frames =
+            Support::CaptureStackAddresses(ep, out->stack, Support::kMaxStackFrames);
+        if (out->stack_frames < 3) {
+            out->stack_frames =
+                Support::ScanStackForReturns(ep, out->stack, Support::kMaxStackFrames);
+        }
         out->pc = reinterpret_cast<uintptr_t>(ep->ExceptionRecord->ExceptionAddress);
         if (ep->ExceptionRecord->NumberParameters >= 2) {
             out->op = static_cast<DWORD>(ep->ExceptionRecord->ExceptionInformation[0]);

@@ -1,7 +1,7 @@
 #pragma once
 
 #include "loop/ddr_loop_detector.h"
-#include "media_sink.h"
+#include "encode/export_encoder.h"
 
 #include <chrono>
 #include <cstdint>
@@ -66,7 +66,7 @@ struct Session {
     int blend_w = 0, blend_h = 0;
     std::vector<std::vector<uint8_t>> blend_buf;
 
-    MediaSink::Sink sink;
+    ExportEncoder::Sink sink;
 };
 
 Session& ActiveSession();

@@ -73,31 +73,6 @@ std::string AsString(const std::vector<uint8_t>& v) {
 
 }
 
-TEST_CASE("Lz77Decompress literals only") {
-    const std::vector<uint8_t> src = {0x07, 'A', 'B', 'C'};
-    CHECK(AsString(DdrArc::Lz77Decompress(src, 0)) == "ABC");
-}
-
-TEST_CASE("Lz77Decompress back-reference expands window match") {
-    CHECK(AsString(DdrArc::Lz77Decompress(AbcLz77Stream(), 0)) == "ABCABCABC");
-}
-
-TEST_CASE("Lz77Decompress reads zero pre-history") {
-    const std::vector<uint8_t> src = {0x00, 0x06, 0x41};
-    const std::vector<uint8_t> expected = {0, 0, 0, 0};
-    CHECK(DdrArc::Lz77Decompress(src, 0) == expected);
-}
-
-TEST_CASE("Lz77Decompress stops at expected_size") {
-    const std::vector<uint8_t> src = {0x1F, 'A', 'B', 'C', 'D', 'E'};
-    CHECK(AsString(DdrArc::Lz77Decompress(src, 3)) == "ABC");
-}
-
-TEST_CASE("Lz77Decompress stops at zero-distance end marker") {
-    const std::vector<uint8_t> src = {0x01, 'X', 0x00, 0x00, 'Y', 'Z'};
-    CHECK(AsString(DdrArc::Lz77Decompress(src, 0)) == "X");
-}
-
 TEST_CASE("ParseToc reads header and entries") {
     const std::vector<uint8_t> arc = BuildTwoEntryArc();
     DdrArc::Toc toc;

@@ -5,6 +5,7 @@ import sys
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 GUI_PREFIXES = ("src/gui/", "tests/gui/")
+SCANNED_PREFIXES = ("src/", "tests/", "editor/")
 SOURCE_SUFFIXES = (".cpp", ".h", ".hpp", ".inl")
 PATTERNS = [
     re.compile(rb"\bImGui::"),
@@ -21,7 +22,7 @@ def tracked_sources():
         text=True)
     return [
         line for line in out.splitlines()
-        if line.startswith(("src/", "tests/")) and line.endswith(SOURCE_SUFFIXES)
+        if line.startswith(SCANNED_PREFIXES) and line.endswith(SOURCE_SUFFIXES)
     ]
 
 

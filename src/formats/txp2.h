@@ -2,6 +2,7 @@
 
 #include <array>
 #include <cstdint>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -73,5 +74,10 @@ struct Package {
 bool Parse(const std::vector<uint8_t>& core, Package& out, std::string& err);
 
 uint32_t SectionDwordCount(uint32_t flag_bit);
+
+int BytesPerTexel(int format);
+
+bool TexelsToBgra(int format, int width, int height, std::span<const uint8_t> pixels,
+                  std::vector<uint8_t>& out);
 
 }

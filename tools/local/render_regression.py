@@ -49,7 +49,8 @@ def scenario_sdvx(game_dir, work):
     rc = run_renderer([
         "--no-gui", "--game-dir", game_dir, "--profile", "sdvx7",
         "--render-size", "1080x1920",
-        "--ifs", str(pathlib.PureWindowsPath(game_dir) / "data/graphics/select_bg/select_bg_vi.ifs"),
+        "--ifs",
+        str(pathlib.PureWindowsPath(game_dir) / "data/graphics/select_bg/select_bg_vi.ifs"),
         "--export", str(out / "out.webp"), "--export-max-frames", "12",
         "--export-bg", "32,64,96", "--export-crop", "100,200,400,300",
         "--export-dump-frames", str(out),

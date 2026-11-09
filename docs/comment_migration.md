@@ -55,7 +55,7 @@ were audited from scratch during P9 rather than incrementally.
 | src/afp_d3d9.cpp | docs/d3d9_backend.md (InstallDefaultRenderStates, alpha-MAX blend, game-verified sampler state, per-frame reset, afpu_render_info counters) |
 | src/afp_d3d9_textures.cpp | docs/d3d9_backend.md (format-id table, TexCreate slot alloc, atlas-filter drain, LoadExternalImageSlot) + docs/ownership.md (1024-slot overflow) |
 | src/afp_anim.cpp | docs/engine_binding.md + docs/boot_and_render_loop.md sec 5 (mc-playhead codes, labels, seek/pause, companions) + docs/d3d9_backend.md (mc_set handler addrs) + docs/export_pipeline.md (0xE0000000 latches, hantei no-signal) |
-| src/ifs_inspect.cpp | docs/boot_and_render_loop.md sec 4.3b (manifest parse, 3-tier variant discovery) + docs/d3d9_backend.md (texturelist NEAREST/x=540) |
+| src/ifs_inspect.cpp | docs/boot_and_render_loop.md sec 4.3b (manifest parse, 3-stage variant discovery) + docs/d3d9_backend.md (texturelist NEAREST/x=540) |
 | src/arc_extract.cpp | docs/ddr.md (.arc format, two-pass extraction) + docs/formats.md - the source comments were mostly progress narration |
 | src/customize_extract.cpp | docs/ddr.md (category mapping, lossless PNG minify chunk policy) |
 | src/qpro/qpro_dll.cpp | docs/qpro.md (PE part-array parse, Elpis head1/2 numeric-suffix classify) |

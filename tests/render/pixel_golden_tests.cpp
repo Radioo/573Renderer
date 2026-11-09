@@ -95,7 +95,7 @@ Render::RenderCommandList RecordPixelFrame() {
     g_gpu.deferred_replay = true;
     g_gpu.frame_cmds.clear();
 
-    AfpD3D9::SetLayer(0, 0, nullptr);
+    AfpD3D9::SetLayer(0);
     AfpD3D9::SetBlend(0, 0, nullptr);
     SubmitColoredQuad(20.0F, 20.0F, 150.0F, 110.0F,
                       {0xFFFF2020, 0xFF20FF20, 0xFF2020FF, 0xFFFFFFFF}, 0);

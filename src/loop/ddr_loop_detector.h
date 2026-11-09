@@ -40,7 +40,8 @@ private:
     bool PreRoll(bool afp_ok, int cf, int loop_label_frame);
     bool FirstFrame(const DdrFeed& in, int cf);
     bool AfpLoop(const DdrFeed& in, int cf, const SubmitFn& submit, DdrResult& result);
-    bool ContentLoop(const DdrFeed& in, double mad, const SubmitFn& submit, DdrResult& result);
+    bool ContentLoop(const DdrFeed& in, double mad, bool allowed, const SubmitFn& submit,
+                     DdrResult& result);
     void CaptureTail(const DdrFeed& in, double mad, const SubmitFn& submit);
     void HoldFrame(const DdrFeed& in);
 
@@ -58,6 +59,7 @@ private:
     bool wrapped_ = false;
     int cf_static_ = 0;
     bool afp_loop_ = false;
+    bool root_drifted_ = false;
     int loops_done_ = 0;
 };
 

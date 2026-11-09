@@ -10,6 +10,7 @@
 #include "backend/afp_profiles.h"
 #include "backend/afp_render_context.h"
 #include "render_backend.h"
+#include <type_traits>
 #include <cstdlib>
 #include <cstddef>
 #include <cstring>
@@ -65,6 +66,15 @@ const AfpProfiles::AfpConfig& DefaultAfpConfig() {
     static const AfpProfiles::AfpConfig cfg{};
     return cfg;
 }
+
+static_assert(std::is_same_v<decltype(AfpD3D9::SetLayer), void __cdecl(unsigned int)>,
+              "afp-utils calls the render context's layer slot with one argument. Both IIDX 33 "
+              "and IIDX 34 forward exactly one uint, so a wider signature reads whatever the "
+              "caller happened to leave in the argument registers.");
+static_assert(std::is_same_v<decltype(AfpD3D9::BeginRender), void __cdecl()>,
+              "afp-utils calls the begin slot with no arguments.");
+static_assert(std::is_same_v<decltype(AfpD3D9::EndRender), void __cdecl()>,
+              "afp-utils calls the end slot with no arguments.");
 
 void FillRenderContext(AfpRenderContext& render_ctx) {
     render_ctx.InitZero();

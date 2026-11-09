@@ -81,8 +81,8 @@ int BuildVertices(const float* vtx, int count, const Render::VtxLayout& lay, D3D
         }
         if (i == 0) bb.first_vcol = vcol;
         Vtx& d = buf[i];
-        d.x = x - 0.5F;
-        d.y = y - 0.5F;
+        d.x = ((g_world._11 * x) + (g_world._21 * y) + g_world._41) - 0.5F;
+        d.y = ((g_world._12 * x) + (g_world._22 * y) + g_world._42) - 0.5F;
         d.z = 0.0F;
         d.rhw = 1.0F;
         uint32_t c = lay.has_vcol ? Render::MulARGB(vcol, (uint32_t)modulate) : (uint32_t)modulate;
@@ -228,6 +228,30 @@ void AFP_CB Cb_DrawPrimitiveLegacy(const float* vtx, int count, int prim_type, u
     if (g_frame < 1 && g_draw_count <= 8) {
         LOG("DDR-R", "legacy draw_primitive type=%d attr=%#x a5=%#x a6=%#x", prim_type, attr,
             (unsigned)a5, (unsigned)a6);
+    }
+    if (Support::EnvFlag("DDR_TRACE_PRIM") && vtx != nullptr && count > 0) {
+        const Render::VtxLayout lay = Render::DecodeVtxLayout(static_cast<int>(attr));
+        float x0 = 1e9F;
+        float y0 = 1e9F;
+        float x1 = -1e9F;
+        float y1 = -1e9F;
+        if (lay.stride > 0) {
+            for (int i = 0; i < count; i++) {
+                const float* v = vtx + (static_cast<std::size_t>(i) * lay.stride);
+                const int at = (lay.has_uv ? 2 : 0) + (lay.skip2 ? 2 : 0) + (lay.has_vcol ? 1 : 0);
+                x0 = std::min(x0, v[at]);
+                x1 = std::max(x1, v[at]);
+                y0 = std::min(y0, v[at + 1]);
+                y1 = std::max(y1, v[at + 1]);
+            }
+        }
+        LOG("DDR-R",
+            "prim type=%d n=%d attr=%#x tex=%#x box=[%.1f,%.1f]-[%.1f,%.1f] c0=[%.2f %.2f %.2f "
+            "%.2f] c1=%s",
+            prim_type, count, attr, static_cast<unsigned>(a5), x0, y0, x1, y1,
+            (c0 != nullptr) ? c0[0] : -1.0F, (c0 != nullptr) ? c0[1] : -1.0F,
+            (c0 != nullptr) ? c0[2] : -1.0F, (c0 != nullptr) ? c0[3] : -1.0F,
+            (c1 != nullptr) ? "yes" : "no");
     }
     int params[12] = {};
     params[0] = prim_type;

@@ -59,7 +59,7 @@ Recording RecordFixedFrame() {
     std::copy_n(matrix.begin(), matrix.size(), std::begin(g_gpu.current_matrix));
     g_gpu.current_matrix_ready = true;
 
-    AfpD3D9::SetLayer(0, 0, nullptr);
+    AfpD3D9::SetLayer(0);
     AfpD3D9::SetBlend(0, 0, nullptr);
 
     std::vector<float> strip_src = {10.25F, 20.75F,  110.25F, 20.75F,

@@ -14,9 +14,13 @@ struct Profile {
 
     int default_render_w;
     int default_render_h;
+
+    bool has_qpro = false;
 };
 
 const std::vector<Profile>& All();
+
+[[nodiscard]] bool SlugHasQpro(const std::string& slug);
 
 const Profile* AutoDetect(const std::string& dir);
 

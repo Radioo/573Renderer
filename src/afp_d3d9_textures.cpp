@@ -151,6 +151,15 @@ void MarkPersistentBoundary() {
         g_gpu.persistent_tex_high_water - 1);
 }
 
+int PersistentBoundary() {
+    return g_gpu.persistent_tex_high_water;
+}
+
+void RestorePersistentBoundary(int slot) {
+    g_gpu.persistent_tex_high_water = std::max(slot, 1);
+    g_gpu.next_tex_slot = g_gpu.persistent_tex_high_water;
+}
+
 IDirect3DTexture9* ResolveTexture(uint32_t tex_ref) {
     if (tex_ref == 0) return nullptr;
     uint32_t slot_id = 0;
@@ -271,6 +280,7 @@ void ResetAllTextures() {
         }
     }
     g_gpu.current_texture = nullptr;
+    g_gpu.next_tex_slot = g_gpu.persistent_tex_high_water;
     LOG("AfpD3D9", "ResetAllTextures: released %d scene textures (kept %d persistent)", released,
         g_gpu.persistent_tex_high_water - 1);
 }

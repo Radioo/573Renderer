@@ -305,7 +305,7 @@ constexpr std::array<BoolOpt, 14> kBoolOpts = {{
     {.name = "--export-sw", .member = &Options::export_prefer_hardware, .value = false},
 }};
 
-constexpr std::array<StringOpt, 29> kStringOpts = {{
+constexpr std::array<StringOpt, 30> kStringOpts = {{
     {.name = "--game-dir", .member = &Options::game_dir},
     {.name = "--profile", .member = &Options::game_profile},
     {.name = "--ifs", .member = &Options::startup_ifs},
@@ -313,6 +313,7 @@ constexpr std::array<StringOpt, 29> kStringOpts = {{
     {.name = "--animation", .member = &Options::animation_name},
     {.name = "--animation-label", .member = &Options::animation_label},
     {.name = "--goto-label", .member = &Options::goto_label},
+    {.name = "--iidx-playfield", .member = &Options::iidx_playfield},
     {.name = "--extract-qpro", .member = &Options::extract_qpro_dir},
     {.name = "--qpro-parts", .member = &Options::qpro_parts},
     {.name = "--qpro-only", .member = &Options::qpro_only},
@@ -438,6 +439,32 @@ Handled HandleRootLoop(Cursor& c, Options& out, std::string& err) {
     return Handled::Error;
 }
 
+Handled HandleLoadBitmaps(Cursor& c, Options& out, std::string& err) {
+    std::string v;
+    if (!NextArg(c, "--load-bitmaps", v, err)) return Handled::Error;
+    if (v.empty()) {
+        err = "--load-bitmaps expects a package path";
+        return Handled::Error;
+    }
+    out.bitmap_packages.push_back(std::move(v));
+    return Handled::Ok;
+}
+
+Handled HandleStretch(Cursor& c, Options& out, std::string& err) {
+    std::string v;
+    if (!NextArg(c, "--stretch", v, err)) return Handled::Error;
+    if (v == "0" || v == "off") {
+        out.stretch_16_9 = 0;
+        return Handled::Ok;
+    }
+    if (v == "1" || v == "on") {
+        out.stretch_16_9 = 1;
+        return Handled::Ok;
+    }
+    err = "--stretch expects 0/off or 1/on, got '" + v + "'";
+    return Handled::Error;
+}
+
 Handled HandleMcNameType(Cursor& c, Options& out, std::string& err) {
     std::string v;
     if (!NextArg(c, "--mc-name-type", v, err)) return Handled::Error;
@@ -552,12 +579,14 @@ Handled HandleShowSublayer(Cursor& c, Options& out, std::string& err) {
     return Handled::Ok;
 }
 
-constexpr std::array<SpecialOpt, 16> kSpecialOpts = {{
+constexpr std::array<SpecialOpt, 18> kSpecialOpts = {{
     {.name = "--render-size", .fn = HandleRenderSize},
     {.name = "--export-size", .fn = HandleExportSize},
     {.name = "--scale", .fn = HandleScale},
     {.name = "--afp-speed", .fn = HandleAfpSpeed},
     {.name = "--root-loop", .fn = HandleRootLoop},
+    {.name = "--stretch", .fn = HandleStretch},
+    {.name = "--load-bitmaps", .fn = HandleLoadBitmaps},
     {.name = "--mc-name-type", .fn = HandleMcNameType},
     {.name = "--export-format", .fn = HandleExportFormat},
     {.name = "--export-crop", .fn = HandleExportCrop},

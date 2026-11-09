@@ -1,0 +1,87 @@
+namespace PreviewProtocol;
+
+table Boot {
+  game_dir:string;
+  build:string;
+}
+
+table LoadPackage {
+  package:string;
+  animation:string;
+  ifs:[ubyte];
+  reload:bool;
+}
+
+table SelectAnimation {
+  name:string;
+}
+
+table Seek {
+  frame:uint;
+}
+
+table Resize {
+  width:uint;
+  height:uint;
+}
+
+table Render {
+}
+
+table ShowSymbol {
+  name:string;
+}
+
+table BackgroundFill {
+  drawn:bool;
+}
+
+table InputValue {
+  path:string;
+  texture:string;
+  hidden:bool;
+}
+
+table SetInputs {
+  values:[InputValue];
+}
+
+union Request { Boot, LoadPackage, SelectAnimation, Seek, Resize, Render, ShowSymbol, BackgroundFill, SetInputs }
+
+table RequestMessage {
+  request:Request;
+}
+
+table Label {
+  name:string;
+  frame:uint;
+}
+
+table Done {
+}
+
+table Loaded {
+  frame_count:uint;
+  labels:[Label];
+}
+
+table Frame {
+  shared_handle:ulong;
+  width:uint;
+  height:uint;
+  frame:uint;
+  stage_width:uint;
+  stage_height:uint;
+}
+
+table Failure {
+  message:string;
+}
+
+union Reply { Done, Loaded, Frame, Failure }
+
+table ReplyMessage {
+  reply:Reply;
+}
+
+root_type RequestMessage;

@@ -2,6 +2,7 @@
 
 #include "afp_funcs.h"
 #include "afpu_funcs.h"
+#include "avs_boot.h"
 #include "avs_funcs.h"
 #include "backend/afp_profiles.h"
 #include "support/dll_loader.h"
@@ -25,6 +26,17 @@ void Shutdown(EngineSession& es);
 void DestroySceneStreams(AfpFuncs& afp);
 
 void UnloadPackages(EngineSession& es);
+
+bool LoadPackageFromMemory(EngineSession& es, const AvsManager::MemoryIfs& ifs,
+                           const std::string& package, const std::string& animation);
+
+bool ReloadPackageFromMemory(EngineSession& es, const AvsManager::MemoryIfs& ifs,
+                             const std::string& package, const std::string& animation);
+
+bool LoadTexturePackageFromMemory(EngineSession& es, const AvsManager::MemoryIfs& ifs,
+                                  const std::string& package);
+
+void UnloadTexturePackage(EngineSession& es);
 
 void UmountPackagesAndData(AvsFuncs& avs);
 
@@ -79,7 +91,11 @@ bool GotoLabel(const AfpFuncs& afp, const std::string& label);
 
 bool SeekFrame(const AfpFuncs& afp, int frame);
 
+bool AttachSymbol(const AfpFuncs& afp, const std::string& name);
+
 void SetStreamPaused(const AfpFuncs& afp, bool paused);
+
+void SetBackgroundDrawn(const AfpFuncs& afp, bool drawn);
 
 struct ChildClip {
     std::string name;
@@ -92,6 +108,10 @@ struct ChildClip {
 };
 
 int GetRootMcId(const AfpFuncs& afp);
+
+bool SetInputTexture(const AfpFuncs& afp, const std::string& path, const std::string& texture);
+
+bool SetInputShown(const AfpFuncs& afp, const std::string& path, bool shown);
 
 std::vector<ChildClip> EnumerateChildClips(const AfpFuncs& afp, bool want_positions = true,
                                            bool* ok = nullptr);

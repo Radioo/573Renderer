@@ -53,30 +53,16 @@ void ResetMaskWrite() {
     g_gpu.in_mask_write = false;
 }
 
-void __cdecl SetLayer(unsigned int blend_mode, int zero, const unsigned char* hsv_desc) {
-    (void)zero;
+void __cdecl SetLayer(unsigned int blend_mode) {
     g_last_setlayer_blend = (int)blend_mode;
-    const auto hsv_addr = reinterpret_cast<uintptr_t>(hsv_desc);
-    if (hsv_addr < 0x10000ULL || hsv_addr >= 0x800000000000ULL) hsv_desc = nullptr;
-    g_gpu.hsv_desc_ptr = hsv_desc;
-    if (hsv_desc != nullptr) memcpy(g_gpu.hsv_captured, hsv_desc, 16);
-    static int hsv_log = 0;
-    if ((hsv_desc != nullptr) && hsv_log < 8) {
-        unsigned short const valid = *(const unsigned short*)(hsv_desc + 2);
-        float const hue = *(const float*)(hsv_desc + 4);
-        float const sat = *(const float*)(hsv_desc + 8);
-        float const val = *(const float*)(hsv_desc + 12);
-        LOG("HSV", "SetLayer/+0x28 #%d arg0=0x%x id=%u valid=%u mono=%u hue=%.3f sat=%.3f val=%.3f",
-            hsv_log, blend_mode, hsv_desc[0], valid, hsv_desc[3], hue, sat, val);
-        hsv_log++;
-    }
     if ((g_gpu.device == nullptr) && !g_gpu.deferred_replay) return;
 
     Render::SetLayerCmd cmd{.blend_mode = blend_mode, .has_desc = false, .desc = {}};
     if (!g_gpu.deferred_replay) RenderExec::Execute(g_gpu.device, cmd);
     if ((g_gpu.cmd_list != nullptr) || g_gpu.deferred_replay) {
-        if (hsv_desc != nullptr) {
-            const Render::HsvDescriptor parsed = Render::ParseHsvDescriptor({hsv_desc, 16});
+        if (g_gpu.hsv_desc_ptr != nullptr) {
+            const Render::HsvDescriptor parsed =
+                Render::ParseHsvDescriptor({g_gpu.hsv_desc_ptr, 16});
             if (Render::HsvFilterActive(parsed)) {
                 cmd.has_desc = true;
                 cmd.desc = parsed;

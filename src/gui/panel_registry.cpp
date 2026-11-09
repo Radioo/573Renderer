@@ -11,6 +11,8 @@
 
 #include <span>
 #include <string>
+#include "game_profile.h"
+
 #include <vector>
 
 namespace Gui {
@@ -18,7 +20,7 @@ namespace Gui {
 namespace {
 
 bool QproTabVisible() {
-    return App::Global().GetGameProfileSlug() == "iidx33";
+    return GameProfile::SlugHasQpro(App::Global().GetGameProfileSlug());
 }
 
 bool Scene3dTabVisible() {

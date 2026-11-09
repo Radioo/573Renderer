@@ -6,6 +6,7 @@
 #include "afp_boot.h"
 #include "render_backend.h"
 #include "support/log.h"
+#include "support/png_write.h"
 
 #include <cstdint>
 #include <filesystem>
@@ -66,7 +67,7 @@ void RenderHeadDumpSweep(EngineSession& es, D3D9State& d3d, uint32_t sid) {
             char nm[64];
             snprintf(nm, sizeof(nm), "eaglecomp_f%d.png", f);
             if (w > 0 && h > 0)
-                WritePngBGRA((fs::path("screenshots") / nm).string(), px.data(), w, h);
+                Support::WritePngBGRA((fs::path("screenshots") / nm).string(), px.data(), w, h);
             ++di;
         }
     }

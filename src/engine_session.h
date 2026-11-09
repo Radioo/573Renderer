@@ -42,6 +42,8 @@ struct EngineSession {
     std::vector<uint32_t> extra_streams;
     std::string anim_name;
     std::vector<uint32_t> persistent_pkg_ids;
+    uint32_t texture_pkg_id = 0;
+    int texture_boundary = 1;
     std::vector<CompanionRecord> companions;
     std::vector<OverlayIfs> overlays;
     int next_companion_idx = 0;

@@ -366,7 +366,7 @@ the raw (transient) bitmap.
   (skipping a=0 and a=255).
 - Additive glows carry alpha = max(rgb) from the additive-coverage shader (g_afp_add_ps), so
   unpremultiply recovers the straight glow color (rgb/coverage) without hue skew and black
-  stays transparent (see memory doc renderer573_additive_alpha).
+  stays transparent (see docs/d3d9_backend.md "Additive-coverage shader").
 - `ReadPiece` (atlas crop) returns STRAIGHT-alpha pixels already - directly comparable to
   unpremultiplied clip frames.
 - texturelist.xml imgrect values are HALVED for pixel coords: x = r[0]/2, y = r[2]/2,

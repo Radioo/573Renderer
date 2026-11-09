@@ -15,6 +15,7 @@ typedef void (*avs_shutdown_t)();
 typedef int (*avs_is_active_t)();
 
 typedef void* (*avs_filesys_imagefs_t)();
+typedef void* (*avs_filesys_ramfs_t)();
 typedef int (*avs_fs_addfs_t)(void* filesys);
 typedef int (*avs_fs_mount_t)(const char* mountpoint, const char* fsroot, const char* fstype,
                               const char* options);
@@ -75,6 +76,7 @@ struct AvsOrdinals {
     int avs_is_active;
 
     int avs_filesys_imagefs;
+    int avs_filesys_ramfs;
     int avs_fs_addfs;
     int avs_fs_mount;
     int avs_fs_umount;
@@ -123,6 +125,7 @@ constexpr AvsOrdinals kAvsOrdinals217 = {
     .avs_shutdown = 0x12a,
     .avs_is_active = 0x12d,
     .avs_filesys_imagefs = 0x158,
+    .avs_filesys_ramfs = 0x159,
     .avs_fs_addfs = 0x048,
     .avs_fs_mount = 0x04b,
     .avs_fs_umount = 0x04c,
@@ -162,6 +165,7 @@ constexpr AvsOrdinals kAvsOrdinals2161 = {
     .avs_shutdown = 0x11b,
     .avs_is_active = 0x11c,
     .avs_filesys_imagefs = 0x14d,
+    .avs_filesys_ramfs = 0,
     .avs_fs_addfs = 0x033,
     .avs_fs_mount = 0x036,
     .avs_fs_umount = 0x037,
@@ -201,6 +205,7 @@ constexpr AvsOrdinals kAvsOrdinals2158 = {
     .avs_shutdown = 0x01d,
     .avs_is_active = 0x012,
     .avs_filesys_imagefs = 0x095,
+    .avs_filesys_ramfs = 0,
     .avs_fs_addfs = 0x12d,
     .avs_fs_mount = 0x0ce,
     .avs_fs_umount = 0x0a2,
@@ -240,6 +245,7 @@ constexpr AvsOrdinals kAvsOrdinals2134 = {
     .avs_shutdown = 0x154,
     .avs_is_active = 0x07d,
     .avs_filesys_imagefs = 0x05a,
+    .avs_filesys_ramfs = 0,
     .avs_fs_addfs = 0x11f,
     .avs_fs_mount = 0x09c,
     .avs_fs_umount = 0x06e,
@@ -292,6 +298,7 @@ struct AvsFuncs {
     avs_is_active_t avs_is_active = nullptr;
 
     avs_filesys_imagefs_t avs_filesys_imagefs = nullptr;
+    avs_filesys_ramfs_t avs_filesys_ramfs = nullptr;
     avs_fs_addfs_t avs_fs_addfs = nullptr;
 
     avs_fs_mount_t avs_fs_mount = nullptr;
@@ -341,6 +348,7 @@ struct AvsFuncs {
         DLL_LOAD(loader, avs_shutdown, ord.avs_shutdown);
         DLL_LOAD(loader, avs_is_active, ord.avs_is_active);
         DLL_LOAD(loader, avs_filesys_imagefs, ord.avs_filesys_imagefs);
+        if (ord.avs_filesys_ramfs != 0) DLL_LOAD(loader, avs_filesys_ramfs, ord.avs_filesys_ramfs);
         DLL_LOAD(loader, avs_fs_addfs, ord.avs_fs_addfs);
         DLL_LOAD(loader, avs_fs_mount, ord.avs_fs_mount);
         DLL_LOAD(loader, avs_fs_umount, ord.avs_fs_umount);

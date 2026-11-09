@@ -3,8 +3,10 @@
 The quality gates. Every `check_*.py` / `run_*.py` script here is run by
 `tools/checks.sh` and by the hosted `quality-gates` workflow, and each one exits
 non-zero with the offending paths on failure. Rationale for every rule lives in
-`docs/gates.md`; this file is how to run them. The one script that is NOT a gate
-is `gen_layer_verdicts.py`, a build step, described at the bottom.
+`docs/gates.md`; this file is how to run them. The ones that are NOT gates are
+`gen_layer_verdicts.py`, a build step, and `stage_editor.py` /
+`check_editor_starts.py`, which package the editor, both described at the
+bottom.
 
 This is a uv project: `uv run <script>` works with nothing to install. Commands
 below assume you are in this directory.
@@ -17,6 +19,7 @@ uv run check_no_comments.py
 uv run check_banned_chars.py
 uv run check_machine_paths.py
 uv run check_gui_isolation.py
+uv run check_qt_isolation.py
 uv run check_host_isolation.py
 uv run check_preset_layers.py
 uv run check_preset_states.py
@@ -31,11 +34,39 @@ uv run run_tidy.py
 | `check_banned_chars.py` | em/en dashes, smart quotes, non-breaking spaces and their HTML entities |
 | `check_machine_paths.py` | an absolute drive-letter path in a tracked file |
 | `check_gui_isolation.py` | ImGui symbols outside `src/gui/` and `tests/gui/` |
+| `check_qt_isolation.py` | Qt symbols in `src/` or `tests/`, which belong to the editor project alone |
 | `check_host_isolation.py` | `PresetHost::` / `Scene3dHost::` / `Gc2dHost::` inside `src/gui/timeline/` or `src/gui/gui_preset_library.*` |
 | `check_preset_layers.py` | a 2D layer a built-in preset draws with no `background` row in `docs/preset_layers.md`, or a hidden part with no `chrome` row |
 | `check_preset_states.py` | a preset marker or option choice with no row in `docs/preset_states.md`, and a documented state no preset exposes |
 | `run_format.py` | clang-format differences (`--fix` formats in place) |
 | `run_tidy.py` | clang-tidy findings on changed files |
+
+## Packaging the editor
+
+`stage_editor.py` copies a runnable editor folder out of the two build trees,
+and `check_editor_starts.py` proves the folder actually runs. The `editor` job
+of the `Build` workflow uses both, and they work the same way locally:
+
+```bash
+uv run stage_editor.py --editor ../../build-editor --host ../../build --into ../../dist
+uv run check_editor_starts.py --dist ../../dist
+```
+
+`--editor` is the editor's build directory (`ifs_editor.exe`, the Qt DLLs and
+the `platforms`/`imageformats`/`iconengines` plugin folders), `--host` is the
+renderer's (`preview_host.exe`, which the editor runs to draw anything), and
+`--into` is emptied and rebuilt. `--symbols` adds the `.pdb`s, which are left
+out by default because the editor's is around 600 MB. The stager fails, naming
+what is short, when the folder would not be usable: both executables and the
+`qwindows`, `qminimal`, `qjpeg`, `qsvg` and `qsvgicon` plugins have to be there.
+
+`tools/checks.sh` runs both after the editor suites, so a packaging regression
+fails the local gate too.
+
+`check_editor_starts.py` runs the staged `ifs_editor.exe` with
+`QT_QPA_PLATFORM=minimal` for six seconds and fails if it exits, which is what a
+missing DLL looks like. It is the check that would have caught the first editor
+artefact, which had every Qt file and no `preview_host.exe`.
 
 `run_format.py` and `run_tidy.py` resolve the pip-pinned binary out of the venv
 rather than trusting PATH, and refuse to run on a version mismatch.

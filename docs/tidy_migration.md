@@ -182,6 +182,18 @@ Manual categories:
 - WIC `WritePixels` takes a non-const pointer it never writes through; its
   `const_cast` put `cppcoreguidelines-pro-type-const-cast` on the
   transitional subtraction list rather than contorting the call site.
+- Text formatting in gated libs uses `std::format`, not `std::to_chars`:
+  `to_chars` needs a `char*` first/last pair and pointer subtraction for the
+  length (both `cppcoreguidelines-pro-bounds-pointer-arithmetic`), and MSVC's
+  `std::array::end()` is a checked iterator, not a `char*`. `std::format` is
+  locale-independent, pointer-math-free and not variadic.
+- Pointer-plus-length stream interfaces cannot be written clean under
+  `pro-bounds-pointer-arithmetic`: design gated-lib interfaces span-first
+  (as `Dxt::Decompress` is), and in tests use `std::array` with `.at()` for
+  non-constexpr indices.
+- `bugprone-unchecked-optional-access` does not recognise a Catch2
+  `REQUIRE(opt)` (nor `.value()`) as a check: wrap the field checks in an
+  explicit `if (opt)`.
 - Dead diagnostics found along the way are DELETED, not suppressed: dead
   stubs, unused RE crop constants (their values live in docs/qpro.md).
 

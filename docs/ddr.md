@@ -411,6 +411,9 @@ All DDR_* debug switches, kept for future dip-hunting:
 - `DDR_DUMP_FRAME=N` - per-draw logging (bbox, uv, blend, vcol, truncation) on frame N; frame
   summary lines for +-60 frames around it.
 - `DDR_DUMP_DRAW=N` - on the dump frame, log every vertex of the Nth draw.
+- `DDR_DUMP_LOOP=1` - refer the root clip once, log every frame label and its frame, then log each
+  `current_frame` wrap (0x1010) and the gap since the previous one, plus the builtin loop count
+  (0x1013). Re-derives a background's authored loop from afp state.
 - `DDR_DUMP_TEX=1` - on the dump frame, save every live atlas to screenshots/atlas_NN.png via
   dynamically-resolved D3DXSaveTextureToFileA (tries d3dx9_43 down to d3dx9_30).
 - `DDR_ONLY_DRAW=N` / `DDR_DRAW_MIN` / `DDR_DRAW_MAX` - render only selected draws per frame

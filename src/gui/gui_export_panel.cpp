@@ -2,12 +2,12 @@
 #include "gui_dpi.h"
 #include "../native_dialog.h"
 #include "editor/export_range.h"
+#include "encode/export_encoder.h"
 #include "editor/preset_editor_state.h"
 #include "../export.h"
 #include "../export_capture.h"
 #include "../state/app_state.h"
 #include "../state/commands.h"
-#include "../video_encoder.h"
 #include "imgui.h"
 #include "media/media_format.h"
 #include "render/stretch.h"
@@ -761,7 +761,7 @@ void RenderModal() {
 
     const MediaSink::Format current_format = MediaSink::FromIndex(g_format_idx);
     const bool hw_available =
-        VideoEncoder::HardwareAvailable(MediaSink::HardwareProbeFormat(current_format));
+        ExportEncoder::HardwareAvailable(MediaSink::HardwareProbeFormat(current_format));
 
     if (busy) ImGui::BeginDisabled();
     DrawFilenameAndFormat();

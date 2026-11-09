@@ -11,6 +11,7 @@
 #include "support/log.h"
 
 #include <algorithm>
+#include <array>
 #include <cstddef>
 #include <map>
 #include <memory>
@@ -34,6 +35,7 @@ std::map<std::string, std::unique_ptr<Loaded>> g_assets;
 Loaded* g_active = nullptr;
 Gc2d::Canvas g_canvas;
 std::vector<GcAnim::DrawNode> g_nodes;
+std::vector<GcAnim::ElementNode> g_elements;
 std::vector<GcAnim::DrawNode> g_batch;
 std::string g_anim;
 size_t g_start = 0;
@@ -270,6 +272,20 @@ void SetSpriteScale(int index, float scale) {
     g_sprites[(size_t)index].scale = scale;
 }
 
+std::vector<GcAnim::ElementNode> ListElements() {
+    return g_elements;
+}
+
+std::array<int, 2> CellSize(const std::string& asset, const std::string& cell) {
+    const Loaded* owner = Find(asset);
+    if (owner == nullptr) return {0, 0};
+    const auto it = owner->pkg.index.cell_names.find(cell);
+    if (it == owner->pkg.index.cell_names.end()) return {0, 0};
+    if ((size_t)it->second >= owner->pkg.index.cells.size()) return {0, 0};
+    const SysIdx::Cell& found = owner->pkg.index.cells[(size_t)it->second];
+    return {static_cast<int>(found.w), static_cast<int>(found.h)};
+}
+
 std::vector<DrawInfo> ListDrawNodes() {
     std::vector<DrawInfo> out;
     if (g_active == nullptr) return out;
@@ -330,6 +346,7 @@ void DrawParticles(const std::string& asset, const std::vector<CellDraw>& cells)
 void DrawSprites(int min_priority, int max_priority) {
     if (g_assets.empty() || g_sprites.empty()) return;
     g_nodes.clear();
+    g_elements.clear();
     g_batch.clear();
     Loaded* run = nullptr;
     for (const auto& sprite : g_sprites) {
@@ -338,7 +355,7 @@ void DrawSprites(int min_priority, int max_priority) {
         if (owner == nullptr) continue;
         if (owner != run) DrawBatch(run, g_batch);
         run = owner;
-        Gc2d::AppendNodes(owner->pkg.index, DrawOf(sprite), g_canvas, g_batch);
+        Gc2d::AppendNodes(owner->pkg.index, DrawOf(sprite), g_canvas, g_batch, &g_elements);
     }
     DrawBatch(run, g_batch);
 }

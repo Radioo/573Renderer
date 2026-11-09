@@ -1,0 +1,119 @@
+set(R573_EDITOR_SUPPORT_SOURCES
+    src/support/log.cpp
+    src/support/crash_report.cpp
+    src/support/stack_trace.cpp
+    src/support/dll_loader.cpp
+    src/support/env.cpp
+    src/support/math/float_trig.cpp
+)
+
+set(R573_EDITOR_FORMATS_SOURCES
+    src/formats/afp_animation_bytes.cpp
+    src/formats/afp_animation_read.cpp
+    src/formats/afp_animation_stored.cpp
+    src/formats/afp_animation_write.cpp
+    src/formats/afp_byte_order.cpp
+    src/formats/afp_bytecode.cpp
+    src/formats/afp_placement_read.cpp
+    src/formats/afp_script.cpp
+    src/formats/afp_script_names.cpp
+    src/formats/afp_placement_write.cpp
+    src/formats/avs_lz77.cpp
+    src/formats/binary_xml_names.cpp
+    src/formats/binary_xml_read.cpp
+    src/formats/binary_xml_types.cpp
+    src/formats/binary_xml_write.cpp
+    src/formats/ge2d_shape.cpp
+    src/formats/ifs_digest.cpp
+    src/formats/ifs_layout.cpp
+    src/formats/ifs_names.cpp
+    src/formats/ifs_read.cpp
+    src/formats/ifs_write.cpp
+    src/formats/texture_images.cpp
+)
+
+set(R573_EDITOR_DOCUMENT_SOURCES
+    src/document/document.cpp
+    src/document/atlas.cpp
+    src/document/atlas_write.cpp
+    src/document/authored.cpp
+    src/document/blend_modes.cpp
+    src/document/animation_strings.cpp
+    src/document/camera_edit.cpp
+    src/document/characters.cpp
+    src/document/clip.cpp
+    src/document/clip_edit.cpp
+    src/document/entries.cpp
+    src/document/entry_edit.cpp
+    src/document/field_values.cpp
+    src/document/filter_fields.cpp
+    src/document/colour_pick.cpp
+    src/document/curve_values.cpp
+    src/document/filter_values.cpp
+    src/document/frame_edit.cpp
+    src/document/frame_notes.cpp
+    src/document/history.cpp
+    src/document/group_sprite.cpp
+    src/document/hidden_depths.cpp
+    src/document/image_shape.cpp
+    src/document/inputs.cpp
+    src/document/inspector.cpp
+    src/document/keyframe_edit.cpp
+    src/document/keyframes.cpp
+    src/document/key_selection.cpp
+    src/document/label_edit.cpp
+    src/document/script_index.cpp
+    src/document/script_problems.cpp
+    src/document/script_docs.cpp
+    src/document/script_source.cpp
+    src/document/span_edit.cpp
+    src/document/span_arrange.cpp
+    src/document/span_split.cpp
+    src/document/clip_trim.cpp
+    src/document/clip_extract.cpp
+    src/document/anchor_edit.cpp
+    src/document/key_simplify.cpp
+    src/document/stage_fit.cpp
+    src/document/key_wiggle.cpp
+    src/document/span_sequence.cpp
+    src/document/timeline_snap.cpp
+    src/document/motion_path.cpp
+    src/document/span_clipboard.cpp
+    src/document/span_transplant.cpp
+    src/document/unused_definitions.cpp
+    src/document/span_tags.cpp
+    src/document/span_trim.cpp
+    src/document/animation_entries.cpp
+    src/document/animation_template.cpp
+    src/document/preview_packages.cpp
+    src/document/stage_snap.cpp
+    src/document/stage_align.cpp
+    src/document/animation_settings.cpp
+    src/document/sprite_preview.cpp
+    src/document/sprite_exports.cpp
+    src/document/stage_bounds.cpp
+    src/document/number_places.cpp
+    src/document/stage_move.cpp
+    src/document/transform_parts.cpp
+    src/document/inspector_view.cpp
+    src/document/tags.cpp
+    src/document/library_call.cpp
+    src/document/placement_edit.cpp
+    src/document/placement_effect.cpp
+    src/document/playback.cpp
+    src/document/placement_values.cpp
+    src/document/project_content.cpp
+    src/document/project_drift.cpp
+    src/document/project_export.cpp
+    src/document/project.cpp
+    src/document/property_groups.cpp
+    src/document/outline.cpp
+    src/document/place_image.cpp
+    src/document/timeline.cpp
+)
+
+set(R573_EDITOR_PREVIEW_SOURCES
+    src/preview/preview_channel.cpp
+    src/preview/preview_client.cpp
+    src/preview/shared_texture.cpp
+)
