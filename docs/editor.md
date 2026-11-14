@@ -7,13 +7,13 @@ configures it.
 
 ## One project, two profiles
 
-The renderer links everything statically (`x64-windows-static`, `/MT`) so
-`573Renderer.exe` ships as one file. Qt in that triplet is a very long build
-and vcpkg's Qt is only routinely exercised dynamically, so the editor is built
-with the dynamic triplet (`x64-windows`) into its own binary directory
-(`build-editor/`). A binary directory can only hold one triplet, so the two
-live in the same CMake project as two configure presets rather than as two
-projects:
+The renderer and the editor both link everything statically
+(`x64-windows-static`, `/MT`), so `573Renderer.exe` and `ifs_editor.exe` each
+ship as one file (ADR 0009). They still need different dependency sets (ffmpeg
+and imgui against Qt) and so different `vcpkg_installed` trees, and a binary
+directory holds one, so the editor builds into its own binary directory
+(`build-editor/`). The two live in the same CMake project as two configure
+presets rather than as two projects:
 
 - `dev` (and `ci`, `dev32`, ...) build the renderer. `R573_BUILD_EDITOR` is
   off, so `editor/` is never added.
@@ -46,9 +46,10 @@ editor\build.bat
 Same shape as the renderer's `build.bat`: vswhere locates Visual Studio,
 `vcvarsall x64` sets the toolchain up, vcpkg is bootstrapped if needed, then
 `cmake --preset editor` and `cmake --build --preset editor` from the repository
-root. The preset writes to `build-editor/` (gitignored) and inherits
-`VCPKG_HOST_TRIPLET` `x64-windows` from `base`, so `flatc` is found as a host
-tool. Running plain `cmake` from a
+root. The preset writes to `build-editor/` (gitignored) and sets
+`VCPKG_HOST_TRIPLET` to `x64-windows-static`, the same as its target triplet:
+`flatc` is found as a host tool, and vcpkg does not treat the build as a cross
+build, which would make the qtbase port build a second Qt for `moc` and `rcc`. Running plain `cmake` from a
 shell with no Visual Studio environment fails at the compiler check with
 `LNK1104: cannot open file 'kernel32.lib'`, which is what the batch file
 exists to prevent.
@@ -432,36 +433,29 @@ Known deviations from the artboards, all deliberate:
 - The preview card on the start screen has no "Restart host" button because
   there is no such command.
 
-## Qt plugin deployment
+## Qt plugins are linked in
 
-vcpkg's applocal step copies the Qt DLLs next to the executable, but not the
-Qt *plugins*, and Qt aborts at startup with a message box when it cannot find
-a platform plugin. vcpkg's qtbase does not install `windeployqt` (it lives in
-qttools), so `editor/CMakeLists.txt` copies the plugins the application needs
-straight from their imported targets in a post-build step:
-`Qt6::QWindowsIntegrationPlugin` into `platforms/`,
-`Qt6::QModernWindowsStylePlugin` into `styles/` and `Qt6::QJpegPlugin` into
-`imageformats/`. The destination subdirectory comes from each target's
-`QT_PLUGIN_TYPE` property, so the copy cannot drift from what Qt expects to
-find.
+Qt is static (ADR 0009), so its plugins are static libraries compiled into
+each executable rather than DLLs found at run time. `r573_link_qt_plugins` in
+`editor/CMakeLists.txt` calls `qt_import_plugins` with the set every editor
+executable links: `Qt6::QWindowsIntegrationPlugin` and
+`Qt6::QMinimalIntegrationPlugin` (platforms), `Qt6::QModernWindowsStylePlugin`
+(the style the theme is designed on), and `Qt6::QJpegPlugin`,
+`Qt6::QSvgPlugin` and `Qt6::QSvgIconPlugin` (images and icons). `ifs_editor`,
+`ifs_editor_shot` and both test executables all call it, so a test runs with
+the same platforms, style and image handlers as the shipped editor; in the
+dynamic build they shared one directory of plugin DLLs, which gave them the
+same set by accident. A plugin a new feature needs goes into that list, never
+into one target only. The minimal platform is linked into `ifs_editor` too,
+because the packaging check starts the shipped exe with
+`QT_QPA_PLATFORM=minimal` (docs/gates.md).
 
-A plugin's own dependencies need the same care: `qjpeg.dll` needs
-`jpeg62.dll`, and vcpkg's applocal step only resolves the executable's
-dependencies, not a plugin's. Windows also looks for a plugin's dependencies
-next to the executable rather than next to the plugin, which was checked by
-hand: with `jpeg62.dll` in `imageformats/` Qt still listed no JPEG support,
-and with it beside the executable it did. So the step copies the plugin into
-its subdirectory, copies it once more beside the executable, runs vcpkg's
-`z-applocal` on that second copy and deletes it, which leaves the plugin where
-Qt looks and its dependencies where Windows looks.
-
-The copy beside the executable is named after the target
-(`ifs_editor_qjpeg.dll`, `editor_window_tests_qjpeg.dll`). `ifs_editor` and both
-test executables deploy `qjpeg` into the same directory, and ninja links them in
-parallel; with one shared name, one target's delete removed the copy while
-another's `z-applocal` was reading it (`qjpeg.dll: warning: no such file or
-directory`), which failed about one relink in three. Eight relinks in a row
-passed once each target had its own name.
+Configuring the editor fails at once if `Qt6::Core` is not a static library,
+so pointing the project at a dynamic Qt cannot quietly bring the DLLs back.
+A `build-editor/` configured before the switch still has `x64-windows` in its
+cache, and regenerating from ninja does not re-read preset variables, so it
+stops on that error; `cmake --preset editor --fresh` (or deleting
+`build-editor/`) configures it again with the static triplet.
 
 ## Window layout
 

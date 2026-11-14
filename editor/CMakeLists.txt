@@ -8,7 +8,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 if(MSVC)
-    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
+    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 endif()
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
 
@@ -22,6 +22,10 @@ list(TRANSFORM R573_EDITOR_DOCUMENT_SOURCES PREPEND "${R573_ROOT}/")
 list(TRANSFORM R573_EDITOR_PREVIEW_SOURCES PREPEND "${R573_ROOT}/")
 
 find_package(Qt6 CONFIG REQUIRED COMPONENTS Widgets Svg Concurrent)
+get_target_property(R573_QT_CORE_TYPE Qt6::Core TYPE)
+if(NOT R573_QT_CORE_TYPE STREQUAL "STATIC_LIBRARY")
+    message(FATAL_ERROR "The editor links Qt statically; Qt6::Core is ${R573_QT_CORE_TYPE}. Reconfigure from scratch with the editor preset: cmake --preset editor --fresh")
+endif()
 find_package(qtadvanceddocking-qt6 CONFIG REQUIRED)
 find_package(unofficial-qscintilla CONFIG REQUIRED)
 find_package(tl-expected CONFIG REQUIRED)
@@ -136,29 +140,19 @@ target_link_libraries(ifs_editor PRIVATE editor_shared Qt6::Widgets Qt6::Svg Qt6
                                        unofficial::qscintilla::qscintilla
                                        d3d9.lib)
 
-set(R573_VCPKG_EXE "${R573_ROOT}/vendor/vcpkg/vcpkg.exe")
-set(R573_VCPKG_BIN "${CMAKE_BINARY_DIR}/vcpkg_installed/${VCPKG_TARGET_TRIPLET}/bin")
-
-function(r573_deploy_qt_plugin target plugin)
-    get_target_property(plugin_type ${plugin} QT_PLUGIN_TYPE)
-    set(plugin_dir "$<TARGET_FILE_DIR:${target}>/${plugin_type}")
-    set(beside "$<TARGET_FILE_DIR:${target}>/${target}_$<TARGET_FILE_NAME:${plugin}>")
-    add_custom_command(TARGET ${target} POST_BUILD
-        COMMAND "${CMAKE_COMMAND}" -E make_directory "${plugin_dir}"
-        COMMAND "${CMAKE_COMMAND}" -E copy_if_different "$<TARGET_FILE:${plugin}>" "${plugin_dir}"
-        COMMAND "${CMAKE_COMMAND}" -E copy_if_different "$<TARGET_FILE:${plugin}>" "${beside}"
-        COMMAND "${R573_VCPKG_EXE}" z-applocal "--target-binary=${beside}"
-                "--installed-bin-dir=${R573_VCPKG_BIN}"
-        COMMAND "${CMAKE_COMMAND}" -E rm -f "${beside}"
-        VERBATIM
+function(r573_link_qt_plugins target)
+    qt_import_plugins(${target}
+        INCLUDE
+            Qt6::QWindowsIntegrationPlugin
+            Qt6::QMinimalIntegrationPlugin
+            Qt6::QModernWindowsStylePlugin
+            Qt6::QJpegPlugin
+            Qt6::QSvgPlugin
+            Qt6::QSvgIconPlugin
     )
 endfunction()
 
-r573_deploy_qt_plugin(ifs_editor Qt6::QWindowsIntegrationPlugin)
-r573_deploy_qt_plugin(ifs_editor Qt6::QModernWindowsStylePlugin)
-r573_deploy_qt_plugin(ifs_editor Qt6::QJpegPlugin)
-r573_deploy_qt_plugin(ifs_editor Qt6::QSvgPlugin)
-r573_deploy_qt_plugin(ifs_editor Qt6::QSvgIconPlugin)
+r573_link_qt_plugins(ifs_editor)
 
 add_executable(ifs_editor_shot
     src/editor_shot_main.cpp
@@ -168,9 +162,7 @@ target_include_directories(ifs_editor_shot PRIVATE src)
 target_link_libraries(ifs_editor_shot PRIVATE editor_shared Qt6::Widgets Qt6::Svg Qt6::Concurrent ads::qtadvanceddocking-qt6
                                        unofficial::qscintilla::qscintilla
                                             d3d9.lib)
-r573_deploy_qt_plugin(ifs_editor_shot Qt6::QJpegPlugin)
-r573_deploy_qt_plugin(ifs_editor_shot Qt6::QSvgPlugin)
-r573_deploy_qt_plugin(ifs_editor_shot Qt6::QSvgIconPlugin)
+r573_link_qt_plugins(ifs_editor_shot)
 
 add_executable(editor_widget_tests
     icons/icons.qrc
@@ -206,10 +198,7 @@ add_executable(editor_widget_tests
 target_include_directories(editor_widget_tests PRIVATE src)
 target_link_libraries(editor_widget_tests PRIVATE editor_shared Qt6::Widgets Qt6::Svg Qt6::Concurrent
                                                    unofficial::qscintilla::qscintilla Catch2::Catch2)
-r573_deploy_qt_plugin(editor_widget_tests Qt6::QMinimalIntegrationPlugin)
-r573_deploy_qt_plugin(editor_widget_tests Qt6::QJpegPlugin)
-r573_deploy_qt_plugin(editor_widget_tests Qt6::QSvgPlugin)
-r573_deploy_qt_plugin(editor_widget_tests Qt6::QSvgIconPlugin)
+r573_link_qt_plugins(editor_widget_tests)
 
 add_executable(editor_window_tests
     icons/icons.qrc
@@ -288,7 +277,4 @@ target_include_directories(editor_window_tests PRIVATE src "${R573_ROOT}/tests/d
 target_link_libraries(editor_window_tests PRIVATE editor_shared Qt6::Widgets Qt6::Svg Qt6::Concurrent
                                                   ads::qtadvanceddocking-qt6 d3d9.lib
                                                   unofficial::qscintilla::qscintilla Catch2::Catch2)
-r573_deploy_qt_plugin(editor_window_tests Qt6::QMinimalIntegrationPlugin)
-r573_deploy_qt_plugin(editor_window_tests Qt6::QJpegPlugin)
-r573_deploy_qt_plugin(editor_window_tests Qt6::QSvgPlugin)
-r573_deploy_qt_plugin(editor_window_tests Qt6::QSvgIconPlugin)
+r573_link_qt_plugins(editor_window_tests)

@@ -13,7 +13,6 @@ POLL_SECONDS = 0.25
 def started(exe, seconds):
     room = dict(os.environ)
     room["QT_QPA_PLATFORM"] = "minimal"
-    room["QT_PLUGIN_PATH"] = str(exe.parent)
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as elsewhere:
         running = subprocess.Popen([str(exe)], cwd=elsewhere, env=room,
                                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT)

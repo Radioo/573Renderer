@@ -13,8 +13,8 @@
 
 "It is not installed" / "that plugin is not deployed" / "vcpkg did not build it" is the START of
 the job, not a finding. **Install it**: add the port to `vcpkg.json` (the `editor` feature for Qt
-things), `find_package` its component, link it, and deploy its plugins with
-`r573_deploy_qt_plugin`. Then use it. Rebuilding vcpkg takes minutes and that is fine.
+things), `find_package` its component, link it, and add its plugins to
+`r573_link_qt_plugins`. Then use it. Rebuilding vcpkg takes minutes and that is fine.
 - **NEVER hand-roll a replacement for something a Qt module or maintained library already does.**
   Only a port that genuinely does not ship the thing (vcpkg's qtbase has no `qoffscreen.dll`) is a
   real constraint: say so, and pick the next real option.

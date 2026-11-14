@@ -448,19 +448,21 @@ live cases skip themselves, since `R573_IIDX_DIR` is not set on a runner.
 
 It needs a different dependency set from the renderer job: the `editor` feature
 of `vcpkg.json` with `VCPKG_MANIFEST_NO_DEFAULT_FEATURES`, so no ffmpeg and no
-imgui, and the dynamic `x64-windows` triplet where the renderer uses
-`x64-windows-static`. Its vcpkg archive cache therefore has its own key
-(`vcpkg-archives-editor-...`) and cannot collide with the renderer's.
+imgui, though the same `x64-windows-static` triplet as the renderer (ADR 0009).
+Its vcpkg archive cache therefore has its own key
+(`vcpkg-archives-editor-...-x64-windows-static-...`) and does not evict the
+renderer's.
 
 **The first run on a cold cache builds Qt from source**, which is the bulk of
 the job; every run after it restores qtbase, qtsvg and the docking system from
-the archive cache, which is roughly 400 MB for this triplet. Two things evict
+the archive cache. The first run after the switch to the static triplet
+is such a cold run. Two things evict
 it: a bump of the vcpkg submodule or of `vcpkg.json` (both are in the key), and
 GitHub's own 7-day idle eviction and 10 GB per-repository limit, which this
 cache shares with the renderer's. A run that suddenly takes hours is that
 cache, not the code.
 
-### The artefact is a folder that runs
+### The artefact is two executables that run
 
 `preview_host.exe` is renderer-side: it loads the game's own avs2 and afp DLLs
 and draws through D3D9, so it links `r573_afp_host` and the render stack, and
@@ -474,14 +476,17 @@ So the `editor` job `needs` the renderer `windows` job, which saves the x64
 `build/preview_host.exe` to the Actions cache under
 `preview-host-<os>-<sha>`. The editor job restores it to the same path
 (`fail-on-cache-miss`), so it is never an artefact of its own: on its own it
-is useless. `tools/ci/stage_editor.py` merges it with the editor build into
-`dist/`: the editor,
-the host, the Qt DLLs and the plugin folders. That folder is the artefact, so
-extracting it gives something that runs.
+is useless. `tools/ci/stage_editor.py` copies it and `ifs_editor.exe` into
+`dist/`, and nothing else: Qt, its plugins and the C++ runtime are linked into
+the exe (ADR 0009), so the stager copies no DLL or plugin folder, and a build
+that has gone back to needing one fails the start check below instead of
+shipping. That folder is the artefact.
 
 `tools/ci/check_editor_starts.py` then runs the staged `ifs_editor.exe` under
 `QT_QPA_PLATFORM=minimal` for six seconds and fails if it exits. A missing DLL
-exits instantly (`0xc0000135`), which no file listing would have told us. It
+exits instantly (`0xc0000135`), which no file listing would have told us, and
+so does a missing platform plugin, which is why `qminimal` is linked into the
+shipped exe. It
 runs from a temporary working directory, so the editor's own log and `dev/`
 folder do not end up inside the artefact. `tools/checks.sh` runs both scripts
 after the editor suites, so the packaging is checked locally as well.

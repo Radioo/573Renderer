@@ -21,3 +21,4 @@ build-editor/
 dist/
 
 *.local.md
+/release/

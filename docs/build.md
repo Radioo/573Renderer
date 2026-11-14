@@ -20,7 +20,7 @@ working tree with: `git rm --cached -r . && git reset --hard`.
 | `build.bat` | Local developer build: locates VS via vswhere, runs `vcvarsall x64`, bootstraps the vcpkg submodule if needed, then `cmake --preset dev` + `cmake --build --preset dev`. |
 | `CMakePresets.json` | Single source of truth for configure/build knobs. `dev` = local, `ci` = same plus `CMAKE_COMPILE_WARNING_AS_ERROR=ON`. CI and build.bat both go through presets so the two can never drift. |
 | `editor/build.bat` | Local build of the Qt editor: same vswhere + vcvarsall shape, then `cmake --preset editor` + `cmake --build --preset editor` into `build-editor/`. Target names as arguments build only those (`editor\build.bat editor_window_tests ifs_editor_shot`), which still works while `ifs_editor.exe` is running and holds its own file locked. See docs/editor.md. |
-| `editor` preset | Same project, dynamic `x64-windows` triplet, `build-editor/` binary dir, `R573_BUILD_EDITOR=ON` and `R573_BUILD_RENDERER=OFF`, and the `editor` vcpkg feature instead of the default `renderer` one. |
+| `editor` preset | Same project, the same static `x64-windows-static` triplet as the renderer (host triplet too, so Qt is built once; ADR 0009), `build-editor/` binary dir, `R573_BUILD_EDITOR=ON` and `R573_BUILD_RENDERER=OFF`, and the `editor` vcpkg feature instead of the default `renderer` one. |
 | `CMakeLists.txt` | The gated libs (`r573_support`, `r573_formats`, ...), the `r573_app` static library holding everything the app is made of, the `renderer` executable (output name `573Renderer.exe`, just `src/main.cpp` linked against `r573_app`), the test targets, and the `r573::warnings` interface target. |
 
 ## Generated sources (a Python interpreter is required to configure)
@@ -118,7 +118,8 @@ owns them.
 - `flatbuffers` (Apache 2.0): the preview host protocol (`src/preview/preview_host.fbs`,
   docs/preview_host.md). CMake runs the port's `flatc` at build time into
   `build/generated/preview_host_generated.h`. `flatc` is a host tool, so the
-  presets set `VCPKG_HOST_TRIPLET` to `x64-windows`; a build directory
+  presets set `VCPKG_HOST_TRIPLET` (`x64-windows`, and `x64-windows-static`
+  for the editor preset); a build directory
   configured before that setting existed needs `cmake --preset dev` once,
   because regenerating from ninja does not re-read preset variables.
 - `boost-interprocess` (Boost Software Licence, `Boost::interprocess` through

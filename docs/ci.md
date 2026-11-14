@@ -9,8 +9,9 @@ pwsh preinstalled):
   artifact so a reviewer can try a PR without building locally (30-day
   retention - long enough for review, short enough for the free Actions
   storage quota).
-- tag push matching `v*` (e.g. `v0.2.0`): additionally attach exe + PDB to a
-  GitHub Release with auto-generated notes (needs `contents: write`
+- tag push matching `v*` (e.g. `v0.2.0`): additionally publish a GitHub
+  Release with auto-generated notes and exactly two assets, `573Renderer.zip`
+  and `573Editor.zip` (see "Release zips" below; needs `contents: write`
   permission and `fetch-depth: 0` for the release-notes generator; PR runs
   stay read-only).
 - `workflow_dispatch`: on-demand rebuilds.
@@ -37,7 +38,7 @@ structured to pay that only when the dependency set actually changes.
 
 1. **vcpkg binary cache** - the big one. `VCPKG_BINARY_SOURCES` uses vcpkg's
    `files` backend pointed at `${{ github.workspace }}/vcpkg_cache`, persisted
-   with `actions/cache@v4`. Each built package is a zip keyed internally by
+   with `actions/cache@v6`. Each built package is a zip keyed internally by
    its full ABI hash (port + triplet + features + compiler + vcpkg tool
    version), so a restored cache is always safe: vcpkg rebuilds only archives
    whose ABI moved. The actions/cache key mixes the resolved vcpkg submodule
@@ -63,6 +64,16 @@ structured to pay that only when the dependency set actually changes.
 
 ## Other steps
 
+- Every action is referenced by its floating major tag (`actions/checkout@v7`,
+  `actions/cache@v6`, `actions/upload-artifact@v7`,
+  `actions/download-artifact@v8`, `softprops/action-gh-release@v3`), except
+  `astral-sh/setup-uv`, which stopped publishing major and minor tags at v8
+  and so is pinned to an exact release (`@v10.3.3`); bumping it is a manual
+  edit of every `uses:` line naming it. `ilammy/msvc-dev-cmd@v1` is still that
+  action's newest line (v1.13.0) and declares the Node 20 runtime. The upload
+  and download artifact actions have to stay on matching artifact backends;
+  v4 and later all use the same one. `actions/download-artifact` v8 fails a
+  download whose digest does not match the upload instead of warning.
 - `ilammy/msvc-dev-cmd@v1` puts the x64 `cl.exe`/`link.exe` on PATH (the CI
   equivalent of build.bat's `vcvarsall.bat x64`); it edits `GITHUB_ENV` so
   later steps inherit the toolchain without re-running vcvars.
@@ -75,6 +86,29 @@ structured to pay that only when the dependency set actually changes.
   64-bit executable. Every renderer zip is flat (exes and PDBs, no folders),
   and the 32-bit one gets `573Encoder.exe` from the `bundle-win32` job,
   because the 32-bit renderer encodes through it (docs/x86_build.md).
+
+## Release zips
+
+The `release` job runs on a `v*` tag after `bundle-win32` and `editor`. It
+downloads the three per-commit artefacts (`renderer-win64-*`,
+`renderer-win32-*`, `editor-win64-*`) and `tools/ci/package_release.py` packs
+them into the only two release assets:
+
+- `573Renderer.zip`, flat: `573Renderer.exe` (x64), `573Renderer32.exe`
+  (x86) and `573Encoder.exe` (x64, taken from the x64 artefact). Both
+  renderers look for the encoder in their own directory and only the 32-bit
+  one uses it (ADR 0008), so one copy beside both serves them.
+- `573Editor.zip`, flat: `ifs_editor.exe` and `preview_host.exe`
+  (`docs/gates.md`, "The artefact is two executables that run").
+
+Neither zip holds a DLL: all five exes are fully static (`x64-windows-static`
+/ `x86-windows-static`, `/MT`), Qt and its plugins included (ADR 0009), and
+import nothing outside Windows itself. No PDB is in either zip either: the
+three renderer PDBs are about 1 GB together and the editor's alone about
+700 MB. The per-commit artefacts keep the renderer PDBs for their 30 days.
+The packer takes only those five named files and refuses to write anything,
+naming each one, when any is missing, so a release can never go out with a
+zip that is short.
 
 ## clang-tidy legs
 

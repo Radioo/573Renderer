@@ -64,7 +64,8 @@
       "inherits": "base",
       "binaryDir": "${sourceDir}/build-editor",
       "cacheVariables": {
-        "VCPKG_TARGET_TRIPLET": "x64-windows",
+        "VCPKG_TARGET_TRIPLET": "x64-windows-static",
+        "VCPKG_HOST_TRIPLET": "x64-windows-static",
         "VCPKG_MANIFEST_FEATURES": "editor",
         "R573_BUILD_EDITOR": "ON",
         "R573_BUILD_RENDERER": "OFF",

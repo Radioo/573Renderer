@@ -1,0 +1,9 @@
+# The editor links Qt statically
+
+The editor is built with the same `x64-windows-static` triplet and `/MT` runtime as the renderer, so `ifs_editor.exe` ships as one file beside `preview_host.exe`, with no Qt DLL, no plugin folder and no Visual C++ runtime next to it. This replaces the linking half of ADR 0003. The dynamic build shipped a dozen DLLs and three plugin folders, needed a post-build step to copy each plugin and its dependencies into the places Qt and Windows look for them (the `z-applocal` dance), and still depended on the Visual C++ redistributable being installed, which the GitHub runner has and a player's PC may not. A release that is two executables cannot be missing a file.
+
+Qt's plugins are compiled in with `qt_import_plugins` (`r573_link_qt_plugins` in `editor/CMakeLists.txt`): the Windows and minimal platforms, the modern Windows style, and the JPEG, SVG and SVG icon handlers. Every editor executable, the tests and `ifs_editor_shot` included, links the same set, so a test sees the style and platforms the shipped editor has. The minimal platform is in the shipped exe because the CI start check (`tools/ci/check_editor_starts.py`) runs it with `QT_QPA_PLATFORM=minimal`.
+
+The editor preset also sets the host triplet to `x64-windows-static`. With a host triplet different from the target one vcpkg treats the build as a cross build, and the qtbase port then builds a second, host Qt for `moc` and `rcc`; with the two equal Qt is built once.
+
+ADR 0003 gave the LGPL as the reason for linking Qt dynamically. The LGPL does allow a statically linked program to be distributed, on the condition that the recipient can relink it against a modified Qt, which in practice means offering the editor's source or object files with each release. QScintilla is GPL whichever way it is linked, which already asked for the source.

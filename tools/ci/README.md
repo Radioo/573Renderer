@@ -4,9 +4,9 @@ The quality gates. Every `check_*.py` / `run_*.py` script here is run by
 `tools/checks.sh` and by the hosted `quality-gates` workflow, and each one exits
 non-zero with the offending paths on failure. Rationale for every rule lives in
 `docs/gates.md`; this file is how to run them. The ones that are NOT gates are
-`gen_layer_verdicts.py`, a build step, and `stage_editor.py` /
-`check_editor_starts.py`, which package the editor, both described at the
-bottom.
+`gen_layer_verdicts.py`, a build step, `stage_editor.py` /
+`check_editor_starts.py`, which package the editor, and `package_release.py`,
+which packs the release zips, all described at the bottom.
 
 This is a uv project: `uv run <script>` works with nothing to install. Commands
 below assume you are in this directory.
@@ -52,21 +52,41 @@ uv run stage_editor.py --editor ../../build-editor --host ../../build --into ../
 uv run check_editor_starts.py --dist ../../dist
 ```
 
-`--editor` is the editor's build directory (`ifs_editor.exe`, the Qt DLLs and
-the `platforms`/`imageformats`/`iconengines` plugin folders), `--host` is the
-renderer's (`preview_host.exe`, which the editor runs to draw anything), and
-`--into` is emptied and rebuilt. `--symbols` adds the `.pdb`s, which are left
-out by default because the editor's is around 600 MB. The stager fails, naming
-what is short, when the folder would not be usable: both executables and the
-`qwindows`, `qminimal`, `qjpeg`, `qsvg` and `qsvgicon` plugins have to be there.
+`--editor` is the editor's build directory (`ifs_editor.exe`, which links Qt,
+its plugins and the C++ runtime statically), `--host` is the renderer's
+(`preview_host.exe`, which the editor runs to draw anything), and `--into` is
+emptied and rebuilt. Those two executables are the whole staged folder.
+`--symbols` adds their `.pdb`s, which are left out by default because the
+editor's is around 700 MB. The stager fails, naming what is short, when either
+executable is missing.
 
 `tools/checks.sh` runs both after the editor suites, so a packaging regression
 fails the local gate too.
 
 `check_editor_starts.py` runs the staged `ifs_editor.exe` with
 `QT_QPA_PLATFORM=minimal` for six seconds and fails if it exits, which is what a
-missing DLL looks like. It is the check that would have caught the first editor
-artefact, which had every Qt file and no `preview_host.exe`.
+missing DLL or a missing platform plugin looks like. So a build that has
+slipped back to needing a DLL fails here, since the staged folder has none.
+
+## Packing the release zips
+
+`package_release.py` writes the two release assets, `573Renderer.zip`
+(`573Renderer.exe`, `573Renderer32.exe`, `573Encoder.exe`) and `573Editor.zip`
+(`ifs_editor.exe`, `preview_host.exe`), both flat and both with no DLL, since
+every one of those exes is fully static. The `release` job of the `Build`
+workflow runs it on a `v*` tag; locally, after `build.bat`, `build32.bat` and
+staging the editor into `dist/`:
+
+```bash
+uv run package_release.py --win64 ../../bin --win32 ../../bin --editor ../../dist --into ../../release
+```
+
+`--win64` holds `573Renderer.exe` and `573Encoder.exe`, `--win32` holds
+`573Renderer32.exe` (both are `bin/` locally, separate artefact folders in
+CI), `--editor` is a folder `stage_editor.py` produced, and `--into` gets the
+two zips. It takes only those five named files, so a PDB staged with
+`--symbols` never ends up in a zip, and it writes nothing and names every
+missing file when one of them is absent (`docs/ci.md`, "Release zips").
 
 `run_format.py` and `run_tidy.py` resolve the pip-pinned binary out of the venv
 rather than trusting PATH, and refuse to run on a version mismatch.

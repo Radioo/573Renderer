@@ -477,8 +477,8 @@ copies `573Encoder.exe` and its PDB into the x86 set and re-uploads
 on its own. `preview_host.exe` is only the editor's helper: it reaches the
 editor job through the Actions cache, never as an artefact (docs/gates.md).
 
-Releasing is a SEPARATE `release` job gated on `needs: bundle-win32` plus the
-`v*` tag, which downloads both artefacts and publishes them in one release.
-Both carry the same `573Encoder.exe`, so merging them leaves one copy.
-Doing it inside the matrix would have two jobs racing to create the same
-release.
+Releasing is a SEPARATE `release` job gated on `needs: [bundle-win32,
+editor]` plus the `v*` tag. It packs both renderers and the one
+`573Encoder.exe` they share into `573Renderer.zip`, and the editor into
+`573Editor.zip` (docs/ci.md, "Release zips"). Doing it inside the matrix
+would have two jobs racing to create the same release.
