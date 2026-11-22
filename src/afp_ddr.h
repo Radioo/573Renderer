@@ -19,6 +19,14 @@ bool Boot(DllLoader& afp_dll, DllLoader& afpu_dll, D3D9State& d3d);
 
 bool LoadTxp2(AvsFuncs& avs, const std::string& disk_path);
 
+bool LoadTxp2Streams(AvsFuncs& avs, const std::string& disk_path);
+
+uint32_t ClipStreamId(const std::string& name);
+
+void DestroyLayer(uint32_t layer_id);
+
+void Advance(float dt);
+
 bool LoadIfs(AvsFuncs& avs, DllLoader& avs_dll, const std::string& ifs_disk_path,
              const std::string& pkg_name);
 

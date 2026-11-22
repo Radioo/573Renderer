@@ -108,6 +108,26 @@ Contracts covered:
   `loop_start` / `loop_end` range, so there is no loop range to check against the
   data; the M8 rewrite of this file dropped a loop over card-in loop ranges that
   had always iterated zero times.
+- SDVX 1 TXP2 clips (tests/local/ddr_txp2_live_tests.cpp, R573_SDVX1_DIR): the
+  32-bit `ddr_local_tests` target (built only by `build32.bat`, it links the
+  renderer's `r573_app`) boots SDVX 1's own libavs / libafp, loads
+  `data/graphics/bg_space.bin` through the TXP2 path, and requires the four clip
+  names and a readable playhead on each one, the first clip included
+  (docs/x86_build.md, "SDVX 1 (BOOTH)").
+- SDVX 1 package reloads (tests/local/ddr_txp2_reload_live_tests.cpp, R573_SDVX1_DIR):
+  `ddr_reload_local_tests` loads every package in turn through `DdrAfp::LoadTxp2`
+  and plays it for 30 frames (docs/x86_build.md, "A package's bytes outlive its
+  streams").
+- SDVX 1 re-placement survey (tests/local/judge_succession_survey_tests.cpp,
+  R573_SDVX1_DIR): `judge_succession_survey_tests` prints how new objects relate to
+  removed ones over every clip (docs/judge.md, "Objects that are replaced instead
+  of moved").
+- SDVX 1 interpolation (tests/local/judge_interp_live_tests.cpp, R573_SDVX1_DIR): the
+  32-bit `judge_local_tests` target boots SDVX 1's libafp with the judge's detours,
+  opens `bg_space.bin` / `bg_space` on two layers and, over ten logic steps, requires
+  the authored layer to draw the same pixels at 0 and at half a step after the
+  advance while the interpolated layer draws different ones every time
+  (docs/judge.md).
 - bm2dx qpro pattern-scan: `QproDll::Read` on the real bm2dx.dll - parses ok,
   >= 447 heads, first head is qp_kihon, every head is a `qp_*.ifs` name.
 - game profile auto-detection on the real installs (slug + legacy_afp).

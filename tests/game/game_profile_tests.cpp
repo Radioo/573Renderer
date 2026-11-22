@@ -1,6 +1,7 @@
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include "avs_funcs.h"
 #include "backend/afp_profiles.h"
 #include "game_fingerprint.h"
 #include "game_profile.h"
@@ -206,6 +207,41 @@ TEST_CASE("Every AFP-family profile has an engine config row") {
                          << "' but AfpProfiles::For(slug) has no row, so its boot fails");
         CHECK(AfpProfiles::For(p.slug) != nullptr);
     }
+}
+
+TEST_CASE("An SDVX 1 BOOTH install is its own 32-bit TXP2 profile, not SDVX 7") {
+    const GameProfile::Profile* booth = GameProfile::AutoDetect("F:/SDVX/SDVX 1 - BOOTH");
+    REQUIRE(booth != nullptr);
+    CHECK(std::string(booth->slug) == "sdvx1");
+    CHECK(std::string(booth->backend_id) == "afp_ddr");
+    CHECK(booth->default_render_w == 720);
+    CHECK(booth->default_render_h == 1280);
+
+    const AfpProfiles::AfpConfig* cfg = AfpProfiles::For("sdvx1");
+    REQUIRE(cfg != nullptr);
+    CHECK(std::string(cfg->avs_dll) == "libavs-win32.dll");
+    CHECK(std::string(cfg->afp_dll) == "libafp-win32.dll");
+    CHECK(cfg->afpu_dll == nullptr);
+    CHECK(cfg->avs_generation == AfpProfiles::AvsGeneration::Avs2158);
+    CHECK(cfg->scan_txp2_packages);
+
+    const GameProfile::Profile* nabla = GameProfile::AutoDetect("F:/SDVX/SDVX 7 - NABLA");
+    REQUIRE(nabla != nullptr);
+    CHECK(std::string(nabla->slug) == "sdvx7");
+}
+
+TEST_CASE("Each avs generation opens files read-only with its own access flag") {
+    CHECK(kAvsOrdinals2134.fs_open_read_flags == 0);
+    CHECK(kAvsOrdinals2158.fs_open_read_flags == 1);
+    CHECK(kAvsOrdinals2161.fs_open_read_flags == 1);
+    CHECK(kAvsOrdinals217.fs_open_read_flags == 1);
+}
+
+TEST_CASE("avs 2.15.8 resolves the cstream inflate SDVX 1 textures need") {
+    CHECK(kAvsOrdinals2158.avs_cstream_create == 0x141);
+    CHECK(kAvsOrdinals2158.avs_cstream_execute == 0x08c);
+    CHECK(kAvsOrdinals2158.avs_cstream_finish == 0x025);
+    CHECK(kAvsOrdinals2158.avs_cstream_destroy == 0x0e3);
 }
 
 TEST_CASE("A pop'n install auto-detects as pop'n music 29") {

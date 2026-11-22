@@ -225,6 +225,37 @@ TEST_CASE("ParseToolCommand recognizes ddr-test with defaults and explicit args"
     CHECK(c.frames == 120);
 }
 
+TEST_CASE("ParseToolCommand reads the judge view and its options") {
+    const std::vector<std::string> plain = {"exe", "--judge", "D:/sdvx1"};
+    Cli::ToolCommand c = Cli::ParseToolCommand(plain);
+    CHECK(c.kind == Cli::ToolKind::Judge);
+    CHECK(c.in_path == "D:/sdvx1");
+    CHECK(c.json_path.empty());
+    CHECK(c.out_path.empty());
+    CHECK(c.frames == 0);
+    CHECK(c.display_hz == 0);
+    CHECK(c.judge_background.empty());
+
+    const std::vector<std::string> full = {"exe",       "--judge",
+                                           "D:/sdvx1",  "--profile",
+                                           "sdvx1",     "--judge-verdicts",
+                                           "D:/v.json", "--judge-clip",
+                                           "bg.bin/bg", "--judge-capture",
+                                           "shots",     "--judge-capture-frames",
+                                           "8",         "--judge-display-hz",
+                                           "120",       "--judge-background",
+                                           "checker"};
+    c = Cli::ParseToolCommand(full);
+    CHECK(c.kind == Cli::ToolKind::Judge);
+    CHECK(c.profile == "sdvx1");
+    CHECK(c.json_path == "D:/v.json");
+    CHECK(c.judge_clip == "bg.bin/bg");
+    CHECK(c.out_path == "shots");
+    CHECK(c.frames == 8);
+    CHECK(c.display_hz == 120);
+    CHECK(c.judge_background == "checker");
+}
+
 TEST_CASE("gc2d-sheet draws at the origin unless --gc2d-at moves it") {
     const std::vector<std::string> plain = {"exe", "--gc2d-sheet", "D:/items", "out", "40"};
     Cli::ToolCommand c = Cli::ParseToolCommand(plain);

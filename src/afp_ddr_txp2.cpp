@@ -19,7 +19,6 @@ namespace {
 
 constexpr int kSeekSet = 0;
 constexpr int kSeekEnd = 2;
-constexpr int kOpenReadOnly = 0;
 constexpr int kOpenMode = 420;
 constexpr int kMaxCreateLevel = 127;
 constexpr int kCreateLevelBias = 10;
@@ -174,7 +173,7 @@ bool ReadAvsFile(AvsFuncs& avs, const std::string& vfs_path, std::vector<uint8_t
         return false;
     }
 
-    int const desc = avs.avs_fs_open(vfs_path.c_str(), kOpenReadOnly, kOpenMode);
+    int const desc = avs.avs_fs_open(vfs_path.c_str(), avs.fs_open_read_flags, kOpenMode);
     if (desc <= 0) {
         err = "avs_fs_open failed for " + vfs_path;
         return false;

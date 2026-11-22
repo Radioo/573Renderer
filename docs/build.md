@@ -129,6 +129,10 @@ owns them.
   docs/x86_build.md). The same file generates `encode_host_generated.h` from
   `src/encode/encode_host.fbs` with the port's `flatc`, and builds
   `573Encoder.exe` into `bin/` on x64 only.
+- `safetyhook` (Boost Software Licence, `safetyhook::safetyhook`, pulls in
+  `zydis`): the inline detours of the interpolation judge (docs/judge.md). Its
+  headers need C++23 (`std::expected`), so only the small `r573_judge_hooks`
+  library is built as C++23; nothing else includes them.
 - `vcpkg-overlays/` overrides registry ports. It ships an x265 overlay with
   `-DENABLE_ALPHA=ON` so ffmpeg's libx265 wrapper can emit HEVC-with-alpha
   (Safari-compatible transparent video); stock vcpkg x265 builds alpha OFF.

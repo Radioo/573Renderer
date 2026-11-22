@@ -42,6 +42,7 @@ find_package(tl-expected CONFIG REQUIRED)
 find_package(nlohmann_json CONFIG REQUIRED)
 find_package(rapidfuzz CONFIG REQUIRED)
 find_package(unofficial-hash-library CONFIG REQUIRED)
+find_package(safetyhook CONFIG REQUIRED)
 
 set(R573_MSVC_WARNING_FLAGS
     /W4
@@ -169,6 +170,26 @@ add_library(r573_loop STATIC
 )
 target_include_directories(r573_loop PUBLIC src)
 target_link_libraries(r573_loop PRIVATE r573::warnings)
+
+add_library(r573_judge STATIC
+    src/judge/afp_pose.cpp
+    src/judge/interp_tracks.cpp
+    src/judge/verdict_store.cpp
+    src/judge/judge_clock.cpp
+    src/judge/clip_catalog.cpp
+    src/judge/judge_backdrop.cpp
+)
+target_include_directories(r573_judge PUBLIC src)
+target_link_libraries(r573_judge PUBLIC r573_formats
+                      PRIVATE nlohmann_json::nlohmann_json r573::warnings)
+
+add_library(r573_judge_hooks STATIC
+    src/judge_hooks/afp_interp_hooks.cpp
+)
+target_include_directories(r573_judge_hooks PUBLIC src)
+set_target_properties(r573_judge_hooks PROPERTIES CXX_STANDARD 23)
+target_link_libraries(r573_judge_hooks PUBLIC r573_judge
+                      PRIVATE safetyhook::safetyhook r573::warnings)
 
 add_library(r573_render STATIC
     src/render/blend_map.cpp
@@ -355,6 +376,11 @@ add_library(r573_app STATIC
     src/gui/gui_loading_overlay.cpp
     src/gui/gui_setup_view.cpp
     src/gui/gui_thread.cpp
+    src/gui/judge/judge_view.cpp
+    src/gui/judge/judge_device.cpp
+    src/gui/judge/judge_scan.cpp
+    src/gui/judge/judge_app.cpp
+    src/judge_engine/judge_engine.cpp
     src/anim_inspect.cpp
     src/native_dialog.cpp
     src/export.cpp
@@ -452,6 +478,8 @@ target_link_libraries(r573_app
         r573_state
         r573_loop
         r573_render
+        r573_judge
+        r573_judge_hooks
         imgui::imgui
         ${FFMPEG_LIBRARIES}
         d3d9.lib
@@ -677,6 +705,15 @@ add_executable(loop_tests
 target_link_libraries(loop_tests PRIVATE Catch2::Catch2WithMain r573_loop r573::warnings)
 catch_discover_tests(loop_tests DISCOVERY_MODE POST_BUILD PROPERTIES LABELS ci)
 
+add_executable(judge_tests
+    tests/judge/afp_pose_tests.cpp
+    tests/judge/interp_tracks_tests.cpp
+    tests/judge/judge_store_tests.cpp
+    tests/judge/judge_backdrop_tests.cpp
+)
+target_link_libraries(judge_tests PRIVATE Catch2::Catch2WithMain r573_judge r573::warnings)
+catch_discover_tests(judge_tests DISCOVERY_MODE POST_BUILD PROPERTIES LABELS ci)
+
 add_executable(render_tests
     tests/render/blend_map_tests.cpp
     tests/render/vertex_math_tests.cpp
@@ -770,6 +807,40 @@ target_link_libraries(local_dll_tests PRIVATE r573_preview_protocol r573_shared_
 target_compile_definitions(local_dll_tests PRIVATE R573_PREVIEW_HOST_EXE="$<TARGET_FILE:preview_host>")
 add_dependencies(local_dll_tests preview_host)
 catch_discover_tests(local_dll_tests DISCOVERY_MODE POST_BUILD PROPERTIES LABELS local_dll)
+
+if(CMAKE_SIZEOF_VOID_P EQUAL 4)
+    add_executable(ddr_local_tests
+        tests/local/ddr_txp2_live_tests.cpp
+    )
+    target_link_libraries(ddr_local_tests PRIVATE Catch2::Catch2WithMain r573_app r573::warnings)
+    catch_discover_tests(ddr_local_tests DISCOVERY_MODE POST_BUILD PROPERTIES LABELS local_dll)
+    add_executable(ddr_reload_local_tests
+        tests/local/ddr_txp2_reload_live_tests.cpp
+    )
+    target_link_libraries(ddr_reload_local_tests PRIVATE Catch2::Catch2WithMain r573_app
+                                                         r573::warnings)
+    catch_discover_tests(ddr_reload_local_tests DISCOVERY_MODE POST_BUILD
+                         PROPERTIES LABELS local_dll)
+    add_executable(judge_local_tests
+        tests/local/judge_interp_live_tests.cpp
+    )
+    target_link_libraries(judge_local_tests PRIVATE Catch2::Catch2WithMain r573_app r573::warnings)
+    catch_discover_tests(judge_local_tests DISCOVERY_MODE POST_BUILD PROPERTIES LABELS local_dll)
+    add_executable(judge_title_study_tests
+        tests/local/judge_title_study_tests.cpp
+    )
+    target_link_libraries(judge_title_study_tests PRIVATE Catch2::Catch2WithMain r573_app
+                                                          r573::warnings)
+    catch_discover_tests(judge_title_study_tests DISCOVERY_MODE POST_BUILD
+                         PROPERTIES LABELS local_dll)
+    add_executable(judge_succession_survey_tests
+        tests/local/judge_succession_survey_tests.cpp
+    )
+    target_link_libraries(judge_succession_survey_tests PRIVATE Catch2::Catch2WithMain r573_app
+                                                                r573::warnings)
+    catch_discover_tests(judge_succession_survey_tests DISCOVERY_MODE POST_BUILD
+                         PROPERTIES LABELS local_dll)
+endif()
 
 add_executable(shared_texture_tests
     tests/local/shared_texture_tests.cpp
@@ -1002,6 +1073,7 @@ add_executable(gui_tests
     tests/gui/input_mode_tests.cpp
     tests/gui/render_window_tests.cpp
     tests/gui/scenario_tests.cpp
+    tests/gui/judge_view_tests.cpp
 )
 target_include_directories(gui_tests PRIVATE tests/gui src/gui)
 target_link_libraries(gui_tests PRIVATE Catch2::Catch2WithMain r573_app r573::warnings)

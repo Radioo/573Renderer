@@ -21,6 +21,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <cstring>
+#include <functional>
 #include <string>
 #include <utility>
 
@@ -52,6 +53,11 @@ std::string& OpenFileResult() {
 std::string& SaveFileResult() {
     static std::string value;
     return value;
+}
+
+std::function<void()>& FrameBuilder() {
+    static std::function<void()> builder;
+    return builder;
 }
 
 bool& CaptureArmed() {
@@ -170,6 +176,7 @@ Harness::~Harness() {
     ImGuiTestEngine_DestroyContext(engine_);
     NativeDialog::SetOverrides({});
     Gui::Dpi::SetScaleFromDpi(96);
+    FrameBuilder() = nullptr;
 }
 
 ImGuiTest* Harness::NewTest(const char* name) {
@@ -180,7 +187,11 @@ void Harness::Frame() {
     ImGui::NewFrame();
     bool const capturing = CaptureArmed();
     if (capturing) ImGui::LogToBuffer();
-    Panels::Build();
+    if (FrameBuilder()) {
+        FrameBuilder()();
+    } else {
+        Panels::Build();
+    }
     if (capturing) {
         CapturedText() = ImGui::GetCurrentContext()->LogBuffer.c_str();
         ImGui::LogFinish();
@@ -205,6 +216,10 @@ void Harness::Run(ImGuiTest* test) {
     INFO(log);
     REQUIRE(frames < kFrameBudget);
     REQUIRE(test->Output.Status == ImGuiTestStatus_Success);
+}
+
+void SetFrameBuilder(std::function<void()> builder) {
+    FrameBuilder() = std::move(builder);
 }
 
 void FocusChild(ImGuiTestContext* ctx, const char* child_path) {

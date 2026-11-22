@@ -66,6 +66,18 @@ PNG each, so a layer can be classified by what it draws instead of by its name:
 The third argument is how many frames to sample per animation. This is a required
 step before a layer may go into a scene preset: `docs/preset_layers.md`.
 
+## Judging interpolated animation (SDVX 1)
+
+Every SDVX 1 clip twice side by side, as the game draws it and with poses
+interpolated between authored frames at the monitor's refresh rate, with a verdict
+per clip saved as soon as it is given:
+
+```
+bin\573Renderer32.exe --judge "<sdvx1-dir>"
+```
+
+Keys, the verdict file and how the interpolation works: `docs/judge.md`.
+
 ## The IFS editor
 
 A separate Qt 6 application for editing an IFS package's animations: the

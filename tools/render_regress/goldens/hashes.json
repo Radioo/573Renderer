@@ -106,5 +106,13 @@
     },
     "ifs": "title.ifs",
     "seconds": 2.1
+  },
+  "sdvx1": {
+    "frames": {
+      "30": "9f93f13cfff4a4a46692cc80bb0d1847ade608fd63303a0ef810b41216eb7b80",
+      "90": "06c46ba60fb9fbddf978831b54c765d5dab142ca90a04220a35daa7753dd77ea"
+    },
+    "ifs": "bg_space.bin",
+    "seconds": 2.6
   }
 }

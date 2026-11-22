@@ -360,6 +360,145 @@ both the profile default and `--render-size`. The profile's
 `default_render_w/h` is now authoritative unless `--render-size` is passed on
 that run, which is what makes Lincle boot at its real 640x480.
 
+## SDVX 1 (BOOTH) - the TXP2 path on a newer engine
+
+Profile `sdvx1`, dir hint "booth", backend `afp_ddr`, 720x1280 portrait,
+`avs_generation = Avs2158`, no afp-utils (docs/game_profiles.md has the
+profile and where the render size comes from). WORKING: TXP2 packages from
+`data/graphics/*.bin` load, every clip enumerates, and they render
+(`bg_space.bin` / `bg_space`, `logo.bin`, `game_bg_loop.bin`,
+`cmn_game_hud.bin`). Render-regress case `sdvx1`.
+
+### Where it sits between the known generations
+
+| | IIDX 19 (Lincle) | SDVX 1 (BOOTH) | IIDX 20 (tricoro) |
+|---|---|---|---|
+| libafp | 2.9.4, 152 exports | 2.10.3, 159 exports | 2.10.5t7 |
+| libavs | 2.13.4 | 2.15.8 | 2.15.8 (same file) |
+| afp-utils | none | none | present |
+| packages | TXP2 `.bin` | TXP2 `.bin` | IFS |
+
+SDVX 1's libafp is a strict superset of Lincle's: it adds
+`afp_layer_create_with_property`, `afp_layer_mc_refer_by_level_depth_id`,
+`afp_mc_mc_listf`, `afp_set_render_params`, `afp_stream_symbol_get_param`,
+`afp_stream_symbol_mc_listf` and `afp_system_get_attribute`, and removes
+nothing. Against IIDX 24's 2.13.1t8 it is the pre-unification split API
+(`afp_render_all` / `afp_display_layer` / `afp_layer_is_valid`, no
+`afp_do_*`, no `afp_id_is_valid`), so `HasSplitRenderApi()` picks the
+caller-supplied-heap `afp_boot` and the 9-argument `draw_primitive`, both
+detected from the exports with no profile flag. The game's own bring-up
+(the only caller of the `afp_boot` import in `soundvoltex.dll`) is
+`afp_boot(malloc(6 MB), 6 MB, render_params)`, `afp_system_set_attribute(16,
+16)`, `afp_set_stream_max_nr(2048)`, `afp_set_policy(1)`.
+
+The game's package reader is the same code as Lincle's
+`BMAFP::C_MY_AFP_PACKAGE::package_read` (find it as the only caller of the
+`afp_stream_create_call` import; it checks the `TXP2` magic). It opens
+`/data/graphics/<name>_j.bin` (or `_k` / `_a` by region) and falls back to
+`<name>.bin`. Every SDVX 1 package has flags `0x67fdb`, so its textures are
+avslz compressed (`0x40000`) and the byte-order block (`0x20000`) is present.
+
+Two things had to change, both avs 2.15.8 facts rather than SDVX ones
+(docs/game_profiles.md, avs boot contract items 4 and 5):
+
+1. `avs_fs_open` read-only is flags 1 on 2.15.8, not 0. With 0 the open
+   failed (`avs_fs_open failed for /pkg/bg_space.bin`) even though the mount
+   succeeded.
+2. The 2.15.8 table had no cstream ordinals, so the compressed textures could
+   not be inflated.
+
+### The `.ifs` files in `data/graphics`
+
+`game_hud.ifs`, `game_lane.ifs`, `card_end_j.ifs` and the rest are IFS images
+holding afp-utils packages (`afp/afplist.xml`, `afp/bsi/...`). No consumer
+found in this build (searched: no `.ifs` or `imagefs` string in any module
+except libavs itself; the imagefs getter export, ordinal 330, has no import in
+`soundvoltex.dll`; the one `avs_fs_mount` import is used only to mount
+`/e_drive`), and the build ships no afp-utils to read them with. The renderer
+loads them only through the afp-utils path, so on `sdvx1` they fail to load.
+
+### The first clip of a package could not report its playhead
+
+`--dump-anim-info` reported `"ok": false` for the first clip of every TXP2
+package (SDVX 1 and IIDX 19 alike). `RootMc()` caches the root MC id per
+layer id. `SwitchClip` back to a clip whose layer already exists calls
+`afp_layer_stop` then `afp_layer_play`, and `afp_layer_stop` instantiates a
+NEW root MC: `afp_layer_mc_refer` returned `0x18050000` before the stop and
+`0x18060000` after it, while `afp_layer_play(0)` and `afp_layer_play(1)` left
+it unchanged. The cached id was then dead (`W:afp-access: afp_mc_get_param
+afp_mc_id[0x18050000] is invalid.`). `SwitchClip` now drops the cache on that
+path. Test: `tests/local/ddr_txp2_live_tests.cpp` (`ddr_local_tests`, label
+`local_dll`, 32-bit only, `R573_SDVX1_DIR`) loads `bg_space.bin` and requires a
+readable playhead for all four clips; it failed on the first clip before the
+fix.
+
+### A package's bytes outlive its streams until the next advance
+
+Loading SDVX 1 packages one after another (the judge's clip list, or picking files
+in the renderer) crashed inside libafp on the fifth package with an access
+violation in the object constructor. `afp_stream_destroy_call` does not destroy
+anything:
+
+```c
+int afp_stream_destroy_call(int id) {
+    if (!stream_lookup(id)) return -3;
+    stream_mark_destroy(id, 1, 1);      /* sets the entry's pending bit */
+    afp_flags |= 8;
+    return 0;
+}
+```
+
+and `afp_render_init` runs the real destruction (`if (afp_flags & 8) destroy_pending();`).
+Until then the stream is alive and still referenced by the "current render stream"
+global that the last advance or display left behind. The next `afp_layer_create`
+constructs the new layer's root object, whose constructor
+(memsets 188 bytes) asks that current stream for its data to read the AS
+version flag (`"afp_play_work_check_as_version"`), and the data points into the
+afp blob of the package the renderer had already freed.
+
+`UnloadTxp2Package` now moves the package's bytes into `g_retired_cores` instead
+of freeing them, and `DdrAfp::Advance` / the renderer's per-frame advance clear
+that list after `afp_render_init` has run. Test: `ddr_reload_local_tests`
+(`tests/local/ddr_txp2_reload_live_tests.cpp`, `local_dll`, `R573_SDVX1_DIR`)
+loads every SDVX 1 package in turn, playing each for 30 frames; it crashed on
+`caution.bin` before the change.
+
+### The interpolation judge
+
+`--judge` runs SDVX 1 clips through the same engine with libafp's per-layer advance
+and draw detoured, to draw poses interpolated between authored frames next to the
+authored rate. It needs no change to the DDR backend beyond `DdrAfp::LoadTxp2Streams`
+(a package without the root layer `LoadTxp2` creates), `DdrAfp::Advance` (the game's
+`afp_render` call) and `DdrAfp::DestroyLayer`. docs/judge.md.
+
+### How a frame is produced (afp does the transforms)
+
+The renderer never walks afp's display objects. Per render-loop tick:
+
+1. `render_loop.cpp` `AdvanceFrame` takes `dt` as `1 / render_fps` (the
+   renderer setting, 120 by default) or `1 / export fps` while exporting, and
+   `RenderOneFrame` hands it to `AfpFamilyBackend::RenderScene` ->
+   `DdrRuntime::RenderFrame` -> `DdrAfp::RenderFrame(dt)`.
+2. `AdvanceOnce` runs `afp_render_init()`, `afp_render_all(dt * time_scale)`,
+   `afp_render_finish()`. That is exactly the body of libafp's own
+   `afp_render(dt)`, which is what SDVX 1 calls once per frame with a fixed
+   1/60, except that `afp_render` skips all three when `dt <= 0`.
+3. Inside `afp_render_all`, each layer scales `dt` by its speed and steps in
+   whole-frame chunks of `1 / stream fps`, carrying the remainder in the
+   layer's time accumulators, and advances its MC tree once per chunk. A clip
+   authored at 60 fps and driven at dt = 1/120 therefore changes pose every
+   second tick and holds it in between: afp never produces an in-between pose.
+4. `DisplayFrame` calls `afp_display_layer(layer)`. afp walks the display list
+   itself, composes each placement's world matrix down the clip chain and calls
+   the render-params callbacks: `load_matrix` (2x3, `Cb_LoadMatrix`) or
+   `load_matrix44` (`Cb_LoadMatrix44`) with the FINAL composed matrix, then
+   `draw_shape` (`Cb_DrawShape`, shape id plus colour) or `draw_primitive`
+   (`Cb_DrawPrimitiveLegacy`). The callbacks only set D3D state and draw.
+
+Clips are enumerated from the TXP2 file itself (`Txp2::Parse`'s AFP stream
+table, then one `afp_stream_create_call` per entry in `LoadTxp2Package`);
+nothing comes from afp-utils, which this generation does not have.
+
 ## Still x64-only
 
 The MODERN afp path (`afp_boot.cpp`'s render context / `afpu_data`,

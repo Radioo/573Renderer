@@ -25,6 +25,7 @@ enum class ToolKind : std::uint8_t {
     PresetDumpDefaults,
     PresetExportJson,
     PresetValidate,
+    Judge,
     RetiredFlag,
 };
 
@@ -48,6 +49,10 @@ struct ToolCommand {
     std::string playfield;
     bool force = false;
     std::string retired;
+    std::string profile;
+    std::string judge_clip;
+    std::string judge_background;
+    int display_hz = 0;
 };
 
 [[nodiscard]] ToolCommand ParseToolCommand(std::span<const std::string> args);

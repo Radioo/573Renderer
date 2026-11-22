@@ -1,6 +1,9 @@
 #include "gui_style.h"
+#include "gui/judge/judge_view.h"
+#include "judge/verdict_store.h"
 #include "imgui.h"
 
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
@@ -102,11 +105,30 @@ std::vector<std::string> FaintPairs(const std::string& slug) {
 TEST_CASE("Every profile's accent keeps the renderer's words readable on what they sit on") {
     const Session ui;
     std::vector<std::string> faint;
-    for (const std::string& slug : {"iidx33", "sdvx7", "ddrworld", "gitadora", "jubeat", "popn9"}) {
+    for (const std::string& slug :
+         {"iidx33", "sdvx7", "sdvx1", "ddrworld", "gitadora", "jubeat", "popn9"}) {
         for (std::string& said : FaintPairs(slug))
             faint.push_back(std::move(said));
     }
     CHECK(faint.empty());
     for (const std::string& said : faint)
         FAIL_CHECK(said);
+}
+
+TEST_CASE("The judge view's verdict colours stay readable on every surface they sit on") {
+    const Session ui;
+    Gui::ApplyStyle();
+    Gui::ApplyAccentForProfile("sdvx1");
+    const ImGuiStyle& style = ImGui::GetStyle();
+    const std::span<const ImVec4, ImGuiCol_COUNT> colours(style.Colors);
+    for (const Judge::Verdict verdict :
+         {Judge::Verdict::Smooth, Judge::Verdict::Wrong, Judge::Verdict::Unsure}) {
+        for (const Surface& surface : kSurfaces) {
+            const ImVec4 behind = Over(colours[static_cast<std::size_t>(surface.which)],
+                                       colours[static_cast<std::size_t>(ImGuiCol_WindowBg)]);
+            const double ratio = Contrast(JudgeView::VerdictColour(verdict), behind);
+            INFO(Judge::VerdictName(verdict) << " on " << surface.name << " is " << ratio << ":1");
+            CHECK(ratio >= kLeastContrast);
+        }
+    }
 }

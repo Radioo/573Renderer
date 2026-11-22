@@ -1,6 +1,6 @@
 # Interaction inventory
 
-Every user interaction 573Renderer exposes: **526** across **13** surfaces,
+Every user interaction 573Renderer exposes: **546** across **14** surfaces,
 including the render window and the 3D scene camera, not just the GUI panels.
 
 ## Surfaces
@@ -20,19 +20,20 @@ including the render window and the 3D scene camera, not just the GUI panels.
 | 3D scene camera | 29 | [scene3d_camera.md](scene3d_camera.md) |
 | Scene pane | 24 | [scene_pane.md](scene_pane.md) |
 | Render window | 22 | [render_window.md](render_window.md) |
+| Interpolation judge | 20 | [judge_view.md](judge_view.md) |
 
 ## By input kind
 
 | input | count |
 |---|---|
-| cli-arg | 111 |
-| left-click | 108 |
+| cli-arg | 118 |
+| left-click | 115 |
 | hover | 74 |
-| key | 61 |
+| key | 70 |
 | drag | 40 |
-| text-entry | 28 |
-| window-message | 25 |
-| checkbox | 25 |
+| text-entry | 29 |
+| window-message | 26 |
+| checkbox | 27 |
 | scroll | 25 |
 | combo-select | 12 |
 | right-click | 9 |

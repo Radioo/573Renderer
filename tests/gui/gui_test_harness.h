@@ -4,6 +4,7 @@
 #include "imgui_te_context.h"
 #include "imgui_te_engine.h"
 
+#include <functional>
 #include <string>
 
 namespace GuiTest {
@@ -34,6 +35,8 @@ void ComboPick(ImGuiTestContext* ctx, const char* combo_path, const char* item_l
 void ClickTreeArrow(ImGuiTestContext* ctx, const char* item_path);
 
 void SetDisplaySize(float w, float h);
+
+void SetFrameBuilder(std::function<void()> builder);
 
 bool TooltipShown(ImGuiTestContext* ctx);
 

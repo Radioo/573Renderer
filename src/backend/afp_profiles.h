@@ -1,5 +1,7 @@
 #pragma once
 
+#include "judge/interp_layout.h"
+
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -79,6 +81,9 @@ struct AfpConfig {
     float time_scale = 1.0f;
 
     bool skip_explicit_afp_set_afp_data = false;
+
+    const AfpInterp::Layout* interp_layout = nullptr;
+    float fixed_step_seconds = 0.0F;
 };
 
 const AfpConfig* For(const std::string& slug);

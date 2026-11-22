@@ -384,6 +384,39 @@ entries in the same psmap confirm the decoding: `log/use_netsci` is type 0x03
 (u8) and `desc/nr_desc` is type 0x05 (u16) with default 808, which matches the
 `nr_desc=808` the build then logs.
 
+**4. `fs_open_read_flags` - the avs_fs_open ACCESS ENCODING.** The low two bits
+of `avs_fs_open`'s flags pick the Win32 access mode inside the `fs` driver's
+open, and the encoding changed between generations:
+
+| flags & 3 | avs 2.13.4 | avs 2.15.8 and newer |
+|---|---|---|
+| 0 | read (`GENERIC_READ`) | invalid, returns `0x80070016` |
+| 1 | write | read |
+| 2 | read + write | write |
+| 3 | (assert) | read + write |
+
+2.13.4 is POSIX-style (`O_RDONLY` = 0); 2.15.8 adds one. So a read-only open
+with flags 0, which is what IIDX 19's `BMAFP::my_file_open` passes, fails on
+every later build, and flags 1 would open 2.13.4 files write-only. SDVX 1's own
+package reader passes `(path, 1, 0644)` on 2.15.8. `AvsOrdinals::fs_open_read_flags`
+is 0 on the 2.13.4 table and 1 everywhere else; the TXP2 reader
+(`DdrAfp::ReadAvsFile`) is the one caller that used a per-generation value.
+Re-find: xref `CreateFileA` in libavs and take the caller whose body switches
+on `flags & 3` to pick `dwDesiredAccess` (2.13.4 asserts with the source name
+`avs-fs-win32.c` in the default case).
+
+**5. cstream ordinals.** The TXP2 texture path inflates through avs's own
+cstream (`avs_cstream_create/operate/finish/destroy`). They are resolved only
+on the generations whose table names them. 2.15.8 (SDVX 1 and IIDX 20 ship the
+same file, SHA-1 identical) has create `0x141`, operate `0x08c`, finish
+`0x025`, destroy `0x0e3`. Found from SDVX 1's `soundvoltex.dll`: its texture
+decode helper (the callee of the TXP2 reader for flag `0x40000`, logging
+`cstream INFLATE failed.`) imports libavs ordinals 294 / 296 / 297 / 298, which
+the export table maps to those names. Confirmed in libavs: `0x141` logs
+`cstream: cannot operator '%u'` for a type >= 2, `0x08c` and `0x025` dispatch
+through slots 0 and 1 of the per-type table (`avs-cstream-common.c` lines 56
+and 63), and `0x0e3` frees the context through `avs_gheap_free` (`0x16a`).
+
 ## kSkip sentinel
 
 `GameProfile::kSkip` (= -1) as an ordinal means "this game's afp-core does
@@ -1098,6 +1131,39 @@ was documented as "PLACEHOLDER ordinals equal to IIDX's, marked TODO" whose
 value was (a) auto-detect recognition and (b) gating known-AV calls. That
 phase is over - the map is confirmed equal - but the note explains older
 comments elsewhere.)
+
+### SDVX 1 (BOOTH) - slug `sdvx1`, dir hint "booth"
+
+32-bit, so it runs in `573Renderer32.exe` only. Backend `afp_ddr` on the TXP2
+package path IIDX 19 uses (docs/x86_build.md, "SDVX 1 (BOOTH)"). DLLs in
+`modules/`: `libavs-win32.dll` 2.15.8 (byte-identical to IIDX 20's, so
+`AvsGeneration::Avs2158`), `libafp-win32.dll` ver2.10.3, and NO afp-utils
+(`afpu_dll = nullptr`, `scan_txp2_packages = true`). Render size 720x1280
+portrait, read from `soundvoltex.dll`: the function that builds the main render
+target calls `CreateTexture(720, 1280, 1, D3DUSAGE_RENDERTARGET,
+D3DFMT_A8R8G8B8)`, the device setup creates a 720x1280 `D3DFMT_D24S8`
+depth-stencil surface and centres its 2D set-up on (360, 640), and the window
+function sizes the window 720x1280 (360x640 and 180x320 for its two reduced
+window modes). spice2x screenshots of the running
+game are 720x1280 too. Re-find: functions holding both immediates `0x2D0` and
+`0x500`.
+
+`.interp_layout = &kLibafp2103Interp` and `.fixed_step_seconds = 1/60` are what the
+interpolation judge needs (docs/judge.md): the five libafp 2.10.3 hook sites with
+their prologue bytes, the layer and display-object field offsets the hooks read, and
+the game's fixed logic step (SDVX 1's frame loop calls `afp_render` with a constant
+1/60). Profiles without a layout cannot be judged.
+
+`.offsets = kIidx33Offsets` is inert here, as on every `afp_ddr` row: the
+DllOffsetSet pokes belong to the modern path, and the DDR path's own
+hardcoded diagnostic reads (`LayerStruct`, `ChildMc`) are env-gated and DDR
+World x64 only.
+
+The identity row sits after `sdvx7`. AutoDetect prefers the longest matching
+hint, so `SDVX 1 - BOOTH` (which also contains "sdvx") picks `sdvx1`. The
+game-DLL fallback cannot tell the two apart (both ship `soundvoltex.dll`) and
+keeps returning `sdvx7` for a folder with no name hint, so such an install
+needs `--profile sdvx1`.
 
 ### DDR World (MDX) - slug `ddrworld`, dir hint "mdx"
 

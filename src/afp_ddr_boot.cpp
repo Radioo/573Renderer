@@ -47,6 +47,7 @@ struct DdrClip {
 std::vector<DdrClip> g_clips;
 std::string g_active_clip;
 Txp2Loaded g_txp2;
+std::vector<std::vector<uint8_t>> g_retired_cores;
 
 struct BitmapSource {
     Txp2Loaded package;
@@ -457,12 +458,13 @@ void UnloadTxp2Package() {
     g_active_clip.clear();
     LOG("DDR", "unloaded previous TXP2 package (%zu streams, %d could not be destroyed)",
         g_txp2.clips.size(), failed);
+    g_retired_cores.push_back(std::move(g_txp2.core));
     g_txp2 = Txp2Loaded{};
 }
 
 }
 
-bool LoadTxp2(AvsFuncs& avs, const std::string& disk_path) {
+bool LoadTxp2Streams(AvsFuncs& avs, const std::string& disk_path) {
     if (!g_booted) {
         LOG("DDR", "LoadTxp2 before Boot");
         return false;
@@ -492,7 +494,34 @@ bool LoadTxp2(AvsFuncs& avs, const std::string& disk_path) {
     g_clips.clear();
     for (const auto& c : g_txp2.clips)
         g_clips.push_back({.name = c.name, .stream_id = c.stream_id, .layer_id = 0});
+    return true;
+}
 
+uint32_t ClipStreamId(const std::string& name) {
+    for (const auto& c : g_clips) {
+        if (c.name == name) return c.stream_id;
+    }
+    return 0;
+}
+
+void DestroyLayer(uint32_t layer_id) {
+    DestroyTxp2Layer(layer_id);
+}
+
+void Advance(float dt) {
+    if (!g_booted || !(dt > 0.0F)) return;
+    if (s_ddr_afp.afp_render != nullptr) {
+        s_ddr_afp.afp_render(dt);
+    } else {
+        if (s_ddr_afp.afp_render_init != nullptr) s_ddr_afp.afp_render_init();
+        s_ddr_afp.RenderAll(dt, 1);
+        if (s_ddr_afp.afp_render_finish != nullptr) s_ddr_afp.afp_render_finish();
+    }
+    g_retired_cores.clear();
+}
+
+bool LoadTxp2(AvsFuncs& avs, const std::string& disk_path) {
+    if (!LoadTxp2Streams(avs, disk_path)) return false;
     uint32_t root_stream_id = g_clips.empty() ? 0 : g_clips.front().stream_id;
     const char* root_clip_name = g_clips.empty() ? nullptr : g_clips.front().name.c_str();
     ApplyRootClipOverride(root_stream_id, root_clip_name);
@@ -595,6 +624,7 @@ void AdvanceOnce(float dt) {
         s_ddr_afp.RenderAll(dt * eff, env_mode);
         if (s_ddr_afp.afp_render_finish != nullptr) s_ddr_afp.afp_render_finish();
     }
+    g_retired_cores.clear();
 }
 }
 
@@ -929,6 +959,7 @@ bool SwitchClip(const std::string& name) {
         if (s_ddr_afp.afp_layer_stop != nullptr) s_ddr_afp.afp_layer_stop(clip->layer_id);
         if (s_ddr_afp.afp_layer_play != nullptr) s_ddr_afp.afp_layer_play(clip->layer_id, 1.0F);
         g_layer_id = clip->layer_id;
+        g_root_mc_layer = 0;
     } else if (!CreateClipLayer(*clip, name)) {
         return false;
     }

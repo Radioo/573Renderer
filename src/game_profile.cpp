@@ -133,6 +133,15 @@ const std::vector<Profile> kProfiles = {
         .default_render_h = 1920,
     },
     Profile{
+        .name = "SDVX 1 (BOOTH)",
+        .slug = "sdvx1",
+        .dir_substring = "booth",
+        .backend_id = "afp_ddr",
+        .game_dll = "soundvoltex.dll",
+        .default_render_w = 720,
+        .default_render_h = 1280,
+    },
+    Profile{
         .name = "DDR World (MDX)",
         .slug = "ddrworld",
         .dir_substring = "mdx",

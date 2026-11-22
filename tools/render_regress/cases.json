@@ -125,6 +125,20 @@
       ]
     },
     {
+      "name": "sdvx1",
+      "arch": "x86",
+      "profile": "sdvx1",
+      "ifs_candidates": [
+        "data/graphics/bg_space.bin"
+      ],
+      "animation": "bg_space",
+      "render_size": "720x1280",
+      "frames": [
+        30,
+        90
+      ]
+    },
+    {
       "name": "iidx20",
       "arch": "x86",
       "profile": "iidx20",

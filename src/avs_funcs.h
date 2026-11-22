@@ -118,6 +118,8 @@ struct AvsOrdinals {
     int avs_cstream_execute;
     int avs_cstream_finish;
     int avs_cstream_destroy;
+
+    int fs_open_read_flags = 1;
 };
 
 constexpr AvsOrdinals kAvsOrdinals217 = {
@@ -238,6 +240,10 @@ constexpr AvsOrdinals kAvsOrdinals2158 = {
     .boot_takes_split_heaps = true,
     .log_writer_ctx_first = false,
     .log_level_is_u32 = false,
+    .avs_cstream_create = 0x141,
+    .avs_cstream_execute = 0x08c,
+    .avs_cstream_finish = 0x025,
+    .avs_cstream_destroy = 0x0e3,
 };
 
 constexpr AvsOrdinals kAvsOrdinals2134 = {
@@ -282,6 +288,7 @@ constexpr AvsOrdinals kAvsOrdinals2134 = {
     .avs_cstream_execute = 0x078,
     .avs_cstream_finish = 0x130,
     .avs_cstream_destroy = 0x12b,
+    .fs_open_read_flags = 0,
 };
 
 struct AvsFuncs {
@@ -294,6 +301,7 @@ struct AvsFuncs {
     bool boot_takes_split_heaps = false;
     bool log_writer_ctx_first = false;
     bool log_level_is_u32 = false;
+    int fs_open_read_flags = 1;
     avs_shutdown_t avs_shutdown = nullptr;
     avs_is_active_t avs_is_active = nullptr;
 
@@ -339,6 +347,7 @@ struct AvsFuncs {
         boot_takes_split_heaps = ord.boot_takes_split_heaps;
         log_writer_ctx_first = ord.log_writer_ctx_first;
         log_level_is_u32 = ord.log_level_is_u32;
+        fs_open_read_flags = ord.fs_open_read_flags;
         if (ord.avs_cstream_create != 0) {
             DLL_LOAD_AS(loader, avs_cstream_create, ord.avs_cstream_create, "cstream_create");
             DLL_LOAD_AS(loader, avs_cstream_execute, ord.avs_cstream_execute, "cstream_operate");

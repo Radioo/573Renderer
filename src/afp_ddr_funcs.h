@@ -36,6 +36,7 @@ typedef int (*ddr_afp_layer_get_info_t)(uint32_t layer_id, void* out_info, intpt
 typedef int (*ddr_afp_stream_get_info_t)(uint32_t stream_id, void* out_info);
 
 typedef void (*ddr_afp_render_all_t)(float dt);
+typedef int (*ddr_afp_render_t)(float dt);
 typedef int (*ddr_afp_display_all_t)();
 typedef int (*ddr_afp_display_layer_t)(uint32_t layer_id);
 typedef int (*ddr_afp_layer_is_valid_t)(uint32_t layer_id);
@@ -89,6 +90,7 @@ struct AfpDdrFuncs {
     ddr_afp_stream_get_info_t afp_stream_get_info = nullptr;
 
     ddr_afp_render_all_t afp_render_all = nullptr;
+    ddr_afp_render_t afp_render = nullptr;
     ddr_afp_display_all_t afp_display_all = nullptr;
     ddr_afp_display_layer_t afp_display_layer = nullptr;
     ddr_afp_layer_is_valid_t afp_layer_is_valid = nullptr;
@@ -202,6 +204,7 @@ struct AfpDdrFuncs {
         DDR_LOAD(loader, afp_stream_get_info);
 
         DDR_LOAD(loader, afp_render_all);
+        DDR_LOAD(loader, afp_render);
         DDR_LOAD(loader, afp_display_all);
         DDR_LOAD(loader, afp_display_layer);
         DDR_LOAD(loader, afp_layer_is_valid);

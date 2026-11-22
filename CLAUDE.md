@@ -77,6 +77,7 @@ test that takes a path the UI cannot take never executes the branch the user hit
 # Resolutions
 
 When testing or debugging, ALWAYS use a proper render resolution for the game so that the content is not getting cut off.
+- SDVX 1 (BOOTH) - 720x1280
 - SDVX - 1080x1920
 - IIDX 9 to 19 - 640x480
 - IIDX 20 to 29 - 1280x720

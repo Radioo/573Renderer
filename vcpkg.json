@@ -59,7 +59,8 @@
           ]
         },
         "boost-interprocess",
-        "dxsdk-d3dx"
+        "dxsdk-d3dx",
+        "safetyhook"
       ]
     }
   },

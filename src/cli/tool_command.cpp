@@ -168,6 +168,25 @@ ToolCommand ParseOutDir(std::span<const std::string> args, std::size_t i, ToolKi
     return c;
 }
 
+std::string FlagValue(std::span<const std::string> args, const std::string& flag) {
+    const std::size_t at = FindFlagWithValue(args, flag);
+    return at < args.size() ? args[at + 1] : std::string();
+}
+
+ToolCommand ParseJudge(std::span<const std::string> args, std::size_t i) {
+    ToolCommand c;
+    c.kind = ToolKind::Judge;
+    c.in_path = args[i + 1];
+    c.profile = FlagValue(args, "--profile");
+    c.json_path = FlagValue(args, "--judge-verdicts");
+    c.judge_clip = FlagValue(args, "--judge-clip");
+    c.judge_background = FlagValue(args, "--judge-background");
+    c.out_path = FlagValue(args, "--judge-capture");
+    c.frames = ParseIntAtoiLike(FlagValue(args, "--judge-capture-frames"));
+    c.display_hz = ParseIntAtoiLike(FlagValue(args, "--judge-display-hz"));
+    return c;
+}
+
 ToolCommand Retired(const std::string& flag) {
     ToolCommand c;
     c.kind = ToolKind::RetiredFlag;
@@ -179,7 +198,9 @@ ToolCommand Retired(const std::string& flag) {
 
 ToolCommand ParseToolCommand(std::span<const std::string> args) {
     if (Mentions(args, "--preset-tweaks")) return Retired("--preset-tweaks");
-    std::size_t i = FindFlagWithValue(args, "--preset-dump-defaults");
+    std::size_t i = FindFlagWithValue(args, "--judge");
+    if (i < args.size()) return ParseJudge(args, i);
+    i = FindFlagWithValue(args, "--preset-dump-defaults");
     if (i < args.size()) return ParseOutDir(args, i, ToolKind::PresetDumpDefaults);
     i = FindFlagWithValue(args, "--preset-export-json");
     if (i < args.size()) return ParsePresetExportJson(args, i);

@@ -12,6 +12,7 @@
 #include "arc_extract.h"
 #include "customize_extract.h"
 #include "qpro/qpro_dll.h"
+#include "gui/judge/judge_app.h"
 
 #include <fstream>
 #include <ios>
@@ -146,6 +147,15 @@ int Run(const Cli::ToolCommand& cmd) {
         return PresetTools::ExportJson(cmd.build, cmd.preset_id, cmd.out_path);
     case Cli::ToolKind::PresetValidate:
         return PresetTools::Validate(cmd.in_path);
+    case Cli::ToolKind::Judge:
+        return JudgeApp::Run(JudgeApp::Options{.game_dir = cmd.in_path,
+                                               .profile = cmd.profile,
+                                               .verdicts_path = cmd.json_path,
+                                               .start_clip = cmd.judge_clip,
+                                               .capture_dir = cmd.out_path,
+                                               .capture_frames = cmd.frames,
+                                               .display_hz = cmd.display_hz,
+                                               .background = cmd.judge_background});
     case Cli::ToolKind::RetiredFlag:
         return RunRetired(cmd);
     case Cli::ToolKind::DdrTest:
