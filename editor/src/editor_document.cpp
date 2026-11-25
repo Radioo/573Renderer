@@ -95,6 +95,7 @@ void Window::FinishOpen(const QString& path, OpenedPackage opened) {
     CloseAnimation();
     rows_ = std::move(opened.rows);
     FillTree();
+    WarnForeignPackage(path, opened.install);
     if (!opened.first_animation.isEmpty()) SelectEntry(opened.first_animation);
     RefreshState();
     if (opened.problems.isEmpty()) {

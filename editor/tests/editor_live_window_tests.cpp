@@ -722,3 +722,26 @@ TEST_CASE("An IIDX 34 install previews and saves a frame of its own title packag
     CHECK(drawn);
     CHECK(opening.Problems().isEmpty());
 }
+
+TEST_CASE("An IIDX 34 package opened on an IIDX 33 install is reported once as incompatible") {
+    const QString chosen = qEnvironmentVariable("R573_IIDX_DIR");
+    const QString zinrai = qEnvironmentVariable("R573_IIDX34_DIR");
+    if (chosen.isEmpty() || zinrai.isEmpty()) SKIP("R573_IIDX_DIR or R573_IIDX34_DIR not set");
+    QSettings().setValue("game/directory", chosen);
+    Editor::Window window;
+    window.resize(1600, 900);
+    window.show();
+    Script opening({});
+    window.OpenDocument(zinrai + "/data/graphic/0/title.ifs");
+    WaitForOpen(window);
+    REQUIRE(Settle([&window] { return !window.Loading(); }));
+    QApplication::processEvents();
+    const QString kept = QSettings().value("game/directory").toString();
+    QSettings().remove("game/directory");
+    INFO(opening.Problems().join("|").toStdString());
+    CHECK(QDir(kept) == QDir(chosen));
+    REQUIRE(opening.Problems().size() == 1);
+    CHECK(opening.Problems().front().contains("might be incompatible"));
+    CHECK(opening.Problems().front().contains("iidx34"));
+    CHECK(opening.Problems().front().contains("iidx33"));
+}

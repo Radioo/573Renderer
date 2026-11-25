@@ -199,6 +199,7 @@ private:
     void ChooseGameDirectory();
     void StartHost(const QString& game_dir);
     void StopHost();
+    void WarnForeignPackage(const QString& path, const QString& install);
     [[nodiscard]] std::optional<QString> HostRefusal(const QString& game_dir) const;
     void ChooseDocument();
     void CreateProject();
@@ -555,6 +556,7 @@ private:
     bool host_busy_ = false;
     bool closing_ = false;
     std::optional<PendingLoad> pending_load_;
+    std::string foreign_build_;
     std::optional<FrameExport> frames_;
     bool view_busy_ = false;
     bool view_again_ = false;

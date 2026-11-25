@@ -26,4 +26,6 @@ const Profile* AutoDetect(const std::string& dir);
 
 const Profile* BySlug(const std::string& slug);
 
+[[nodiscard]] bool HoldsGameDll(const std::string& dir);
+
 }

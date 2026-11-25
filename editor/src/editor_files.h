@@ -28,6 +28,8 @@ inline constexpr int kProblemMs = 15000;
 
 [[nodiscard]] std::string InstallBuild(const QString& game_dir);
 
+[[nodiscard]] QString InstallHolding(const QString& file);
+
 bool WriteFileBytes(const QString& path, const std::vector<uint8_t>& bytes);
 
 }

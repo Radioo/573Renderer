@@ -795,15 +795,35 @@ ADR 0004's promise that the game shows what the viewport shows. When nothing
 matches the install the project's build is trusted, since there is nothing to
 compare it with.
 
+A package from another build's install is not followed. The editor works on one
+build at a time, the one the chosen install (or the project) names, and opening an
+IFS never changes it. What it does is say so: the open job also walks up from the
+IFS to the first folder that holds a game DLL (`Editor::InstallHolding`, using
+`GameProfile::HoldsGameDll`, the profiles' own `game_dll` list in the places the
+host looks for DLLs), and `Window::WarnForeignPackage` compares that install's
+build with the target build. When both are known and differ, one warning says the
+package might be incompatible with the target build, names both builds and the
+install it came from, and points at File > Choose game install. A host booted on
+IIDX 33 fails to load ZINRAI's `title.ifs`, and without this warning the only
+message was the host's "LoadPackage failed". Once the warning has been given, a refused load for
+that document goes to the status bar instead of a second box. An IFS outside any
+install (a copy, a project folder), an install whose build is not recognised, and
+an editor with no install and no project give no warning, because there is no
+build to compare.
+
 A folder not named for its game (no `zinrai`, `iidx`, ...) falls through to the
 game DLL check, which finds `bm2dx.dll` and answers with the first IIDX profile
 that ships one; the editor has no build picker like the renderer's Setup combo
 yet, so such an install needs renaming. Re-find: `InstallBuild` and
-`HostRefusal`; the cases are "The target build follows the game the chosen
-install is named for" and "A project made for another build refuses to boot the
-preview on this install" (no install needed) and "An IIDX 34 install previews
-and saves a frame of its own title package" (`R573_IIDX34_DIR`, opens
-`data/graphic/0/title.ifs`, the folder IIDX 34's `bm2dx.dll` names).
+`HostRefusal`, `InstallHolding` and `WarnForeignPackage`; the cases are "The
+target build follows the game the chosen install is named for", "A project made
+for another build refuses to boot the preview on this install" and "A package
+from another build's install says it might be incompatible and keeps the
+install" (no install needed), "An IIDX 34 install previews and saves a frame of
+its own title package" (`R573_IIDX34_DIR`, opens `data/graphic/0/title.ifs`, the
+folder IIDX 34's `bm2dx.dll` names) and "An IIDX 34 package opened on an IIDX 33
+install is reported once as incompatible" (both `R573_IIDX_DIR` and
+`R573_IIDX34_DIR`).
 
 Nothing but the picture needs the host. Without one, choosing an animation
 still fills the clip list, the timeline (its frame count and depths come from the

@@ -60,6 +60,22 @@ std::optional<QString> Window::HostRefusal(const QString& game_dir) const {
              QString::fromStdString(install_build_));
 }
 
+void Window::WarnForeignPackage(const QString& path, const QString& install) {
+    foreign_build_.clear();
+    if (install.isEmpty() || (!project_ && install_build_.empty())) return;
+    const std::string theirs = InstallBuild(install);
+    const std::string ours = TargetBuild();
+    if (theirs.empty() || theirs == ours) return;
+    foreign_build_ = theirs;
+    const QString target = QString::fromStdString(ours);
+    ReportProblem(
+        tr("%1 comes from %2, an install of %3, but the editor is working on %4. The "
+           "package might be incompatible with %4: the preview may not load it, and "
+           "what you save has to load on %4. To work on %3, choose its install under "
+           "File > Choose game install.")
+            .arg(QFileInfo(path).fileName(), install, QString::fromStdString(theirs), target));
+}
+
 void Window::StopHost() {
     if (!host_.Running() || host_busy_) return;
     host_busy_ = true;

@@ -2,6 +2,8 @@
 
 #include "game_profile.h"
 
+#include <QDir>
+#include <QFileInfo>
 #include <QString>
 
 #include <cstdint>
@@ -23,6 +25,14 @@ bool WriteFileBytes(const QString& path, const std::vector<uint8_t>& bytes) {
     for (const uint8_t byte : bytes)
         out.put(static_cast<char>(byte));
     return out.good();
+}
+
+QString InstallHolding(const QString& file) {
+    QDir dir = QFileInfo(file).absoluteDir();
+    do {
+        if (GameProfile::HoldsGameDll(dir.absolutePath().toStdString())) return dir.absolutePath();
+    } while (dir.cdUp());
+    return {};
 }
 
 std::string InstallBuild(const QString& game_dir) {

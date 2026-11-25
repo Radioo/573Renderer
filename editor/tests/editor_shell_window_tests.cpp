@@ -511,18 +511,21 @@ TEST_CASE("A project made for another build refuses to boot the preview on this 
         Document::WriteProject(project)));
 
     Editor::Window window;
-    Script opening({});
-    QMimeData data;
-    data.setUrls({QUrl::fromLocalFile(folder)});
-    QDragEnterEvent entered(QPoint(4, 4), Qt::CopyAction, &data, Qt::LeftButton, Qt::NoModifier);
-    QApplication::sendEvent(&window, &entered);
-    QDropEvent drop(QPointF(4, 4), Qt::CopyAction, &data, Qt::LeftButton, Qt::NoModifier);
-    QApplication::sendEvent(&window, &drop);
-    WaitForOpen(window);
-    const bool adopted =
-        Settle([&window] { return window.windowTitle().contains("sample project"); });
-    INFO(opening.Problems().join("|").toStdString() + " / " + window.windowTitle().toStdString());
-    REQUIRE(adopted);
+    {
+        Script opening({});
+        QMimeData data;
+        data.setUrls({QUrl::fromLocalFile(folder)});
+        QDragEnterEvent entered(QPoint(4, 4), Qt::CopyAction, &data, Qt::LeftButton,
+                                Qt::NoModifier);
+        QApplication::sendEvent(&window, &entered);
+        QDropEvent drop(QPointF(4, 4), Qt::CopyAction, &data, Qt::LeftButton, Qt::NoModifier);
+        QApplication::sendEvent(&window, &drop);
+        WaitForOpen(window);
+        const bool adopted =
+            Settle([&window] { return window.windowTitle().contains("sample project"); });
+        INFO(opening.Problems().join("|").toStdString());
+        REQUIRE(adopted);
+    }
 
     Script choosing({PickFile(install)});
     CommandsOf(window).Run("file.game_install");
@@ -532,4 +535,37 @@ TEST_CASE("A project made for another build refuses to boot the preview on this 
     REQUIRE(choosing.Problems().size() == 1);
     CHECK(choosing.Problems().front().contains("iidx33"));
     CHECK(choosing.Problems().front().contains("iidx34"));
+}
+
+TEST_CASE(
+    "A package from another build's install says it might be incompatible and keeps the install") {
+    QTemporaryDir root;
+    const QString chosen = root.filePath("IIDX 33 - Sparkle Shower");
+    const QString zinrai = root.filePath("IIDX 34 - ZINRAI");
+    REQUIRE(QDir().mkpath(chosen + "/modules"));
+    REQUIRE(QDir().mkpath(zinrai + "/modules"));
+    REQUIRE(QDir().mkpath(zinrai + "/data/graphic/0"));
+    REQUIRE(Editor::WriteFileBytes(chosen + "/modules/bm2dx.dll", {0}));
+    REQUIRE(Editor::WriteFileBytes(zinrai + "/modules/bm2dx.dll", {0}));
+    const auto package = Ifs::Write(SamplePackage::SampleArchive());
+    REQUIRE(package.has_value());
+    const QString ifs = zinrai + "/data/graphic/0/title.ifs";
+    REQUIRE(Editor::WriteFileBytes(ifs, *package));
+
+    QSettings().setValue("game/directory", chosen);
+    Script opening({});
+    Editor::Window window;
+    window.OpenDocument(ifs);
+    WaitForOpen(window);
+    REQUIRE(Settle(
+        [&opening] { return opening.Problems().filter("might be incompatible").size() == 1; }));
+    const QString kept = QSettings().value("game/directory").toString();
+    QSettings().remove("game/directory");
+    CHECK(QDir(kept) == QDir(chosen));
+    const QString warned = opening.Problems().filter("might be incompatible").front();
+    CHECK(warned.contains("iidx34"));
+    CHECK(warned.contains("iidx33"));
+    auto* build = window.findChild<QLabel*>("start_build");
+    REQUIRE(build != nullptr);
+    CHECK(build->text().contains("iidx33"));
 }

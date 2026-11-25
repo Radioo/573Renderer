@@ -402,7 +402,12 @@ void Window::LoadIntoHost(bool fresh, Document::File document, const QString& wh
         [this, then = std::move(then)](HostLoad load) {
             host_busy_ = false;
             JobFinished();
-            if (!load.refusal.isEmpty()) ReportOnce(load.refusal);
+            if (!load.refusal.isEmpty()) {
+                if (foreign_build_.empty())
+                    ReportOnce(load.refusal);
+                else
+                    statusBar()->showMessage(load.refusal);
+            }
             if (load.loaded) {
                 frame_count_ = load.frame_count;
                 symbol_shown_ = load.symbol_shown;

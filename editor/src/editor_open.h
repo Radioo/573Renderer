@@ -38,6 +38,7 @@ struct OpenedPackage {
     std::optional<Document::File> file;
     QString refusal;
     QString first_animation;
+    QString install;
     QStringList problems;
     PackageRows rows;
     int entries = 0;

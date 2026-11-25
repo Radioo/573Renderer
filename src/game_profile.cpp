@@ -237,6 +237,13 @@ const Profile* BySlug(const std::string& slug) {
     return nullptr;
 }
 
+bool HoldsGameDll(const std::string& dir) {
+    for (const auto& p : kProfiles) {
+        if (p.game_dll != nullptr && GameDllPresent(dir, p.game_dll)) return true;
+    }
+    return false;
+}
+
 bool SlugHasQpro(const std::string& slug) {
     const Profile* profile = BySlug(slug);
     return profile != nullptr && profile->has_qpro;

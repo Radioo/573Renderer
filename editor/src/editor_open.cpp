@@ -121,6 +121,7 @@ OpenedPackage OpenPackage(const QString& path, const Moved& moved) {
     opened.rows = ReadRows(*opened.file, moved);
     if (!opened.rows.animations.empty())
         opened.first_animation = opened.rows.animations.front().path;
+    opened.install = InstallHolding(path);
     return opened;
 }
 
