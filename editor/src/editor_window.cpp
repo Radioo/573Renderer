@@ -446,6 +446,14 @@ void Window::ChooseGameDirectory() {
 }
 
 void Window::StartHost(const QString& game_dir) {
+    install_build_ = InstallBuild(game_dir);
+    if (const std::optional<QString> refused = HostRefusal(game_dir)) {
+        StopHost();
+        ReportProblem(*refused);
+        RefreshStatus();
+        RefreshState();
+        return;
+    }
     const std::vector<std::string> search = {
         QApplication::applicationDirPath().toStdString(),
         QDir(QApplication::applicationDirPath() + "/../build").absolutePath().toStdString()};
@@ -460,8 +468,9 @@ void Window::StartHost(const QString& game_dir) {
     RefreshState();
     Jobs::Start<QString>(
         this, pool_,
-        [this, host_exe, dir = game_dir.toStdString()](QPromise<QString>& promise) {
-            const auto started = host_.Start(host_exe, dir, TargetBuild());
+        [this, host_exe, dir = game_dir.toStdString(),
+         build = TargetBuild()](QPromise<QString>& promise) {
+            const auto started = host_.Start(host_exe, dir, build);
             promise.addResult(started ? QString() : QString::fromStdString(started.error()));
         },
         [this](const QString& refusal) {

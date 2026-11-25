@@ -47,7 +47,36 @@ namespace Editor {
 
 std::string Window::TargetBuild() const {
     if (project_ && !project_->build.empty()) return project_->build;
+    if (!install_build_.empty()) return install_build_;
     return std::string(kBuildSlug);
+}
+
+std::optional<QString> Window::HostRefusal(const QString& game_dir) const {
+    if (!project_ || project_->build.empty() || install_build_.empty()) return std::nullopt;
+    if (install_build_ == project_->build) return std::nullopt;
+    return tr("The project targets %1, but the install at %2 is %3. Choose a %1 install to see "
+              "the stage.")
+        .arg(QString::fromStdString(project_->build), game_dir,
+             QString::fromStdString(install_build_));
+}
+
+void Window::StopHost() {
+    if (!host_.Running() || host_busy_) return;
+    host_busy_ = true;
+    JobStarted();
+    Jobs::Start<QString>(
+        this, pool_,
+        [this](QPromise<QString>& promise) {
+            host_.Stop();
+            promise.addResult(QString());
+        },
+        [this](const QString&) {
+            host_busy_ = false;
+            JobFinished();
+            RefreshStatus();
+            RefreshState();
+            RefreshStartScreen();
+        });
 }
 
 QString Window::SuggestedProjectFolder() const {

@@ -198,6 +198,8 @@ private:
     void ToggleCameraAt(uint32_t frame);
     void ChooseGameDirectory();
     void StartHost(const QString& game_dir);
+    void StopHost();
+    [[nodiscard]] std::optional<QString> HostRefusal(const QString& game_dir) const;
     void ChooseDocument();
     void CreateProject();
     [[nodiscard]] QString SuggestedProjectFolder() const;
@@ -605,6 +607,7 @@ private:
     QLabel* zoom_status_ = nullptr;
     qint64 render_ms_ = 0;
     Host host_;
+    std::string install_build_;
     std::optional<Document::File> file_;
     Document::History history_;
     QString document_path_;

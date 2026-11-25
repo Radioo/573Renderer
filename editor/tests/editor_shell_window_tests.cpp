@@ -4,12 +4,17 @@
 #include <DockManager.h>
 #include <DockWidget.h>
 
+#include "editor_files.h"
 #include "editor_hover.h"
 #include "editor_layout.h"
 #include "editor_timeline.h"
 #include "editor_window.h"
 
+#include "document/project.h"
+
 #include <QApplication>
+#include <QDir>
+#include <QTemporaryDir>
 #include <QPointF>
 #include <QUrl>
 #include <QStackedWidget>
@@ -474,4 +479,57 @@ TEST_CASE("A stored layout whose splitters are all zero is not put back") {
     CHECK_FALSE(Editor::LayoutSized(alive));
     CHECK(Editor::LayoutSized(sized));
     CHECK(Editor::LayoutSized(qCompress(sized, 9)));
+}
+
+TEST_CASE("The target build follows the game the chosen install is named for") {
+    QTemporaryDir root;
+    const QString install = root.filePath("IIDX 34 - ZINRAI");
+    REQUIRE(QDir().mkpath(install));
+    QSettings().setValue("game/directory", install);
+    Script booting({});
+    Editor::Window window;
+    QSettings().remove("game/directory");
+    auto* build = window.findChild<QLabel*>("start_build");
+    REQUIRE(build != nullptr);
+    CHECK(build->text().contains("iidx34"));
+    CHECK_FALSE(build->text().contains("iidx33"));
+}
+
+TEST_CASE("A project made for another build refuses to boot the preview on this install") {
+    WithoutHost without_host;
+    QTemporaryDir root;
+    const QString install = root.filePath("IIDX 34 - ZINRAI");
+    REQUIRE(QDir().mkpath(install));
+    const QString ifs = WritePackage(root);
+    const QString folder = root.filePath("sample project");
+    REQUIRE(QDir().mkpath(folder));
+    const Document::Project project{
+        .build = "iidx33",
+        .ifs_path = Document::StoredIfsPath(folder.toStdString(), ifs.toStdString())};
+    REQUIRE(Editor::WriteFileBytes(
+        QString::fromStdString(Document::ProjectManifestPath(folder.toStdString())),
+        Document::WriteProject(project)));
+
+    Editor::Window window;
+    Script opening({});
+    QMimeData data;
+    data.setUrls({QUrl::fromLocalFile(folder)});
+    QDragEnterEvent entered(QPoint(4, 4), Qt::CopyAction, &data, Qt::LeftButton, Qt::NoModifier);
+    QApplication::sendEvent(&window, &entered);
+    QDropEvent drop(QPointF(4, 4), Qt::CopyAction, &data, Qt::LeftButton, Qt::NoModifier);
+    QApplication::sendEvent(&window, &drop);
+    WaitForOpen(window);
+    const bool adopted =
+        Settle([&window] { return window.windowTitle().contains("sample project"); });
+    INFO(opening.Problems().join("|").toStdString() + " / " + window.windowTitle().toStdString());
+    REQUIRE(adopted);
+
+    Script choosing({PickFile(install)});
+    CommandsOf(window).Run("file.game_install");
+    REQUIRE(Settle([&choosing] { return !choosing.Problems().isEmpty(); }));
+    QSettings().remove("game/directory");
+    INFO(choosing.Problems().join("|").toStdString());
+    REQUIRE(choosing.Problems().size() == 1);
+    CHECK(choosing.Problems().front().contains("iidx33"));
+    CHECK(choosing.Problems().front().contains("iidx34"));
 }

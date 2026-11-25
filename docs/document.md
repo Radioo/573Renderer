@@ -793,8 +793,8 @@ are on different drives; `ResolvedIfsPath` reverses it. Both are pure path
 arithmetic and touch no disk, so they are tested under `ci`.
 
 The target build comes from the project when a document has one. Without a
-project the editor uses the build it was compiled against, because nothing in
-the editor decides a build yet.
+project it is the build of the game install the editor is pointed at (see
+**Which build the preview host boots** in docs/editor.md).
 
 ## Keyframes (`document/keyframes.h`)
 

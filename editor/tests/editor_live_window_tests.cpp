@@ -681,3 +681,44 @@ TEST_CASE("The graph's playhead keeps up while the animation plays") {
     RunCommand(window, "play.toggle");
     CHECK(playing != still);
 }
+
+TEST_CASE("An IIDX 34 install previews and saves a frame of its own title package") {
+    const QString game = qEnvironmentVariable("R573_IIDX34_DIR");
+    if (game.isEmpty()) SKIP("R573_IIDX34_DIR not set");
+    QSettings().setValue("game/directory", game);
+    Editor::Window window;
+    QSettings().remove("game/directory");
+    window.resize(1600, 900);
+    window.show();
+    Script opening({});
+    window.OpenDocument(game + "/data/graphic/0/title.ifs");
+    WaitForOpen(window);
+    REQUIRE(opening.Problems().isEmpty());
+    auto* timeline = window.findChild<Editor::Timeline*>();
+    REQUIRE(timeline != nullptr);
+    emit timeline->FrameChosen(kPreviewFrame);
+    QApplication::processEvents();
+
+    QTemporaryDir dir;
+    REQUIRE(dir.isValid());
+    const QString path = dir.filePath("frame.png");
+    QAction* save = ShortcutAction(window, QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_S));
+    REQUIRE(save != nullptr);
+    {
+        Script saving({PickFile(path)});
+        save->trigger();
+        WaitForOpen(window);
+        REQUIRE(Settle([&saving] { return saving.Finished(); }));
+        CHECK(saving.Problems().isEmpty());
+    }
+    const QImage saved(path);
+    REQUIRE_FALSE(saved.isNull());
+    CHECK(saved.size() == QSize(1920, 1080));
+    bool drawn = false;
+    for (int y = 0; y < saved.height() && !drawn; y += 7) {
+        for (int x = 0; x < saved.width() && !drawn; x += 7)
+            drawn = saved.pixelColor(x, y) != QColor(0, 0, 0);
+    }
+    CHECK(drawn);
+    CHECK(opening.Problems().isEmpty());
+}

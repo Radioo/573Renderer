@@ -520,24 +520,68 @@ is what the Setup combo is for.
 
 ### IIDX 34 asserts that the packed render buffer is drained
 
-With the offsets right, IIDX 34 boots and loads, then breaks on an int3 rather
-than an access violation, naming `afpu-render-inline.h` line 27 and the
-function `afpu_render_init_frame_inline`.
+IIDX 34's afp-utils (1.2.28) asserts at the top of every frame that its packed
+render buffer is empty. The assert names `afpu-render-inline.h` lines 27 and 28
+and the function `afpu_render_init_frame_inline`, and ends in an int3. IIDX 33's
+afp-utils (1.2.19) has the same packed buffer but no such assert. afp-core
+drains the buffer itself at the end of every frame, so 573Renderer needs no
+call of its own, and makes none.
 
-That helper is afp-utils' begin-frame: it asserts two globals are zero and then
-calls the render context's slot 8, which on 573Renderer is
-`AfpD3D9::BeginRender`. Line 27 checks the count of commands packed into
-afp-utils' own render buffer; line 28 checks a second flag. Ordinal `0x074`,
-`afpu_render_flush`, is the only thing that clears both: it walks the packed
-buffer dispatching each command through afp-utils' handler table, zeroes the
-count, then clears the line-28 flag. IIDX 33's afp-utils has neither assert, so
-the leftover state was simply tolerated there.
+**The buffer.** afp-utils' draw handlers do not draw straight away. They append
+commands to a buffer (`afpu-render-packd.c`: `afpu_render_get_buf` for shapes,
+`afpu_render_get_etc_buf` for state commands), raise a byte count, and set a
+pending flag. `afpu_render_flush_buf_local` walks the buffer, dispatches each
+command through afp-utils' handler table and zeroes the count. Line 27 asserts
+the count is zero, line 28 the pending flag.
 
-573Renderer bound `afpu_render_flush` and never called it. It now calls it once
-per frame, right after `afp_do_sort_render`, on all three paths that drive a
-frame: the modern runtime, the preview host session and the qpro detail render.
-That is the pairing the asserts describe, begin-frame at the top and flush at
-the bottom, and an empty buffer makes the flush a cheap no-op.
+**The frame bracket.** afp-utils' own callback table, the one the renderer hands
+to afp-core through `afpu_data_struct`, holds two frame callbacks:
+
+- slot 1, begin-frame: the two asserts, then a reset of afp-utils' per-frame
+  state, then the render context's slot 8 (`AfpD3D9::BeginRender` here).
+- slot 2, end-frame: `afpu_render_flush_buf_local`, then it clears the pending
+  flag, then the render context's slot 16 (`AfpD3D9::EndRender`).
+
+`afp_set_afp_data` does not copy that table one to one. It fills afp-core's
+callback table from a list of (afp-core offset, afp-utils offset) word pairs,
+and the first two pairs are `0 <- 8` and `8 <- 0x10`. So afp-core's slot 0 is
+afp-utils' begin-frame and afp-core's slot 1 is its end-frame.
+
+`afp_do_sort_render` collects the visible streams and hands them to its draw
+loop, which calls afp-core slot 0 before the first stream and slot 1 after the
+last one. It does that only when no frame is open yet: the loop first tests the
+top pointer of afp-core's per-frame stack, which its frame-open step allocates
+and its frame-close step frees back to null. A call made while a frame is
+already open draws inside that frame and leaves the bracket to the outer call.
+Every frame 573Renderer drives goes through `afp_do_sort_render`: the modern
+runtime, the preview host session and the qpro detail render all call it, and
+nothing else. So each frame opens with the asserts and closes with the flush,
+and the next frame's asserts always find an empty buffer.
+
+`afpu_render_flush` (afp-utils name `0x074`) is the same flush plus the
+pending-flag clear, exported for callers that draw through afp-utils outside
+afp-core's frame. 573Renderer binds it and never calls it, and does not need to.
+Calling it after `afp_do_sort_render` would find the buffer already empty.
+
+**When the int3 can fire.** Only when a begin-frame runs while the buffer still
+holds commands, which with this bracket means the previous `afp_do_sort_render`
+never reached its end-frame callback: an exception between the two, caught by
+`RenderSeh::SafeCallSortRender`. From then on every frame breaks in the
+begin-frame asserts before anything is drawn, so a single caught fault on IIDX 34
+blanks the picture for good, where IIDX 33 would carry on. Treat the int3 as the
+echo of an earlier fault and look for that one. With the current `iidx34`
+profile an export of all 845 frames of `data/graphic/0/title.ifs` logs no fault,
+and the editor's preview host renders the same package.
+
+**Re-find.** In afp-utils, the string `afpu_render_init_frame_inline` is
+referenced by two functions. Begin-frame is the one whose address sits in
+`.data` right after a null pointer: that null is slot 0 of `afpu_data_struct`,
+and the next pointer is end-frame. `idc573/afp/afpu_frame_callbacks.idc` in the
+notes repo names all three. The pair list is read by the helper that
+`afp_set_afp_data` calls first, which also fills afp-core's defaults from a
+static table. In afp-core, `afp_do_sort_render`'s draw loop is the callee that
+calls a thunk jumping through the callback table's first slot before its stream
+loop, and a thunk jumping through the second slot after it.
 
 ### The layer callback takes one argument, and always did
 

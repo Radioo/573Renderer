@@ -57,6 +57,7 @@ add_library(editor_shared STATIC
     ${R573_EDITOR_FORMATS_SOURCES}
     ${R573_EDITOR_DOCUMENT_SOURCES}
     ${R573_EDITOR_PREVIEW_SOURCES}
+    "${R573_ROOT}/src/game_profile.cpp"
 )
 add_dependencies(editor_shared editor_preview_schema)
 target_include_directories(editor_shared PUBLIC "${R573_ROOT}/src" "${CMAKE_BINARY_DIR}/generated")

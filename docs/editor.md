@@ -89,7 +89,8 @@ trimming the clip, timeline drops and new sprites) and
 `editor/tests/editor_key_window_tests.cpp` (the keyframe edits), and the
 ones that start the preview host live in
 `editor/tests/editor_live_window_tests.cpp` (they skip without
-`R573_IIDX_DIR`). The `Script`, its steps and the package helpers are shared
+`R573_IIDX_DIR`, an IIDX 33 install; the IIDX 34 case skips without
+`R573_IIDX34_DIR`). The `Script`, its steps and the package helpers are shared
 from `editor/tests/window_test_support.h`, including `OwnDroppedDot`, which
 drops the dot shape on depth 3 at frame 0, makes a project and lets it own that
 depth, the start of every test that edits an owned depth. A case that compares
@@ -763,6 +764,46 @@ which `tools/ci/stage_editor.py` does. The application starts the host on the in
 remembers, or on the one the user picks from the File menu, and stops it on
 close; a host that fails to start or refuses a request shows in a warning box
 and leaves the window and its document alone.
+
+### Which build the preview host boots
+
+The host is told a build slug at boot, and that slug picks the afp offsets
+(`AfpProfiles::For`) and the stage size (`GameProfile::BySlug`) it runs the
+install's DLLs with. A slug that does not belong to the DLLs is not a smaller
+picture but a dead host: IIDX 34 ZINRAI's afp-utils keeps its heap callback table
+somewhere else than IIDX 33's, so booting ZINRAI as `iidx33` hands afp-core a
+garbage malloc slot (docs/game_profiles.md, "How the IIDX 34 set was derived").
+
+So the editor asks the install, the same way the renderer does.
+`Editor::InstallBuild` (`editor_files.cpp`) runs `GameProfile::AutoDetect` on
+the chosen folder, which picks the profile whose folder name is the longest
+match (`zinrai` beats IIDX 27-33's `iidx`) and falls back to looking for each
+profile's game DLL. `Window::StartHost` keeps the answer, and
+`Window::TargetBuild` is, in order: the project's build, the install's build,
+and `kBuildSlug` (`iidx33`) only when no install has been chosen or nothing
+matched. The start screen's card names that build, so "Target build: iidx34"
+shows the moment a ZINRAI install is chosen. `game_profile.cpp` is compiled into
+`editor_shared` for this; it touches only the standard library.
+
+A project stores the build it was made for, and the saved IFS has to load on
+that build. When the install answers with a different build,
+`Window::HostRefusal` stops the host instead of booting it: the window says the
+project targets one build and the install is another, stops any host that is
+running (on the thread pool, since the host's teardown waits for its process),
+and draws no picture. A stage drawn by a different build's afp-core would break
+ADR 0004's promise that the game shows what the viewport shows. When nothing
+matches the install the project's build is trusted, since there is nothing to
+compare it with.
+
+A folder not named for its game (no `zinrai`, `iidx`, ...) falls through to the
+game DLL check, which finds `bm2dx.dll` and answers with the first IIDX profile
+that ships one; the editor has no build picker like the renderer's Setup combo
+yet, so such an install needs renaming. Re-find: `InstallBuild` and
+`HostRefusal`; the cases are "The target build follows the game the chosen
+install is named for" and "A project made for another build refuses to boot the
+preview on this install" (no install needed) and "An IIDX 34 install previews
+and saves a frame of its own title package" (`R573_IIDX34_DIR`, opens
+`data/graphic/0/title.ifs`, the folder IIDX 34's `bm2dx.dll` names).
 
 Nothing but the picture needs the host. Without one, choosing an animation
 still fills the clip list, the timeline (its frame count and depths come from the
@@ -1948,7 +1989,9 @@ the project folder's name next to the file's while one is open, and the two menu
 items are enabled only when they can do anything. A project is only adopted once
 its IFS has actually opened, so a manifest pointing at a file that no longer
 loads leaves the window as it was. Opening a project restarts the preview host
-when one is running, because the target build comes from the project.
+when one is running, because the target build comes from the project; when the
+project's build is not the install's, the host is stopped instead (see **Which
+build the preview host boots**).
 
 With a project open, right-clicking the timeline also offers to let the project
 own the selected depth from the frame under the cursor, and to detach one it

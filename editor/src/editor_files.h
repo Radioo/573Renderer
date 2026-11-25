@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <string>
 #include <vector>
 
 class QString;
@@ -24,6 +25,8 @@ inline constexpr int kNoticeMs = 5000;
 inline constexpr int kProblemMs = 15000;
 
 [[nodiscard]] std::vector<uint8_t> ReadFileBytes(const QString& path);
+
+[[nodiscard]] std::string InstallBuild(const QString& game_dir);
 
 bool WriteFileBytes(const QString& path, const std::vector<uint8_t>& bytes);
 
