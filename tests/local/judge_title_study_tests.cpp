@@ -17,7 +17,6 @@
 #include <filesystem>
 #include <format>
 #include <iostream>
-#include <map>
 #include <optional>
 #include <span>
 #include <string>
@@ -34,14 +33,21 @@ constexpr std::uint32_t kCurrentFrame = 0x1010;
 constexpr int kLoopStart = 74;
 constexpr int kLoopEnd = 264;
 
-std::vector<AfpInterp::Sample> g_before;
-std::vector<AfpInterp::Sample> g_after;
+struct Observed {
+    std::vector<AfpInterp::Sample> before;
+    std::vector<AfpInterp::Sample> after;
+};
+
+Observed& Seen() {
+    static Observed seen;
+    return seen;
+}
 
 void Observe(std::span<const AfpInterp::Sample> before, std::span<const AfpInterp::Sample> after,
              int steps) {
     (void)steps;
-    g_before.assign(before.begin(), before.end());
-    g_after.assign(after.begin(), after.end());
+    Seen().before.assign(before.begin(), before.end());
+    Seen().after.assign(after.begin(), after.end());
 }
 
 struct Change {
@@ -63,22 +69,49 @@ std::string Describe(const AfpInterp::Sample& s) {
                        s.lifetime_end, s.pose.matrix[4], s.pose.matrix[5], s.pose.matrix[0]);
 }
 
+std::vector<const AfpInterp::Sample*> Removed(const std::vector<AfpInterp::Sample>& from,
+                                              const std::vector<AfpInterp::Sample>& to, bool dump) {
+    std::unordered_set<std::uintptr_t> is;
+    for (const auto& s : to)
+        is.insert(s.object);
+    std::vector<const AfpInterp::Sample*> removed;
+    for (const auto& s : from) {
+        if (is.contains(s.object)) continue;
+        removed.push_back(&s);
+        if (dump) std::cerr << "[title]     gone " << Describe(s) << "\n";
+    }
+    return removed;
+}
+
+bool SameSlot(const AfpInterp::Sample& old, const AfpInterp::Sample& created,
+              std::uintptr_t parent) {
+    return old.parent == parent && old.pose.depth == created.pose.depth &&
+           old.pose.character == created.pose.character;
+}
+
+void MatchSlot(const AfpInterp::Sample& s, const std::vector<const AfpInterp::Sample*>& removed,
+               std::unordered_map<std::uintptr_t, std::uintptr_t>& old_of_new, Change& c) {
+    const auto paired_parent = old_of_new.find(s.parent);
+    const bool through_pair = paired_parent != old_of_new.end();
+    const std::uintptr_t look_parent = through_pair ? paired_parent->second : s.parent;
+    for (const AfpInterp::Sample* r : removed) {
+        if (!SameSlot(*r, s, look_parent)) continue;
+        c.same_slot++;
+        if (through_pair) c.same_slot_parent_pair++;
+        if (r->lifetime_end == s.created) c.same_slot_contiguous++;
+        if (!(r->pose == s.pose)) c.same_slot_moved++;
+        old_of_new.emplace(s.object, r->object);
+        return;
+    }
+}
+
 Change Compare(const std::vector<AfpInterp::Sample>& from, const std::vector<AfpInterp::Sample>& to,
                bool dump) {
     Change c;
     std::unordered_map<std::uintptr_t, const AfpInterp::Sample*> was;
     for (const auto& s : from)
         was.emplace(s.object, &s);
-    std::unordered_set<std::uintptr_t> is;
-    for (const auto& s : to)
-        is.insert(s.object);
-    std::vector<const AfpInterp::Sample*> removed;
-    for (const auto& s : from) {
-        if (!is.contains(s.object)) {
-            removed.push_back(&s);
-            if (dump) std::cerr << "[title]     gone " << Describe(s) << "\n";
-        }
-    }
+    const std::vector<const AfpInterp::Sample*> removed = Removed(from, to, dump);
     c.removed = removed.size();
     std::unordered_map<std::uintptr_t, std::uintptr_t> old_of_new;
     for (const auto& s : to) {
@@ -90,22 +123,8 @@ Change Compare(const std::vector<AfpInterp::Sample>& from, const std::vector<Afp
         }
         c.created++;
         if (dump) std::cerr << "[title]     new  " << Describe(s) << "\n";
-        const bool parent_new = !was.contains(s.parent);
-        if (parent_new) c.created_parent_new++;
-        const auto paired_parent = old_of_new.find(s.parent);
-        const std::uintptr_t look_parent =
-            paired_parent != old_of_new.end() ? paired_parent->second : s.parent;
-        for (const AfpInterp::Sample* r : removed) {
-            if (r->parent != look_parent || r->pose.depth != s.pose.depth ||
-                r->pose.character != s.pose.character)
-                continue;
-            c.same_slot++;
-            if (paired_parent != old_of_new.end()) c.same_slot_parent_pair++;
-            if (r->lifetime_end == s.created) c.same_slot_contiguous++;
-            if (!(r->pose == s.pose)) c.same_slot_moved++;
-            old_of_new.emplace(s.object, r->object);
-            break;
-        }
+        if (!was.contains(s.parent)) c.created_parent_new++;
+        MatchSlot(s, removed, old_of_new, c);
     }
     return c;
 }
@@ -159,11 +178,11 @@ TEST_CASE("What the title screen's frame by frame deep goto does to its objects"
     for (int i = 0; i < 300; i++) {
         JudgeEngine::Advance(boot.fixed_step_seconds);
         if (i >= kLoopStart + 30 && i < kLoopStart + 33)
-            Print(std::format("play {}", i).c_str(), Compare(g_before, g_after, false));
+            Print(std::format("play {}", i).c_str(), Compare(Seen().before, Seen().after, false));
     }
 
     afp.afp_layer_play(layer, 0.0F);
-    const std::uint32_t root = static_cast<std::uint32_t>(afp.afp_layer_mc_refer(layer, ""));
+    const auto root = static_cast<std::uint32_t>(afp.afp_layer_mc_refer(layer, ""));
     std::cerr << "[title] paused, deep goto by one frame\n";
     std::vector<AfpInterp::Sample> previous;
     for (int frame = kLoopStart; frame < kLoopEnd; frame++) {
@@ -174,20 +193,20 @@ TEST_CASE("What the title screen's frame by frame deep goto does to its objects"
         if (!previous.empty() && frame >= kLoopStart + 30 && frame < kLoopStart + 33) {
             const bool dump = frame == kLoopStart + 30;
             Print(std::format("goto {} (afp reports {})", frame, current).c_str(),
-                  Compare(previous, g_before, dump));
+                  Compare(previous, Seen().before, dump));
             AfpInterp::LayerTracks as_step;
             as_step.BeginAdvance(previous);
-            as_step.EndAdvance(1, g_before);
+            as_step.EndAdvance(1, Seen().before);
             AfpInterp::LayerTracks as_jump;
             as_jump.BeginAdvance(previous);
             for (const AfpInterp::Sample& s : previous)
                 as_jump.MarkJumped(s.parent);
-            as_jump.EndAdvance(1, g_before);
+            as_jump.EndAdvance(1, Seen().before);
             std::cerr << std::format("[title]   blended objects: goto as a step {}, every clip "
                                      "marked as jumped {}\n",
                                      as_step.MovingCount(), as_jump.MovingCount());
         }
-        previous = g_after;
+        previous = Seen().after;
     }
     AfpInterpHooks::SetAdvanceObserver(nullptr);
     AfpInterpHooks::SetLayerInterpolated(layer, false);
