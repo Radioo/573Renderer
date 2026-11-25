@@ -1,16 +1,21 @@
 #include "judge/clip_catalog.h"
 
 #include "formats/txp2.h"
+#include "judge/verdict_store.h"
 
 #include <algorithm>
 #include <cctype>
+#include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <ios>
 #include <iterator>
+#include <optional>
+#include <string>
 #include <system_error>
 #include <utility>
+#include <vector>
 
 namespace Judge {
 

@@ -5,13 +5,17 @@
 #include "gui/judge/judge_device.h"
 #include "gui/judge/judge_scan.h"
 #include "gui/judge/judge_view.h"
+#include "judge/clip_catalog.h"
+#include "judge/judge_backdrop.h"
 #include "judge/judge_clock.h"
 #include "judge/verdict_store.h"
 #include "judge_engine/judge_engine.h"
+#include "judge_hooks/afp_interp_hooks.h"
 #include "support/crash_report.h"
 #include "support/log.h"
 #include "support/png_write.h"
 
+#include <d3d9.h>
 #include <imgui.h>
 #include <imgui_impl_dx9.h>
 #include <imgui_impl_win32.h>
@@ -24,6 +28,7 @@
 #include <optional>
 #include <string>
 #include <system_error>
+#include <utility>
 #include <vector>
 
 namespace JudgeApp {
@@ -86,7 +91,7 @@ void Select(Session& s, std::size_t index) {
 }
 
 void OpenPending(Session& s) {
-    if (!s.want_open || !s.engine_ready) return;
+    if (!s.want_open || !s.engine_ready || !s.catalog) return;
     const std::size_t index = *s.want_open;
     const Judge::ClipKey& key = s.catalog->Key(index);
     if (!s.load_shown) {
@@ -138,7 +143,7 @@ void Apply(Session& s, const JudgeView::Actions& a) {
     if (a.note_edited) SaveEntry(s, std::nullopt);
     if (a.verdict) {
         SaveEntry(s, a.verdict);
-        if (s.model.next_after_verdict && s.store) {
+        if (s.model.next_after_verdict && s.store && s.catalog) {
             if (auto next = s.catalog->NextUnjudged(s.model.current, *s.store)) Select(s, *next);
         }
     }
@@ -169,15 +174,17 @@ void WriteCapture(Session& s) {
     int h = 0;
     const char* names[] = {"_authored.png", "_interpolated.png"};
     for (std::size_t i = 0; i < s.window.stages.size(); i++) {
-        if (JudgeDevice::ReadSurface(s.window, s.window.stages[i].surface, bgra, w, h))
+        if (JudgeDevice::ReadSurface(s.window, s.window.stages[i].surface, bgra, w, h)) {
             Support::WritePngBGRA((dir / (std::string(stem) + names[i])).string(), bgra.data(), w,
                                   h);
+        }
     }
     const bool first_or_last = s.captured == 0 || s.captured + 1 >= s.options.capture_frames;
     IDirect3DSurface9* back = JudgeDevice::BackBuffer(s.window);
-    if (first_or_last && JudgeDevice::ReadSurface(s.window, back, bgra, w, h))
+    if (first_or_last && JudgeDevice::ReadSurface(s.window, back, bgra, w, h)) {
         Support::WritePngBGRA((dir / (std::string(stem) + "_window.png")).string(), bgra.data(), w,
                               h);
+    }
     if (back != nullptr) back->Release();
     s.captured++;
 }
@@ -228,9 +235,10 @@ void Frame(Session& s, float real_seconds) {
     device->EndScene();
     if (Capturing(s) && s.open_index) WriteCapture(s);
     JudgeDevice::Present(s.window);
-    if (++s.presented == kRateReportFrames)
+    if (++s.presented == kRateReportFrames) {
         LOG("Judge", "presenting at %.1f Hz (vsync %s)", s.model.display_hz,
             Capturing(s) ? "off" : "on");
+    }
     Apply(s, actions);
 }
 

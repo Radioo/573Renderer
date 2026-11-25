@@ -4,7 +4,9 @@
 #include "gui/gui_icons.h"
 #include "gui/gui_style.h"
 #include "gui/gui_widgets.h"
-#include "judge/judge_clock.h"
+#include "judge/afp_pose.h"
+#include "judge/judge_backdrop.h"
+#include "judge/verdict_store.h"
 
 #include "imgui.h"
 
@@ -12,6 +14,7 @@
 #include <array>
 #include <cstdio>
 #include <string>
+#include <utility>
 
 namespace JudgeView {
 
@@ -45,9 +48,7 @@ int ResizeString(ImGuiInputTextCallbackData* data) {
     return 0;
 }
 
-void Keyboard(const Model& model, Actions& out) {
-    if (ImGui::GetIO().WantTextInput) return;
-    const std::size_t count = model.catalog != nullptr ? model.catalog->Size() : 0;
+void PlaybackKeys(const Model& model, Actions& out) {
     if (ImGui::IsKeyPressed(ImGuiKey_Space, false)) out.toggle_pause = true;
     if (ImGui::IsKeyPressed(ImGuiKey_RightArrow) || ImGui::IsKeyPressed(ImGuiKey_Period))
         out.step = true;
@@ -65,6 +66,10 @@ void Keyboard(const Model& model, Actions& out) {
         out.scale_index = model.scale_index + 1;
     if (ImGui::IsKeyPressed(ImGuiKey_RightBracket) && model.scale_index > 0)
         out.scale_index = model.scale_index - 1;
+}
+
+void ClipKeys(const Model& model, Actions& out) {
+    const std::size_t count = model.catalog != nullptr ? model.catalog->Size() : 0;
     if (count > 0 && (ImGui::IsKeyPressed(ImGuiKey_DownArrow) || ImGui::IsKeyPressed(ImGuiKey_J)))
         out.select = std::min(model.current + 1, count - 1);
     if (count > 0 && (ImGui::IsKeyPressed(ImGuiKey_UpArrow) || ImGui::IsKeyPressed(ImGuiKey_K)))
@@ -76,6 +81,12 @@ void Keyboard(const Model& model, Actions& out) {
     for (std::size_t i = 0; i < keys.size(); i++) {
         if (count > 0 && ImGui::IsKeyPressed(keys[i], false)) out.verdict = kVerdicts[i];
     }
+}
+
+void Keyboard(const Model& model, Actions& out) {
+    if (ImGui::GetIO().WantTextInput) return;
+    PlaybackKeys(model, out);
+    ClipKeys(model, out);
 }
 
 void Progress(const Model& model) {

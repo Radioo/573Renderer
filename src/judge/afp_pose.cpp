@@ -1,5 +1,6 @@
 #include "judge/afp_pose.h"
 
+#include <array>
 #include <cmath>
 #include <cstddef>
 #include <numbers>

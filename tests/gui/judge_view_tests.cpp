@@ -5,11 +5,13 @@
 #include "imgui.h"
 #include "imgui_te_context.h"
 #include "imgui_te_engine.h"
+#include "judge/afp_pose.h"
 #include "judge/clip_catalog.h"
 #include "judge/verdict_store.h"
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <cstddef>
 #include <filesystem>
 #include <optional>
 #include <string>
@@ -52,7 +54,8 @@ struct Fixture {
         std::string err;
         store = Judge::VerdictStore::Open(path.string(), err);
         REQUIRE(store);
-        REQUIRE(store->Set(catalog.Key(0), {.verdict = Judge::Verdict::Smooth}));
+        if (!store) return;
+        REQUIRE(store->Set(catalog.Key(0), {.verdict = Judge::Verdict::Smooth, .note = {}}));
         model.catalog = &catalog;
         model.store = &*store;
         model.scan.done = true;
@@ -87,7 +90,7 @@ struct Fixture {
 TEST_CASE("The judge view shows how many clips are judged and the verdict of each row",
           "[gui][judge]") {
     GuiTest::Harness harness;
-    Fixture fixture;
+    const Fixture fixture;
     ImGuiTest* test = harness.NewTest("judge_progress");
     test->TestFunc = [](ImGuiTestContext* ctx) {
         ctx->Yield(2);
@@ -104,7 +107,7 @@ TEST_CASE("Verdict buttons, keys, rows and the note reach the judge", "[gui][jud
     Fixture fixture;
     ImGuiTest* test = harness.NewTest("judge_actions");
     test->TestFunc = [](ImGuiTestContext* ctx) {
-        Recorded& recorded = *g_recorded;
+        const Recorded& recorded = *g_recorded;
         ctx->SetRef("##judge");
         ctx->ItemClick("**/Wrong (2)");
         IM_CHECK(recorded.verdict == Judge::Verdict::Wrong);

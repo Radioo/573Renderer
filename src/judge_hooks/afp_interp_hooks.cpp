@@ -1,17 +1,21 @@
 #include "judge_hooks/afp_interp_hooks.h"
 
+#include "judge/afp_pose.h"
+#include "judge/interp_layout.h"
 #include "judge/interp_tracks.h"
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 
-#include <safetyhook.hpp>
+#include <safetyhook/inline_hook.hpp>
 
 #include <array>
+#include <cstdint>
 #include <cstring>
 #include <map>
 #include <optional>
 #include <set>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -136,7 +140,7 @@ int __cdecl HookedAdvance(std::uintptr_t layer, float dt) {
     if (!id) return g_advance_hook.ccall<int>(layer, dt);
     LayerState& state = g_layers[*id];
     const std::vector<AfpInterp::Sample> before = LayerSamples(layer);
-    const float accumulator = Read<float>(layer + g_layout.layer_accumulator);
+    const auto accumulator = Read<float>(layer + g_layout.layer_accumulator);
     state.tracks.BeginAdvance(before);
     g_advancing = &state.tracks;
     const int result = g_advance_hook.ccall<int>(layer, dt);

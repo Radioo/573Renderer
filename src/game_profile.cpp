@@ -1,5 +1,6 @@
 #include "game_profile.h"
 
+#include <algorithm>
 #include <filesystem>
 #include <system_error>
 
@@ -238,10 +239,9 @@ const Profile* BySlug(const std::string& slug) {
 }
 
 bool HoldsGameDll(const std::string& dir) {
-    for (const auto& p : kProfiles) {
-        if (p.game_dll != nullptr && GameDllPresent(dir, p.game_dll)) return true;
-    }
-    return false;
+    return std::ranges::any_of(kProfiles, [&dir](const Profile& p) {
+        return p.game_dll != nullptr && GameDllPresent(dir, p.game_dll);
+    });
 }
 
 bool SlugHasQpro(const std::string& slug) {

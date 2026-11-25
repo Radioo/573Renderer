@@ -8,11 +8,13 @@
 #include "backend/afp_profiles.h"
 #include "engine_dlls.h"
 #include "game_profile.h"
+#include "judge/afp_pose.h"
 #include "judge_hooks/afp_interp_hooks.h"
 #include "render_backend.h"
 #include "support/log.h"
 
 #include <cstdint>
+#include <d3d9.h>
 #include <string>
 
 namespace JudgeEngine {

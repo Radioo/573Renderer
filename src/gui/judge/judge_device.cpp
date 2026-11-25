@@ -1,14 +1,17 @@
 #include "gui/judge/judge_device.h"
 
 #include "gui/gui_dpi.h"
+#include "judge/judge_backdrop.h"
 #include "support/log.h"
 
+#include <d3d9.h>
 #include <imgui.h>
 #include <imgui_impl_dx9.h>
-#include <imgui_impl_win32.h>
 
 #include <algorithm>
+#include <cstdint>
 #include <cstring>
+#include <vector>
 
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam,
                                                              LPARAM lParam);
@@ -134,7 +137,7 @@ void Destroy(Window& w) {
 
 bool Pump(Window& w) {
     MSG msg{};
-    while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
+    while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE) != 0) {
         if (msg.message == WM_QUIT) w.closed = true;
         TranslateMessage(&msg);
         DispatchMessageW(&msg);
@@ -161,7 +164,7 @@ void BeginStage(Window& w, std::size_t index, const Judge::BackdropFill& backdro
     std::vector<D3DRECT> rects;
     rects.reserve(backdrop.rects.size());
     for (const Judge::BackdropRect& r : backdrop.rects)
-        rects.push_back({r.x0, r.y0, r.x1, r.y1});
+        rects.push_back({.x1 = r.x0, .y1 = r.y0, .x2 = r.x1, .y2 = r.y1});
     w.device->Clear(static_cast<DWORD>(rects.size()), rects.data(), D3DCLEAR_TARGET,
                     backdrop.squares, 1.0F, 0);
 }
@@ -186,16 +189,16 @@ void Present(Window& w) {
     w.device->PresentEx(nullptr, nullptr, nullptr, nullptr, 0);
 }
 
-bool ReadSurface(Window& w, IDirect3DSurface9* surface, std::vector<std::uint8_t>& bgra, int& width,
+bool ReadSurface(Window& w, IDirect3DSurface9* target, std::vector<std::uint8_t>& bgra, int& width,
                  int& height) {
     D3DSURFACE_DESC desc{};
-    if (surface == nullptr || FAILED(surface->GetDesc(&desc))) return false;
+    if (target == nullptr || FAILED(target->GetDesc(&desc))) return false;
     IDirect3DSurface9* copy = nullptr;
     if (FAILED(w.device->CreateOffscreenPlainSurface(desc.Width, desc.Height, desc.Format,
                                                      D3DPOOL_SYSTEMMEM, &copy, nullptr))) {
         return false;
     }
-    bool ok = SUCCEEDED(w.device->GetRenderTargetData(surface, copy));
+    bool ok = SUCCEEDED(w.device->GetRenderTargetData(target, copy));
     D3DLOCKED_RECT locked{};
     if (ok) ok = SUCCEEDED(copy->LockRect(&locked, nullptr, D3DLOCK_READONLY));
     if (ok) {

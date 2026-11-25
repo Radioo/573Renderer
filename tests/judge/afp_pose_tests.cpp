@@ -5,6 +5,7 @@
 
 #include <array>
 #include <cmath>
+#include <cstddef>
 #include <numbers>
 
 namespace {
@@ -44,9 +45,9 @@ TEST_CASE("Both lerp modes land exactly on the two authored poses at t = 0 and t
     for (const auto mode : {AfpPose::MatrixLerp::Decompose, AfpPose::MatrixLerp::Linear}) {
         const auto start = AfpPose::Lerp(from, to, 0.0F, mode);
         const auto end = AfpPose::Lerp(from, to, 1.0F, mode);
-        for (int i = 0; i < 6; i++) {
-            CHECK(start.matrix[i] == Catch::Approx(from.matrix[i]).margin(1e-5));
-            CHECK(end.matrix[i] == Catch::Approx(to.matrix[i]).margin(1e-5));
+        for (std::size_t i = 0; i < start.matrix.size(); i++) {
+            CHECK(start.matrix.at(i) == Catch::Approx(from.matrix.at(i)).margin(1e-5));
+            CHECK(end.matrix.at(i) == Catch::Approx(to.matrix.at(i)).margin(1e-5));
         }
     }
 }

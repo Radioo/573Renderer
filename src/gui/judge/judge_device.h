@@ -41,7 +41,7 @@ void BeginStage(Window& w, std::size_t index, const Judge::BackdropFill& backdro
 void BeginWindow(Window& w);
 void Present(Window& w);
 
-[[nodiscard]] bool ReadSurface(Window& w, IDirect3DSurface9* surface,
+[[nodiscard]] bool ReadSurface(Window& w, IDirect3DSurface9* target,
                                std::vector<std::uint8_t>& bgra, int& width, int& height);
 [[nodiscard]] IDirect3DSurface9* BackBuffer(Window& w);
 

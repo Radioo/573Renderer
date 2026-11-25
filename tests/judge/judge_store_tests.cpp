@@ -1,15 +1,18 @@
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include "judge/afp_pose.h"
 #include "judge/clip_catalog.h"
 #include "judge/judge_clock.h"
 #include "judge/verdict_store.h"
 
+#include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <ios>
 #include <iterator>
+#include <optional>
 #include <string>
 #include <system_error>
 #include <vector>
@@ -43,8 +46,8 @@ std::string ReadText(const fs::path& path) {
 
 void WriteBytes(const fs::path& path, const std::vector<std::uint8_t>& bytes) {
     std::ofstream out(path, std::ios::binary | std::ios::trunc);
-    out.write(reinterpret_cast<const char*>(bytes.data()),
-              static_cast<std::streamsize>(bytes.size()));
+    const std::vector<char> chars(bytes.begin(), bytes.end());
+    out.write(chars.data(), static_cast<std::streamsize>(chars.size()));
 }
 
 void PushU32Be(std::vector<std::uint8_t>& v, std::uint32_t x) {
@@ -100,6 +103,7 @@ TEST_CASE("A missing verdict file opens empty and the first verdict creates it")
     std::string err;
     auto store = Judge::VerdictStore::Open(path.string(), err);
     REQUIRE(store);
+    if (!store) return;
     const Judge::ClipKey key{.package = "bg_space.bin", .clip = "bg_space"};
     CHECK_FALSE(store->Judged(key));
     REQUIRE(store->Set(key, {.verdict = Judge::Verdict::Wrong,
@@ -119,19 +123,24 @@ TEST_CASE("Verdicts read back by package and clip name") {
     {
         auto store = Judge::VerdictStore::Open(path.string(), err);
         REQUIRE(store);
+        if (!store) return;
         REQUIRE(store->Set({.package = "a.bin", .clip = "two"},
                            {.verdict = Judge::Verdict::Smooth, .note = "fine"}));
-        REQUIRE(store->Set({.package = "a.bin", .clip = "one"}, {.note = "look again"}));
+        REQUIRE(store->Set({.package = "a.bin", .clip = "one"},
+                           {.verdict = std::nullopt, .note = "look again"}));
     }
     auto reopened = Judge::VerdictStore::Open(path.string(), err);
     REQUIRE(reopened);
+    if (!reopened) return;
     const Judge::Entry* two = reopened->Find({.package = "a.bin", .clip = "two"});
     REQUIRE(two != nullptr);
     CHECK(two->verdict == Judge::Verdict::Smooth);
     CHECK(two->note == "fine");
     CHECK(two->matrix_lerp == AfpPose::MatrixLerp::Decompose);
     CHECK_FALSE(reopened->Judged({.package = "a.bin", .clip = "one"}));
-    CHECK(reopened->Find({.package = "a.bin", .clip = "one"})->note == "look again");
+    const Judge::Entry* one = reopened->Find({.package = "a.bin", .clip = "one"});
+    REQUIRE(one != nullptr);
+    CHECK(one->note == "look again");
 }
 
 TEST_CASE("A verdict file that does not parse is refused and left untouched") {
@@ -139,7 +148,7 @@ TEST_CASE("A verdict file that does not parse is refused and left untouched") {
     const fs::path path = dir.root / "verdicts.json";
     {
         std::ofstream out(path, std::ios::binary);
-        out << "{\"verdicts\": {\"a.bin/one\": {\"verdict\": \"great\"}}}";
+        out << R"({"verdicts": {"a.bin/one": {"verdict": "great"}}})";
     }
     const std::string before = ReadText(path);
     std::string err;
@@ -153,16 +162,17 @@ TEST_CASE("The catalog lists every clip of every package and counts the judged o
     std::string err;
     auto store = Judge::VerdictStore::Open((dir.root / "v.json").string(), err);
     REQUIRE(store);
+    if (!store) return;
     const Judge::Catalog catalog = TwoPackages();
     REQUIRE(catalog.Size() == 3);
     CHECK(catalog.Key(2).package == "menu/b.bin");
     CHECK(catalog.PathOf(2) == "x/menu/b.bin");
     CHECK(catalog.IndexOf({.package = "a.bin", .clip = "two"}) == 1U);
-    REQUIRE(store->Set(catalog.Key(0), {.verdict = Judge::Verdict::Unsure}));
-    REQUIRE(store->Set(catalog.Key(1), {.verdict = Judge::Verdict::Smooth}));
+    REQUIRE(store->Set(catalog.Key(0), {.verdict = Judge::Verdict::Unsure, .note = {}}));
+    REQUIRE(store->Set(catalog.Key(1), {.verdict = Judge::Verdict::Smooth, .note = {}}));
     CHECK(catalog.JudgedCount(*store) == 2);
     CHECK(catalog.NextUnjudged(0, *store) == 2U);
-    REQUIRE(store->Set(catalog.Key(2), {.verdict = Judge::Verdict::Wrong}));
+    REQUIRE(store->Set(catalog.Key(2), {.verdict = Judge::Verdict::Wrong, .note = {}}));
     CHECK_FALSE(catalog.NextUnjudged(0, *store));
 }
 

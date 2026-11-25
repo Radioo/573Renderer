@@ -1,10 +1,15 @@
 #include "judge/interp_tracks.h"
+#include "judge/afp_pose.h"
 #include "judge/interp_layout.h"
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <cstring>
+#include <optional>
+#include <span>
 #include <string>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 

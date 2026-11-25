@@ -1,12 +1,15 @@
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include "judge/afp_pose.h"
 #include "judge/interp_layout.h"
 #include "judge/interp_tracks.h"
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <span>
 #include <vector>
 
 namespace {
@@ -138,10 +141,11 @@ TEST_CASE("A libafp whose hook prologues differ is refused with the function nam
     image[0x10] = 0x57;
     image[0x11] = 0x56;
     for (const std::size_t at : {0x20U, 0x30U, 0x40U, 0x50U})
-        image[at] = 0x55;
+        image.at(at) = 0x55;
     const AfpInterp::ReadImage read = [&](std::uint32_t rva, std::size_t size, std::uint8_t* out) {
         if (rva + size > image.size()) return false;
-        std::memcpy(out, image.data() + rva, size);
+        const std::span<const std::uint8_t> wanted = std::span(image).subspan(rva, size);
+        std::memcpy(out, wanted.data(), size);
         return true;
     };
     CHECK(AfpInterp::PrologueMismatch(layout, read).empty());

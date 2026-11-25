@@ -24,6 +24,7 @@ public:
     [[nodiscard]] std::optional<Judge::Catalog> TakeCatalog();
 
 private:
+    void Run() noexcept;
     void Body();
 
     std::string graphics_dir_;

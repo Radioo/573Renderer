@@ -1,11 +1,17 @@
 #include "judge/verdict_store.h"
 
+#include "judge/afp_pose.h"
+
 #include <nlohmann/json.hpp>
+#include <nlohmann/json_fwd.hpp>
 
 #include <filesystem>
 #include <fstream>
 #include <ios>
 #include <iterator>
+#include <map>
+#include <optional>
+#include <string>
 #include <system_error>
 #include <utility>
 

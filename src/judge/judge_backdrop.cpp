@@ -2,6 +2,9 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstdint>
+#include <optional>
+#include <string_view>
 
 namespace Judge {
 
@@ -47,8 +50,10 @@ BackdropFill FillFor(Backdrop backdrop, int width, int height) {
     for (int y = 0; y < height; y += kSquarePixels) {
         for (int x = 0; x < width; x += kSquarePixels) {
             if (((x / kSquarePixels) + (y / kSquarePixels)) % 2 == 0) continue;
-            fill.rects.push_back(
-                {x, y, std::min(x + kSquarePixels, width), std::min(y + kSquarePixels, height)});
+            fill.rects.push_back({.x0 = x,
+                                  .y0 = y,
+                                  .x1 = std::min(x + kSquarePixels, width),
+                                  .y1 = std::min(y + kSquarePixels, height)});
         }
     }
     return fill;
