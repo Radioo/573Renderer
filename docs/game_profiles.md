@@ -1556,8 +1556,22 @@ the document's `camera.aspect` (`Preset::Doc::CameraSpec::aspect`, and
 `Scene3d::Projection::aspect`) overrides the derived-from-render-size default when
 it is a number instead of `"auto"`.
 
-Registered IIDX 12 HAPPY SKY screens (`IIDX/happy_sky_3d_screens.md`), built one
-milestone at a time per the plan in `docs/iidx12_scene_report.html`:
+HAPPY SKY's presets landed in eight milestones of their own, separate from the
+preset editor's M1 to M8 in docs/preset_document.md:
+
+| Milestone | Scope |
+|---|---|
+| M1 | HAPPY SKY plumbing: the fingerprint and profile rows, the clear colour, the light channels |
+| M2 | expert course select preset |
+| M3 | mode select preset and its sin(t) camera fly-in |
+| M4 | music select preset, fog, the EXTRA STAGE option and the clear-colour strobe |
+| M5 | class course (dan) select preset, camera ease, grade option, bubbles |
+| M6 | ending preset, rolling camera, poly_draw movie tiles |
+| M7 | the 2D-only presets: title attract and card in |
+| M8 | re-check of the RED and IIDX 10 light ambient |
+
+Registered IIDX 12 HAPPY SKY screens (`IIDX/happy_sky_3d_screens.md` in the notes
+repo holds the evidence for each):
 
 | id | content | natural length |
 |---|---|---|

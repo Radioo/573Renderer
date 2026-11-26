@@ -6,7 +6,6 @@ axis, plus the document-wide render, camera, light, asset, option and marker
 blocks. This file defines the schema, the command catalog, the canonical
 serialization rules and the validation rules.
 
-Status: every milestone of `docs/scene_preset_editor_plan.html` is in the tree.
 Documents drive the app end to end: the host evaluates a document
 (`preset_host.cpp` on `src/preset/eval/`), the 18 shipped screens are documents
 built in code (`src/preset/defaults/`, below), and the preset library and the
@@ -15,6 +14,20 @@ M8 deleted the `Preset::Scene` tables, the registry over them, `preset_effective
 `preset_schema`, `preset_params` and the one-shot converter `preset_convert`
 (`FromScene`). The timeline editor (M4 to M7) is in the tree: the library below is
 how a document is picked, created, saved and validated (docs/gui.md 3.6).
+
+The move from tables to documents landed in eight milestones, and the docs still
+name them when they say when something changed:
+
+| Milestone | Scope |
+|---|---|
+| M1 | document model, JSON and validation |
+| M2 | evaluator, converter, golden test and the new host |
+| M3 | the defaults as documents, the registry, the CLI and the CI gates |
+| M4 | editor state, commands and the timeline core |
+| M5 | palette, clip modal, forms, asset picker and the validation UI |
+| M6 | tweens, curve editor, options track and transitions |
+| M7 | library, import and export, frame inspector, shortcuts, and removal of the old panels |
+| M8 | cleanup: deleting the tables, the converter and the code that served them |
 
 The old host's behaviour is recorded in a committed fixture, so the evaluator was
 built against a frozen reference, not against a host that had to keep working
@@ -980,13 +993,13 @@ validation already calls it an error.) The rules:
 - Whitespace is nlohmann's two-space dump, one key per line (so vectors expand to
   one number per line), plus a trailing newline.
 
-Two rules that the plan's printed examples imply without stating, settled here:
+Two serialization rules that need stating:
 
 - `ease` is written on every key except the last key of a clip, where the default
   `linear` is omitted because the last key's ease is never read. A non-default
   ease is still written on the last key, so editing it and saving does not lose
   it. That keeps `Load(Save(doc))` lossless instead of dropping a value the writer
-  considers meaningless. Both worked examples in the plan end on a `linear` key
+  considers meaningless. Both real fixtures end their tweens on a `linear` key
   and so print no `ease` there.
 - `params` is omitted entirely when it would be empty, which is why the
   `camera.tween` and `model.tween` clips carry only `keys`.
@@ -1002,9 +1015,8 @@ message}` where `path` is the clip id, track id or option id the problem belongs
 to, or the document id for document-wide problems. `builtin_ids` is the list of
 built-in ids of the same build; it is a `std::span` argument because the built-in
 documents only arrive in M3. Validation never needs a game directory: the
-asset-dependent checks of the plan (a missing dir, an unknown model, cell or
-animation name, a chrome layer verdict) come with the `AssetIndex` in a later
-milestone.
+asset-dependent checks (a missing dir, an unknown model, cell or animation name,
+a chrome layer verdict) come with the `AssetIndex` in a later milestone.
 
 Errors:
 
@@ -1573,11 +1585,10 @@ never has more than one step pending.
 | `tests/game/fixtures/iidx10-card-in.json` | the small IIDX 10 card-in document: one held 2D animation, one additive model, `aspect` auto |
 | `tests/game/fixtures/unknown-keys.json` | one unknown key at the document, track, clip and `params` level |
 
-Both real fixtures are the documents printed in sections 3.7 and 3.8 of
-`docs/scene_preset_editor_plan.html`, canonicalized once: the printed form packs
-several keys per line, and it writes `"blend_mode": "opaque"` on the two r_side
-clips where `opaque` is the catalog default and the omit-at-default rule drops it.
-No value differs from the plan.
+Both real fixtures were written by hand and canonicalized once: the hand-written
+form packed several keys per line and wrote `"blend_mode": "opaque"` on the two
+r_side clips, where `opaque` is the catalog default and the omit-at-default rule
+drops it. Canonicalizing changed no value.
 
 `preset_json_tests.cpp` parses both documents into typed structs, asserts
 `Save(Load(x)) == x` byte for byte for all three fixtures, asserts
@@ -1658,13 +1669,13 @@ buffers in `App::State::GetPresetPreview()` with a version counter, and the stri
 determinate "sample k / N" cell for every sample that has not arrived. Sample frames are spread
 across the animation length the `AssetIndex` reports.
 
-## Choices made where the plan is silent
+## Implementation choices
 
 - Namespace `Preset::Doc`, as above.
 - `Load` and `Save` instead of `Parse` and `Serialize`, matching the rest of the
   tree's naming.
-- `Problem` carries `severity`, `path` and `message`. The plan's sketch also had a
-  `field`; nothing in this milestone reads one, so it is not there yet.
+- `Problem` carries `severity`, `path` and `message`. It has no `field` member,
+  because nothing reads one.
 - Unknown keys are stored as `{key, compact json text}` pairs instead of a live
   `nlohmann::ordered_json` member, so `preset_document.h` stays free of the JSON
   library and every consumer of the document model does too.
@@ -1674,6 +1685,6 @@ across the animation length the `AssetIndex` reports.
 - Nested parameter objects (`orbit`, `pulse`, `scatter`) are one `FieldDesc` each,
   with their sub-fields documented here instead of in descriptor tables of their
   own. Their ranges are therefore not machine-checked in M1.
-- An unknown key inside `params` is preserved, not reported: 3.5 of the plan asks
-  for unknown keys at any level to survive, and 5.5 lists no error for them.
+- An unknown key inside `params` is preserved, not reported: unknown keys survive
+  at every level of a document, and none of them is an error.
 - The `length` value `"auto"` is represented as an absent `Document::length`.

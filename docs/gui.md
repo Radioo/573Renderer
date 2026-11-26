@@ -584,7 +584,7 @@ Clip bars fill `LaneMetrics::clip` in the row's main lane, centred in it, and
 `LaneMetrics::sub_clip` in a modifier sub-lane (sub-lane rule above). The bar text is
 `Editor::ClipSummary`
 shortened to the bar width with an ellipsis. The bar is filled with the command
-colour (the plan's twelve-colour legend, `gui_tl_colors.cpp`, with separate dark and light
+colour (a twelve-colour legend, `gui_tl_colors.cpp`, with separate dark and light
 values chosen from `ImGuiCol_WindowBg` luminance; these are the only colours in the shell not
 derived from the profile accent). Muted clips and muted or non-solo tracks draw at 40 percent alpha,
 a `when` gate draws a 3 px accent stripe along the top edge, a locked track draws a
@@ -1186,7 +1186,7 @@ and is not copied, so the validation error stays visible until the user renames 
 Other builds open read-only. Selecting a row whose `build` is not the current fingerprint calls
 `Editor::State::LoadDocument(document, true)` and posts no `PresetCmd::LoadDocument`, so the
 renderer keeps whatever it was showing: the document's assets cannot be resolved against this game
-directory, and plan 3.1 requires that it is never silently loaded as if it were for this build.
+directory, and a document for another build is never silently loaded as if it were for this one.
 `Editor::State::Apply`, `Undo` and `Redo` all refuse while `ReadOnly()`, which is the one hard
 guarantee (every edit in the editor goes through `Apply`). In addition, the request pump in
 `gui_tl_editor.cpp` drops every modal request, the transport disables `Add command` / `Add track`, and

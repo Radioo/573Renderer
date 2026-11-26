@@ -1,7 +1,7 @@
 # The legacy preset golden fixture
 
 This file describes the reference recording of the old preset host, taken before
-milestone M2 of `docs/scene_preset_editor_plan.html` changed anything about it. The
+milestone M2 (docs/preset_document.md lists the milestones) changed anything about it. The
 new evaluator is accepted when it reproduces this recording: M2 part B replayed every
 fixture against documents the converter produced, and M8 pointed the same comparison
 at the built-in default documents of `src/preset/defaults/`. A recorded value is
@@ -62,7 +62,7 @@ why they also answer `Gc2dHost::DescribePackage`, `Scene3dHost::DescribeScene` a
 `Gc2dHost::SetCanvas` from `asset_lengths.json`.
 
 This worked because both hosts are namespaces of free functions with a single
-global instance each, as the plan (3.9) predicted, and because `game_tests` already
+global instance each, and because `game_tests` already
 compiles the preset sources without linking `r573_app`. The stubs need no D3D
 device, no window and no game files.
 
@@ -182,7 +182,7 @@ when it does. 40 files, 2.7 MB in total, largest 628 KB
   on the preset (every transform of every model on every frame of every preset), so
   the recorder holds no preset knowledge.
 - `detail` carries the full push list for the frames a person or a failing test
-  needs to read: every 64th frame, every phase start frame (the plan's markers) and
+  needs to read: every 64th frame, every phase start frame (the preset's markers) and
   the frame right after each phase start. That stride and marker rule lived in the
   recorder and is frozen into the committed files; the reader does not work it out
   again.
@@ -251,7 +251,7 @@ rounded value.
 
 ## The second change to the recording: the HAPPY SKY light channels
 
-HAPPY SKY milestone M8 (`docs/iidx12_scene_report.html`, not the editor plan's M8
+HAPPY SKY milestone M8 (docs/game_profiles.md, "Preset options", not the preset editor's M8
 named at the top of this file) is the planned re-record that "Growing the push
 vocabulary without touching the fixture" below refers to. It changed two things at
 once, and both are text inside the single `light[...]` token:
