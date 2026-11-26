@@ -210,10 +210,10 @@ set(R573_LAYER_VERDICTS "${CMAKE_BINARY_DIR}/generated/preset_layer_verdicts.cpp
 add_custom_command(
     OUTPUT "${R573_LAYER_VERDICTS}"
     COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/tools/ci/gen_layer_verdicts.py"
-            "${CMAKE_SOURCE_DIR}/docs/preset_layers.md" "${R573_LAYER_VERDICTS}"
+            "${CMAKE_SOURCE_DIR}/tools/ci/data/preset_layers.tsv" "${R573_LAYER_VERDICTS}"
     DEPENDS "${CMAKE_SOURCE_DIR}/tools/ci/gen_layer_verdicts.py"
-            "${CMAKE_SOURCE_DIR}/docs/preset_layers.md"
-    COMMENT "Generating preset layer verdicts from docs/preset_layers.md"
+            "${CMAKE_SOURCE_DIR}/tools/ci/data/preset_layers.tsv"
+    COMMENT "Generating preset layer verdicts from tools/ci/data/preset_layers.tsv"
     VERBATIM
 )
 

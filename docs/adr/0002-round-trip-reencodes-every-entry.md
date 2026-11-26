@@ -1,3 +1,0 @@
-# A round trip encodes every entry again
-
-The round trip gate opens an unmodified IFS and saves it. Every entry must come out of the editor's own writers instead of being copied through from the original bytes, each entry's decoded bytes must match the original, and the container must be equal field by field. Whole-file byte identity also needs KONAMI's exact LZ77 match choices, so it is tracked as a separate metric and does not block. If untouched entries were copied through, the gate would pass while the writers were still wrong, and that failure is what the gate is for. The writers are our own, so saving and CI need no game DLL; a local test compares their output against avs2-core's property and LZ77 writers on the same input.

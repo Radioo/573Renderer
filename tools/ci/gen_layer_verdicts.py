@@ -53,13 +53,11 @@ std::string_view VerdictName(LayerVerdict verdict) {
 
 def read_rows(path):
     rows = []
-    for line in path.read_text(encoding="utf-8").splitlines():
-        if not line.startswith("|"):
+    for line in path.read_text(encoding="utf-8").splitlines()[1:]:
+        cols = line.split("\t")
+        if len(cols) != 3 or cols[2] not in VERDICTS:
             continue
-        cols = [c.strip() for c in line.strip().strip("|").split("|")]
-        if len(cols) < 4 or cols[3] not in VERDICTS:
-            continue
-        rows.append((cols[0], cols[1], VERDICTS[cols[3]]))
+        rows.append((cols[0], cols[1], VERDICTS[cols[2]]))
     return sorted(set(rows))
 
 
@@ -73,7 +71,7 @@ def render(rows):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("source", type=Path, help="docs/preset_layers.md")
+    parser.add_argument("source", type=Path, help="tools/ci/data/preset_layers.tsv")
     parser.add_argument("output", type=Path, help="generated .cpp to write")
     args = parser.parse_args()
 

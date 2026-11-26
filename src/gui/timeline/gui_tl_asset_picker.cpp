@@ -126,7 +126,8 @@ FieldEvent DrawHiddenParts(const FormContext& context, Doc::Command& command) {
                                  : ImVec4(0.62F, 0.72F, 0.62F, 1.0F);
         ImGui::TextColored(color, "%s", std::string(name).c_str());
         if (ImGui::IsItemHovered()) {
-            ImGui::SetTooltip("docs/preset_layers.md classifies this layer as %s.",
+            ImGui::SetTooltip("This layer is classified as %s. A preset may draw background "
+                              "layers and hide chrome.",
                               std::string(name).c_str());
         }
     }

@@ -5,20 +5,18 @@ from pathlib import Path
 from preset_dump import DumpError, add_dump_argument, asset_dirs, clips_of, documents
 
 ROOT = Path(__file__).resolve().parents[2]
-DOC = ROOT / "docs" / "preset_layers.md"
+DATA = ROOT / "tools" / "ci" / "data" / "preset_layers.tsv"
 
 SPRITE_TYPES = ("sprite.draw", "sprite.animate")
 
 
-def read_doc():
+def read_verdicts():
     verdicts = {}
-    for line in DOC.read_text(encoding="utf-8").splitlines():
-        if not line.startswith("|"):
+    for line in DATA.read_text(encoding="utf-8").splitlines()[1:]:
+        cols = line.split("\t")
+        if len(cols) != 3 or cols[2] not in ("background", "chrome"):
             continue
-        cols = [c.strip() for c in line.strip().strip("|").split("|")]
-        if len(cols) < 4 or cols[3] not in ("background", "chrome"):
-            continue
-        verdicts[(cols[0], cols[1])] = cols[3]
+        verdicts[(cols[0], cols[1])] = cols[2]
     return verdicts
 
 
@@ -55,38 +53,40 @@ def check(docs):
             f"was found. The gate would pass without looking at a single layer."
         ]
 
-    verdicts = read_doc()
+    verdicts = read_verdicts()
     for origin, package, layer in used:
         verdict = verdicts.get((package, layer))
         if verdict is None:
             problems.append(
                 f"{origin}: {package}/{layer} is in a preset but has no row in "
-                f"docs/preset_layers.md - render it with --gc2d-sheet, look at it, "
-                f"then write down what it is"
+                f"tools/ci/data/preset_layers.tsv. Render it with --gc2d-sheet, look at it, "
+                f"then add its verdict"
             )
         elif verdict != "background":
             problems.append(
                 f"{origin}: {package}/{layer} is classified '{verdict}' in "
-                f"docs/preset_layers.md - a preset may only draw background layers"
+                f"tools/ci/data/preset_layers.tsv, and a preset may only draw background layers"
             )
 
     for origin, package, part in hidden:
         verdict = verdicts.get((package, part))
         if verdict is None:
             problems.append(
-                f"{origin}: hidden part {package}/{part} has no row in docs/preset_layers.md"
+                f"{origin}: hidden part {package}/{part} has no row in "
+                f"tools/ci/data/preset_layers.tsv"
             )
         elif verdict != "chrome":
             problems.append(
-                f"{origin}: hidden part {package}/{part} is classified '{verdict}' - "
-                f"only chrome is worth hiding"
+                f"{origin}: hidden part {package}/{part} is classified '{verdict}', "
+                f"and only chrome is worth hiding"
             )
     return problems
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Check every 2D layer a built-in preset draws against docs/preset_layers.md"
+        description="Check every 2D layer a built-in preset draws against "
+        "tools/ci/data/preset_layers.tsv"
     )
     add_dump_argument(parser)
     args = parser.parse_args()

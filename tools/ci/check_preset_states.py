@@ -5,8 +5,7 @@ from pathlib import Path
 from preset_dump import DumpError, add_dump_argument, documents
 
 ROOT = Path(__file__).resolve().parents[2]
-DOC = ROOT / "docs" / "preset_states.md"
-GAPS_HEADING = "## Screens whose remaining states are not yet exposed"
+DATA = ROOT / "tools" / "ci" / "data" / "preset_states.tsv"
 
 
 def states_of(document):
@@ -25,39 +24,25 @@ def read_dump_states(docs):
     return states
 
 
-def table_rows(text, second_heading):
-    rows = []
-    inside = False
-    for line in text.splitlines():
-        if not line.startswith("|"):
-            inside = False
-            continue
-        cols = [c.strip() for c in line.strip().strip("|").split("|")]
-        if len(cols) < 3:
-            inside = False
-            continue
-        if cols[0] == "preset" and cols[1] == second_heading:
-            inside = True
-            continue
-        if inside and "".join(cols).strip("-: "):
-            rows.append(cols)
-    return rows
-
-
-def read_doc():
-    text = DOC.read_text(encoding="utf-8")
-    head, _, gaps = text.partition(GAPS_HEADING)
+def read_recorded():
     documented = {}
-    for cols in table_rows(head, "state"):
-        documented.setdefault(cols[0], []).append(cols[1])
-    return documented, [cols[0] for cols in table_rows(gaps, "state still missing")]
+    gaps = []
+    for line in DATA.read_text(encoding="utf-8").splitlines()[1:]:
+        cols = line.split("\t")
+        if len(cols) != 3:
+            continue
+        if cols[0] == "state":
+            documented.setdefault(cols[1], []).append(cols[2])
+        elif cols[0] == "gap":
+            gaps.append(cols[1])
+    return documented, gaps
 
 
 def check(docs):
     if not docs:
         return [
             "the dump holds no preset documents at all. The gate can only check what the "
-            "renderer dumps, so an empty dump means no state is checked against the docs."
+            "renderer dumps, so an empty dump means no state is checked at all."
         ], {}, []
     states = read_dump_states(docs)
     if not states:
@@ -67,13 +52,13 @@ def check(docs):
         ], {}, []
 
     known_ids = {document["id"] for document in docs}
-    documented, gaps = read_doc()
+    documented, gaps = read_recorded()
     problems = []
     for preset, labels in documented.items():
         if preset not in known_ids:
             problems.append(
-                f"{preset}: docs/preset_states.md names a preset no built-in document "
-                f"provides. Fix the id in the docs, or ship the preset."
+                f"{preset}: tools/ci/data/preset_states.tsv names a preset no built-in "
+                f"document provides. Fix the id there, or ship the preset."
             )
             continue
         have = states.get(preset, [])
@@ -81,7 +66,7 @@ def check(docs):
             if label in have:
                 continue
             problems.append(
-                f"{preset}: the docs record a state '{label}' that the preset does not "
+                f"{preset}: a state '{label}' is recorded that the preset does not "
                 f"expose. A preset must offer every state its screen can show."
             )
 
@@ -90,8 +75,8 @@ def check(docs):
             if label in documented.get(preset, []):
                 continue
             problems.append(
-                f"{preset}: state '{label}' has no row in docs/preset_states.md - record "
-                f"where it came from in the game before shipping it."
+                f"{preset}: state '{label}' has no row in tools/ci/data/preset_states.tsv. "
+                f"Find where it comes from in the game, then record it."
             )
     return problems, states, gaps
 
@@ -99,7 +84,7 @@ def check(docs):
 def main():
     parser = argparse.ArgumentParser(
         description="Check every marker and option choice of a built-in preset against "
-        "docs/preset_states.md"
+        "tools/ci/data/preset_states.tsv"
     )
     add_dump_argument(parser)
     args = parser.parse_args()
@@ -121,7 +106,7 @@ def main():
     total = sum(len(v) for v in states.values())
     print(f"preset-state gate OK: {total} state(s) across {len(states)} preset(s), all recorded")
     if gaps:
-        print(f"  known gaps still to build: {len(gaps)} (see docs/preset_states.md)")
+        print(f"  known gaps still to build: {len(gaps)}")
     return 0
 
 

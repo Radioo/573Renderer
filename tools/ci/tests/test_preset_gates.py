@@ -119,18 +119,19 @@ def test_states_gate_fails_on_a_row_whose_id_carries_no_build_prefix(tmp_path, m
     document = documented_screen()
     document["markers"] = [{"frame": 0, "label": "Only state"}]
     write_document(tmp_path, document)
-    doc = tmp_path / "preset_states.md"
-    doc.write_text(
-        "| preset | state | source |\n"
-        "|---|---|---|\n"
-        "| iidx11-card-in | Only state | the row the document backs |\n"
-        "| attract-screen | Only state | a typo no document backs |\n",
+    data = tmp_path / "preset_states.tsv"
+    data.write_text(
+        "kind\tpreset\tstate\n"
+        "state\tiidx11-card-in\tOnly state\n"
+        "state\tattract-screen\tOnly state\n",
         encoding="utf-8",
     )
-    monkeypatch.setattr(check_preset_states, "DOC", doc)
+    monkeypatch.setattr(check_preset_states, "DATA", data)
     problems, _, _ = check_preset_states.check(preset_dump.read_dump(tmp_path))
     assert len(problems) == 1
-    assert problems[0].startswith("attract-screen: docs/preset_states.md names a preset")
+    assert problems[0].startswith(
+        "attract-screen: tools/ci/data/preset_states.tsv names a preset"
+    )
 
 
 def test_write_dump_reports_the_exit_code_and_the_renderer_log(tmp_path, monkeypatch):

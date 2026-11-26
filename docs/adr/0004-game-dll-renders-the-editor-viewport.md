@@ -1,3 +1,0 @@
-# The game DLL renders the editor viewport
-
-The target build's afp-core always draws the IFS editor's viewport, through the renderer's draw callbacks. After an edit the editor encodes the package, reloads it, and seeks afp-core to the current frame, which afp-core does by replaying frames. We have no playback engine of our own, not even for dragging a value. The editor promises that the game shows exactly what the viewport shows. Only the game's own code can keep that promise, and a second engine would slowly drift away from it. Gizmos and selection outlines come from the editor's model and are drawn on top of the DLL's output. If reload latency makes editing unpleasant, fix the reload path before considering a native engine.

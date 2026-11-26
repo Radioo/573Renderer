@@ -562,5 +562,5 @@
       ]
     }
   ],
-  "notes": "IIDX RED title/attract. Boot logo 0..502, warp-in 502..793, logo runs on to 902, attract loop to 1736, standby loop 720 frames. See docs/preset_states.md and IIDX/red_3d_screens.md."
+  "notes": "IIDX RED title/attract. Boot logo 0..502, warp-in 502..793, logo runs on to 902, attract loop to 1736, standby loop 720 frames."
 }

@@ -1,0 +1,83 @@
+kind	preset	state
+state	iidx11-attract	Boot animation, models hidden
+state	iidx11-attract	Warp in, rotating and zooming
+state	iidx11-attract	Boot animation runs on, models hidden again
+state	iidx11-attract	Attract loop, settled to the right
+state	iidx11-attract	Standby logo, TITLE_TAIKI looping
+state	iidx11-dan-select	CLASS 7
+state	iidx11-dan-select	CLASS 6
+state	iidx11-dan-select	CLASS 5
+state	iidx11-dan-select	CLASS 4
+state	iidx11-dan-select	CLASS 3
+state	iidx11-dan-select	CLASS 2
+state	iidx11-dan-select	CLASS 1
+state	iidx11-dan-select	1ST DAN
+state	iidx11-dan-select	2ND DAN
+state	iidx11-dan-select	3RD DAN
+state	iidx11-dan-select	4TH DAN
+state	iidx11-dan-select	5TH DAN
+state	iidx11-dan-select	6TH DAN
+state	iidx11-dan-select	7TH DAN
+state	iidx11-dan-select	8TH DAN
+state	iidx11-dan-select	9TH DAN
+state	iidx11-dan-select	10TH DAN
+state	iidx11-music-select	Fly in, punching past the resting point
+state	iidx11-music-select	Settled
+state	iidx11-music-select	Normal
+state	iidx11-music-select	ATTACK
+state	iidx11-mode-select	Fly in, fast wind up
+state	iidx11-mode-select	Fly in, spin slowing down
+state	iidx11-mode-select	Fly in, spin at its floor
+state	iidx11-mode-select	Interactive, unwinding
+state	iidx11-expert-select	Fly in from the eye plane
+state	iidx11-expert-select	Settled
+state	iidx11-expert-select	Outro hold, snapped to centre
+state	iidx11-ending	Black, models hidden
+state	iidx11-ending	Fade in, camera pulling back
+state	iidx11-ending	Burst, the spin-up whip
+state	iidx11-ending	Beat pulse
+state	iidx11-ending	Core and flame counter-rotate
+state	iidx11-ending	Second beat run
+state	iidx11-ending	Beat 80, the flame unwinds
+state	iidx11-ending	Camera pushes through
+state	iidx11-ending	Snap back, triple speed
+state	iidx11-ending	Fade out, close in
+state	iidx11-ending	Cyan burst
+state	iidx11-ending	Blue burst
+state	iidx11-ending	Nine degree spin
+state	iidx11-ending	Reverse twelve
+state	iidx11-ending	Sixteen degree spin, fading up
+state	iidx11-ending	Logo hold
+state	iidx11-ending	Drift out
+state	iidx11-ending	Final push in
+state	iidx11-expert-select	Outro fade
+state	iidx12-expert-select	Course select
+state	iidx12-mode-select	Fly in
+state	iidx12-mode-select	Settled
+state	iidx12-music-select	Song list
+state	iidx12-music-select	NORMAL
+state	iidx12-music-select	EXTRA
+state	iidx12-dan-select	Enter
+state	iidx12-dan-select	Camera follows the grade
+state	iidx12-dan-select	CLASS 7 to 1
+state	iidx12-dan-select	1ST to 8TH DAN
+state	iidx12-dan-select	9TH and 10TH DAN
+state	iidx12-ending	Title plate blooms in
+state	iidx12-ending	Sky and movie tiles
+state	iidx12-ending	Plate gone
+state	iidx12-ending	Speed ramp and burst
+state	iidx12-ending	Fade
+state	iidx12-ending	Seed 1
+state	iidx12-ending	Seed 573
+state	iidx12-ending	Seed 12345
+state	iidx12-attract	Intro film
+state	iidx12-attract	Logo reveal
+state	iidx12-attract	Standby loop
+state	iidx12-attract	Attract times out
+state	iidx12-card-in	Card hall
+state	iidx10-mode-select	BEGINNER
+state	iidx10-mode-select	LIGHT7
+state	iidx10-mode-select	7KEYS
+state	iidx10-mode-select	EXPERT
+state	iidx10-mode-select	CLASS COURSE
+state	iidx10-mode-select	FREE
