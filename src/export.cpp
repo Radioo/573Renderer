@@ -298,7 +298,7 @@ bool BlendComposeAndSubmit(Session& sess) {
 
     const Loop::BlendPlan plan = Loop::PlanBlendLoop(buf, sess.blend_frames);
     if (plan.loop_length < 2 || fsz == 0) {
-        FailSession(sess, "blend-loop: nothing to compose");
+        FailSession(sess, "Could not blend the loop seam: too few frames were captured.");
         return false;
     }
 
@@ -342,7 +342,7 @@ bool BlendComposeAndSubmit(Session& sess) {
 
 void FinishAndEncode(Session& sess) {
     if (sess.frames_captured == 0) {
-        FailSession(sess, "no frames were captured - did the animation never advance?");
+        FailSession(sess, "No frames were captured. The animation may not have advanced.");
         return;
     }
 

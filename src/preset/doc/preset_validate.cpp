@@ -233,7 +233,7 @@ void CheckParams(const Document& doc, const Clip& clip, Report& out) {
         if (field.kind == FieldKind::Enum && std::holds_alternative<int>(value)) {
             const int index = std::get<int>(value);
             if (index < 0 || (std::size_t)index >= field.enum_names.size()) {
-                out.Error(clip.id, std::string(field.id) + " holds no name of its enum");
+                out.Error(clip.id, std::string(field.id) + " does not name a value in its list");
             }
         }
         CheckRange(field, value, clip.id, out);
@@ -315,10 +315,10 @@ void CheckClip(const Document& doc, const Track& track, const Clip& clip, Report
     if (clip.start < 0) out.Error(clip.id, "start is before frame 0");
     if (IsEvent(type)) {
         if (clip.end.has_value() && *clip.end != clip.start) {
-            out.Error(clip.id, "an event clip carries no end");
+            out.Error(clip.id, "an event clip has no end");
         }
     } else if (clip.end.has_value() && *clip.end <= clip.start) {
-        out.Error(clip.id, "end must be after start or null for an open ended clip");
+        out.Error(clip.id, "end must be after start, or null for an open-ended clip");
     }
     CheckParams(doc, clip, out);
     CheckKeys(doc, clip, out);

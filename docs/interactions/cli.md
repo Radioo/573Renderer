@@ -1,7 +1,7 @@
 # Command line
 
-Every interaction on this surface. Generated inventory, cross-checked by a second
-reader against the source (see README.md for method).
+Every interaction on this surface. The inventory was generated, then checked
+against the source by a second reader (see README.md for the method).
 
 | # | id | control | input | tooltip | tests |
 |---|---|---|---|---|---|
@@ -121,7 +121,7 @@ reader against the source (see README.md for method).
 - **source**: `src/cli/cli.cpp:410`
 - **notes**: Undocumented in --help. Special handler registered at cli.cpp:548.
 - **tests**: `cli: scale and afp-speed validate as floats`
-- **audit correction**: Effect "Options::afp_speed = f" omits two gates, one of which makes the documented accepted value 0 a silent no-op. -> Options::afp_speed = f (0..16 accepted). It is consumed only in ApplyCliOverrides: `if (opts.afp_speed > 0.0F && Runtime::Active().SetGlobalSpeed(g_afp, opts.afp_speed))` logging "afp global speed set to %.3f (--afp-speed)" (boot.cpp:157-159). f == 0 passes validation but does nothing. ApplyCliOverrides has exactly one call site, main.cpp:381, inside the successful-mount branch of MountStartupContent - so the flag is inert without a startup IFS that mounts.
+- **audit correction**: Effect "Options::afp_speed = f" omits two gates, one of which makes the documented accepted value 0 a silent no-op. -> Options::afp_speed = f (0..16 accepted). It is consumed only in ApplyCliOverrides: `if (opts.afp_speed > 0.0F && Runtime::Active().SetGlobalSpeed(g_afp, opts.afp_speed))` logging "afp global speed set to %.3f (--afp-speed)" (boot.cpp:157-159). f == 0 passes validation but does nothing. ApplyCliOverrides has exactly one call site, main.cpp:381, inside the successful-mount branch of MountStartupContent, so the flag does nothing without a startup IFS that mounts.
 
 ### 2. --animation <name>
 
@@ -187,7 +187,7 @@ reader against the source (see README.md for method).
 - **source**: `src/cli/cli.cpp:330`
 - **notes**: Undocumented: not present in the kUsage --help text.
 - **tests**: `cli: Parse handles the remaining playback and diagnostic flags`, `cli: help returns false without error`
-- **audit correction**: Effect is the bare "Options::cmd_trace_path = value" with no consumer named, hiding that the flag both enables render-command capture and writes a file. -> Options::cmd_trace_path = value. A non-empty value arms capture by pointing g_gpu.cmd_list at the frame's RenderCommandList (src/render_loop.cpp:334); WriteCmdTrace then disarms the pointer, formats the list and writes it to that path, logging "--cmd-trace: %zu commands -> %zu bytes to '%s'" on success or "--cmd-trace: FAILED to open '%s'" when the ofstream cannot be opened (src/render_loop.cpp:186-198).
+- **audit correction**: Effect is the bare "Options::cmd_trace_path = value" with no consumer named, so it does not show that the flag both enables render-command capture and writes a file. -> Options::cmd_trace_path = value. A non-empty value arms capture by pointing g_gpu.cmd_list at the frame's RenderCommandList (src/render_loop.cpp:334); WriteCmdTrace then disarms the pointer, formats the list and writes it to that path, logging "--cmd-trace: %zu commands -> %zu bytes to '%s'" on success or "--cmd-trace: FAILED to open '%s'" when the ofstream cannot be opened (src/render_loop.cpp:186-198).
 
 ### 8. --continuous-loop <N>
 
@@ -208,7 +208,7 @@ reader against the source (see README.md for method).
 - **precondition**: no tool subcommand present; a following value token must exist; the value contains adjacent, leading, or trailing commas
 - **effect**: SplitCsv drops empty tokens before counting, so `--export-bg 30,,33,,43,` still yields exactly three ints and succeeds, and `--export-crop ,0,0,100,50,` still yields four and succeeds, while an all-empty value like `--export-crop ,,,` collapses to zero tokens and fails the expected-count check with "--export-crop expects 'X,Y,W,H' with non-negative ints". A completely empty value ('') yields an empty list: --export-crop/--export-bg error, --screenshot-frames/--submonitor-frames succeed as no-ops.
 - **source**: `src/cli/cli.cpp:222-233 (SplitCsv, empty tokens skipped at :228), :235-246 (ParseIntList count check at :237)`
-- **notes**: main.cpp's ForEachCsvToken (used by --qpro-parts / --qpro-only, src/main.cpp:80-90) does NOT drop empty tokens, so the two CSV dialects in this CLI behave differently.
+- **notes**: main.cpp's ForEachCsvToken (used by --qpro-parts / --qpro-only, src/main.cpp:80-90) does not drop empty tokens, so the two CSV dialects in this CLI behave differently.
 - **tests**: `cli: Parse handles every string-valued qpro flag`
 
 ### 10. --deferred-replay
@@ -236,9 +236,9 @@ reader against the source (see README.md for method).
 - **id**: `duplicate-scalar-flag-last-wins` *(audit)*
 - **input**: cli-arg
 - **precondition**: no tool subcommand present; the same option name appears two or more times
-- **effect**: The per-argument loop keeps no seen-set and every handler is a plain assignment, so the LAST occurrence wins for every bool/string/int/clamped/ranged/special option: `--export-fps 30 --export-fps 60` yields 60; `--export-bg transparent --export-bg 30,33,43` yields the opaque colour. The only exceptions are the six appending options (--variant, --hide, --hide-sublayer, --show-sublayer, --screenshot-frames, --submonitor-frames), whose repeats accumulate.
+- **effect**: The per-argument loop keeps no seen-set and every handler is a plain assignment, so the last occurrence wins for every bool/string/int/clamped/ranged/special option: `--export-fps 30 --export-fps 60` yields 60; `--export-bg transparent --export-bg 30,33,43` yields the opaque colour. The only exceptions are the six appending options (--variant, --hide, --hide-sublayer, --show-sublayer, --screenshot-frames, --submonitor-frames), whose repeats accumulate.
 - **source**: `src/cli/cli.cpp:637-652 (loop), :565 (bool assign), :575 (string assign), :586/:595/:615 (int assigns)`
-- **notes**: The inventory marks the six appenders "Repeatable" but never states the last-wins rule for the other ~60 flags, so the two behaviours are indistinguishable from the record set.
+- **notes**: The inventory marks the six appenders "Repeatable" but never states the last-wins rule for the other ~60 flags, so the records do not tell the two behaviours apart.
 - **tests**: none
 
 ### 13. --exit-after-frames <N>
@@ -259,7 +259,7 @@ reader against the source (see README.md for method).
 - **disabled when**: a tool subcommand flag is present
 - **effect**: Options::export_path = value: start export after the startup IFS loads, then exit once encoding finishes
 - **source**: `src/cli/cli.cpp:327`
-- **notes**: Gates the whole --export-* family in practice.
+- **notes**: In practice the whole --export-* family depends on it.
 - **tests**: `cli: Parse handles the full export option set`
 
 ### 15. --export-bg <transparent\|none\|R,G,B>
@@ -270,7 +270,7 @@ reader against the source (see README.md for method).
 - **disabled when**: a tool subcommand flag is present
 - **effect**: "transparent" or "none" sets Options::export_bg_transparent = true; otherwise three comma-separated ints set export_bg_transparent = false and export_bg_r/g/b = value/255. Bad input errors "--export-bg expects 'transparent' or 'R,G,B' with 0..255 ints" and aborts with rc 1
 - **source**: `src/cli/cli.cpp:473`
-- **notes**: Special handler registered at cli.cpp:553. The undocumented "none" alias is accepted alongside "transparent"; the 0..255 bound is not actually range-checked.
+- **notes**: Special handler registered at cli.cpp:553. The undocumented "none" alias is accepted alongside "transparent"; the 0..255 bound is not range-checked.
 - **tests**: `cli: export-bg parses transparent and rgb`
 
 ### 16. --export-crop <X,Y,W,H>
@@ -304,7 +304,7 @@ reader against the source (see README.md for method).
 - **source**: `src/cli/cli.cpp:444`
 - **notes**: Special handler registered at cli.cpp:551. One entry covers all six accepted tokens since they share one handler; the accepted set is owned by MediaSink::ParseToken.
 - **tests**: `cli: export-format resolves tokens and aliases`
-- **audit correction**: Wrong accepted-token set. The control string and the note claim six tokens "owned by MediaSink::ParseToken", but ParseToken accepts 20 distinct tokens across kTable, kAliases and a "safari" special case, and one of them selects a format (MP4_HEVC_Alpha, export_format index 6) that no documented token can reach. The note that "one entry covers all six accepted tokens" is therefore incorrect. -> control: "--export-format <token>" where token is one of avif \| webm-vp9 \| webm-av1 \| webp \| png \| mp4 \| mp4-hevc-alpha (canonical, media_format.cpp:22-70) or the aliases webm, vp9, av1, webp-anim, png-seq, pngseq, h264, avc, mp4-h264, hevc, hevc-alpha, mp4-hevc (media_format.cpp:78-89) or the literal "safari" (media_format.cpp:154). Matching is exact and case-sensitive. Note that the documented "webm" is an alias and "webm-vp9" is the canonical token.
+- **audit correction**: Wrong accepted-token set. The control string and the note claim six tokens "owned by MediaSink::ParseToken", but ParseToken accepts 20 distinct tokens across kTable, kAliases and a "safari" special case, and one of them selects a format (MP4_HEVC_Alpha, export_format index 6) that no documented token can reach. The note that "one entry covers all six accepted tokens" is therefore incorrect. -> control: "--export-format <token>" where token is one of avif \| webm-vp9 \| webm-av1 \| webp \| png \| mp4 \| mp4-hevc-alpha (canonical, media_format.cpp:22-70) or the aliases webm, vp9, av1, webp-anim, png-seq, pngseq, h264, avc, mp4-h264, hevc, hevc-alpha, mp4-hevc (media_format.cpp:78-89) or the literal "safari" (media_format.cpp:154). Matching is exact and case-sensitive. The documented "webm" is an alias and "webm-vp9" is the canonical token.
 
 ### 19. --export-format <webm-vp9\|vp9\|av1\|webp-anim\|png-seq\|pngseq\|h264\|avc\|mp4-h264>
 
@@ -323,7 +323,7 @@ reader against the source (see README.md for method).
 - **input**: cli-arg
 - **precondition**: no tool subcommand present; a following value token must exist; MediaSink::ParseToken compares the token case-sensitively against kTable then kAliases then the literal "safari"
 - **disabled when**: a tool subcommand flag is present
-- **effect**: Resolves to MediaSink::Format::MP4_HEVC_Alpha, so Options::export_format = 6 and the export writes an MP4 HEVC-with-alpha file (muxer "mp4", extension ".mp4", label "MP4 HEVC alpha (video, alpha, Safari)"). This is a SEVENTH output format that is reachable ONLY through these five undocumented tokens - none of the six names printed by --help or by the --export-format error string select it.
+- **effect**: Resolves to MediaSink::Format::MP4_HEVC_Alpha, so Options::export_format = 6 and the export writes an MP4 HEVC-with-alpha file (muxer "mp4", extension ".mp4", label "MP4 HEVC alpha (video, alpha, Safari)"). This is a seventh output format, reachable only through these five undocumented tokens: none of the six names printed by --help or by the --export-format error string select it.
 - **source**: `src/media/media_format.cpp:64 (kTable row), :86-88 (hevc/hevc-alpha/mp4-hevc aliases), :154 ("safari" special case); dispatched from src/cli/cli.cpp:448`
 - **notes**: The existing export-format entry folds "all six accepted tokens" into one record and asserts the accepted set is owned by ParseToken, but ParseToken accepts 20 tokens and one whole extra format. A user reading the inventory cannot discover MP4 HEVC alpha at all.
 - **tests**: `cli: export-format resolves tokens and aliases`
@@ -357,7 +357,7 @@ reader against the source (see README.md for method).
 - **disabled when**: a tool subcommand flag is present
 - **effect**: Options::export_loop_count = N when N >= 1, else falls back to 1: capture N loops of the animation
 - **source**: `src/cli/cli.cpp:353`
-- **notes**: Clamped option; note the help text's "0 (default) = capture until animation ends" cannot be expressed because 0 is rewritten to 1.
+- **notes**: Clamped option. The help text's "0 (default) = capture until animation ends" cannot be expressed, because 0 is rewritten to 1.
 - **tests**: `cli: clamped int options keep their floors`
 
 ### 24. --export-max-frames <N>
@@ -444,7 +444,7 @@ reader against the source (see README.md for method).
 - **disabled when**: a tool subcommand flag is present
 - **effect**: Options::render_fps = N (live render / animation-tick rate). Out-of-range sets err "--fps out of range (1..1000), got '<v>'" and aborts parsing with exit rc 1
 - **source**: `src/cli/cli.cpp:362`
-- **notes**: Ranged option; the out-of-range rejection is a distinct observable outcome of the same flag.
+- **notes**: Ranged option; the out-of-range rejection is a separate visible outcome of the same flag.
 - **tests**: `cli: fps and qpro-fps enforce ranges`
 
 ### 32. --game-dir <path>
@@ -467,7 +467,7 @@ reader against the source (see README.md for method).
 - **source**: `src/cli/cli.cpp:311`
 - **notes**: Undocumented: not present in the kUsage --help text.
 - **tests**: `cli: Parse handles flags and string options`, `cli: help returns false without error`
-- **audit correction**: Effect is the bare "Options::goto_label = value" with no consumer, so the flag looks dead; it actually drives a one-shot afp command and gates the CLI autopilot's readiness. -> Options::goto_label = value. A non-empty value logs "--goto-label='%s' -> will goto after IFS load" (render_loop.cpp:86-87) and sets AutopilotConfig::want_goto_label (render_loop.cpp:299); once the clip is live the autopilot fires post_goto_label exactly once and the loop posts AfpCmd::GotoLabel{name = cli.goto_label} (render_loop.cpp:262-264, src/loop/cli_autopilot.cpp:37-39). Downstream readiness gates on label_playback_active && active_label == goto_label (render_loop.cpp:101-103), so a label that never becomes active stalls the autopilot's ready condition.
+- **audit correction**: Effect is the bare "Options::goto_label = value" with no consumer, so the flag looks unused. It drives a one-shot afp command and gates the CLI autopilot's readiness. -> Options::goto_label = value. A non-empty value logs "--goto-label='%s' -> will goto after IFS load" (render_loop.cpp:86-87) and sets AutopilotConfig::want_goto_label (render_loop.cpp:299); once the clip is live the autopilot fires post_goto_label exactly once and the loop posts AfpCmd::GotoLabel{name = cli.goto_label} (render_loop.cpp:262-264, src/loop/cli_autopilot.cpp:37-39). Downstream readiness gates on label_playback_active && active_label == goto_label (render_loop.cpp:101-103), so a label that never becomes active stalls the autopilot's ready condition.
 
 ### 34. --headless
 
@@ -485,7 +485,7 @@ reader against the source (see README.md for method).
 - **input**: cli-arg
 - **precondition**: --headless set and Options::game_dir empty, so main.cpp never posts the initial BootGame command
 - **disabled when**: --game-dir is supplied (a boot request is posted and the normal boot path runs)
-- **effect**: WaitForFirstBoot takes its first no-boot-command iteration, logs "--headless without --game-dir: nothing to do, exiting.", calls Log::Shutdown() and returns with exit_rc = 1, so the process exits with rc 1 almost immediately. A settings.ini game_dir does NOT rescue this: the boot request at main.cpp:370-371 is posted only when cli.game_dir is non-empty.
+- **effect**: WaitForFirstBoot takes its first no-boot-command iteration, logs "--headless without --game-dir: nothing to do, exiting.", calls Log::Shutdown() and returns with exit_rc = 1, so the process exits with rc 1 almost immediately. A game_dir in settings.ini does not prevent this: the boot request at main.cpp:370-371 is posted only when cli.game_dir is non-empty.
 - **source**: `src/main.cpp:308-315 (message and exit_rc = 1), :370-371 (boot posted only for cli.game_dir), :420`
 - **notes**: The headless entry describes only "skip window creation entirely; run only the init sequence and exit" and never mentions this hard --game-dir dependency or the non-zero rc.
 - **tests**: `cli: Parse handles flags and string options`, `cli: Parse rejects a missing value`
@@ -500,7 +500,7 @@ reader against the source (see README.md for method).
 - **source**: `src/cli/cli.cpp:639`
 - **notes**: Scanned first in the per-argument loop, so it wins over any other option that appears later in argv.
 - **tests**: `cli: help returns false without error`
-- **audit correction**: The note "Scanned first in the per-argument loop, so it wins over any other option that appears later in argv" is misleading in two provable ways: an EARLIER erroring option aborts Parse before --help is reached, and an earlier value-taking flag swallows --help as its value. -> --help wins only over later options in an otherwise valid command line. `--bogus --help` returns the error "Unknown argument: --bogus" with rc 1 and prints no usage (cli.cpp:643-651 runs before the next iteration's help check); `--fps 0 --help` returns the range error; and `--ifs --help` sets startup_ifs = "--help" via NextArg (cli.cpp:190) so no usage is printed and the process boots normally. The same three qualifiers apply to help-short and help-slash.
+- **audit correction**: The note "Scanned first in the per-argument loop, so it wins over any other option that appears later in argv" is misleading in two ways: an earlier option that errors aborts Parse before --help is reached, and an earlier value-taking flag swallows --help as its value. -> --help wins only over later options in an otherwise valid command line. `--bogus --help` returns the error "Unknown argument: --bogus" with rc 1 and prints no usage (cli.cpp:643-651 runs before the next iteration's help check); `--fps 0 --help` returns the range error; and `--ifs --help` sets startup_ifs = "--help" via NextArg (cli.cpp:190) so no usage is printed and the process boots normally. The same three qualifiers apply to help-short and help-slash.
 
 ### 37. -h
 
@@ -605,9 +605,9 @@ reader against the source (see README.md for method).
 - **id**: `no-arguments-at-all` *(audit)*
 - **input**: cli-arg
 - **precondition**: argc == 1 (only argv[0])
-- **effect**: ParseToolCommand returns ToolKind::None, the Parse loop body never executes and Parse returns true with a fully default Options; main.cpp then takes initial_dir from settings.ini's game_dir, starts the GUI thread, posts NO boot request (cli.game_dir is empty) and waits in WaitForFirstBoot for the GUI Setup screen to post one. This is the only path into the GUI Setup screen.
+- **effect**: ParseToolCommand returns ToolKind::None, the Parse loop body never executes and Parse returns true with a fully default Options; main.cpp then takes initial_dir from settings.ini's game_dir, starts the GUI thread, posts no boot request (cli.game_dir is empty) and waits in WaitForFirstBoot for the GUI Setup screen to post one. This is the only path into the GUI Setup screen.
 - **source**: `src/cli/cli.cpp:637 (loop starts at c.i = 1), :653; src/main.cpp:413-419`
-- **notes**: The inventory records the analogous no-tool-command gate but never the no-flags-at-all baseline, even though it is the default launch every GUI user takes.
+- **notes**: The inventory records the similar no-tool-command gate but not a launch with no flags at all, which is how every GUI user starts the app.
 - **tests**: none
 
 ### 47. --no-gui
@@ -628,7 +628,7 @@ reader against the source (see README.md for method).
 - **disabled when**: --game-dir is supplied; or the GUI thread is running, which can post its own boot request
 - **effect**: Same WaitForFirstBoot branch fires on the !have_gui side, logging "no GUI and no --game-dir: nothing to boot, exiting.", then Log::Shutdown() and exit_rc = 1. The same branch also catches a normal GUI run where GuiThread::Start failed.
 - **source**: `src/main.cpp:308-315 (the !have_gui alternative message), :354-359 (StartGuiIfWanted)`
-- **notes**: Also unrecorded: after a boot request that FAILS, main.cpp:301-307 exits rc 1 when there is no GUI to retry from, whereas a GUI run stays alive to retry.
+- **notes**: Also not recorded elsewhere: after a boot request fails, main.cpp:301-307 exits rc 1 when there is no GUI to retry from, whereas a GUI run stays alive to retry.
 - **tests**: `cli: Parse handles flags and string options`, `cli: Parse rejects a missing value`, `cli: ParseToolCommand keeps the historical priority order and value rule`, `cli: ParseToolCommand qpro-json output defaults unless a non-flag follows`
 
 ### 49. launching with no tool subcommand at all
@@ -638,7 +638,7 @@ reader against the source (see README.md for method).
 - **precondition**: none of the six tool flags appear with a following value token
 - **effect**: ParseToolCommand returns a default ToolCommand with ToolKind::None; ToolCommands::Run's None/default branch returns 0 and main.cpp continues into InstallProcessDiagnostics + Cli::Parse + GUI boot instead of exiting
 - **source**: `src/tool_commands.cpp:116`
-- **notes**: This is the gate that makes every option flag above reachable; recorded once rather than repeated per flag.
+- **notes**: Every option flag above is reachable only through this path. It is recorded once instead of for each flag.
 - **tests**: none
 
 ### 50. --profile <slug>
@@ -694,7 +694,7 @@ reader against the source (see README.md for method).
 - **source**: `src/cli/cli.cpp:322`
 - **notes**: Undocumented: not present in the kUsage --help text.
 - **tests**: `cli: Parse handles every string-valued qpro flag`, `cli: help returns false without error`
-- **audit correction**: Control and effect omit the value's internal format; "<value>" hides that the argument is a colon-separated pair. -> control: "--qpro-clip-one <ifs>[:<clip>]". The value is split at the LAST ':' (rfind), giving ifs = text before it and clip = text after it; with no ':' the whole value is the ifs and clip is empty. It then calls QproExtract::ClipOne(engine, d3d, game_dir, ifs, clip) as a one-shot and the process exits rc 0 (main.cpp:154-159).
+- **audit correction**: Control and effect omit the value's internal format; "<value>" hides that the argument is a colon-separated pair. -> control: "--qpro-clip-one <ifs>[:<clip>]". The value is split at the last ':' (rfind), giving ifs = text before it and clip = text after it; with no ':' the whole value is the ifs and clip is empty. It then calls QproExtract::ClipOne(engine, d3d, game_dir, ifs, clip) as a one-shot and the process exits rc 0 (main.cpp:154-159).
 
 ### 55. --qpro-dump <ifs>
 
@@ -706,7 +706,7 @@ reader against the source (see README.md for method).
 - **source**: `src/cli/cli.cpp:315`
 - **notes**: Undocumented: not present in the kUsage --help text.
 - **tests**: `cli: Parse handles every string-valued qpro flag`, `cli: help returns false without error`
-- **audit correction**: Effect "Options::qpro_dump_ifs = value" omits the path resolution rule and the one-shot behaviour. -> Options::qpro_dump_ifs = value. In RunQproOneShot (lowest precedence of the eleven one-shot flags) a RELATIVE value is resolved to <game_dir>/data/graphic/<value> while an absolute path is used as-is, then QproExtract::DumpIfs(engine, path) runs and RunQproCliAndExit exits the process with rc 0 (main.cpp:172-176).
+- **audit correction**: Effect "Options::qpro_dump_ifs = value" omits the path resolution rule and the one-shot behaviour. -> Options::qpro_dump_ifs = value. In RunQproOneShot (lowest precedence of the eleven one-shot flags) a relative value is resolved to <game_dir>/data/graphic/<value> while an absolute path is used as-is, then QproExtract::DumpIfs(engine, path) runs and RunQproCliAndExit exits the process with rc 0 (main.cpp:172-176).
 
 ### 56. --qpro-face-one <value>
 
@@ -791,8 +791,8 @@ reader against the source (see README.md for method).
 - **id**: `qpro-modifier-flags-inert-alone` *(audit)*
 - **input**: cli-arg
 - **precondition**: no tool subcommand present; none of the twelve flags listed in WantsQproCliMode is set
-- **disabled when**: always inert in this combination - WantsQproCliMode returns false so RunQproCliMode is never called
-- **effect**: These four are modifiers, not modes: WantsQproCliMode tests only extract_qpro_dir, qpro_dump_ifs and the nine one-shot/composite strings, so passing them alone parses successfully and then does nothing at all - the process continues into the normal GUI/render path. They take effect only inside RunQproCliMode: SetHueScopeEnabled(!qpro_no_hue_scope), fps override only when qpro_fps > 0, ParseQproPartsCsv, ParseQproOnlyCsv - and the last two apply only on the batch --extract-qpro path, since RunQproOneShot returns before them.
+- **disabled when**: always does nothing in this combination: WantsQproCliMode returns false, so RunQproCliMode is never called
+- **effect**: These four adjust a qpro mode and do not select one. WantsQproCliMode tests only extract_qpro_dir, qpro_dump_ifs and the nine one-shot/composite strings, so passing them alone parses successfully and then does nothing, and the process continues into the normal GUI/render path. They take effect only inside RunQproCliMode: SetHueScopeEnabled(!qpro_no_hue_scope), fps override only when qpro_fps > 0, ParseQproPartsCsv, ParseQproOnlyCsv. The last two apply only on the batch --extract-qpro path, since RunQproOneShot returns before them.
 - **source**: `src/main.cpp:139-145 (WantsQproCliMode), :183-194 (RunQproCliMode; :185 early return, :189 fps gate, :190-191 csv gates)`
 - **notes**: Four inventory entries (qpro-parts, qpro-only, qpro-fps, qpro-no-hue-scope) claim an unconditional effect and list disabled_when as only "a tool subcommand flag is present".
 - **tests**: `cli: Parse handles every string-valued qpro flag`, `cli: Parse handles the qpro hue-scope switch`, `cli: fps and qpro-fps enforce ranges`
@@ -814,10 +814,10 @@ reader against the source (see README.md for method).
 - **id**: `qpro-oneshot-precedence` *(audit)*
 - **input**: cli-arg
 - **precondition**: no tool subcommand present; two or more of --qpro-back-composite, --qpro-hand-composite, --qpro-head-composite, --qpro-clip-one, --qpro-back-one, --qpro-head-one, --qpro-hand-one, --qpro-hair-one, --qpro-face-one, --qpro-body-one, --qpro-dump are non-empty; a game dir must have booted
-- **disabled when**: never - no error or warning is emitted for the ignored flags
-- **effect**: RunQproOneShot is a single if/else-if chain, so exactly ONE flag runs and the rest are silently discarded, in this fixed precedence regardless of argv order: back-composite > hand-composite > head-composite > clip-one > back-one > head-one > hand-one > hair-one > face-one > body-one > qpro-dump. Whichever wins renders its one-shot and RunQproCliAndExit shuts the engine stack down and returns rc 0 without ever entering the render loop. If none is set, RunQproOneShot returns false and the batch QproExtract::Run path (--extract-qpro) executes instead.
+- **disabled when**: never; no error or warning is emitted for the ignored flags
+- **effect**: RunQproOneShot is a single if/else-if chain, so exactly one flag runs and the rest are silently discarded, in this fixed precedence regardless of argv order: back-composite > hand-composite > head-composite > clip-one > back-one > head-one > hand-one > hair-one > face-one > body-one > qpro-dump. Whichever wins renders its one-shot and RunQproCliAndExit shuts the engine stack down and returns rc 0 without ever entering the render loop. If none is set, RunQproOneShot returns false and the batch QproExtract::Run path (--extract-qpro) executes instead.
 - **source**: `src/main.cpp:147-181 (RunQproOneShot), :183-194 (RunQproCliMode), :331-337 (RunQproCliAndExit), :429 (gate)`
-- **notes**: The inventory has all eleven flags but records each effect as a bare "Options::qpro_x = value", so this mutual exclusion and its precedence order are entirely absent - and so is the fact that any one of them turns the process into a one-shot that exits before the render loop.
+- **notes**: The inventory has all eleven flags but records each effect as a bare "Options::qpro_x = value", so this mutual exclusion and its precedence order are missing, and so is the fact that any one of them turns the process into a one-shot that exits before the render loop.
 - **tests**: none
 
 ### 66. --qpro-only <value>
@@ -861,7 +861,7 @@ reader against the source (see README.md for method).
 - **input**: cli-arg
 - **precondition**: no tool subcommand present; a following value token must exist; value must be exactly "hold" or "force"
 - **disabled when**: a tool subcommand flag is present
-- **effect**: Options::root_loop_mode = 0 for "hold" (mount once, root plays once then HOLDs while nested children free-run) or 1 for "force" (ForceReplay + continuous-loop flag sequence). Anything else errors "--root-loop expects 'hold' or 'force'" and aborts with rc 1
+- **effect**: Options::root_loop_mode = 0 for "hold" (mount once, root plays once then holds while nested children keep running) or 1 for "force" (ForceReplay + continuous-loop flag sequence). Anything else errors "--root-loop expects 'hold' or 'force'" and aborts with rc 1
 - **source**: `src/cli/cli.cpp:422`
 - **notes**: Special handler registered at cli.cpp:549. Struct default is -1 meaning "use settings.ini".
 - **tests**: `cli: root-loop accepts hold and force only`
@@ -939,7 +939,7 @@ reader against the source (see README.md for method).
 - **input**: cli-arg
 - **precondition**: no tool subcommand present; a following value token must exist
 - **disabled when**: a tool subcommand flag is present
-- **effect**: ParseSizePair splits at the FIRST lowercase 'x' and lets from_chars ignore trailing text, so "1920x1080junk" and "1920x1080x2" are ACCEPTED as 1920x1080, while "1920X1080" (capital X) fails with "--render-size expects 'WxH' with positive ints" and "x1080" fails because the left side is empty. "1920x-5" parses to h = -5 and is then rejected by the <= 0 check (--render-size) or the < 0 check (--export-size).
+- **effect**: ParseSizePair splits at the first lowercase 'x' and lets from_chars ignore trailing text, so "1920x1080junk" and "1920x1080x2" are accepted as 1920x1080, while "1920X1080" (capital X) fails with "--render-size expects 'WxH' with positive ints" and "x1080" fails because the left side is empty. "1920x-5" parses to h = -5 and is then rejected by the <= 0 check (--render-size) or the < 0 check (--export-size).
 - **source**: `src/cli/cli.cpp:206-220 (ParseSizePair), :371 (--render-size validation), :389 (--export-size validation)`
 - **notes**: Both existing entries state only the range rules, so the case-sensitivity of the separator and the accepted trailing junk are unrecorded.
 - **tests**: `cli: Parse handles the full export option set`, `cli: render-size validates format and range`
@@ -1034,7 +1034,7 @@ reader against the source (see README.md for method).
 - **input**: cli-arg
 - **precondition**: no tool subcommand present; help text says it needs --submonitor-loop-frames
 - **disabled when**: a tool subcommand flag is present
-- **effect**: Options::submonitor_slideshow = true: cross-fade CYCLE mode (oversized r3_fade 2-layer dissolve)
+- **effect**: Options::submonitor_slideshow = true: cross-fade cycle mode (oversized r3_fade 2-layer dissolve)
 - **source**: `src/cli/cli.cpp:295`
 - **tests**: `cli: Parse handles the submonitor option set`
 
@@ -1044,7 +1044,7 @@ reader against the source (see README.md for method).
 - **input**: cli-arg
 - **precondition**: no tool subcommand present
 - **disabled when**: a tool subcommand flag is present
-- **effect**: Options::submonitor_slideshow_fade = true: NORMAL slideshow mode (centered subbg_usr + subbg_0001 fade_in/fade_out labels, no pan)
+- **effect**: Options::submonitor_slideshow_fade = true: normal slideshow mode (centered subbg_usr + subbg_0001 fade_in/fade_out labels, no pan)
 - **source**: `src/cli/cli.cpp:297`
 - **tests**: `cli: submonitor options parse`
 
@@ -1198,7 +1198,7 @@ reader against the source (see README.md for method).
 - **effect**: ToolCommand::out_path = that token, passed as the second argument to Scene3dTest::Run
 - **source**: `src/cli/tool_command.cpp:57`
 - **tests**: none
-- **audit correction**: disabled_when is incomplete: an EMPTY token at i+2 does not fall back to the default, unlike the --extract-qpro-json parser. -> ParseScene3dTest tests only `args[i + 2][0] != '-'`, and indexing an empty std::string yields '\0', so an empty token at i+2 sets out_path = "" (passed straight to Scene3dTest::Run) rather than "scene3d_out.png". Only an ABSENT token or one starting with '-' reaches the default (src/cli/tool_command.cpp:57). Contrast ParseExtractQproJson at :47, which explicitly guards !args[i + 2].empty(). The same missing empty-guard applies to the frames positional at :58 and to every ParseDdrTest positional at :30-32.
+- **audit correction**: disabled_when is incomplete: unlike the --extract-qpro-json parser, an empty token at i+2 does not fall back to the default. -> ParseScene3dTest tests only `args[i + 2][0] != '-'`, and indexing an empty std::string yields '\0', so an empty token at i+2 sets out_path = "" (passed straight to Scene3dTest::Run) instead of "scene3d_out.png". Only an absent token or one starting with '-' reaches the default (src/cli/tool_command.cpp:57). Contrast ParseExtractQproJson at :47, which explicitly guards !args[i + 2].empty(). The same missing empty-guard applies to the frames positional at :58 and to every ParseDdrTest positional at :30-32.
 
 ### 101. any unrecognised token
 
@@ -1218,7 +1218,7 @@ reader against the source (see README.md for method).
 - **disabled when**: never; NextArg has no look-ahead guard of any kind
 - **effect**: NextArg takes args[++c.i] unconditionally, so the following flag is swallowed as the value and is never parsed: `--ifs --no-gui` sets Options::startup_ifs = "--no-gui" and leaves no_gui false; `--ifs --help` sets startup_ifs = "--help" and no usage is printed; `--export-format --headless` produces the misleading error "--export-format expects 'avif' ... got '--headless'". Silent for all string options, an error for validated ones.
 - **source**: `src/cli/cli.cpp:185-192 (NextArg), consumed by src/cli/cli.cpp:575, :585, :593, :602 and every Handle* special`
-- **notes**: Distinct from the missing-value entry, which only covers the flag being the LAST argv token. Note the contrast with tool_command.cpp, where ParseScene3dTest and ParseExtractQproJson do guard against a leading '-'.
+- **notes**: Separate from the missing-value entry, which covers only the flag being the last argv token. In tool_command.cpp, by contrast, ParseScene3dTest and ParseExtractQproJson do guard against a leading '-'.
 - **tests**: none
 
 ### 103. --variant <path>=<bitmap>
@@ -1231,5 +1231,5 @@ reader against the source (see README.md for method).
 - **source**: `src/cli/cli.cpp:510`
 - **notes**: Special handler registered at cli.cpp:556. Repeatable; each occurrence appends one override.
 - **tests**: `cli: variant and hide build slot overrides`
-- **audit correction**: Effect omits the hard precondition that slot overrides are applied only after a startup IFS mounts, and omits that they are written into the ACTIVE ifs config, creating the slot when it does not exist. -> Parsing is as recorded, but application happens in ApplyCliOverrides (boot.cpp:170-190), whose only call site is main.cpp:381 inside the successful-mount branch: it returns early if App::Global().ActiveIfs() is empty, then for each override finds the matching slot in MutConfig(active) or PUSHES A NEW ONE with default_bitmap = path, setting bitmap, visible and bitmap_override = !bitmap.empty(). Without a startup IFS that mounts, --variant does nothing.
+- **audit correction**: Effect omits the hard precondition that slot overrides are applied only after a startup IFS mounts, and omits that they are written into the active ifs config, creating the slot when it does not exist. -> Parsing is as recorded, but application happens in ApplyCliOverrides (boot.cpp:170-190), whose only call site is main.cpp:381 inside the successful-mount branch: it returns early if App::Global().ActiveIfs() is empty, then for each override finds the matching slot in MutConfig(active) or pushes a new one with default_bitmap = path, setting bitmap, visible and bitmap_override = !bitmap.empty(). Without a startup IFS that mounts, --variant does nothing.
 

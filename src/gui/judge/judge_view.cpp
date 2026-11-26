@@ -231,7 +231,7 @@ void Verdicts(const Model& model, std::string& note, Actions& out) {
         ImGui::SameLine();
         ImGui::TextDisabled("given under %s", AfpPose::MatrixLerpName(entry->matrix_lerp));
     }
-    ImGui::TextUnformatted("Note, saved as you type");
+    ImGui::TextUnformatted("Note (saved as you type)");
     if (ImGui::InputTextMultiline("##note", note.data(), note.capacity() + 1,
                                   ImVec2(-1.0F, Gui::Dpi::S(kNoteHeightDips)),
                                   ImGuiInputTextFlags_CallbackResize, ResizeString, &note)) {

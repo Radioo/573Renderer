@@ -19,8 +19,7 @@ void Window::TogglePlay() {
         return;
     }
     if (clip_.sprite && !symbol_shown_) {
-        statusBar()->showMessage(
-            tr("This sprite is not showing on its own, so there is nothing of it to play"));
+        statusBar()->showMessage(tr("Show this sprite on its own to play it"));
         return;
     }
     if (!file_ || animation_path_.empty() || frame_count_ == 0) return;

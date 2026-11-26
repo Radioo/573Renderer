@@ -230,10 +230,11 @@ std::string ProblemLines(const Doc::Clip& clip) {
 void HandleClick(Ctx& ctx, const Doc::Track& track, const Doc::Clip& clip, const Box& visible) {
     const ImGuiIO& io = ImGui::GetIO();
     if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("%s\nframes %d..%d%s%s\nclick selects, double-click opens properties",
-                          Editor::ClipSummary(clip, track.target).c_str(), clip.start,
-                          Editor::ClipEnd(clip, ctx.length) - 1, clip.muted ? "\nmuted" : "",
-                          ProblemLines(clip).c_str());
+        ImGui::SetTooltip(
+            "%s\nframes %d..%d%s%s\nClick to select, double-click to open its properties.",
+            Editor::ClipSummary(clip, track.target).c_str(), clip.start,
+            Editor::ClipEnd(clip, ctx.length) - 1, clip.muted ? "\nmuted" : "",
+            ProblemLines(clip).c_str());
     }
     if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
         ctx.editor->Select(clip.id);

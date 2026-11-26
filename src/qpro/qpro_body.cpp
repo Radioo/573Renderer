@@ -54,8 +54,8 @@ bool BodyCanvasOk(D3D9State& d3d, size_t count, Result& res) {
     LOG("Qpro", "BODY needs render size %dx%d (got %dx%d); skipping %zu bodies", kBodyCanvasW,
         kBodyCanvasH, ow, oh, count);
     res.failed += (int)count;
-    NoteIssue("all body parts -- render must be 520x704 "
-              "(Setup > \"qpro avatar\" preset, then re-Load)",
+    NoteIssue("all body parts: the render size must be 520x704. Pick the "
+              "\"520x704 (qpro avatar)\" preset on the Setup screen and load again.",
               true);
     return false;
 }
@@ -66,7 +66,7 @@ bool MountBodyMain(EngineSession& es, const std::string& game_dir, size_t count,
     if (!MountAndLoadIfs(main2)) {
         LOG("Qpro", "BODY: qp_main2 mount FAILED; skipping %zu bodies", count);
         res.failed += (int)count;
-        NoteIssue("all body parts -- qp_main2.ifs failed to mount", true);
+        NoteIssue("all body parts: qp_main2.ifs failed to mount", true);
         return false;
     }
     return true;
@@ -92,7 +92,7 @@ void ExtractOneBody(EngineSession& es, D3D9State& d3d, const BodyPassCtx& ctx,
     AfpD3D9::SetNextSlot(ctx.comp_base);
     uint32_t const pkg = AfpManager::LoadCompanion(es, path, Stem(part.ifs));
     if (pkg == 0U) {
-        Note(res, true, lbl, part.ifs, "LoadCompanion failed");
+        Note(res, true, lbl, part.ifs, "the .ifs failed to load");
         return;
     }
     if (!AfpManager::SwitchAnimation(es, "qp_motion", true)) {
@@ -126,8 +126,8 @@ void ExtractOneBody(EngineSession& es, D3D9State& d3d, const BodyPassCtx& ctx,
         res.images++;
     } else {
         char why[96];
-        snprintf(why, sizeof(why), "body render/write failed (got %dx%d, need %dx%d)", w, h,
-                 kBodyCanvasW, kBodyCanvasH);
+        snprintf(why, sizeof(why), "could not render or write the body (got %dx%d, need %dx%d)", w,
+                 h, kBodyCanvasW, kBodyCanvasH);
         Note(res, true, lbl, part.ifs, why);
     }
 

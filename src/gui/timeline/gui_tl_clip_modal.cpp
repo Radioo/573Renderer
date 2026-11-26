@@ -65,7 +65,7 @@ FieldEvent DrawGateChoices(const Doc::Document& document, Doc::Gate& gate) {
     }
     RowLabel("choice(s)");
     if (labels.empty()) {
-        ImGui::TextDisabled("the option declares no choices");
+        ImGui::TextDisabled("the option has no choices");
         return FieldEvent::None;
     }
     FieldEvent event = FieldEvent::None;
@@ -194,7 +194,7 @@ FieldEvent DrawGeneral(Doc::Document& document, Doc::Clip& clip, int length, int
     RowLabel("mute");
     if (ImGui::Checkbox("###tl_general_mute", &live->muted)) event = FieldEvent::Committed;
     ImGui::SameLine();
-    ImGui::TextDisabled("the evaluator skips this clip");
+    ImGui::TextDisabled("the clip is ignored");
     return event;
 }
 
@@ -314,7 +314,7 @@ void DrawFooter(Editor::State& editor) {
         editor.Undo();
     }
     ImGui::Separator();
-    ImGui::TextDisabled("Ctrl+Z inside the modal undoes field by field. Esc cancels.");
+    ImGui::TextDisabled("Ctrl+Z undoes one field at a time. Esc cancels.");
     ImGui::SameLine();
     if (ImGui::Button("Cancel###tl_clip_cancel") || CancelKeyPressed()) {
         Cancel(editor);
@@ -387,7 +387,7 @@ void RenderClipModal() {
     ImGui::Text("%s  %s", std::string(Doc::kCommandTypeNames[(std::size_t)type]).c_str(),
                 Editor::ClipSummary(*clip, target).c_str());
     ImGui::SameLine();
-    ImGui::TextDisabled("clip %s", clip->id.c_str());
+    ImGui::TextDisabled("Clip %s", clip->id.c_str());
     ImGui::Separator();
 
     Commit(editor, working, DrawBody(working, type, target));

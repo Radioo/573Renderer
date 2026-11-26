@@ -1,15 +1,15 @@
 # Export modal
 
-Every interaction on this surface. Generated inventory, cross-checked by a second
-reader against the source (see README.md for method).
+Every interaction on this surface. The inventory was generated and then checked
+against the source by a second reader (see README.md for the method).
 
 | # | id | control | input | tooltip | tests |
 |---|---|---|---|---|---|
 | 1 | `blend-loop-checkbox` | "Blend loop seam" checkbox | checkbox | yes | 3 |
-| 2 | `hw-accel-checkbox` | "HW accel" checkbox (live) | checkbox | yes | 3 |
-| 3 | `hw-accel-checkbox-disabled` | "HW accel" checkbox (placeholder, always-unchecked) | checkbox | yes | 3 |
+| 2 | `hw-accel-checkbox` | "Hardware encoding" checkbox (live) | checkbox | yes | 3 |
+| 3 | `hw-accel-checkbox-disabled` | "Hardware encoding" checkbox (placeholder, always-unchecked) | checkbox | yes | 3 |
 | 4 | `limit-frames-checkbox` | "Limit frames" checkbox | checkbox | yes | 3 |
-| 5 | `transparent-bg-checkbox` | "Transparent bg" checkbox | checkbox | yes | 3 |
+| 5 | `transparent-bg-checkbox` | "Transparent background" checkbox | checkbox | yes | 3 |
 | 6 | `format-combo-open` | Output format combo box | combo-select | yes | 9 |
 | 7 | `res-preset-combo-open` | Output resolution preset combo | combo-select | yes | 5 |
 | 8 | `bg-color-picker` | Colour picker popup opened from the background swatch | drag | - | **none** |
@@ -38,7 +38,7 @@ reader against the source (see README.md for method).
 | 31 | `res-preset-tooltip` | Hover tooltip on the resolution preset combo | hover | yes | 5 |
 | 32 | `scale-button-tooltip` | Hover tooltip on a scale-multiplier button | hover | yes | **none** |
 | 33 | `stem-input-tooltip` | Hover tooltip on the filename stem field | hover | yes | 5 |
-| 34 | `transparent-bg-tooltip` | Hover tooltip on "Transparent bg" | hover | yes | 3 |
+| 34 | `transparent-bg-tooltip` | Hover tooltip on "Transparent background" | hover | yes | 3 |
 | 35 | `escape-clears-active-item` *(audit)* | Escape key while a widget in the modal is active | key | - | **none** |
 | 36 | `modal-escape-close` | Escape key while the Export modal has focus | key | - | **none** |
 | 37 | `modal-keyboard-nav` | Tab / Shift+Tab / arrow-key navigation between the modal's widgets | key | - | **none** |
@@ -70,8 +70,8 @@ reader against the source (see README.md for method).
 | 63 | `blend-frames-input` | "Blend frames" InputInt (text portion) | text-entry | yes | 3 |
 | 64 | `crop-xywh-input` | Crop x / y / w / h InputInt | text-entry | - | 1 |
 | 65 | `fps-input` | fps InputInt (text portion) | text-entry | yes | 3 |
-| 66 | `keyframe-input` | "keyframe interval" InputInt (text portion) | text-entry | yes | 2 |
-| 67 | `loop-count-input` | "Continuous loop count" InputInt (text portion) | text-entry | yes | 3 |
+| 66 | `keyframe-input` | "Keyframe interval" InputInt (text portion) | text-entry | yes | 2 |
+| 67 | `loop-count-input` | "Loops to capture" InputInt (text portion) | text-entry | yes | 3 |
 | 68 | `max-frames-input` | "frames" InputInt (max frame count, text portion) | text-entry | - | 3 |
 | 69 | `quality-slider-ctrl-click` | quality SliderInt ctrl+click / double-click to type a value | text-entry | - | 3 |
 | 70 | `res-height-input` | Output height InputInt | text-entry | - | 2 |
@@ -91,15 +91,15 @@ reader against the source (see README.md for method).
 - **effect**: Toggles g_blend_loop (posted as r.blend_loop) and reveals/hides the "Blend frames" input on the same line.
 - **source**: `src/gui/gui_export_panel.cpp:201`
 - **tooltip**: yes
-- **notes**: Gate for blend-frames-input.
+- **notes**: The blend-frames-input entry depends on this checkbox.
 - **tests**: `export modal blend frame count hides while the seam is off`, `export modal controls all explain themselves`, `export modal loop count and blend seam reach the request`
 
-### 2. "HW accel" checkbox (live)
+### 2. "Hardware encoding" checkbox (live)
 
 - **id**: `hw-accel-checkbox`
 - **input**: checkbox
 - **path**: `Export/HW accel##exp_hw`
-- **precondition**: VideoEncoder::HardwareAvailable(MediaSink::HardwareProbeFormat(current_format)) is true AND the format is AVIF, WebM_AV1 or MP4_H264
+- **precondition**: VideoEncoder::HardwareAvailable(MediaSink::HardwareProbeFormat(current_format)) is true and the format is AVIF, WebM_AV1 or MP4_H264
 - **disabled when**: busy
 - **effect**: Toggles g_prefer_hw; posted as r.prefer_hardware = g_prefer_hw && hw_applies in the StartExport request.
 - **source**: `src/gui/gui_export_panel.cpp:514`
@@ -107,17 +107,17 @@ reader against the source (see README.md for method).
 - **notes**: Default true.
 - **tests**: `export modal controls all explain themselves`, `export modal disables hardware encode for software-only formats`, `hardware-accel tooltip names the reason for the chosen format`
 
-### 3. "HW accel" checkbox (placeholder, always-unchecked)
+### 3. "Hardware encoding" checkbox (placeholder, always-unchecked)
 
 - **id**: `hw-accel-checkbox-disabled`
 - **input**: checkbox
 - **path**: `Export/HW accel##exp_hw`
-- **precondition**: Hardware is unavailable OR the format cannot use hardware (WebM_VP9, WebP_Anim, PNG_Sequence, MP4_HEVC_Alpha)
+- **precondition**: Hardware is unavailable or the format cannot use hardware (WebM_VP9, WebP_Anim, PNG_Sequence, MP4_HEVC_Alpha)
 - **disabled when**: always (this variant only exists in the disabled branch)
 - **effect**: A separate ImGui::Checkbox bound to a local bool tmp=false is drawn inside BeginDisabled/EndDisabled; clicking it does nothing and g_prefer_hw is untouched.
 - **source**: `src/gui/gui_export_panel.cpp:511`
 - **tooltip**: yes
-- **notes**: Distinct code path from the enabled checkbox; the two share the same ImGui ID.
+- **notes**: A separate code path from the enabled checkbox; the two share the same ImGui ID.
 - **tests**: `export modal controls all explain themselves`, `export modal disables hardware encode for software-only formats`, `hardware-accel tooltip names the reason for the chosen format`
 
 ### 4. "Limit frames" checkbox
@@ -132,7 +132,7 @@ reader against the source (see README.md for method).
 - **tooltip**: yes
 - **tests**: `export modal controls all explain themselves`, `export modal frame limit is applied only while enabled`, `scenario: configure an export from the keyboard shortcut and start it`
 
-### 5. "Transparent bg" checkbox
+### 5. "Transparent background" checkbox
 
 - **id**: `transparent-bg-checkbox`
 - **input**: checkbox
@@ -190,7 +190,7 @@ reader against the source (see README.md for method).
 - **path**: `Export/##exp_bg_color`
 - **precondition**: Modal open, g_bg_transparent is false; either dragging away from ##exp_bg_color while it is active, or dropping an ImGui colour payload onto it
 - **disabled when**: g_bg_transparent is true or busy; also suppressed if ImGuiColorEditFlags_NoDragDrop were set, which it is not here
-- **effect**: As a source, ColorButton begins a drag-drop source carrying IMGUI_PAYLOAD_TYPE_COLOR_3F/_4F with the current colour. As a target, ColorEdit4 accepts those payloads and memcpy's them straight into g_bg_rgb, marking the value changed - so a colour dragged from any other ImGui colour widget overwrites the export background colour (and therefore r.bg_r/g/b).
+- **effect**: As a source, ColorButton begins a drag-drop source carrying IMGUI_PAYLOAD_TYPE_COLOR_3F/_4F with the current colour. As a target, ColorEdit4 accepts those payloads and memcpy's them straight into g_bg_rgb, marking the value changed, so a colour dragged from any other ImGui colour widget overwrites the export background colour (and therefore r.bg_r/g/b).
 - **source**: `src/gui/gui_export_panel.cpp:500`
 - **notes**: Verified in vendored imgui_widgets.cpp:6477-6482 (source) and the ColorEdit4 drag-drop target block that calls AcceptDragDropPayload(IMGUI_PAYLOAD_TYPE_COLOR_3F/4F). The inventory mentions the drop case only in a free-text note on bg-color-picker; there is no record for it and none at all for the drag-source half.
 - **tests**: none
@@ -200,7 +200,7 @@ reader against the source (see README.md for method).
 - **id**: `modal-scrollbar-drag` *(audit)*
 - **input**: drag
 - **path**: `Export/#SCROLLY`
-- **precondition**: Modal open AND content height exceeds the vp->WorkSize.y - 48 cap set at line 627 (typically Advanced expanded on a short screen)
+- **precondition**: Modal open and content height exceeds the vp->WorkSize.y - 48 cap set at line 627 (typically Advanced expanded on a short screen)
 - **disabled when**: never (the scrollbar is drawn by the window, outside the BeginDisabled(busy) block, so it still works during an export)
 - **effect**: Dragging the scrollbar grab scrolls the popup's content region, same as the wheel. No application state changes. Clicking the scrollbar track pages the view.
 - **source**: `src/gui/gui_export_panel.cpp:627`
@@ -215,7 +215,7 @@ reader against the source (see README.md for method).
 - **precondition**: Modal open
 - **effect**: No lasting effect: ImGui::SetNextWindowPos(vp->GetCenter(), ImGuiCond_Always, {0.5,0.5}) re-centres the window every frame, so any drag is undone on the next frame.
 - **source**: `src/gui/gui_export_panel.cpp:626`
-- **notes**: Listed because it is a gesture a user will attempt; the Always condition makes it a no-op.
+- **notes**: Listed because users will try it; the Always condition undoes it.
 - **tests**: none
 
 ### 12. Background colour swatch built-in hover tooltip
@@ -224,11 +224,11 @@ reader against the source (see README.md for method).
 - **input**: hover
 - **path**: `Export/##exp_bg_color`
 - **precondition**: Modal open, g_bg_transparent is false (swatch not disabled), hovering ##exp_bg_color
-- **disabled when**: g_bg_transparent is true (BeginDisabled at line 498) or busy - ColorButton gates the tooltip on IsItemHovered(ImGuiHoveredFlags_ForTooltip), which returns false for disabled items
-- **effect**: ImGui's ColorButton draws its own tooltip because ImGuiColorEditFlags_NoTooltip is NOT among the flags passed at line 501 (only NoInputs \| NoLabel). The tooltip shows a large colour preview plus the float and 8-bit RGB values and the hex code of g_bg_rgb. No application state changes.
+- **disabled when**: g_bg_transparent is true (BeginDisabled at line 498) or busy. ColorButton shows the tooltip only when IsItemHovered(ImGuiHoveredFlags_ForTooltip) is true, and that returns false for disabled items
+- **effect**: ImGui's ColorButton draws its own tooltip because ImGuiColorEditFlags_NoTooltip is not among the flags passed at line 501 (only NoInputs \| NoLabel). The tooltip shows a large colour preview plus the float and 8-bit RGB values and the hex code of g_bg_rgb. No application state changes.
 - **source**: `src/gui/gui_export_panel.cpp:500`
 - **tooltip**: yes
-- **notes**: Verified in vendored imgui_widgets.cpp:6490 (ColorButton -> ColorTooltip). The inventory has NO hover entry for this widget at all; it is the only interactive widget in the file whose tooltip comes from ImGui rather than an explicit SetTooltip.
+- **notes**: Verified in vendored imgui_widgets.cpp:6490 (ColorButton -> ColorTooltip). The inventory has no hover entry for this widget at all; it is the only interactive widget in the file whose tooltip comes from ImGui rather than an explicit SetTooltip.
 - **tests**: none
 
 ### 13. Hover tooltip on "Blend frames"
@@ -297,22 +297,22 @@ reader against the source (see README.md for method).
 - **id**: `hw-tooltip-av1-nvenc`
 - **input**: hover
 - **path**: `Export/HW accel##exp_hw`
-- **precondition**: Hovering HW accel while hw_available is true AND format is AVIF or WebM_AV1
+- **precondition**: Hovering HW accel while hw_available is true and format is AVIF or WebM_AV1
 - **disabled when**: busy
 - **effect**: ImGui::SetTooltip describing av1_nvenc as ~50x faster than libaom-av1, noting AVIF alpha stays on software and that it falls back to software if NVENC init fails.
 - **source**: `src/gui/gui_export_panel.cpp:477`
 - **tooltip**: yes
 - **notes**: Fallback else-branch; reachable for AVIF and WebM_AV1.
 - **tests**: `export modal controls all explain themselves`, `export modal disables hardware encode for software-only formats`, `hardware-accel tooltip names the reason for the chosen format`
-- **audit correction**: Incomplete/wrong precondition: line 477 is a bare else, so it also catches hw_available == true with current_format == MP4_HEVC_Alpha (HardwareProbeFormat maps HEVC_Alpha to AVIF, so hw_available can be true), and MP4_HEVC_Alpha fails format_can_use_hw at lines 505-506, meaning the checkbox is in the disabled placeholder branch and the tooltip is unreachable in that case. The entry claims the branch is simply 'reachable'. -> Precondition: hovering HW accel while hw_available is true AND the format is not VP9/WebP/PNG - i.e. AVIF, WebM_AV1 (reachable, checkbox enabled) or MP4_HEVC_Alpha (unreachable, checkbox disabled because format_can_use_hw is false, and IsItemHovered returns false for disabled items).
+- **audit correction**: Incomplete/wrong precondition: line 477 is a bare else, so it also catches hw_available == true with current_format == MP4_HEVC_Alpha (HardwareProbeFormat maps HEVC_Alpha to AVIF, so hw_available can be true), and MP4_HEVC_Alpha fails format_can_use_hw at lines 505-506, meaning the checkbox is in the disabled placeholder branch and the tooltip is unreachable in that case. The entry claims the branch is simply 'reachable'. -> Precondition: hovering HW accel while hw_available is true and the format is not VP9/WebP/PNG, so AVIF, WebM_AV1 (reachable, checkbox enabled) or MP4_HEVC_Alpha (unreachable, checkbox disabled because format_can_use_hw is false, and IsItemHovered returns false for disabled items).
 
 ### 19. Hover tooltip on HW accel: H.264 with no NVENC
 
 - **id**: `hw-tooltip-h264-no-nvenc`
 - **input**: hover
 - **path**: `Export/HW accel##exp_hw`
-- **precondition**: Hovering HW accel while hw_available is false AND format is MP4_H264
-- **disabled when**: the checkbox is in its disabled placeholder branch in this state, and ImGui::IsItemHovered() returns false for disabled items, so this tooltip is effectively unreachable
+- **precondition**: Hovering HW accel while hw_available is false and format is MP4_H264
+- **disabled when**: the checkbox is in its disabled placeholder branch in this state, and ImGui::IsItemHovered() returns false for disabled items, so in practice this tooltip never shows
 - **effect**: ImGui::SetTooltip stating h264_nvenc is unavailable and that this ffmpeg build has no software H.264 encoder.
 - **source**: `src/gui/gui_export_panel.cpp:446`
 - **tooltip**: yes
@@ -324,7 +324,7 @@ reader against the source (see README.md for method).
 - **id**: `hw-tooltip-h264-nvenc`
 - **input**: hover
 - **path**: `Export/HW accel##exp_hw`
-- **precondition**: Hovering HW accel while hw_available is true AND format is MP4_H264
+- **precondition**: Hovering HW accel while hw_available is true and format is MP4_H264
 - **disabled when**: busy
 - **effect**: ImGui::SetTooltip describing h264_nvenc as fast hardware encode available on most NVIDIA GPUs, opaque only, and required because there is no software H.264 encoder.
 - **source**: `src/gui/gui_export_panel.cpp:471`
@@ -337,7 +337,7 @@ reader against the source (see README.md for method).
 - **id**: `hw-tooltip-png`
 - **input**: hover
 - **path**: `Export/HW accel##exp_hw`
-- **precondition**: Hovering HW accel while hw_available is true AND format is PNG_Sequence
+- **precondition**: Hovering HW accel while hw_available is true and format is PNG_Sequence
 - **disabled when**: same disabled-item hover caveat
 - **effect**: ImGui::SetTooltip stating PNG sequence writes lossless per-frame files through WIC with no encoder, no NVENC and no quality slider.
 - **source**: `src/gui/gui_export_panel.cpp:466`
@@ -361,7 +361,7 @@ reader against the source (see README.md for method).
 - **id**: `hw-tooltip-vp9`
 - **input**: hover
 - **path**: `Export/HW accel##exp_hw`
-- **precondition**: Hovering HW accel while hw_available is true AND format is WebM_VP9
+- **precondition**: Hovering HW accel while hw_available is true and format is WebM_VP9
 - **disabled when**: same disabled-item hover caveat (VP9 never satisfies hw_applies)
 - **effect**: ImGui::SetTooltip stating VP9 has no hardware encoder path on NVIDIA desktop GPUs and suggesting AVIF or WebM-AV1.
 - **source**: `src/gui/gui_export_panel.cpp:456`
@@ -373,7 +373,7 @@ reader against the source (see README.md for method).
 - **id**: `hw-tooltip-webp`
 - **input**: hover
 - **path**: `Export/HW accel##exp_hw`
-- **precondition**: Hovering HW accel while hw_available is true AND format is WebP_Anim
+- **precondition**: Hovering HW accel while hw_available is true and format is WebP_Anim
 - **disabled when**: same disabled-item hover caveat
 - **effect**: ImGui::SetTooltip stating libwebp_anim is software only because VP8 has no consumer-GPU encoder.
 - **source**: `src/gui/gui_export_panel.cpp:461`
@@ -399,7 +399,7 @@ reader against the source (see README.md for method).
 - **path**: `Export/Limit frames##exp_limit`
 - **precondition**: Hovering Limit frames##exp_limit
 - **disabled when**: busy
-- **effect**: ImGui::SetTooltip explaining that ON stops the export after a fixed captured-frame count (default 60) while OFF runs to the master animation's natural end-of-timeline, plus use cases.
+- **effect**: ImGui::SetTooltip explaining that when on it stops the export after a fixed captured-frame count (default 60), and when off it runs to the master animation's natural end-of-timeline, plus use cases.
 - **source**: `src/gui/gui_export_panel.cpp:162`
 - **tooltip**: yes
 - **tests**: `export modal controls all explain themselves`, `export modal frame limit is applied only while enabled`, `scenario: configure an export from the keyboard shortcut and start it`
@@ -426,7 +426,7 @@ reader against the source (see README.md for method).
 - **effect**: ImGui::SetTooltip explaining the encoder receives exactly this many frames before auto-finalising, counted post-capture.
 - **source**: `src/gui/gui_export_panel.cpp:183`
 - **tooltip**: yes
-- **notes**: The IsItemHovered() at line 183 runs AFTER ImGui::EndDisabled() at line 182, so "last item" is the seconds-preview TextDisabled, not the frames InputInt - hovering the input itself shows nothing.
+- **notes**: The IsItemHovered() at line 183 runs after ImGui::EndDisabled() at line 182, so "last item" is the seconds-preview TextDisabled, not the frames InputInt, and hovering the input itself shows nothing.
 - **tests**: none
 
 ### 29. Hover tooltip on "Open folder"
@@ -474,7 +474,7 @@ reader against the source (see README.md for method).
 - **effect**: ImGui::SetTooltip with that button's per-entry .tip text explaining the resulting size class and that aspect ratio is preserved.
 - **source**: `src/gui/gui_export_panel.cpp:356`
 - **tooltip**: yes
-- **notes**: ONE entry covering 3 distinct tooltip texts, one per loop iteration.
+- **notes**: One entry covering 3 distinct tooltip texts, one per loop iteration.
 - **tests**: none
 
 ### 33. Hover tooltip on the filename stem field
@@ -489,14 +489,14 @@ reader against the source (see README.md for method).
 - **tooltip**: yes
 - **tests**: `export modal PNG sequence writes a directory path`, `export modal controls all explain themselves`, `export modal filename and format drive the output path`, `export modal opens with a stem derived from the active IFS` (+1 more)
 
-### 34. Hover tooltip on "Transparent bg"
+### 34. Hover tooltip on "Transparent background"
 
 - **id**: `transparent-bg-tooltip`
 - **input**: hover
 - **path**: `Export/Transparent bg`
 - **precondition**: Hovering the Transparent bg checkbox
 - **disabled when**: busy
-- **effect**: ImGui::SetTooltip explaining that ON exports a real alpha channel and OFF composites a solid colour under the animation for viewers that handle animated AVIF transparency poorly.
+- **effect**: ImGui::SetTooltip explaining that when on it exports a real alpha channel, and when off it composites a solid colour under the animation for viewers that handle animated AVIF transparency poorly.
 - **source**: `src/gui/gui_export_panel.cpp:491`
 - **tooltip**: yes
 - **tests**: `export modal background toggle and colour reach the request`, `export modal controls all explain themselves`, `export modal disables the colour picker while the bg stays transparent`
@@ -506,10 +506,10 @@ reader against the source (see README.md for method).
 - **id**: `escape-clears-active-item` *(audit)*
 - **input**: key
 - **path**: `Export`
-- **precondition**: Modal open AND g.ActiveId != 0 (a text field is being edited, a slider is being dragged, or a button is held)
-- **effect**: NavUpdateCancelRequest takes the 'g.ActiveId != 0' branch and calls ClearActiveID(): an in-progress InputText edit is reverted to its pre-edit value, a slider drag is released, a held button is released. The popup is NOT closed and no export state changes.
+- **precondition**: Modal open and g.ActiveId != 0 (a text field is being edited, a slider is being dragged, or a button is held)
+- **effect**: NavUpdateCancelRequest takes the 'g.ActiveId != 0' branch and calls ClearActiveID(): an in-progress InputText edit is reverted to its pre-edit value, a slider drag is released, a held button is released. The popup is not closed and no export state changes.
 - **source**: `src/gui/gui_export_panel.cpp:628`
-- **notes**: This is the real Escape behaviour on this surface and replaces the inventory's modal-escape-close, which claims Escape dismisses the popup. Verified in vendored imgui.cpp NavUpdateCancelRequest (the ActiveId branch, and the popup-closing branch that explicitly excludes ImGuiWindowFlags_Modal).
+- **notes**: This is what Escape actually does on this surface; this entry replaces the inventory's modal-escape-close, which claims Escape dismisses the popup. Verified in vendored imgui.cpp NavUpdateCancelRequest (the ActiveId branch, and the popup-closing branch that explicitly excludes ImGuiWindowFlags_Modal).
 - **tests**: none
 
 ### 36. Escape key while the Export modal has focus
@@ -522,7 +522,7 @@ reader against the source (see README.md for method).
 - **source**: `src/gui/gui_export_panel.cpp:628`
 - **notes**: Handled by ImGui core, not by code in this file; there is no explicit IsKeyPressed in gui_export_panel.cpp.
 - **tests**: none
-- **audit correction**: Hallucinated effect: Escape does NOT close this modal. ImGui's NavUpdateCancelRequest closes a popup only when the top popup is NOT ImGuiWindowFlags_Modal, and BeginPopupModal (line 628) forces that flag; p_open is nullptr so there is also no title-bar close button. Verified in vendor/vcpkg/buildtrees/imgui/src/v1.92.7-b588f89316.clean/imgui.cpp (NavUpdateCancelRequest: the popup branch is guarded by !(g.OpenPopupStack.back().Window->Flags & ImGuiWindowFlags_Modal)). The entry's precondition also wrongly implies Escape works whenever no text field is capturing input. -> Escape has NO closing effect on the Export modal. Its only effect is ClearActiveID(): it reverts an in-progress text edit or releases an active slider/button (see the new escape-clears-active-item record). The modal can be dismissed only by the Close button (line 570), the Start export button (line 562), or the Pick region path (line 663). Replace modal-escape-close with escape-clears-active-item.
+- **audit correction**: Wrong effect: Escape does not close this modal. ImGui's NavUpdateCancelRequest closes a popup only when the top popup is not ImGuiWindowFlags_Modal, and BeginPopupModal (line 628) forces that flag; p_open is nullptr so there is also no title-bar close button. Verified in vendor/vcpkg/buildtrees/imgui/src/v1.92.7-b588f89316.clean/imgui.cpp (NavUpdateCancelRequest: the popup branch is guarded by !(g.OpenPopupStack.back().Window->Flags & ImGuiWindowFlags_Modal)). The entry's precondition also wrongly implies Escape works whenever no text field is capturing input. -> Escape does not close the Export modal. Its only effect is ClearActiveID(): it reverts an in-progress text edit or releases an active slider/button (see the new escape-clears-active-item record). The modal can be dismissed only by the Close button (line 570), the Start export button (line 562), or the Pick region path (line 663). Replace modal-escape-close with escape-clears-active-item.
 
 ### 37. Tab / Shift+Tab / arrow-key navigation between the modal's widgets
 
@@ -533,7 +533,7 @@ reader against the source (see README.md for method).
 - **disabled when**: widgets inside the BeginDisabled(busy) block (everything except Start/Cancel/Close) are skipped while an export is Capturing or Encoding
 - **effect**: Moves ImGui keyboard focus between the widgets listed below; activating a focused widget with Space/Enter has the same effect as clicking it.
 - **source**: `src/gui/gui_export_panel.cpp:628`
-- **notes**: ImGui built-in nav; no custom key handling exists in this file.
+- **notes**: Built-in ImGui nav; this file has no custom key handling.
 - **tests**: none
 
 ### 38. Text-editing keymap inside every InputInt on this surface
@@ -543,9 +543,9 @@ reader against the source (see README.md for method).
 - **path**: `Export/fps##exp_fps, Export/keyframe interval##exp_keyint, Export/frames##exp_maxf, Export/Continuous loop count##exp_loops, Export/Blend frames##exp_blendN, Export/##exp_w, Export/##exp_h, Export/x##crop_x, Export/y##crop_y, Export/w##crop_w, Export/h##crop_h`
 - **precondition**: Modal open and one of the InputInt text boxes is active: fps##exp_fps, keyframe interval##exp_keyint, frames##exp_maxf, Continuous loop count##exp_loops, Blend frames##exp_blendN, ##exp_w, ##exp_h, x##crop_x, y##crop_y, w##crop_w, h##crop_h
 - **disabled when**: busy; plus each field's own gate (frames##exp_maxf needs g_limit_frames, Blend frames##exp_blendN needs g_blend_loop, keyframe interval needs MediaSink::UsesKeyframeInterval, all Advanced fields need the header expanded)
-- **effect**: Each InputInt is an InputText underneath, so it accepts the same editing keymap as the stem field (selection, clipboard, undo, word motions, double/triple-click select, drag-select). ImGui::InputScalar unconditionally ORs ImGuiInputTextFlags_AutoSelectAll into the flags, so clicking into ANY of these fields selects the whole value for overtyping - not just the four that pass the flag explicitly. None of them use EnterReturnsTrue, so the value is parsed and applied on every keystroke: an intermediate value is written and clamped mid-typing (typing 800 into ##exp_w momentarily sets g_out_w to 64 via the [64,8192] clamp at line 312 while the visible text still reads 8). Escape reverts the field's text and clears the active item without closing the modal.
+- **effect**: Each InputInt is an InputText underneath, so it accepts the same editing keymap as the stem field (selection, clipboard, undo, word motions, double/triple-click select, drag-select). ImGui::InputScalar unconditionally ORs ImGuiInputTextFlags_AutoSelectAll into the flags, so clicking into any of these fields selects the whole value for overtyping, not only in the four that pass the flag explicitly. None of them use EnterReturnsTrue, so the value is parsed and applied on every keystroke: an intermediate value is written and clamped mid-typing (typing 800 into ##exp_w momentarily sets g_out_w to 64 via the [64,8192] clamp at line 312 while the visible text still reads 8). Escape reverts the field's text and clears the active item without closing the modal.
 - **source**: `src/gui/gui_export_panel.cpp:113`
-- **notes**: ONE entry covering all 11 InputInt text boxes. AutoSelectAll-is-always-on verified at vendored imgui_widgets.cpp:3804; the inventory presents AutoSelectAll as a distinguishing property of ##exp_w/##exp_h/crop only.
+- **notes**: One entry covering all 11 InputInt text boxes. AutoSelectAll-is-always-on verified at vendored imgui_widgets.cpp:3804; the inventory presents AutoSelectAll as a distinguishing property of ##exp_w/##exp_h/crop only.
 - **tests**: `export modal crop inputs reach the request`
 
 ### 39. Filename stem field text-editing keymap and mouse selection
@@ -558,7 +558,7 @@ reader against the source (see README.md for method).
 - **effect**: ImGui::InputText is submitted with no flags at line 64, so the full editing keymap is live on g_stem_buf: left/right/up/down, Home/End, Ctrl+left/right by word, shift+any of those to extend the selection, Ctrl+A select all, Ctrl+C/X/V clipboard (via the platform clipboard handler), Ctrl+Z / Ctrl+Y undo-redo, Delete/Backspace (Ctrl+Backspace deletes a word), plus double-click to select a word, triple-click to select the line, and click-drag to select a range. Enter or Tab deactivates and commits; Escape reverts the buffer to its pre-edit contents. Every keystroke writes g_stem_buf directly, so the value is committed continuously (no EnterReturnsTrue).
 - **source**: `src/gui/gui_export_panel.cpp:64`
 - **tooltip**: yes
-- **notes**: The inventory's stem-input entry records the field but only as generic 'text-entry'; the audit checklist calls out that text fields accept the full editing keymap. Escape here is consumed by the active item and does NOT dismiss the modal (see the modal-escape-close correction).
+- **notes**: The inventory's stem-input entry records the field but only as generic 'text-entry'; the audit checklist calls out that text fields accept the full editing keymap. Escape here is consumed by the active item and does not dismiss the modal (see the modal-escape-close correction).
 - **tests**: `export modal PNG sequence writes a directory path`, `export modal controls all explain themselves`, `export modal filename and format drive the output path`, `export modal opens with a stem derived from the active IFS` (+1 more)
 
 ### 40. "Advanced" collapsing header
@@ -570,7 +570,7 @@ reader against the source (see README.md for method).
 - **disabled when**: busy
 - **effect**: Expands/collapses the Advanced section. While collapsed, DrawKeyframeIntervalControl, DrawFrameLimitControls, DrawLoopControls and DrawCrop are not drawn at all, so none of their widgets exist and close_for_pick stays false.
 - **source**: `src/gui/gui_export_panel.cpp:648`
-- **notes**: Gate for every Advanced-section entry below. Collapsing also shrinks the auto-resized popup.
+- **notes**: Every Advanced-section entry below depends on this header. Collapsing also shrinks the auto-resized popup.
 - **tests**: `export modal controls all explain themselves`, `export modal stays inside a short window and keeps its footer`, `scenario: arm a crop in the modal, draw it on the render window, export it`, `scenario: configure an export from the keyboard shortcut and start it`
 
 ### 41. Background colour swatch (ColorEdit3, NoInputs + NoLabel)
@@ -578,7 +578,7 @@ reader against the source (see README.md for method).
 - **id**: `bg-color-swatch`
 - **input**: left-click
 - **path**: `Export/##exp_bg_color`
-- **precondition**: Modal open AND g_bg_transparent is false
+- **precondition**: Modal open and g_bg_transparent is false
 - **disabled when**: g_bg_transparent is true (ImGui::BeginDisabled at line 498) or busy
 - **effect**: Clicking the swatch opens ImGui's colour picker popup bound to g_bg_rgb[3]; the values become r.bg_r/r.bg_g/r.bg_b in the StartExport request.
 - **source**: `src/gui/gui_export_panel.cpp:500`
@@ -590,12 +590,12 @@ reader against the source (see README.md for method).
 - **id**: `blend-frames-step-buttons`
 - **input**: left-click
 - **path**: `Export/Blend frames##exp_blendN/-  and  Export/Blend frames##exp_blendN/+`
-- **precondition**: Advanced expanded AND g_blend_loop is true (step=1, step_fast=5)
+- **precondition**: Advanced expanded and g_blend_loop is true (step=1, step_fast=5)
 - **disabled when**: busy; hidden when g_blend_loop is false
 - **effect**: Adjusts g_blend_frames by 1 per click, or 5 with Ctrl held, and clamps to [0,240].
 - **source**: `src/gui/gui_export_panel.cpp:212`
 - **tests**: none
-- **audit correction**: has_tooltip is wrong (false): the IsItemHovered() at line 214 covers the entire InputScalar group for Blend frames##exp_blendN, including its -/+ buttons and label. -> has_tooltip: true - hovering the -/+ buttons shows the blend-frames tooltip from line 215. (By contrast max-frames-step-buttons is correctly false, because the IsItemHovered() at line 183 follows the seconds-preview TextDisabled, not the InputInt group.)
+- **audit correction**: has_tooltip is wrong (false): the IsItemHovered() at line 214 covers the entire InputScalar group for Blend frames##exp_blendN, including its -/+ buttons and label. -> has_tooltip: true; hovering the -/+ buttons shows the blend-frames tooltip from line 215. (By contrast max-frames-step-buttons is correctly false, because the IsItemHovered() at line 183 follows the seconds-preview TextDisabled, not the InputInt group.)
 
 ### 43. "Cancel" button
 
@@ -614,7 +614,7 @@ reader against the source (see README.md for method).
 - **id**: `close-modal-button`
 - **input**: left-click
 - **path**: `Export/Close`
-- **precondition**: Modal open (always available, including while busy - it is outside the BeginDisabled block)
+- **precondition**: Modal open (always available, including while busy, because it is outside the BeginDisabled block)
 - **effect**: ImGui::CloseCurrentPopup(). Does not cancel a running export and posts no command.
 - **source**: `src/gui/gui_export_panel.cpp:570`
 - **notes**: Size 90x0, SameLine after Start/Cancel. The status text or progress bar follows on the same line.
@@ -637,7 +637,7 @@ reader against the source (see README.md for method).
 - **id**: `crop-pick-button`
 - **input**: left-click
 - **path**: `Export/Pick region##crop_pick`
-- **precondition**: Advanced expanded AND state.GetCropPickMode() is false
+- **precondition**: Advanced expanded and state.GetCropPickMode() is false
 - **disabled when**: busy
 - **effect**: Calls state.SetCropPickMode(true) and returns close_for_pick=true, which sets g_reopen_after_pick=true and calls ImGui::CloseCurrentPopup() so the user can drag a rectangle on the render window; the modal reopens automatically once crop pick mode clears.
 - **source**: `src/gui/gui_export_panel.cpp:386`
@@ -650,7 +650,7 @@ reader against the source (see README.md for method).
 - **id**: `crop-picking-cancel-button`
 - **input**: left-click
 - **path**: `Export/Picking...##crop_pick`
-- **precondition**: Advanced expanded AND state.GetCropPickMode() is true
+- **precondition**: Advanced expanded and state.GetCropPickMode() is true
 - **disabled when**: busy
 - **effect**: Calls state.SetCropPickMode(false), disarming crop-selection mode without closing the modal.
 - **source**: `src/gui/gui_export_panel.cpp:381`
@@ -667,7 +667,7 @@ reader against the source (see README.md for method).
 - **disabled when**: busy
 - **effect**: ImGui::Selectable sets g_format_idx = i. That immediately changes current_format for the rest of the frame, which drives: the shown extension suffix, whether the keyframe-interval control exists (MediaSink::UsesKeyframeInterval), whether HW accel is applicable, which HW tooltip branch is used, the VideoEncoder::HardwareAvailable probe, and r.format in the posted App::Cmd::StartExport request.
 - **source**: `src/gui/gui_export_panel.cpp:82`
-- **notes**: ONE entry for a loop over i in [0, MediaSink::kFormatCount) = 7 rows: AVIF, WebM_VP9, WebM_AV1, WebP_Anim, PNG_Sequence, MP4_H264, MP4_HEVC_Alpha (media/media_format.h:8-17). The currently selected row also gets ImGui::SetItemDefaultFocus().
+- **notes**: One entry for a loop over i in [0, MediaSink::kFormatCount) = 7 rows: AVIF, WebM_VP9, WebM_AV1, WebP_Anim, PNG_Sequence, MP4_H264, MP4_HEVC_Alpha (media/media_format.h:8-17). The currently selected row also gets ImGui::SetItemDefaultFocus().
 - **tests**: none
 
 ### 49. fps InputInt -/+ step buttons
@@ -681,7 +681,7 @@ reader against the source (see README.md for method).
 - **source**: `src/gui/gui_export_panel.cpp:113`
 - **notes**: ImGui-generated buttons inside InputScalar; they also auto-repeat when held.
 - **tests**: none
-- **audit correction**: has_tooltip is wrong (false). ImGui::InputScalar with a non-zero step wraps the text box, the -/+ buttons and the visible label in BeginGroup()/EndGroup(); EndGroup re-emits the whole group as the last item (ItemAdd(group_bb, 0, ...)), so the IsItemHovered() at line 115 is true when the cursor is over the - or + button or the 'fps' label, not just the text box. Verified at vendored imgui_widgets.cpp:3812 and imgui.cpp EndGroup (ItemSize/ItemAdd on group_bb). -> has_tooltip: true - hovering the -/+ step buttons (or the 'fps' label) shows the same fps tooltip from line 116, because IsItemHovered() after InputInt refers to the whole InputScalar group.
+- **audit correction**: has_tooltip is wrong (false). ImGui::InputScalar with a non-zero step wraps the text box, the -/+ buttons and the visible label in BeginGroup()/EndGroup(); EndGroup re-emits the whole group as the last item (ItemAdd(group_bb, 0, ...)), so the IsItemHovered() at line 115 is true when the cursor is over the - or + button or the 'fps' label, not just the text box. Verified at vendored imgui_widgets.cpp:3812 and imgui.cpp EndGroup (ItemSize/ItemAdd on group_bb). -> has_tooltip: true; hovering the -/+ step buttons (or the 'fps' label) shows the same fps tooltip from line 116, because IsItemHovered() after InputInt refers to the whole InputScalar group.
 
 ### 50. keyframe interval -/+ step buttons
 
@@ -693,7 +693,7 @@ reader against the source (see README.md for method).
 - **effect**: Adjusts g_keyframe_interval by 1 per click, or 30 with Ctrl held; clamped to [0,100000].
 - **source**: `src/gui/gui_export_panel.cpp:139`
 - **tests**: none
-- **audit correction**: has_tooltip is wrong (false) for the same reason as fps-step-buttons: the IsItemHovered() at line 141 tests the whole InputScalar group emitted by EndGroup, which includes the -/+ buttons and the 'keyframe interval' label. -> has_tooltip: true - hovering the -/+ buttons shows the keyframe tooltip from line 142.
+- **audit correction**: has_tooltip is wrong (false) for the same reason as fps-step-buttons: the IsItemHovered() at line 141 tests the whole InputScalar group emitted by EndGroup, which includes the -/+ buttons and the 'keyframe interval' label. -> has_tooltip: true; hovering the -/+ buttons shows the keyframe tooltip from line 142.
 
 ### 51. Continuous loop count -/+ step buttons
 
@@ -705,14 +705,14 @@ reader against the source (see README.md for method).
 - **effect**: Adjusts g_loop_count by 1 per click, or 5 with Ctrl held, and clamps to [1,1000].
 - **source**: `src/gui/gui_export_panel.cpp:192`
 - **tests**: none
-- **audit correction**: has_tooltip is wrong (false): the IsItemHovered() at line 194 covers the entire InputScalar group for Continuous loop count##exp_loops, including its -/+ buttons and label. -> has_tooltip: true - hovering the -/+ buttons shows the loop-count tooltip from line 195.
+- **audit correction**: has_tooltip is wrong (false): the IsItemHovered() at line 194 covers the entire InputScalar group for Continuous loop count##exp_loops, including its -/+ buttons and label. -> has_tooltip: true; hovering the -/+ buttons shows the loop-count tooltip from line 195.
 
 ### 52. frames InputInt -/+ step buttons
 
 - **id**: `max-frames-step-buttons`
 - **input**: left-click
 - **path**: `Export/frames##exp_maxf/-  and  Export/frames##exp_maxf/+`
-- **precondition**: Advanced expanded AND g_limit_frames is true (step=1, step_fast=10)
+- **precondition**: Advanced expanded and g_limit_frames is true (step=1, step_fast=10)
 - **disabled when**: !g_limit_frames or busy
 - **effect**: Adjusts g_max_frames by 1 per click, or 10 with Ctrl held; clamped to [1,100000].
 - **source**: `src/gui/gui_export_panel.cpp:175`
@@ -724,9 +724,9 @@ reader against the source (see README.md for method).
 - **input**: left-click
 - **path**: `Export`
 - **precondition**: Modal open
-- **effect**: Nothing happens. BeginPopupModal forces ImGuiWindowFlags_Modal, and ImGui blocks hovering of every window behind the modal, so the click never reaches the underlying panel; ClosePopupsOverWindow keeps modal popups open (ClosePopupsExceptModals stops at the first modal). Unlike a normal popup, this modal cannot be dismissed by clicking away - only Close, Start export, or the Pick region path close it.
+- **effect**: Nothing happens. BeginPopupModal forces ImGuiWindowFlags_Modal, and ImGui blocks hovering of every window behind the modal, so the click never reaches the underlying panel; ClosePopupsOverWindow keeps modal popups open (ClosePopupsExceptModals stops at the first modal). Unlike a normal popup, this modal cannot be dismissed by clicking away; only Close, Start export or the Pick region path close it.
 - **source**: `src/gui/gui_export_panel.cpp:628`
-- **notes**: A gesture every user attempts, and one of only three ways the modal could plausibly be dismissed - the inventory covers title-bar drag and (incorrectly) Escape but never click-outside. Verified in vendored imgui.cpp: the modal blocking comment 'Modal windows prevents mouse from hovering behind them' and the ClosePopupsOverWindow / ClosePopupsExceptModals modal test.
+- **notes**: Users try this, and it is one of three ways they might expect to dismiss the modal. The inventory covers title-bar drag and (incorrectly) Escape, but not click-outside. Verified in vendored imgui.cpp: the modal blocking comment 'Modal windows prevents mouse from hovering behind them' and the ClosePopupsOverWindow / ClosePopupsExceptModals modal test.
 - **tests**: none
 
 ### 54. "Open folder" button
@@ -734,8 +734,8 @@ reader against the source (see README.md for method).
 - **id**: `open-folder-button`
 - **input**: left-click
 - **path**: `Export/Open folder`
-- **precondition**: Export phase is Done AND ex.output_path is non-empty
-- **disabled when**: never (the button simply is not drawn unless the precondition holds)
+- **precondition**: Export phase is Done and ex.output_path is non-empty
+- **disabled when**: never (the button is not drawn unless the precondition holds)
 - **effect**: Calls NativeDialog::RevealInFileManager(ex.output_path) to show the exported file in Explorer.
 - **source**: `src/gui/gui_export_panel.cpp:547`
 - **tooltip**: yes
@@ -763,7 +763,7 @@ reader against the source (see README.md for method).
 - **disabled when**: busy
 - **effect**: Sets g_out_w/g_out_h to the preset's literal pixel dimensions, pinning the export size regardless of the render size.
 - **source**: `src/gui/gui_export_panel.cpp:277`
-- **notes**: ONE entry for a loop over 5 fixed rows: 1920x1080, 1280x720, 640x480, 1080x1920, 720x1280 (declared at lines 253-258).
+- **notes**: One entry for a loop over 5 fixed rows: 1920x1080, 1280x720, 640x480, 1080x1920, 720x1280 (declared at lines 253-258).
 - **tests**: none
 
 ### 57. "Native (WxH)" entry in the resolution combo
@@ -788,7 +788,7 @@ reader against the source (see README.md for method).
 - **effect**: Sets g_out_w/g_out_h to lroundf(current displayed size * mul), clamped to [64,8192], pinning an explicit custom output size.
 - **source**: `src/gui/gui_export_panel.cpp:352`
 - **tooltip**: yes
-- **notes**: ONE entry for a loop over the 3-element kScales array (lines 325-338). The visible label is rebuilt each frame with the resulting pixel size baked in; the ID suffix is "##exp_scl_" + the original label including its own "##exp_scl". Preceded by TextDisabled("Scale current x:").
+- **notes**: One entry for a loop over the 3-element kScales array (lines 325-338). The visible label is rebuilt each frame with the resulting pixel size baked in; the ID suffix is "##exp_scl_" + the original label including its own "##exp_scl". Preceded by TextDisabled("Scale current size:").
 - **tests**: none
 
 ### 59. "Start export" button
@@ -796,9 +796,9 @@ reader against the source (see README.md for method).
 - **id**: `start-export-button`
 - **input**: left-click
 - **path**: `Export/Start export`
-- **precondition**: Export phase is Idle, Done or Failed (i.e. NOT busy)
+- **precondition**: Export phase is Idle, Done or Failed (not busy)
 - **disabled when**: busy (replaced by the Cancel button)
-- **effect**: Builds an App::ExportRequest from every control on this surface - output_path = MediaSink::MakeOutputPath(g_stem_buf, current_format), fps, quality, keyframe_interval, max_frames (0 unless Limit frames), loop_count, blend_loop, blend_frames, bg_transparent, bg_r/g/b, width/height, crop_x/y/w/h from state.GetCropRect(), format index, prefer_hardware = g_prefer_hw && hw_applies - then posts App::Cmd::StartExport{req} via state.PostCommand and calls ImGui::CloseCurrentPopup().
+- **effect**: Builds an App::ExportRequest from every control on this surface (output_path = MediaSink::MakeOutputPath(g_stem_buf, current_format), fps, quality, keyframe_interval, max_frames (0 unless Limit frames), loop_count, blend_loop, blend_frames, bg_transparent, bg_r/g/b, width/height, crop_x/y/w/h from state.GetCropRect(), format index, prefer_hardware = g_prefer_hw && hw_applies), then posts App::Cmd::StartExport{req} via state.PostCommand and calls ImGui::CloseCurrentPopup().
 - **source**: `src/gui/gui_export_panel.cpp:556`
 - **notes**: Size 120x0. hw_applies is recomputed here independently of DrawBackgroundAndHw (lines 557-560).
 - **tests**: `export modal PNG sequence writes a directory path`, `export modal background toggle and colour reach the request`, `export modal crop inputs reach the request`, `export modal custom resolution inputs clamp` (+14 more)
@@ -810,7 +810,7 @@ reader against the source (see README.md for method).
 - **path**: `Export/##exp_bg_color/context`
 - **precondition**: Modal open, g_bg_transparent is false, right-clicking ##exp_bg_color
 - **disabled when**: g_bg_transparent is true or busy (disabled items do not accept clicks)
-- **effect**: ColorEdit4 calls OpenPopupOnItemClick("context", ImGuiPopupFlags_MouseButtonRight) on the colour button because ImGuiColorEditFlags_NoOptions is not passed. The popup lets the user switch the colour-edit display mode (RGB / HSV / Hex) and the picker type (hue bar + SV rect vs hue wheel + SV triangle). It writes only ImGui's global g.ColorEditOptions - g_bg_rgb and the export request are untouched.
+- **effect**: ColorEdit4 calls OpenPopupOnItemClick("context", ImGuiPopupFlags_MouseButtonRight) on the colour button because ImGuiColorEditFlags_NoOptions is not passed. The popup lets the user switch the colour-edit display mode (RGB / HSV / Hex) and the picker type (hue bar + SV rect vs hue wheel + SV triangle). It writes only ImGui's global g.ColorEditOptions; g_bg_rgb and the export request are untouched.
 - **source**: `src/gui/gui_export_panel.cpp:500`
 - **notes**: Verified in vendored imgui_widgets.cpp: the OpenPopupOnItemClick("context", ...) immediately after the ColorButton("##ColorButton", ...) call inside ColorEdit4. The inventory only mentions right-click *inside* the picker popup (bg-color-picker notes), not right-click on the swatch itself, which is a separate popup.
 - **tests**: none
@@ -820,7 +820,7 @@ reader against the source (see README.md for method).
 - **id**: `modal-scroll`
 - **input**: scroll
 - **path**: `Export`
-- **precondition**: Modal open AND content height exceeds vp->WorkSize.y - 48 (e.g. the "Advanced" header is expanded on a short screen)
+- **precondition**: Modal open and content height exceeds vp->WorkSize.y - 48 (e.g. the "Advanced" header is expanded on a short screen)
 - **effect**: Scrolls the popup window's content region; no application state changes.
 - **source**: `src/gui/gui_export_panel.cpp:627`
 - **notes**: SetNextWindowSizeConstraints caps the height, so the auto-resized popup becomes scrollable once content overflows.
@@ -833,7 +833,7 @@ reader against the source (see README.md for method).
 - **path**: `Export/##exp_q`
 - **precondition**: Modal open
 - **disabled when**: busy
-- **effect**: Drags g_quality over [0,100], displayed as "quality %d". Feeds r.quality in the StartExport request.
+- **effect**: Drags g_quality over [0,100], displayed as "Quality %d". Feeds r.quality in the StartExport request.
 - **source**: `src/gui/gui_export_panel.cpp:126`
 - **tooltip**: yes
 - **notes**: Full remaining width; drawn SameLine after the fps input.
@@ -844,7 +844,7 @@ reader against the source (see README.md for method).
 - **id**: `blend-frames-input`
 - **input**: text-entry
 - **path**: `Export/Blend frames##exp_blendN`
-- **precondition**: Advanced expanded AND g_blend_loop is true
+- **precondition**: Advanced expanded and g_blend_loop is true
 - **disabled when**: busy; hidden entirely when g_blend_loop is false
 - **effect**: On change, clamps g_blend_frames to [0,240]; posted as r.blend_frames.
 - **source**: `src/gui/gui_export_panel.cpp:212`
@@ -861,7 +861,7 @@ reader against the source (see README.md for method).
 - **disabled when**: busy
 - **effect**: Editing any of the four sets changed=true; at the end of DrawCrop the four values are floored at 0 and written via state.SetCropRect(App::CropRect{x,y,w,h}). The rect is later read back with state.GetCropRect() into r.crop_x/y/w/h for the StartExport request.
 - **source**: `src/gui/gui_export_panel.cpp:425`
-- **notes**: ONE entry for a loop over the 4-element labels array (line 421). step=0 so no -/+ buttons; ImGuiInputTextFlags_AutoSelectAll. Field width is computed from available width / 4. Preceded by a non-interactive TextUnformatted("crop").
+- **notes**: One entry for a loop over the 4-element labels array (line 421). step=0 so no -/+ buttons; ImGuiInputTextFlags_AutoSelectAll. Field width is computed from available width / 4. Preceded by a non-interactive TextUnformatted("Crop").
 - **tests**: `export modal crop inputs reach the request`
 
 ### 65. fps InputInt (text portion)
@@ -877,20 +877,20 @@ reader against the source (see README.md for method).
 - **notes**: Item width 120.
 - **tests**: `export modal controls all explain themselves`, `export modal fps and quality reach the request`, `scenario: configure an export from the keyboard shortcut and start it`
 
-### 66. "keyframe interval" InputInt (text portion)
+### 66. "Keyframe interval" InputInt (text portion)
 
 - **id**: `keyframe-input`
 - **input**: text-entry
 - **path**: `Export/keyframe interval##exp_keyint`
-- **precondition**: Advanced expanded AND MediaSink::UsesKeyframeInterval(current_format) is true
+- **precondition**: Advanced expanded and MediaSink::UsesKeyframeInterval(current_format) is true
 - **disabled when**: busy; the whole control is hidden (not merely disabled) for formats where UsesKeyframeInterval is false
-- **effect**: Writes g_keyframe_interval, clamped to [0,100000]; posted as r.keyframe_interval. A SameLine TextDisabled shows "(auto: 1/sec)" when 0 or "(every N frames)" otherwise.
+- **effect**: Writes g_keyframe_interval, clamped to [0,100000]; posted as r.keyframe_interval. A SameLine TextDisabled shows "(one per second)" when 0 or "(every N frames)" otherwise.
 - **source**: `src/gui/gui_export_panel.cpp:139`
 - **tooltip**: yes
 - **notes**: Item width 120.
 - **tests**: `export modal controls all explain themselves`, `export modal keyframe interval is offered only for video formats`
 
-### 67. "Continuous loop count" InputInt (text portion)
+### 67. "Loops to capture" InputInt (text portion)
 
 - **id**: `loop-count-input`
 - **input**: text-entry
@@ -900,7 +900,7 @@ reader against the source (see README.md for method).
 - **effect**: On change, clamps g_loop_count to [1,1000]; posted as r.loop_count in the StartExport request.
 - **source**: `src/gui/gui_export_panel.cpp:192`
 - **tooltip**: yes
-- **notes**: Item width 120. Note the clamp only runs when the InputInt returns true (inside the if), unlike fps/keyframe which clamp unconditionally.
+- **notes**: Item width 120. The clamp only runs when the InputInt returns true (inside the if), unlike fps/keyframe which clamp unconditionally.
 - **tests**: `export modal controls all explain themselves`, `export modal loop count and blend seam reach the request`, `scenario: configure an export from the keyboard shortcut and start it`
 
 ### 68. "frames" InputInt (max frame count, text portion)
@@ -908,7 +908,7 @@ reader against the source (see README.md for method).
 - **id**: `max-frames-input`
 - **input**: text-entry
 - **path**: `Export/frames##exp_maxf`
-- **precondition**: Advanced expanded AND g_limit_frames is true
+- **precondition**: Advanced expanded and g_limit_frames is true
 - **disabled when**: !g_limit_frames (ImGui::BeginDisabled at line 172) or busy
 - **effect**: Writes g_max_frames, clamped to [1,100000]; posted as r.max_frames when Limit frames is on. A SameLine TextDisabled shows the derived duration "(~%.2fs at %d fps)".
 - **source**: `src/gui/gui_export_panel.cpp:175`
@@ -958,7 +958,7 @@ reader against the source (see README.md for method).
 - **input**: text-entry
 - **path**: `Export/##exp_stem`
 - **precondition**: Modal open
-- **disabled when**: busy (export phase is Capturing or Encoding) - wrapped in ImGui::BeginDisabled(busy)
+- **disabled when**: busy (export phase is Capturing or Encoding); the field is wrapped in ImGui::BeginDisabled(busy)
 - **effect**: ImGui::InputText writes directly into the file-scope buffer g_stem_buf[512]. Consumed at export start by MediaSink::MakeOutputPath(g_stem_buf, current_format). The buffer is auto-regenerated by MaybeRegenerateStem() from MediaSink::DeriveExportStem(state.ActiveIfs(), state.GetStatus().playing_animation) whenever the active IFS or playing animation changes, which overwrites whatever the user typed.
 - **source**: `src/gui/gui_export_panel.cpp:64`
 - **tooltip**: yes
@@ -973,5 +973,5 @@ reader against the source (see README.md for method).
 - **precondition**: Panels::Export::RequestOpen() was called by another panel this frame (sets g_open_requested), or g_reopen_after_pick was armed by "Pick region" and state.GetCropPickMode() has returned to false
 - **effect**: ImGui::OpenPopup("Export") then BeginPopupModal("Export", nullptr, ImGuiWindowFlags_AlwaysAutoResize); window is force-recentred on the main viewport every frame (SetNextWindowPos ImGuiCond_Always) and constrained to width exactly 620 and height <= vp->WorkSize.y - 48. When the popup is not open RenderModal() returns immediately and nothing below is drawn.
 - **source**: `src/gui/gui_export_panel.cpp:628`
-- **notes**: Gate for every other entry in this surface: all of them require this modal to be open. The reopen-after-crop-pick path is at lines 616-619.
+- **notes**: Every other entry in this surface requires this modal to be open. The reopen-after-crop-pick path is at lines 616-619.
 

@@ -102,7 +102,7 @@ void DrawRow(const Editor::LibraryEntry& entry) {
     }
     ImGui::SameLine();
     if (entry.modified) {
-        ImGui::TextColored(ImGui::GetStyleColorVec4(ImGuiCol_CheckMark), "modified");
+        ImGui::TextColored(ImGui::GetStyleColorVec4(ImGuiCol_CheckMark), "Modified");
     } else if (entry.errors > 0) {
         ImGui::TextColored(ImVec4(1.0F, 0.45F, 0.45F, 1.0F), "%d error(s)", entry.errors);
     } else if (entry.warnings > 0) {
@@ -164,8 +164,8 @@ void DrawBuildLine() {
     }
     ImGui::TextColored(ImVec4(1.0F, 0.85F, 0.3F, 1.0F), "%s", read_only.c_str());
     if (!ImGui::IsItemHovered()) return;
-    ImGui::SetTooltip("This document is for another build, so it is shown but never loaded "
-                      "into the renderer and every edit is refused.\nDuplicate it to get "
+    ImGui::SetTooltip("This document belongs to another build. It is listed here but never "
+                      "loaded into the renderer, and it cannot be edited.\nDuplicate it to get "
                       "an editable copy for %s.",
                       state.build_name.c_str());
 }
@@ -248,7 +248,7 @@ bool ForeignBuild(const Doc::Document& document) {
 std::string ReadOnlyReason() {
     const Editor::State& editor = Editor::Global();
     if (!editor.Loaded() || !editor.ReadOnly()) return {};
-    return "read-only: built for " + editor.Document().build;
+    return "Read-only: built for " + editor.Document().build;
 }
 
 bool IsBuiltInId(const std::string& build, const std::string& id) {
@@ -318,14 +318,14 @@ void Render() {
     DrawHeaderCounts(entries);
 
     if (state.build_id.empty()) {
-        ImGui::TextDisabled("No known build fingerprint under this directory.");
-        ImGui::TextDisabled("Presets are keyed by build, so nothing can be listed for it.");
+        ImGui::TextDisabled("This directory does not match any known build.");
+        ImGui::TextDisabled("Presets belong to a build, so there is nothing to list.");
         return;
     }
     DrawBuildLine();
 
     ImGui::SetNextItemWidth(-FLT_MIN);
-    ImGui::InputTextWithHint("###lib_filter", "filter presets...", g_filter, sizeof(g_filter));
+    ImGui::InputTextWithHint("###lib_filter", "Filter presets...", g_filter, sizeof(g_filter));
 
     DrawActions();
     ImGui::Separator();

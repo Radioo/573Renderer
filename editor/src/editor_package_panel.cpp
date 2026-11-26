@@ -154,7 +154,7 @@ QWidget* Window::BuildPackageActions() {
     adding->setIcon(Icons::Of(Icons::Glyph::Plus, Theme::kSoft, kPanelIcon));
     adding->setIconSize(QSize(kPanelIcon, kPanelIcon));
     adding->setFixedSize(kPanelButton, kPanelButton);
-    adding->setToolTip(tr("New animation, add image"));
+    adding->setToolTip(tr("Add an animation or an image"));
     connect(adding, &QToolButton::clicked, this, [this] {
         if (package_tabs_->currentIndex() == 1) {
             AddImageFromFile();

@@ -189,7 +189,7 @@ TEST_CASE("scenario: configure an export from the keyboard shortcut and start it
         if ((adv.StatusFlags & ImGuiItemStatusFlags_Opened) == 0) ctx->ItemClick("Advanced");
         ctx->ItemCheck("Limit frames##exp_limit");
         ctx->ItemInputValue("frames##exp_maxf", 150);
-        ctx->ItemInputValue("Continuous loop count##exp_loops", 2);
+        ctx->ItemInputValue("Loops to capture##exp_loops", 2);
         ctx->ItemClick("Start export");
     };
     harness.Run(test);
@@ -221,7 +221,7 @@ TEST_CASE("scenario: a running export can be cancelled from the status strip", "
     test->TestFunc = [](ImGuiTestContext* ctx) {
         ctx->SetRef("##main");
         GuiTest::FocusChild(ctx, "status_strip");
-        ctx->ItemClick("capturing 30");
+        ctx->ItemClick("Capturing 30");
         ctx->Yield(3);
         ctx->SetRef("Export");
         ctx->ItemClick("Cancel");
@@ -323,7 +323,7 @@ TEST_CASE("scenario: qpro scan, narrow to one date group, then extract", "[gui][
         GuiTest::FocusChild(ctx, "main_view");
         ctx->ItemCheck("Body");
         ctx->ItemInputValue("Output fps", 30);
-        ctx->ItemClick("Choose output folder + extract...");
+        ctx->ItemClick("Choose output folder and extract...");
     };
     harness.Run(test);
 
@@ -351,8 +351,8 @@ TEST_CASE("scenario: live overrides can be stacked then reset in one click", "[g
         GuiTest::FocusChild(ctx, "main_view/pane_right");
         ctx->ItemClick("##inspector_tabs/Render");
         ctx->Yield(2);
-        ctx->ItemClick("##inspector_tabs/Render/##live_cont/$$2/ON");
-        ctx->ItemClick("##inspector_tabs/Render/##bg_color/$$3/red");
+        ctx->ItemClick("##inspector_tabs/Render/##live_cont/$$2/On");
+        ctx->ItemClick("##inspector_tabs/Render/##bg_color/$$3/Red");
         ctx->ItemCheck("##inspector_tabs/Render/Filter (F7)");
         ctx->ItemInputValue("##inspector_tabs/Render/##live_trim", 90);
     };

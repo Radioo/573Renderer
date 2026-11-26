@@ -462,7 +462,7 @@ void Window::StartHost(const QString& game_dir) {
         ReportProblem(tr("preview_host.exe was not found next to the editor"));
         return;
     }
-    statusBar()->showMessage(tr("Booting the preview host..."));
+    statusBar()->showMessage(tr("Starting the preview host..."));
     host_busy_ = true;
     JobStarted();
     RefreshState();

@@ -877,7 +877,7 @@ TEST_CASE("the Clip inspector tab reports the selection and opens the modal",
         ctx->ItemClick("##inspector_tabs/Clip");
         ctx->Yield(2);
         const std::string text = GuiTest::CaptureFrameText(ctx);
-        IM_CHECK(text.find("no clip selected") != std::string::npos);
+        IM_CHECK(text.find("No clip selected") != std::string::npos);
     };
     harness.Run(empty);
 

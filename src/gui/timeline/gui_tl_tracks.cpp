@@ -161,10 +161,10 @@ void DrawHeaderName(Ctx& ctx, const Doc::Track& track, float y, float height, fl
         ImGui::EndPopup();
     }
     if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("%s track '%s'%s%s\ndouble-click to rename, drag to reorder, "
-                          "right-click for the track menu",
+        ImGui::SetTooltip("%s track '%s'%s%s\nDouble-click to rename, drag to reorder, "
+                          "right-click for the track menu.",
                           KindBadge(track.kind), track.id.c_str(),
-                          track.target.empty() ? "" : (" -> " + track.target).c_str(),
+                          track.target.empty() ? "" : (", target " + track.target).c_str(),
                           locked ? " (locked)" : "");
     }
     if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
@@ -184,13 +184,13 @@ void DrawHeaderName(Ctx& ctx, const Doc::Track& track, float y, float height, fl
 void DrawHeaderToggles(Ctx& ctx, const Doc::Track& track, float x, float y) {
     const float side = ToggleSide();
     ImGui::SetCursorScreenPos(ImVec2(x, y + ((RowHeight() - side) * 0.5F)));
-    Toggle(ctx, "M###tl_mute_", track, track.muted, "Mute: the evaluator skips this track.",
+    Toggle(ctx, "M###tl_mute_", track, track.muted, "Mute: this track is ignored.",
            &Editor::SetTrackMuted);
     ImGui::SameLine(0.0F, ToggleGap());
-    Toggle(ctx, "S###tl_solo_", track, track.solo, "Solo: only solo tracks evaluate.",
+    Toggle(ctx, "S###tl_solo_", track, track.solo, "Solo: only solo tracks play.",
            &Editor::SetTrackSolo);
     ImGui::SameLine(0.0F, ToggleGap());
-    Toggle(ctx, "L###tl_lock_", track, track.locked, "Lock: this track rejects edits.",
+    Toggle(ctx, "L###tl_lock_", track, track.locked, "Lock: this track cannot be edited.",
            &Editor::SetTrackLocked);
 }
 

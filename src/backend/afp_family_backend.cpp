@@ -199,11 +199,10 @@ void ScanThreadBody(const std::string& game_dir, bool scan_arcs, bool scan_txp2)
             [&st](size_t scanned, size_t found, const std::string& cur_dir) {
                 char s[160];
                 if (!cur_dir.empty()) {
-                    snprintf(s, sizeof(s), "Scanning %s  -  %zu files, %zu .ifs found",
+                    snprintf(s, sizeof(s), "Scanning %s: %zu files, %zu .ifs found",
                              cur_dir.c_str(), scanned, found);
                 } else {
-                    snprintf(s, sizeof(s), "Scanning  -  %zu files, %zu .ifs found", scanned,
-                             found);
+                    snprintf(s, sizeof(s), "Scanning: %zu files, %zu .ifs found", scanned, found);
                 }
                 st.SetIfsScanStatus(s);
             },
@@ -304,8 +303,8 @@ bool AfpFamilyBackend::Boot(const BootEnv& env) {
     PublishSetupStage("Locating game DLLs");
     std::string const dll_dir = EngineDlls::DiscoverDllDir(env.game_dir, *cfg_);
     if (dll_dir.empty()) {
-        return FailBoot("Couldn't find avs2-core.dll / afp-core.dll / afp-utils.dll "
-                        "under the selected directory. Expected them in `modules/`.");
+        return FailBoot("Could not find avs2-core.dll, afp-core.dll and afp-utils.dll "
+                        "in modules/, contents/modules/ or the selected folder itself.");
     }
     LOG("Boot", "DLLs found in: %s", dll_dir.c_str());
 

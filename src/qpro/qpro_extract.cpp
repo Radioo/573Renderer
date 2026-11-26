@@ -53,7 +53,7 @@ void Note(Result& res, bool failure, const std::string& label, const std::string
     } else {
         ++res.skipped;
     }
-    std::string const text = label + " (" + ifs + ") -- " + reason;
+    std::string const text = label + " (" + ifs + "): " + reason;
     LOG("Qpro", "%s %s", failure ? "FAILED" : "skipped", text.c_str());
     std::scoped_lock const lk(g_mu);
     g_status.issues.push_back({.text = text, .failure = failure});
@@ -261,7 +261,7 @@ void SweepOneItem(EngineSession& es, D3D9State& d3d, SweepCtx& ctx, QproDll::Cat
     if (!fs::exists(path, ec)) {
         if (sel) {
             res.images += EmitPlaceholder(*ctx.out_root, cat, prefix, idx);
-            Note(res, true, lbl, ifs, "no source .ifs on disk -> transparent placeholder(s)");
+            Note(res, true, lbl, ifs, "no source .ifs on disk, wrote transparent placeholder(s)");
         }
         return;
     }
@@ -273,7 +273,7 @@ void SweepOneItem(EngineSession& es, D3D9State& d3d, SweepCtx& ctx, QproDll::Cat
     if (ctx.cat_sid == 0) {
         if (sel) {
             res.images += EmitPlaceholder(*ctx.out_root, cat, prefix, idx);
-            Note(res, true, lbl, ifs, "qp_main2 not mounted -> transparent placeholder(s)");
+            Note(res, true, lbl, ifs, "qp_main2 is not mounted, wrote transparent placeholder(s)");
         }
         return;
     }
@@ -285,7 +285,8 @@ void SweepOneItem(EngineSession& es, D3D9State& d3d, SweepCtx& ctx, QproDll::Cat
         if (!fs::exists(j.out_path, ec)) {
             std::vector<uint8_t> blank((size_t)520 * 704 * 4, 0);
             if (WriteStillAvif(j.out_path, blank.data(), 520, 704, kQproAvifQuality)) res.images++;
-            Note(res, true, lbl, ifs, "layer missing after composite -> transparent placeholder");
+            Note(res, true, lbl, ifs,
+                 "layer missing after compositing, wrote a transparent placeholder");
         }
     }
 }

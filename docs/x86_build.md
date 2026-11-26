@@ -4,17 +4,16 @@
 
 IIDX 24 (SINOBUZ) and older ship 32-bit engine DLLs (`libavs-win32.dll`,
 `libafp-win32.dll`, `libafputils-win32.dll`; PE machine 0x14c). A 64-bit
-process CANNOT load a 32-bit DLL: WOW64 isolates at process granularity, so
+process cannot load a 32-bit DLL: WOW64 isolates at process granularity, so
 `LoadLibraryA` on an x86 DLL from an x64 process fails with
-`ERROR_BAD_EXE_FORMAT` (193). Verified empirically against
-`libafp-win32.dll`, not assumed. There is no in-process workaround; hosting
-those DLLs requires a 32-bit renderer process.
+`ERROR_BAD_EXE_FORMAT` (193). This was tested against `libafp-win32.dll`.
+There is no in-process workaround, so hosting those DLLs needs a 32-bit
+renderer process.
 
-The alternative (an out-of-process 32-bit helper driving the engine over
-IPC) was rejected: the renderer's whole interaction with afp is in-process
-pointer work (callback tables handed to `afp_boot`, per-frame vertex
-callbacks, engine struct reads), so a bridge would have to marshal every
-callback in both directions per frame.
+We rejected an out-of-process 32-bit helper that drives the engine over IPC.
+The renderer's whole interaction with afp is in-process pointer work (callback
+tables handed to `afp_boot`, per-frame vertex callbacks, engine struct reads),
+so a bridge would have to marshal every callback in both directions per frame.
 
 ## Building
 
@@ -29,9 +28,9 @@ tl-expected) build for `x86-windows-static` with no manifest changes; the
 x265 overlay port already handles `VCPKG_TARGET_ARCHITECTURE STREQUAL
 "x86"`.
 
-The old `CMakeLists.txt` hard failure ("This project must be built as
-64-bit") is replaced by a pointer-size switch that sets `R573_ARCH_X64` and
-`R573_ARCH_SUFFIX`.
+A pointer-size switch in `CMakeLists.txt` sets `R573_ARCH_X64` and
+`R573_ARCH_SUFFIX`, in place of the old hard failure ("This project must be
+built as 64-bit").
 
 `573Renderer32.exe` exports through `bin/573Encoder.exe`, which only the
 x64 build (`build.bat`) produces, so a working 32-bit setup needs both
@@ -40,9 +39,9 @@ builds in the same `bin/`. See "Encoding runs in a 64-bit child" below.
 ## Configuring dev32 from an IDE (CLion): needs an x86 toolchain
 
 `base32` declares `"architecture": {"value": "x86", "strategy": "external"}`.
-`external` means CMake does NOT set the architecture up - the CALLER must.
-It is the only valid strategy under the Ninja generator, because Ninja has
-no platform concept: with MSVC the target architecture comes entirely from
+`external` means CMake does not set the architecture up; whoever calls CMake
+has to. It is the only valid strategy under the Ninja generator, because Ninja
+has no platform concept: with MSVC the target architecture comes entirely from
 the `INCLUDE` / `LIB` / `PATH` environment variables.
 
 `build32.bat` supplies that by calling `vcvarsall.bat x86` (vs `x64` in
@@ -60,32 +59,32 @@ The unresolved symbols are the x86 CRT entry points (leading-underscore
 cdecl decoration); they are missing because the x64 CRT was linked against
 an x86 object.
 
-Fix in CLion: Settings -> Build, Execution, Deployment -> Toolchains -> add
-a Visual Studio toolchain with **Architecture: x86**, then point the
-`dev32` CMake profile at it. Leave `dev` on the default toolchain.
+To fix it in CLion: Settings -> Build, Execution, Deployment -> Toolchains ->
+add a Visual Studio toolchain with Architecture: x86, then point the `dev32`
+CMake profile at it. Leave `dev` on the default toolchain.
 
-This is an environment mismatch, not a preset defect - do not "fix" it by
-pinning compiler paths or LIB directories in the preset, which would hard
-code an MSVC version. Note the dangerous sibling of this failure: with a
-fully x64 environment the configure SUCCEEDS and silently produces an x64
-binary named `573Renderer32.exe`, which is why CI verifies the PE machine
-field (0x14c) rather than merely that the file exists.
+The environment is wrong here, not the preset. Do not pin compiler paths or
+LIB directories in the preset to work around it, because that would hard code
+an MSVC version. A related failure is worse: with a fully x64 environment the
+configure succeeds and quietly produces an x64 binary named
+`573Renderer32.exe`. That is why CI checks the PE machine field (0x14c) and not
+only that the file exists.
 
 ## The engine ABI seam (src/support/engine_abi.h)
 
-Two things about the engine interface change with pointer width. Both are
-routed through one header so there is a single place to reason about them.
+Two things about the engine interface change with pointer width. Both go
+through this one header, so there is a single place to look at them.
 
 ### Calling convention: `AFP_CB`
 
 The DDR/legacy render callbacks were declared `__fastcall`. On x64 that
-annotation is a NO-OP (there is one convention), so it was never load
-bearing and was never validated. On x86 `__fastcall` is a genuinely
-different ABI (first two integer args in ECX/EDX, callee cleans the stack)
-while the 32-bit engine uses `__cdecl` - confirmed by decompiling
-`libafp-win32.dll`'s `afp_boot` and `libafputils-win32.dll`'s `afpu_boot`,
-both of which IDA types as `__cdecl`. A mismatch is not a compile error; it
-is a stack imbalance on the first callback.
+annotation does nothing (there is one convention), so nothing depended on it
+and it was never checked. On x86 `__fastcall` is a different ABI (first two
+integer args in ECX/EDX, callee cleans the stack), while the 32-bit engine
+uses `__cdecl`, as decompiling `libafp-win32.dll`'s `afp_boot` and
+`libafputils-win32.dll`'s `afpu_boot` shows: IDA types both as `__cdecl`. A
+mismatch does not fail to compile; it unbalances the stack on the first
+callback.
 
 `AFP_CB` expands to `__fastcall` on `_WIN64` and `__cdecl` otherwise, so
 x64 codegen is bit-identical to before and x86 gets the convention the
@@ -93,17 +92,17 @@ x64 codegen is bit-identical to before and x86 gets the convention the
 
 ### Pointer-slot layout: `kEngineSlot` / `SlotOffset`
 
-Structs SHARED with the engine (the `afp_boot` render-params table and the
+Structs shared with the engine (the `afp_boot` render-params table and the
 `afpu_boot` config table) are arrays of function pointers. They were built
 with hardcoded x64 byte offsets (`0x08, 0x10, 0x18, ...`). On x86 those
 tables are 4-byte strided, so every callback would land in the wrong slot
 and the tail of the struct would be past its end.
 
-`BuildStructs` now indexes by SLOT NUMBER through `Support::SlotOffset`,
+`BuildStructs` now indexes by slot number through `Support::SlotOffset`,
 which multiplies by `sizeof(void*)`. On x64 slot N still resolves to the
 same byte offset as before (slot 1 = 0x08, slot 14 = 0x70, slot 36 =
-0x120), so this is a no-op for every existing profile. The named
-`kSlot*` constants replace the magic offsets.
+0x120), so nothing changes for any existing profile. The named `kSlot*`
+constants replace the magic offsets.
 
 Two related details in the same structs:
 
@@ -126,23 +125,24 @@ assume 8-byte pointers and each field offset shifts once a pointer earlier
 in the record shrinks.
 
 That whole walk is now replaced by `afpu_get_afp_info_from_index_at_package`,
-a real export present in BOTH the DDR World x64 build and the IIDX 24 x86
+a real export present in both the DDR World x64 build and the IIDX 24 x86
 build. Enumeration calls it with index 0, 1, 2, ... and stops when it
 returns negative (the engine logs "afp index error" past the end and
-returns -2). No offsets, no strides, no version coupling.
+returns -2). This needs no offsets or strides and does not depend on the
+engine version.
 
 Its out-parameter is `DdrAfpInfo` = `{u32, u32, void*, const char* name,
 u32 stream_id}`, recovered by decompiling the function in both builds. The
 x64 build writes dwords at +0/+4, qwords at +8/+16, dword at +24; the x86
 build writes five consecutive dwords. Declaring it as a plain C++ struct
 makes the compiler produce exactly those layouts on each arch (name at +16
-and stream_id at +24 on x64, +12 and +16 on x86), which is why the old
-`info + 16` / `info + 24` byte offsets could be deleted rather than
-arch-gated. `afpu_get_afp_info_at_package` takes the same struct.
+and stream_id at +24 on x64, +12 and +16 on x86), so the old `info + 16` /
+`info + 24` byte offsets could be deleted instead of being split per arch.
+`afpu_get_afp_info_at_package` takes the same struct.
 
-Verified no DDR World regression: `common_background_v3.arc` enumerates the
-same six clips with identical names, stream ids and sizes as the offset
-walk produced, and still renders.
+DDR World did not regress: `common_background_v3.arc` enumerates the same six
+clips with the same names, stream ids and sizes as the offset walk produced,
+and still renders.
 
 The two remaining `GetModuleHandleA("libafp-win64.dll")` calls (diagnostic
 paths only) now use the `DllLoader`-held module handle that boot already
@@ -152,36 +152,35 @@ has, so no DLL name is hardcoded outside the profile table.
 
 The DDR/legacy allocator callbacks (`Cb_Alloc` / `Cb_Realloc` / `Cb_Free`,
 handed to afp in the render-params table) used `malloc` / `realloc` /
-`free`. afp allocates its internal structures THROUGH those callbacks, and
-at least its shape structures require 16-byte alignment: libafp's
+`free`. afp allocates its internal structures through those callbacks, and
+at least its shape structures need 16-byte alignment: libafp's
 `afp_shape_init` asserts on `(ptr & 0xF) == 0` before memsetting the
-struct, and a failed AVS assert is FATAL - it kills the process.
+struct, and a failed AVS assert is fatal and kills the process.
 
 On x64 this never fires because MSVC's `malloc` guarantees 16-byte
-alignment. **On x86 `malloc` guarantees only 8**, so roughly half the
-shape allocations land 8-mod-16 and the first one to do so aborts the
-process. This is a pure-x86 failure with no x64 symptom whatsoever.
+alignment. On x86 `malloc` guarantees only 8, so roughly half the shape
+allocations land 8-mod-16 and the first one to do so aborts the process. The
+failure only exists on x86; x64 shows no symptom at all.
 
 The callbacks now use `_aligned_malloc` / `_aligned_realloc` /
-`_aligned_free` with a 16-byte alignment. All three must change together:
-memory from `_aligned_malloc` MUST be released with `_aligned_free`, and
-since afp routes every allocation through this one triple, the pairing
-stays consistent.
+`_aligned_free` with a 16-byte alignment. All three have to change together,
+because memory from `_aligned_malloc` must be released with `_aligned_free`.
+afp routes every allocation through this one triple, so the pairing stays
+consistent.
 
-How to re-find the requirement on a new build: search libafp for the
-`afp-shape.c` assert string, data-xref it, and look for the
-`(ptr & 0xF)` test. Note DDR World's 2.13.7 does not even carry the
-`afp_shape_init` symbol string, so its absence in one build says nothing
-about another.
+To find the requirement again on a new build, search libafp for the
+`afp-shape.c` assert string, data-xref it, and look for the `(ptr & 0xF)`
+test. DDR World's 2.13.7 does not even carry the `afp_shape_init` symbol
+string, so its absence in one build says nothing about another.
 
-Verified no DDR World regression: `common_background_v3.arc` still
-enumerates its six clips and produces a byte-identical 4332-byte render
-after the allocator change.
+DDR World did not regress: `common_background_v3.arc` still enumerates its
+six clips and produces a byte-identical 4332-byte render after the allocator
+change.
 
 (`.clang-tidy` gained `corecrt_malloc.h` in the include-cleaner
 `IgnoreHeaders` list: `_aligned_*` is declared in that MSVC-internal
-header, which arrives via `<cstdlib>`, and the list already covers exactly
-this class of CRT/Windows internal header.)
+header, which arrives via `<cstdlib>`, and the list already holds other
+CRT/Windows internal headers of the same kind.)
 
 ## IIDX 24 (SINOBUZ) status
 
@@ -190,7 +189,7 @@ libafp-win32 2.13.1t8 export set matches DDR World's libafp-win64 2.13.7
 apart from `afp_ctrl` / `afp_render_dump`, neither of which the renderer
 uses), 1280x720, `avs_generation = Avs2161`.
 
-WORKING END TO END. The 32-bit renderer loads all three win32 DLLs, AVS
+Works end to end. The 32-bit renderer loads all three win32 DLLs, AVS
 boots (after the 2.16.1 ordinal-map fix, see docs/game_profiles.md),
 afp_boot / afpu_boot succeed, the render loop runs at a stable 60 fps, and
 the directory scan finds 2467 IFS. `data/graphic/gmframe24.ifs` mounts
@@ -200,48 +199,48 @@ and sizes (`1p_frame`, `center_frame_sp`, `x_lane_bg_dp`, `x_lightning`,
 ...). Both `1p_frame` (the 1P lane frame with the ninja motif and the
 animated lightning) and `center_frame_sp` render correctly at 1280x720.
 
-Two bugs stood between "boots" and "renders", both x86-only:
+Two x86-only bugs kept it from rendering after it booted:
 
-1. The avs 2.16.1 ordinal map (see docs/game_profiles.md) - AVS boot
+1. The avs 2.16.1 ordinal map (see docs/game_profiles.md): AVS boot
    segfaulted because `property_create` resolved to `node_refdata`.
-2. The 16-byte allocation alignment above - the FATAL
-   `afp-shape.c:524 afp_shape_init` assert. Note the misleading symptom:
+2. The 16-byte allocation alignment above, which tripped the fatal
+   `afp-shape.c:524 afp_shape_init` assert. The symptom was misleading:
    the log made it look like clip enumeration returned nothing, because
-   the process was aborting inside afp before the enumeration result was
-   ever logged. Enumeration itself was correct all along.
+   the process aborted inside afp before the enumeration result was
+   logged. Enumeration itself was correct all along.
 
-Residual non-fatal warnings in `avs_out.log` of the form
+The remaining non-fatal warnings in `avs_out.log` of the form
 `W:afpu-package: no image[playm_gauge_normal_1p] in shape[1p_frame_shape64]`
-are the game's own: those images live in other IFS the real game has
-mounted concurrently, and afp degrades gracefully. They are not an error
-in the renderer.
+come from the game data: those images live in other IFS that the real game
+has mounted at the same time, and afp carries on without them. They are not
+a renderer error.
 
-## IIDX 20 (tricoro) - a THIRD engine generation
+## IIDX 20 (tricoro) - a third engine generation
 
 Profile `iidx20`, dir hint "tricoro", backend `afp_ddr`, 1280x720,
-`avs_generation = Avs2158`. WORKING: 24 clips enumerate and both
-`1p_frame` (lane, turntable, groove gauge) and `center_frame_sp` render.
+`avs_generation = Avs2158`. Works: 24 clips enumerate and both `1p_frame`
+(lane, turntable, groove gauge) and `center_frame_sp` render.
 
-tricoro is not just "older 32-bit" - it is a different generation of BOTH
-libraries, and needed four separate fixes. Each was found by RE, and each
-is detected from the DLL's own exports rather than hardcoded per profile.
+tricoro uses a different generation of both libraries, not just an older
+32-bit build, and needed four separate fixes. Each was found by RE, and each
+is detected from the DLL's own exports instead of being hardcoded per
+profile.
 
 ### 1. avs 2.15.8 ordinal map
 
-360 exports (vs 390 / 392) with prefix `XCd229cc` - note the prefix is a
-per-build SEED, not a library identity: this same prefix is used by modern
-afp-core elsewhere. Ordinals shifted again and non-uniformly, so
-`kAvsOrdinals2158` is a third table. Recovered by the assert-string method
+360 exports (vs 390 / 392) with prefix `XCd229cc`. The prefix is a per-build
+seed and does not identify the library: modern afp-core uses the same prefix
+elsewhere. Ordinals shifted again, unevenly, so `kAvsOrdinals2158` is a third
+table. Recovered by the assert-string method
 described in docs/game_profiles.md and cross-checked against the repo's
 existing `idc573/avs/2.15.08.idc`.
 
-### 2. avs_boot takes SEVEN args (split heaps)
+### 2. avs_boot takes seven args (split heaps)
 
 2.15.8: `avs_boot(config, std_heap, std_sz, avs_heap, avs_sz, log_writer,
-log_ctx)` - TWO separate heaps. The 6-arg form used by 2.16+/2.17 puts the
-log writer where 2.15.8 expects `avs_sz`. Gated by
-`AvsOrdinals::boot_takes_split_heaps`, which also makes the renderer
-allocate the second heap.
+log_ctx)`, with two separate heaps. The 6-arg form used by 2.16+/2.17 puts
+the log writer where 2.15.8 expects `avs_sz`. `AvsOrdinals::boot_takes_split_heaps`
+selects the 7-arg form and also makes the renderer allocate the second heap.
 
 ### 3. AFP 2.10.5t7 has the PRE-UNIFICATION render API
 
@@ -250,49 +249,49 @@ allocate the second heap.
 per-target `afp_render_all(dt)` / `afp_display_layer(id)` /
 `afp_layer_is_valid(id)`. Likewise afputils: `afpu_ngp_read(name, path)`
 (no flags arg) and `afpu_create_stream_all(pkg)` (1 arg).
-`AfpDdrFuncs`/`AfpuDdrFuncs` resolve BOTH spellings and dispatch through
+`AfpDdrFuncs`/`AfpuDdrFuncs` resolve both spellings and dispatch through
 `RenderAll` / `DisplayLayer` / `LayerValid` / `ReadPackage` /
 `CreateStreamsForPackage`; `HasSplitRenderApi()` is the generation probe.
 
 ### 4. Both engines want a CALLER-SUPPLIED heap
 
-`afp_boot(heap, heap_size, render_params)` - 3 args, where the first two
+`afp_boot(heap, heap_size, render_params)` takes 3 args, and the first two
 initialise afp's own pool (the callee aligns the base, memsets it to -1
-and registers it). Same for `afpu_boot(config, heap, heap_size)`, whose
-heap init logs "afpu heap already setting". The 2.13.x 1-arg/2-arg forms
-pass render_params where the heap belongs, so the engine memsets wild
-memory. 64 MB each; note the afpu render callbacks arrive via the
-separate `afpu_set_render_params`, not through afpu_boot.
+and registers it). The same goes for `afpu_boot(config, heap, heap_size)`,
+whose heap init logs "afpu heap already setting". The 2.13.x 1-arg/2-arg
+forms pass render_params where the heap belongs, so the engine memsets
+random memory. Each heap is 64 MB. The afpu render callbacks arrive through
+the separate `afpu_set_render_params`, not through afpu_boot.
 
 ### 5. draw_primitive changed signature (the last crash)
 
-The render_params PUBLIC layout is otherwise IDENTICAL between 2.10.5t7
+The public render_params layout is otherwise identical between 2.10.5t7
 and 2.13.1t8 (2.13 remaps internally into a compacted table, but the
-caller-facing offsets match, verified slot by slot). The one exception:
+caller-facing offsets match, checked slot by slot). The one exception:
 
-- 2.10.5t7: `draw_primitive(vtx, count, prim_type, attr, a5, a6, c0[4], c1[4], ctx)` - 9 args
-- 2.13.1t8: `draw_primitive(vtx, count, params, ctx)` - 4 args
+- 2.10.5t7: `draw_primitive(vtx, count, prim_type, attr, a5, a6, c0[4], c1[4], ctx)`, 9 args
+- 2.13.1t8: `draw_primitive(vtx, count, params, ctx)`, 4 args
 
-Our callback reads arg 3 as a `params` POINTER; on 2.10 that slot holds an
+Our callback reads arg 3 as a `params` pointer; on 2.10 that slot holds an
 integer primitive type, so dereferencing it segfaulted on the first frame.
 `Cb_DrawPrimitiveLegacy` repacks the 9 args into the 2.13 params block and
 forwards. The block layout is `[0]=type [1]=flags [2]=tex [3]=? [4..7]=c0
-[8..11]=c1`; that c0/c1 pair is exactly 2.10's two colour args. `a5` was
-confirmed to be the texture id EMPIRICALLY (it logs values like 0x9808001,
-the AFP texture-id shape, while a6 is always 0) rather than assumed.
+[8..11]=c1`; that c0/c1 pair is exactly 2.10's two colour args. Logging
+showed that `a5` is the texture id: it holds values like 0x9808001, the shape
+of an AFP texture id, while a6 is always 0.
 
-Also learned from that mapping pass: `set_mask` takes SIX args in BOTH
-builds - the 7-arg description elsewhere counted the format string's
-duplicate print of arg1 (once as %d, once as %s through a type-name table).
+The same mapping pass showed that `set_mask` takes six args in both builds.
+The 7-arg description elsewhere counted the format string's second print of
+arg1 (once as %d, once as %s through a type-name table).
 
 ## IIDX 19 (Lincle) - the TXP2 package path
 
-IIDX 19 ships NO libafputils, so the host has to do what afputils did. It does
-NOT reimplement anything afp or avs already provide - every engine operation
+IIDX 19 ships no libafputils, so the host has to do what afputils did. It
+reimplements nothing that afp or avs already provide: every engine operation
 goes through the game's own DLLs. See `IIDX/lincle_bmafp_package.md` in the
 notes repo for the RE this mirrors (`BMAFP::C_MY_AFP_PACKAGE::package_read`).
 
-Working today, verified against real Lincle packages:
+Working today, checked against real Lincle packages:
 
 - `avs 2.13.4` boots (its own ordinal table, 7-arg split-heap `avs_boot`,
   ctx-first log writer, u32 `log/level`).
@@ -303,23 +302,23 @@ Working today, verified against real Lincle packages:
   their name table. Unit-tested, and validated on real files where
   `texture.offset + texture.size` lands exactly on the file size and the cell
   count matches the cell-name count.
-- Packages are opened as PLAIN AVS FILES (`avs_fs_open`), not an IFS. The
+- Packages are opened as plain AVS files (`avs_fs_open`), not as an IFS. The
   loader mounts the package's own directory at `/pkg` so any `.bin` anywhere in
   the tree can be selected from the UI file list.
-- Texture payloads are decompressed by **AVS's own cstream INFLATE**, reached
+- Texture payloads are decompressed by AVS's own cstream INFLATE, reached
   through four extra avs ordinals, exactly as `BMAFP::avslz_decode_mem` does.
   The blob is `{BE u32 uncompressed, BE u32 compressed, data}` and a zero
   compressed size means a straight copy.
 - `afp_check_src` is applied per stream from the appended byte-order block
-  (whose offset equals the core size) BEFORE `afp_stream_create_call`, without
-  which afp rejects the blob with "This is not afp data."
+  (whose offset equals the core size) before `afp_stream_create_call`.
+  Without it afp rejects the blob with "This is not afp data."
 - Streams, layers and MC refs are all created through the engine, and afp
   reports real timelines back (42 / 25 / 20 frames for `0200.bin`).
 - Textures are uploaded to D3D and `get_bitmap_info` (render-params slot 15 =
   byte 0x3C) is answered from the parsed cells, with half-pixel UVs.
 
-- **Geometry renders.** Most Lincle content never queries `get_bitmap_info`; it
-  goes through the SHAPE path instead. `src/formats/txp2.cpp` parses the 0x2000
+- Geometry renders. Most Lincle content never queries `get_bitmap_info` and
+  goes through the shape path instead. `src/formats/txp2.cpp` parses the 0x2000
   section (shape bodies with their positions, uvs, colours, bitmap refs and
   16-byte primitive nodes), `src/afp_ddr_geo.cpp` resolves each bitmap ref
   against the atlas cell tables and rewrites the per-cell UVs into atlas space
@@ -328,7 +327,7 @@ Working today, verified against real Lincle packages:
   unresolved bitmap refs" and draws the Lincle angel; `0414.bin` (96 shapes)
   draws its song background.
 
-Two decisions worth recording:
+Two design decisions:
 
 - The renderer emits one triangle list per primitive node instead of
   accumulating into bm2dx's 5120-vertex / 512-index batch. The batch size is
@@ -337,14 +336,14 @@ Two decisions worth recording:
   bits 1..7 package slot, bits 8.. geometry index + 1) so ids round-trip
   through afp unchanged.
 
-Package RELOAD (picking a second file from the tree) crashed inside libafp until
-the lifetime was fixed. `afp_stream_create_call` does NOT copy the afp blob - it
-references it in place, which is exactly why `afp_check_src` fixes the bytes up
-in place. Replacing the loaded package therefore freed a buffer afp was still
-reading, and afp faulted on a dangling pointer.
+Reloading a package (picking a second file from the tree) crashed inside
+libafp until the lifetime was fixed. `afp_stream_create_call` does not copy
+the afp blob but references it in place, which is also why `afp_check_src`
+fixes the bytes up in place. Replacing the loaded package therefore freed a
+buffer afp was still reading, and afp faulted on a dangling pointer.
 
 `BMAFP::C_MY_AFP_PACKAGE::package_free` shows the required order, and
-`LoadTxp2` now mirrors it: destroy the LAYERS first
+`LoadTxp2` now follows it: destroy the layers first
 (`afp_layer_is_valid(l) >= 0` then `afp_layer_destroy(l)`, after `play(0)` and
 `set_attribute(1, 0)`), then every stream via `afp_stream_destroy_call` (which
 returns 0 on success), then release the host's D3D textures, and only then free
@@ -352,19 +351,20 @@ the package buffer. Two supporting fixes: the texture-slot allocator now reuses
 released slots instead of only ever bumping a counter (a long session would
 otherwise exhaust the 4096-slot table and silently stop texturing), and a
 process-wide crash reporter (`src/support/crash_report.cpp`) logs the faulting
-module and offset for any access violation, which is what identified this one.
+module and offset for any access violation. The crash reporter is how this
+crash was found.
 
-A resolution bug surfaced while testing this: `CreateRenderWindowAndDevice`
-used to force 1280x720 for every legacy-AFP profile, which silently overrode
-both the profile default and `--render-size`. The profile's
-`default_render_w/h` is now authoritative unless `--render-size` is passed on
-that run, which is what makes Lincle boot at its real 640x480.
+Testing this also turned up a resolution bug: `CreateRenderWindowAndDevice`
+used to force 1280x720 for every legacy-AFP profile, silently overriding both
+the profile default and `--render-size`. The profile's `default_render_w/h`
+now wins unless `--render-size` is passed on that run, so Lincle boots at its
+real 640x480.
 
 ## SDVX 1 (BOOTH) - the TXP2 path on a newer engine
 
 Profile `sdvx1`, dir hint "booth", backend `afp_ddr`, 720x1280 portrait,
 `avs_generation = Avs2158`, no afp-utils (docs/game_profiles.md has the
-profile and where the render size comes from). WORKING: TXP2 packages from
+profile and where the render size comes from). Works: TXP2 packages from
 `data/graphics/*.bin` load, every clip enumerates, and they render
 (`bg_space.bin` / `bg_space`, `logo.bin`, `game_bg_loop.bin`,
 `cmn_game_hud.bin`). Render-regress case `sdvx1`.
@@ -398,7 +398,7 @@ The game's package reader is the same code as Lincle's
 `<name>.bin`. Every SDVX 1 package has flags `0x67fdb`, so its textures are
 avslz compressed (`0x40000`) and the byte-order block (`0x20000`) is present.
 
-Two things had to change, both avs 2.15.8 facts rather than SDVX ones
+Two things had to change. Both are facts about avs 2.15.8, not about SDVX
 (docs/game_profiles.md, avs boot contract items 4 and 5):
 
 1. `avs_fs_open` read-only is flags 1 on 2.15.8, not 0. With 0 the open
@@ -423,7 +423,7 @@ loads them only through the afp-utils path, so on `sdvx1` they fail to load.
 package (SDVX 1 and IIDX 19 alike). `RootMc()` caches the root MC id per
 layer id. `SwitchClip` back to a clip whose layer already exists calls
 `afp_layer_stop` then `afp_layer_play`, and `afp_layer_stop` instantiates a
-NEW root MC: `afp_layer_mc_refer` returned `0x18050000` before the stop and
+new root MC: `afp_layer_mc_refer` returned `0x18050000` before the stop and
 `0x18060000` after it, while `afp_layer_play(0)` and `afp_layer_play(1)` left
 it unchanged. The cached id was then dead (`W:afp-access: afp_mc_get_param
 afp_mc_id[0x18050000] is invalid.`). `SwitchClip` now drops the cache on that
@@ -473,7 +473,7 @@ authored rate. It needs no change to the DDR backend beyond `DdrAfp::LoadTxp2Str
 
 ### How a frame is produced (afp does the transforms)
 
-The renderer never walks afp's display objects. Per render-loop tick:
+The renderer never walks afp's display objects. On each render-loop tick:
 
 1. `render_loop.cpp` `AdvanceFrame` takes `dt` as `1 / render_fps` (the
    renderer setting, 120 by default) or `1 / export fps` while exporting, and
@@ -491,7 +491,7 @@ The renderer never walks afp's display objects. Per render-loop tick:
 4. `DisplayFrame` calls `afp_display_layer(layer)`. afp walks the display list
    itself, composes each placement's world matrix down the clip chain and calls
    the render-params callbacks: `load_matrix` (2x3, `Cb_LoadMatrix`) or
-   `load_matrix44` (`Cb_LoadMatrix44`) with the FINAL composed matrix, then
+   `load_matrix44` (`Cb_LoadMatrix44`) with the final composed matrix, then
    `draw_shape` (`Cb_DrawShape`, shape id plus colour) or `draw_primitive`
    (`Cb_DrawPrimitiveLegacy`). The callbacks only set D3D state and draw.
 
@@ -501,13 +501,13 @@ nothing comes from afp-utils, which this generation does not have.
 
 ## Still x64-only
 
-The MODERN afp path (`afp_boot.cpp`'s render context / `afpu_data`,
+The modern afp path (`afp_boot.cpp`'s render context / `afpu_data`,
 `render_executor.cpp`'s vtable indices, the `uint64_t info[8]` package-info
 reads in `afp_packages.cpp` / `afp_anim.cpp` / `qpro_*.cpp`) keeps its
-8-byte stride assumptions. It COMPILES on x86 but would not work there.
-That is fine today: every modern-afp game (IIDX 26+, SDVX, GITADORA,
-jubeat) ships 64-bit DLLs. If a 32-bit modern-afp title ever appears, those
-sites need the same slot treatment as `BuildStructs` got, all together.
+8-byte stride assumptions. It compiles on x86 but would not work there.
+That does not matter today, because every modern-afp game (IIDX 26+, SDVX,
+GITADORA, jubeat) ships 64-bit DLLs. If a 32-bit modern-afp title ever
+appears, all of those sites need the same slot treatment `BuildStructs` got.
 
 `render_seh.cpp`'s fault register capture is arch-gated: x64 fills all 16
 GPRs, x86 fills the 8 it has and zeroes the rest (`kRegNames` still prints
@@ -515,8 +515,8 @@ x64 mnemonics, so the last 8 lines read as zeros on x86).
 
 ## Encoding runs in a 64-bit child (573Encoder.exe)
 
-RTX 50 cards (Blackwell) and newer do not run 32-bit CUDA programs; NVIDIA's
-driver refuses them on that architecture while RTX 40 and older still accept
+RTX 50 cards (Blackwell) and newer do not run 32-bit CUDA programs: NVIDIA's
+driver refuses them on that architecture, while RTX 40 and older still accept
 them. ffmpeg's `h264_nvenc` / `av1_nvenc` open their session through CUDA
 whenever they get plain system-memory frames: `nvenc_setup_device` in
 `libavcodec/nvenc.c` only takes its Direct3D 11 branch when it is handed
@@ -527,7 +527,7 @@ export panel said "h264_nvenc unavailable" while the same build worked on an
 RTX 4070. The decision record is ADR 0008.
 
 The 32-bit build therefore never encodes in process. `ExportEncoder`
-(`src/encode/export_encoder.h`) is the one place that chooses: with
+(`src/encode/export_encoder.h`) is the one place that makes the choice. With
 `R573_REMOTE_ENCODER` defined (CMake defines it on `r573_encode_client` for
 the 32-bit build, and `r573_app` links that library only there) its `Sink`
 is `EncodeClient::Sink` and its `HardwareAvailable` asks the child; on x64 it
@@ -552,8 +552,8 @@ Each sink is one numbered session. `Open` creates a Boost.Interprocess
 sized for one source frame (`src/encode/frame_section.*`); the child opens it
 by name. `SubmitFrame` copies the frame into the section and sends `Frame`;
 the child encodes straight from the mapping. The copy uses the sink's own
-frame size, never the mapping's, because Windows can round a mapping up to a
-page. `windows_shared_memory` is the native Windows mapping, which disappears
+frame size and never the mapping's, because Windows can round a mapping up to
+a page. `windows_shared_memory` is the native Windows mapping, which disappears
 when its last handle closes, so a crash on either side leaves nothing behind.
 A `Section` is built in place and passed around by `unique_ptr`, never moved:
 Boost's `windows_shared_memory` move constructor swaps with a `mode_t`
@@ -567,9 +567,9 @@ length-prefixed named pipe as the preview host (`PreviewChannel`, ADR 0007):
 (whether hardware is in use), `Done`, `Probed` or `Failure` (the sink's
 `LastError()` text). The finish request is not called `Finish`: flatc
 generates a builder class per table, and a table named `Finish` collides
-with the builder's own `Finish()` method. Replies have no timeout: a slow
-AV1 flush is legitimate, and a dead child closes the pipe, which ends the
-wait at once.
+with the builder's own `Finish()` method. Replies have no timeout, because an
+AV1 flush can be slow, and a dead child closes the pipe, which ends the wait
+at once.
 
 `EncodeHost::Session` (`src/encode/host/encode_session.*`) holds one
 `MediaSink::Sink` and its section per open session. When the renderer closes
@@ -585,22 +585,21 @@ Replacing the child's frame handling with a bare `Done` fails the first case.
 
 ## CI
 
-`CMakePresets.json` gains `dev32` / `ci32`. `build-renderer.yml`'s `windows`
-job is a MATRIX over `x64` and `x86`: each leg picks its own MSVC dev-cmd
+`CMakePresets.json` has `dev32` / `ci32`. `build-renderer.yml`'s `windows`
+job is a matrix over `x64` and `x86`: each leg picks its own MSVC dev-cmd
 arch, vcpkg triplet, preset, build dir and output name, then builds, runs
 the full ctest suite, and uploads its own artefact (`renderer-win64-*` /
 `renderer-win32-*`). All 187 tests pass on x86, including the ffmpeg
 encoder and D3D pixel-golden suites.
 
-Two details worth keeping:
+Two more details:
 
 - The vcpkg binary-archive cache key includes the triplet, so the x64 and
   x86 dependency sets do not evict each other.
 - "Verify build output" checks the PE machine field of the produced binary
-  (0x8664 for x64, 0x14c for x86), not just its size. A preset or dev-cmd
-  arch mix-up would otherwise produce a working-looking build of the wrong
-  architecture, which is exactly the failure this whole effort exists to
-  avoid.
+  (0x8664 for x64, 0x14c for x86), not just its size. Without that, a preset
+  or dev-cmd arch mix-up could produce a build that looks fine but targets the
+  wrong architecture.
 
 clang-tidy runs on the x64 leg only (`run_tidy` matrix flag). The tree is
 arch-independent apart from the few `#ifdef _WIN64` sites, so running it
@@ -616,8 +615,8 @@ copies `573Encoder.exe` and its PDB into the x86 set and re-uploads
 on its own. `preview_host.exe` is only the editor's helper: it reaches the
 editor job through the Actions cache, never as an artefact (docs/gates.md).
 
-Releasing is a SEPARATE `release` job gated on `needs: [bundle-win32,
-editor]` plus the `v*` tag. It packs both renderers and the one
+Releasing is a separate `release` job with `needs: [bundle-win32,
+editor]` that runs only on a `v*` tag. It packs both renderers and the one
 `573Encoder.exe` they share into `573Renderer.zip`, and the editor into
 `573Editor.zip` (docs/ci.md, "Release zips"). Doing it inside the matrix
 would have two jobs racing to create the same release.

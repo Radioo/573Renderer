@@ -181,7 +181,7 @@ void RulerInput(Ctx& ctx, float top) {
 
     if (marker >= 0 && !ImGui::IsMouseDragging(ImGuiMouseButton_Left)) {
         const Doc::Marker& hit = ctx.document->markers[(std::size_t)marker];
-        ImGui::SetTooltip("marker '%s' at frame %d\ndrag to move, right-click to rename or delete",
+        ImGui::SetTooltip("Marker '%s' at frame %d\nDrag to move, right-click to rename or delete.",
                           hit.label.c_str(), hit.frame);
     }
     if (marker >= 0 && ImGui::IsItemClicked(ImGuiMouseButton_Right)) {

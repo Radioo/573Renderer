@@ -159,7 +159,7 @@ TEST_CASE("render tab continuous-loop segmented applies each mode", "[gui][inspe
     ImGuiTest* on_test = harness.NewTest("insp_cont_on");
     on_test->TestFunc = [](ImGuiTestContext* ctx) {
         OpenTab(ctx, "##inspector_tabs/Render");
-        ctx->ItemClick("##inspector_tabs/Render/##live_cont/$$2/ON");
+        ctx->ItemClick("##inspector_tabs/Render/##live_cont/$$2/On");
     };
     harness.Run(on_test);
     CHECK(App::Global().GetLiveOverrides().continuous_loop_mode == 1);
@@ -167,7 +167,7 @@ TEST_CASE("render tab continuous-loop segmented applies each mode", "[gui][inspe
     ImGuiTest* off_test = harness.NewTest("insp_cont_off");
     off_test->TestFunc = [](ImGuiTestContext* ctx) {
         OpenTab(ctx, "##inspector_tabs/Render");
-        ctx->ItemClick("##inspector_tabs/Render/##live_cont/$$0/OFF");
+        ctx->ItemClick("##inspector_tabs/Render/##live_cont/$$0/Off");
     };
     harness.Run(off_test);
     CHECK(App::Global().GetLiveOverrides().continuous_loop_mode == -1);
@@ -229,7 +229,7 @@ TEST_CASE("render tab background segmented selects a preview colour", "[gui][ins
     ImGuiTest* test = harness.NewTest("insp_bg_red");
     test->TestFunc = [](ImGuiTestContext* ctx) {
         OpenTab(ctx, "##inspector_tabs/Render");
-        ctx->ItemClick("##inspector_tabs/Render/##bg_color/$$3/red");
+        ctx->ItemClick("##inspector_tabs/Render/##bg_color/$$3/Red");
     };
     harness.Run(test);
 
@@ -257,10 +257,10 @@ TEST_CASE("render tab MC-names checkbox reveals the name-type segmented", "[gui]
     ImGuiTest* test = harness.NewTest("insp_mc_names");
     test->TestFunc = [](ImGuiTestContext* ctx) {
         OpenTab(ctx, "##inspector_tabs/Render");
-        IM_CHECK(ctx->ItemExists("##inspector_tabs/Render/##mc_name_type/$$1/column") == false);
+        IM_CHECK(ctx->ItemExists("##inspector_tabs/Render/##mc_name_type/$$1/Column") == false);
         ctx->ItemClick("##inspector_tabs/Render/Show MC names (F3)");
         ctx->Yield(2);
-        ctx->ItemClick("##inspector_tabs/Render/##mc_name_type/$$1/column");
+        ctx->ItemClick("##inspector_tabs/Render/##mc_name_type/$$1/Column");
     };
     harness.Run(test);
 
@@ -301,7 +301,7 @@ TEST_CASE("ddr render tab offers background and reset only", "[gui][inspector]")
         OpenTab(ctx, "##inspector_tabs/Render");
         IM_CHECK(ctx->ItemExists("##inspector_tabs/Render/Loop master animation") == false);
         IM_CHECK(ctx->ItemExists("##inspector_tabs/Render/Filter (F7)") == false);
-        ctx->ItemClick("##inspector_tabs/Render/##bg_color/$$2/black");
+        ctx->ItemClick("##inspector_tabs/Render/##bg_color/$$2/Black");
     };
     harness.Run(test);
 

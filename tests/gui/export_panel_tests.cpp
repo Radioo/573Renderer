@@ -233,7 +233,7 @@ TEST_CASE("export modal background toggle and colour reach the request", "[gui][
     ImGuiTest* test = harness.NewTest("export_bg");
     test->TestFunc = [](ImGuiTestContext* ctx) {
         OpenModal(ctx);
-        ctx->ItemUncheck("Transparent bg");
+        ctx->ItemUncheck("Transparent background");
         ctx->ItemClick("Start export");
     };
     harness.Run(test);
@@ -246,7 +246,7 @@ TEST_CASE("export modal background toggle and colour reach the request", "[gui][
     ImGuiTest* back = harness.NewTest("export_bg_back");
     back->TestFunc = [](ImGuiTestContext* ctx) {
         OpenModal(ctx);
-        ctx->ItemCheck("Transparent bg");
+        ctx->ItemCheck("Transparent background");
         ctx->ItemClick("Start export");
     };
     harness.Run(back);
@@ -266,9 +266,9 @@ TEST_CASE("export modal keyframe interval is offered only for video formats", "[
         OpenModal(ctx);
         OpenAdvanced(ctx);
         GuiTest::ComboPick(ctx, "##exp_fmt", "PNG sequence (folder of frames, lossless)");
-        IM_CHECK(ctx->ItemExists("keyframe interval##exp_keyint") == false);
+        IM_CHECK(ctx->ItemExists("Keyframe interval##exp_keyint") == false);
         GuiTest::ComboPick(ctx, "##exp_fmt", "WebM AV1 (video, opaque, NVENC)");
-        ctx->ItemInputValue("keyframe interval##exp_keyint", 240);
+        ctx->ItemInputValue("Keyframe interval##exp_keyint", 240);
         ctx->ItemClick("Start export");
     };
     harness.Run(test);
@@ -321,7 +321,7 @@ TEST_CASE("export modal loop count and blend seam reach the request", "[gui][exp
     test->TestFunc = [](ImGuiTestContext* ctx) {
         OpenModal(ctx);
         OpenAdvanced(ctx);
-        ctx->ItemInputValue("Continuous loop count##exp_loops", 3);
+        ctx->ItemInputValue("Loops to capture##exp_loops", 3);
         ctx->ItemCheck("Blend loop seam##exp_blend");
         ctx->ItemInputValue("Blend frames##exp_blendN", 20);
         ctx->ItemClick("Start export");
@@ -446,15 +446,15 @@ TEST_CASE("export modal disables the colour picker while the bg stays transparen
     ImGuiTest* test = harness.NewTest("export_color_gate");
     test->TestFunc = [](ImGuiTestContext* ctx) {
         OpenModal(ctx);
-        ctx->ItemCheck("Transparent bg");
+        ctx->ItemCheck("Transparent background");
         ctx->Yield(2);
         IM_CHECK((ctx->ItemInfo("##exp_bg_color/##ColorButton").ItemFlags &
                   ImGuiItemFlags_Disabled) != 0);
-        ctx->ItemUncheck("Transparent bg");
+        ctx->ItemUncheck("Transparent background");
         ctx->Yield(2);
         IM_CHECK((ctx->ItemInfo("##exp_bg_color/##ColorButton").ItemFlags &
                   ImGuiItemFlags_Disabled) == 0);
-        ctx->ItemCheck("Transparent bg");
+        ctx->ItemCheck("Transparent background");
     };
     harness.Run(test);
 }
@@ -467,7 +467,8 @@ TEST_CASE("export modal disables hardware encode for software-only formats", "[g
     test->TestFunc = [](ImGuiTestContext* ctx) {
         OpenModal(ctx);
         GuiTest::ComboPick(ctx, "##exp_fmt", "PNG sequence (folder of frames, lossless)");
-        IM_CHECK((ctx->ItemInfo("HW accel##exp_hw").ItemFlags & ImGuiItemFlags_Disabled) != 0);
+        IM_CHECK((ctx->ItemInfo("Hardware encoding##exp_hw").ItemFlags & ImGuiItemFlags_Disabled) !=
+                 0);
         ctx->ItemClick("Start export");
     };
     harness.Run(test);
@@ -557,9 +558,9 @@ TEST_CASE("export modal keeps every loop option for content that has a loop", "[
     ImGuiTest* test = harness.NewTest("export_caps_default");
     test->TestFunc = [](ImGuiTestContext* ctx) {
         OpenModal(ctx);
-        IM_CHECK(ctx->ItemExists("Transparent bg"));
+        IM_CHECK(ctx->ItemExists("Transparent background"));
         OpenAdvanced(ctx);
-        IM_CHECK(ctx->ItemExists("Continuous loop count##exp_loops"));
+        IM_CHECK(ctx->ItemExists("Loops to capture##exp_loops"));
         IM_CHECK(ctx->ItemExists("Blend loop seam##exp_blend"));
     };
     harness.Run(test);
@@ -688,7 +689,7 @@ TEST_CASE("export modal refuses an fps that is not an integer ratio of the docum
         ctx->ItemInputValue("fps##exp_fps", 45);
         ctx->Yield(2);
         const std::string text = GuiTest::CaptureFrameText(ctx);
-        IM_CHECK(text.find("integer") != std::string::npos);
+        IM_CHECK(text.find("whole multiple or divisor") != std::string::npos);
         ctx->ItemClick("Start export");
         ctx->Yield(2);
     };

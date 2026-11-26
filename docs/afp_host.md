@@ -1,9 +1,10 @@
 # r573_afp_host (modern avs/afp host code)
 
-The library the IFS editor's preview host is built on: everything needed to
-boot a modern avs2-core / afp-core / afp-utils build, mount content, load
-packages, drive an animation and draw it through the D3D9 callbacks, with no
-GUI, `App` state or window code. The renderer's `r573_app` links it.
+This is the library the IFS editor's preview host is built on. It has
+everything needed to boot a modern avs2-core / afp-core / afp-utils build,
+mount content, load packages, drive an animation and draw it through the D3D9
+callbacks, and no GUI, `App` state or window code. The renderer's `r573_app`
+links it too.
 
 | Area | Files |
 |---|---|
@@ -20,14 +21,14 @@ types `ifs_inspect.h` uses), `r573_render` and `d3d9`.
 
 `local_dll_tests` links the library with `/WHOLEARCHIVE`, so every object in
 it is linked even when no test calls it. A file that starts depending on
-`r573_app` (the GUI, `App::Global()`, export, the backends) fails that link,
-and `tools/checks.sh` builds every target, so the dependency is caught before
-it lands.
+`r573_app` (the GUI, `App::Global()`, export, the backends) fails that link.
+`tools/checks.sh` builds every target, so such a dependency fails the gate
+before it is merged.
 
 ## Process globals that remain
 
-The library still reads two process-wide objects, which is enough for a host
-process that owns one engine:
+The library still reads two process-wide objects. A host process that owns
+one engine needs nothing more:
 
 - `g_engine` (`app_globals.h`): read by the accessors in `afp_anim.cpp`
   (`IsBooted`, `StreamId`, `PackageId`, `AnimName`,
@@ -54,7 +55,7 @@ half-drawn frame. It waits by copying one pixel of the shared texture into a
 lockable 1x1 render target and locking it. A `D3DQUERYTYPE_EVENT` query was
 tried first: on the development machine its `GetData` kept returning
 `S_FALSE` for five seconds after the copy, with or without a scene or a
-`Present` in between. Why is not known.
+`Present` in between. The cause is not known.
 
 Test: `tests/local/shared_frame_tests.cpp` (label `local`, needs a D3D9Ex
 adapter, no game data). Without the wait, the second device read zeros.
@@ -102,10 +103,10 @@ animation.
 `ReloadPackageFromMemory` keeps the playhead: it reads the root clip's current
 frame, runs `UnloadPackages` (companions, then the scene streams, then
 `afpu_package_control(6, pkg_id)`, then the scene textures), loads the new
-bytes under the same package name and seeks back to that frame. The order
-matters because afp-utils looks a package up by name before reading it: a
-package that is still registered is linked again instead of read, so a reload
-that skipped the destroy would keep showing the old content.
+bytes under the same package name and seeks back to that frame. The destroy
+has to come first because afp-utils looks a package up by name before reading
+it: a package that is still registered is linked again instead of read, so a
+reload that skipped the destroy would keep showing the old content.
 
 Package ids carry a generation counter, so an id kept from before a reload no
 longer resolves. Whether afp-core drops global export and class names when

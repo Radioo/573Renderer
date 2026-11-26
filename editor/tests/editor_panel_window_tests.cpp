@@ -336,7 +336,7 @@ TEST_CASE("Depths chosen together move together, owned or not, as one undo step"
     }
     emit timeline->DepthChosen(3);
     {
-        Script owned({Choose("Let the project own depth 3 from here")});
+        Script owned({Choose("Keyframe depth 3 from here")});
         emit timeline->MenuRequested(QPoint(4, 4), 0, QString());
         REQUIRE(Settle([&owned] { return owned.Finished(); }));
         INFO(owned.Problems().join("|").toStdString());
@@ -518,7 +518,7 @@ TEST_CASE("Delete removes the chosen depths here as one undo step, but not owned
     }
     emit timeline->DepthChosen(3);
     {
-        Script owned({Choose("Let the project own depth 3 from here")});
+        Script owned({Choose("Keyframe depth 3 from here")});
         emit timeline->MenuRequested(QPoint(4, 4), 0, QString());
         REQUIRE(Settle([&owned] { return owned.Finished(); }));
         CHECK(owned.Problems().isEmpty());

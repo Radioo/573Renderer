@@ -133,7 +133,7 @@ void DrawEntries(const std::vector<Editor::PaletteEntry>& entries) {
         }
         DrawEntry(entry, std::cmp_equal(i, g_highlight));
     }
-    if (entries.empty()) ImGui::TextDisabled("no command matches that filter");
+    if (entries.empty()) ImGui::TextDisabled("No command matches that filter");
 }
 
 void DrawAddOption(const std::vector<Editor::PaletteEntry>& entries, std::string_view filter) {
@@ -144,7 +144,7 @@ void DrawAddOption(const std::vector<Editor::PaletteEntry>& entries, std::string
     if (!in_section) ImGui::SeparatorText(SectionLabel(Editor::PaletteSection::Document));
     const bool picked = ImGui::Selectable("Add option###tl_palette_add_option");
     ImGui::SameLine(0.0F, Gui::Dpi::S(12.0F));
-    ImGui::TextDisabled("appends to document.options; not a clip and not a track");
+    ImGui::TextDisabled("adds an entry to document.options, not a clip or a track");
     if (!picked) return;
 
     Editor::State& editor = Editor::Global();
@@ -258,14 +258,14 @@ void RenderPalette() {
 
     const Doc::Document& document = editor.Document();
     const int track_index = Editor::FindTrack(document, g_track_id);
-    ImGui::TextDisabled("track %s at frame %d",
+    ImGui::TextDisabled("Track %s at frame %d",
                         track_index >= 0 ? document.tracks[(std::size_t)track_index].name.c_str()
                                          : "(none, a new one will be created)",
                         g_frame);
 
     if (ImGui::IsWindowAppearing()) ImGui::SetKeyboardFocusHere();
     ImGui::SetNextItemWidth(-FLT_MIN);
-    const bool typed = ImGui::InputTextWithHint("###tl_palette_filter", "filter commands",
+    const bool typed = ImGui::InputTextWithHint("###tl_palette_filter", "Filter commands",
                                                 g_filter.data(), g_filter.size());
 
     const std::vector<Editor::PaletteEntry> entries =

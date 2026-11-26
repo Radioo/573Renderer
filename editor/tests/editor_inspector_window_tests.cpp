@@ -79,7 +79,7 @@ TEST_CASE("The inspector shows the placement in pixels, percent and degrees") {
     REQUIRE(title != nullptr);
     REQUIRE(badge != nullptr);
     CHECK(title->text() == "Depth 2");
-    CHECK(badge->text() == "BAKED");
+    CHECK(badge->text() == "Baked");
     CHECK(MarkTip(opened.window, "Position") == "Set on this frame");
     emit timeline->FrameChosen(1);
     CHECK(MarkTip(opened.window, "Position") == "Set on frame 0");
@@ -126,7 +126,7 @@ TEST_CASE("An owned depth's inspector keys the value it is given and the diamond
     emit timeline->DepthChosen(3);
     auto* badge = opened.window.findChild<QLabel*>("inspector_badge");
     REQUIRE(badge != nullptr);
-    CHECK(badge->text().startsWith("KEYED"));
+    CHECK(badge->text() == "Keyframed");
 
     auto* keying = opened.window.findChild<QToolButton*>("keying_Rotation");
     REQUIRE(keying != nullptr);

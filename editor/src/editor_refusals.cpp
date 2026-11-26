@@ -83,7 +83,7 @@ std::optional<QString> Window::NeedsProject() const {
 
 std::optional<QString> Window::WorkAreaRefusal() const {
     if (const std::optional<QString> refused = NeedsAnimation()) return refused;
-    if (!work_area_) return tr("Mark the frames as the work area first, with B and N");
+    if (!work_area_) return tr("Set a work area first: B marks its start and N its end");
     const bool owned = std::ranges::any_of(authored_, [this](const Document::AuthoredDepth& one) {
         return one.animation == animation_path_ && one.clip == clip_;
     });

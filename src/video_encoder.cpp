@@ -253,10 +253,10 @@ struct Encoder::Impl {
             p.prefer_hardware ? avcodec_find_encoder_by_name("h264_nvenc") : nullptr;
         const AVCodec* libx264 = avcodec_find_encoder_by_name("libx264");
         if ((libx264 == nullptr) && (nvenc_h264 == nullptr)) {
-            err = "MP4 H.264 unavailable: this ffmpeg build has no software "
-                  "H.264 (libx264/openh264) and hardware (h264_nvenc) is off "
-                  "or absent. Enable HW accel on an NVIDIA GPU, or rebuild "
-                  "ffmpeg with the x264/openh264 feature.";
+            err = "MP4 H.264 is not available: this ffmpeg build has no software "
+                  "H.264 encoder (libx264 or openh264), and h264_nvenc is off or "
+                  "missing. Turn on Hardware encoding on an NVIDIA GPU, or rebuild "
+                  "ffmpeg with the x264 or openh264 feature.";
             return false;
         }
         if (!NewColorStream(err)) return false;
@@ -265,10 +265,10 @@ struct Encoder::Impl {
                                          "MP4-H264 (h264_nvenc)");
         if (!opened) {
             if (libx264 == nullptr) {
-                err = "MP4 H.264: h264_nvenc unavailable and this ffmpeg "
-                      "build has no software H.264 (libx264/openh264). Enable "
-                      "HW accel on an NVIDIA GPU, or rebuild ffmpeg with the "
-                      "x264/openh264 feature.";
+                err = "MP4 H.264: h264_nvenc is off or did not start, and this ffmpeg "
+                      "build has no software H.264 encoder (libx264 or openh264). "
+                      "Turn on Hardware encoding on an NVIDIA GPU, or rebuild ffmpeg "
+                      "with the x264 or openh264 feature.";
                 return false;
             }
             if (!OpenLibx264(enc_color, libx264, p, out_w, out_h, global_header, err)) return false;

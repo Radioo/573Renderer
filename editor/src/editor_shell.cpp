@@ -397,7 +397,7 @@ void Window::RefreshTopBar() {
     const std::optional<QString> refused = commands_->Refusal("project.export");
     export_button_->setEnabled(!refused);
     export_button_->setToolTip(refused.value_or(
-        waiting == 0 ? tr("The IFS holds everything the project writes")
+        waiting == 0 ? tr("The IFS is up to date with the project")
                      : tr("%1 IFS entries differ from what the last export wrote").arg(waiting)));
 }
 

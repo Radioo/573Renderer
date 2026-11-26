@@ -1,7 +1,7 @@
 # Inspector
 
-Every interaction on this surface. Generated inventory, cross-checked by a second
-reader against the source (see README.md for method).
+Every interaction on this surface. The inventory was generated and then checked
+against the source by a second reader (see README.md for the method).
 
 | # | id | control | input | tooltip | tests |
 |---|---|---|---|---|---|
@@ -35,7 +35,7 @@ reader against the source (see README.md for method).
 | 28 | `render-root-loop-segment` | "Loop root" segmented control ("Auto-hold" / "Force loop") | left-click | yes | **none** |
 | 29 | `live-mc-names-list-scroll` | "MC names (N)" list child window | scroll | - | **none** |
 | 30 | `properties-slot-bitmap-combo-popup-scroll` | Bitmap combo popup list | scroll | - | **none** |
-| 31 | `properties-slot-bitmap-input` | Variant-slot bitmap name text field (hint: "bitmap name (blank = IFS default)") | text-entry | yes | 3 |
+| 31 | `properties-slot-bitmap-input` | Variant-slot bitmap name text field (hint: "Bitmap name (blank for the IFS default)") | text-entry | yes | 3 |
 | 32 | `render-trim-frames-input` | "Trim frames" integer input | text-entry | yes | 3 |
 
 ## Detail
@@ -68,10 +68,10 @@ reader against the source (see README.md for method).
 - **input**: checkbox
 - **path**: `##inspector_tabs/Render/Loop master animation`
 - **precondition**: Render tab active with the afp_modern backend (RenderRenderTabModern). Not drawn in the DDR render tab.
-- **effect**: App::Global().SetLoopMaster(loop) followed by App::SaveCurrentSettings() - persists immediately.
+- **effect**: App::Global().SetLoopMaster(loop) followed by App::SaveCurrentSettings(), so the setting is saved at once.
 - **source**: `src/gui/gui_inspector.cpp:167`
 - **tooltip**: yes
-- **notes**: Value is read fresh each frame from App::Global().GetLoopMaster().
+- **notes**: The value is read again each frame from App::Global().GetLoopMaster().
 - **tests**: `ddr render tab offers background and reset only`, `inspector render tab controls all explain themselves`, `inspector tabs switch the visible body`, `render tab loop-master checkbox persists to state`
 
 ### 4. "Show MC names (F3)" checkbox
@@ -90,11 +90,11 @@ reader against the source (see README.md for method).
 - **id**: `properties-slot-bitmap-combo-open`
 - **input**: combo-select
 - **path**: `##inspector_tabs/Properties/##bitmap`
-- **precondition**: Properties tab active, selection is a child with a matching VariantSlot, AND cfg.bitmap_names is NOT empty (when it is empty DrawSlotBitmapInput draws a text field instead).
+- **precondition**: Properties tab active, selection is a child with a matching VariantSlot, and cfg.bitmap_names is not empty (when it is empty DrawSlotBitmapInput draws a text field instead).
 - **effect**: ImGui::BeginCombo("##bitmap", preview) opens the dropdown popup listing "(default)" plus every name in cfg.bitmap_names; opening alone mutates nothing. Item width is set to -FLT_MIN (full width).
 - **source**: `src/gui/gui_inspector.cpp:42`
 - **tooltip**: yes
-- **notes**: Tooltip is emitted by the IsItemHovered() check at line 86-87 in DrawSlotProperties, which fires for whichever of the combo/input was drawn last; it explains that this swaps the clip's bitmap and that "(default)" drops the override and replays the master because afp has no restore-authored call.
+- **notes**: The tooltip comes from the IsItemHovered() check at line 86-87 in DrawSlotProperties, which fires for whichever of the combo/input was drawn last; it explains that this swaps the clip's bitmap and that "(default)" drops the override and replays the master because afp has no restore-authored call.
 - **tests**: `slot bitmap combo explains the default restore`, `slot bitmap combo picks an override and restores the default`, `slot bitmap falls back to a text field with no listed bitmaps`
 
 ### 6. "Master scale" slider (0.25x - 4.00x, format "%.2fx")
@@ -113,11 +113,11 @@ reader against the source (see README.md for method).
 - **id**: `properties-slot-bitmap-tooltip` *(audit)*
 - **input**: hover
 - **path**: `##inspector_tabs/Properties/##bitmap`
-- **precondition**: Properties tab active, selection is a child/clip (kind != Kind::Layer) and FindSlotFor found a matching App::VariantSlot, so DrawSlotProperties runs (line 73). The IsItemHovered() at line 86 follows whichever bitmap widget was just submitted: the ##bitmap combo when cfg.bitmap_names is non-empty (line 82), otherwise the ##bitmap InputTextWithHint (line 84). It is NOT attached to the "Slot visible" checkbox above it (line 80).
-- **effect**: ImGui::SetTooltip (lines 87-89) - explains that this swaps the clip's bitmap and that "(default)" drops the override and replays the master so the timeline re-authors the original bitmap, because afp has no restore-authored call.
+- **precondition**: Properties tab active, selection is a child/clip (kind != Kind::Layer) and FindSlotFor found a matching App::VariantSlot, so DrawSlotProperties runs (line 73). The IsItemHovered() at line 86 follows whichever bitmap widget was just submitted: the ##bitmap combo when cfg.bitmap_names is non-empty (line 82), otherwise the ##bitmap InputTextWithHint (line 84). It is not attached to the "Slot visible" checkbox above it (line 80).
+- **effect**: ImGui::SetTooltip (lines 87-89). The tooltip explains that this swaps the clip's bitmap and that "(default)" drops the override and replays the master so the timeline re-authors the original bitmap, because afp has no restore-authored call.
 - **source**: `src/gui/gui_inspector.cpp:86`
 - **tooltip**: yes
-- **notes**: This is the 9th IsItemHovered/SetTooltip pair in the file (86, 171, 189, 209, 228, 257, 274, 285, 295). The inventory has dedicated hover entries for the other 8 but only flagged this one via has_tooltip:true on properties-slot-bitmap-combo-open / properties-slot-bitmap-input, so the one-entry-per-tooltip rule is violated exactly once. Verified the tooltip still targets the combo itself while its popup is open: ImGui::End() restores g.LastItemData from window_stack_data.ParentLastItemDataBackup (vendor/vcpkg/buildtrees/imgui/src/v1.92.7-b588f89316.clean/imgui.cpp:8230), so EndCombo -> EndPopup -> End does not leave LastItemData pointing at the last Selectable.
+- **notes**: This is the 9th IsItemHovered/SetTooltip pair in the file (86, 171, 189, 209, 228, 257, 274, 285, 295). The inventory has dedicated hover entries for the other 8 but only flagged this one via has_tooltip:true on properties-slot-bitmap-combo-open / properties-slot-bitmap-input, so this is the one place the one-entry-per-tooltip rule is broken. The tooltip was checked to still target the combo itself while its popup is open: ImGui::End() restores g.LastItemData from window_stack_data.ParentLastItemDataBackup (vendor/vcpkg/buildtrees/imgui/src/v1.92.7-b588f89316.clean/imgui.cpp:8230), so EndCombo -> EndPopup -> End does not leave LastItemData pointing at the last Selectable.
 - **tests**: `slot bitmap combo explains the default restore`, `slot bitmap combo picks an override and restores the default`, `slot bitmap falls back to a text field with no listed bitmaps`
 
 ### 8. Hover tooltip on the "Background" segmented control
@@ -126,7 +126,7 @@ reader against the source (see README.md for method).
 - **input**: hover
 - **path**: `##bg_color/5/blue`
 - **precondition**: Pointer over the last segment button ("blue") of the row.
-- **effect**: ImGui::SetTooltip - explains this is the AFP debug viewer F4 preview background, that default means transparent, and that it affects the live preview only because export uses its own Background setting.
+- **effect**: ImGui::SetTooltip. The tooltip explains this is the AFP debug viewer F4 preview background, that default means transparent, and that it affects the live preview only because export uses its own Background setting.
 - **source**: `src/gui/gui_inspector.cpp:274`
 - **tooltip**: yes
 - **tests**: `inspector render tab controls all explain themselves`
@@ -137,7 +137,7 @@ reader against the source (see README.md for method).
 - **input**: hover
 - **path**: `##live_cont/2/ON`
 - **precondition**: Pointer over the last segment button ("ON") of the row.
-- **effect**: ImGui::SetTooltip - explains OFF clears the CLayer flag (master reverts to gotoAndStop saturation), default leaves the engine default, ON applies the BG dispatcher's continuous-loop flag sequence (master advances past total_length, sub-clips evolve, required for BG 20), and that it is re-applied on the next stream switch.
+- **effect**: ImGui::SetTooltip. The tooltip explains OFF clears the CLayer flag (master reverts to gotoAndStop saturation), default leaves the engine default, ON applies the BG dispatcher's continuous-loop flag sequence (master advances past total_length, sub-clips evolve, required for BG 20), and that it is re-applied on the next stream switch.
 - **source**: `src/gui/gui_inspector.cpp:209`
 - **tooltip**: yes
 - **notes**: Same last-item-hover behaviour as the other Segmented tooltips.
@@ -149,7 +149,7 @@ reader against the source (see README.md for method).
 - **input**: hover
 - **path**: `##inspector_tabs/Render/Filter (F7)`
 - **precondition**: Pointer over the Filter checkbox.
-- **effect**: ImGui::SetTooltip - explains it toggles the AFP layer filter (debug viewer F7) by calling afp-core set-filter (ord 0x032) on the active stream with filter id 0x80000000\|enable, the same call the scene's CLayer slot-32 wrapper makes.
+- **effect**: ImGui::SetTooltip. The tooltip explains it toggles the AFP layer filter (debug viewer F7) by calling afp-core set-filter (ord 0x032) on the active stream with filter id 0x80000000\|enable, the same call the scene's CLayer slot-32 wrapper makes.
 - **source**: `src/gui/gui_inspector.cpp:285`
 - **tooltip**: yes
 - **tests**: `ddr render tab offers background and reset only`, `inspector render tab controls all explain themselves`, `render tab filter checkbox toggles the live override`, `scenario: live overrides can be stacked then reset in one click`
@@ -160,7 +160,7 @@ reader against the source (see README.md for method).
 - **input**: hover
 - **path**: `##inspector_tabs/Render/Loop master animation`
 - **precondition**: Pointer over the Loop master checkbox (ImGui::IsItemHovered()).
-- **effect**: ImGui::SetTooltip - explains that reaching the end of the master timeline re-plays from frame 0, useful for short title clips that would otherwise freeze on the last authored frame.
+- **effect**: ImGui::SetTooltip. The tooltip explains that reaching the end of the master timeline re-plays from frame 0, useful for short title clips that would otherwise freeze on the last authored frame.
 - **source**: `src/gui/gui_inspector.cpp:171`
 - **tooltip**: yes
 - **notes**: Separate entry per the one-entry-per-tooltip rule.
@@ -171,8 +171,8 @@ reader against the source (see README.md for method).
 - **id**: `render-master-scale-tooltip`
 - **input**: hover
 - **path**: `##inspector_tabs/Render/1.5x##scale_sdvx_old`
-- **precondition**: Pointer over the "1.5x##scale_sdvx_old" small button - the IsItemHovered() at line 257 follows that button, so the tooltip does NOT appear over the slider or the 1.0x button.
-- **effect**: ImGui::SetTooltip - explains that the value multiplies the master stream's transform matrix (default 1.0x) and that 1.5x matches what SDVX 7's BG dispatcher applies to SDVX-I-through-IV-era 720x1280 select_bg variants on a 1080x1920 game.
+- **precondition**: Pointer over the "1.5x##scale_sdvx_old" small button. The IsItemHovered() at line 257 follows that button, so the tooltip does not appear over the slider or the 1.0x button.
+- **effect**: ImGui::SetTooltip. The tooltip explains that the value multiplies the master stream's transform matrix (default 1.0x) and that 1.5x matches what SDVX 7's BG dispatcher applies to SDVX-I-through-IV-era 720x1280 select_bg variants on a 1080x1920 game.
 - **source**: `src/gui/gui_inspector.cpp:257`
 - **tooltip**: yes
 - **tests**: `inspector render tab controls all explain themselves`, `render tab master-scale preset buttons set the scale`
@@ -182,8 +182,8 @@ reader against the source (see README.md for method).
 - **id**: `render-root-loop-tooltip`
 - **input**: hover
 - **path**: `##root_loop/1/Force loop`
-- **precondition**: Pointer over the LAST segment button of the row - IsItemHovered() after Gui::Segmented refers to the final Button submitted inside it ("Force loop").
-- **effect**: ImGui::SetTooltip - explains Auto-hold (game default: mount once, root plays once and holds while nested children run) vs Force loop (ForceReplay plus the continuous-loop flag sequence, needed for one-shot masters like bg_common), and that it applies to the live preview now and to the next non-label export, persisted across restarts.
+- **precondition**: Pointer over the last segment button of the row: IsItemHovered() after Gui::Segmented refers to the final Button submitted inside it ("Force loop").
+- **effect**: ImGui::SetTooltip. The tooltip explains Auto-hold (game default: mount once, root plays once and holds while nested children run) vs Force loop (ForceReplay plus the continuous-loop flag sequence, needed for one-shot masters like bg_common), and that it applies to the live preview now and to the next non-label export, persisted across restarts.
 - **source**: `src/gui/gui_inspector.cpp:189`
 - **tooltip**: yes
 - **notes**: Because Gui::Segmented leaves LastItemData pointing at its final button, this tooltip only shows when hovering the last segment, not the whole row.
@@ -195,7 +195,7 @@ reader against the source (see README.md for method).
 - **input**: hover
 - **path**: `##inspector_tabs/Render/Show MC names (F3)`
 - **precondition**: Pointer over the Show MC names checkbox.
-- **effect**: ImGui::SetTooltip - explains it enumerates the master's named child clips (afp_mc_enumerate_children ord 0x079), that "at clip pos" draws names over the preview while "column" lists them in the Live tab (matching the debug viewer F3/F6), and that it also feeds the child positions shown in the Scene tree.
+- **effect**: ImGui::SetTooltip. The tooltip explains it enumerates the master's named child clips (afp_mc_enumerate_children ord 0x079), that "at clip pos" draws names over the preview while "column" lists them in the Live tab (matching the debug viewer F3/F6), and that it also feeds the child positions shown in the Scene tree.
 - **source**: `src/gui/gui_inspector.cpp:295`
 - **tooltip**: yes
 - **tests**: `inspector render tab controls all explain themselves`, `render tab MC-names checkbox reveals the name-type segmented`
@@ -206,7 +206,7 @@ reader against the source (see README.md for method).
 - **input**: hover
 - **path**: `##inspector_tabs/Render/##live_trim`
 - **precondition**: Pointer over the ##live_trim input.
-- **effect**: ImGui::SetTooltip - explains 0 = no trim (loop forever via the engine) and >0 = at frame N (rendered frames since the last stream-switch/hot-swap) restart the master via ForceReplay so a loop of exactly N frames can be inspected at full framerate.
+- **effect**: ImGui::SetTooltip. The tooltip explains 0 = no trim (loop forever via the engine) and >0 = at frame N (rendered frames since the last stream-switch/hot-swap) restart the master via ForceReplay so a loop of exactly N frames can be inspected at full framerate.
 - **source**: `src/gui/gui_inspector.cpp:228`
 - **tooltip**: yes
 - **tests**: `inspector render tab controls all explain themselves`, `render tab trim input feeds the live overrides`, `scenario: live overrides can be stacked then reset in one click`
@@ -232,7 +232,7 @@ reader against the source (see README.md for method).
 - **source**: `src/gui/gui_inspector.cpp:243`
 - **notes**: Built-in ImGui SliderFloat behaviour, not custom code in this file.
 - **tests**: `render tab master-scale slider sets an arbitrary scale`
-- **audit correction**: The precondition claims the text-entry mode is reachable by "Ctrl+click (or double-click, per ImGui io.ConfigDragClickToInputText)". Double-click does not enter text input on this widget, and io.ConfigDragClickToInputText is never set in this project. -> Ctrl+click only, or keyboard-nav activation. SliderScalar enters temp text input when `(clicked && g.IO.KeyCtrl) \|\| (g.NavActivateId == id && (g.NavActivateFlags & ImGuiActivateFlags_PreferInput))` (vendor/vcpkg/buildtrees/imgui/src/v1.92.7-b588f89316.clean/imgui_widgets.cpp:3336). io.ConfigDragClickToInputText is set nowhere in src/ (a grep for ConfigFlags/ConfigDragClickToInputText/ConfigWindows across src/ returns only src/gui/gui_window.cpp:153 setting ImGuiConfigFlags_NavEnableKeyboard), and that flag only affects DragXXX widgets anyway, not SliderFloat. Double-clicking the slider just grabs and moves it. The nav path (Enter on a keyboard-focused slider) IS available because NavEnableKeyboard is on.
+- **audit correction**: The precondition claims the text-entry mode is reachable by "Ctrl+click (or double-click, per ImGui io.ConfigDragClickToInputText)". Double-click does not enter text input on this widget, and io.ConfigDragClickToInputText is never set in this project. -> Ctrl+click only, or keyboard-nav activation. SliderScalar enters temp text input when `(clicked && g.IO.KeyCtrl) \|\| (g.NavActivateId == id && (g.NavActivateFlags & ImGuiActivateFlags_PreferInput))` (vendor/vcpkg/buildtrees/imgui/src/v1.92.7-b588f89316.clean/imgui_widgets.cpp:3336). io.ConfigDragClickToInputText is set nowhere in src/ (a grep for ConfigFlags/ConfigDragClickToInputText/ConfigWindows across src/ returns only src/gui/gui_window.cpp:153 setting ImGuiConfigFlags_NavEnableKeyboard), and that flag only affects DragXXX widgets anyway, not SliderFloat. Double-clicking the slider just grabs and moves it. The nav path (Enter on a keyboard-focused slider) is available because NavEnableKeyboard is on.
 
 ### 18. Inspector tab (Properties / Render / Live / 3D scene / 2D package)
 
@@ -242,7 +242,7 @@ reader against the source (see README.md for method).
 - **precondition**: Gui::CollectActivePanels(PanelSlot::InspectorTab) returned a non-empty list for the active backend id; the tab bar is skipped entirely when tabs.empty(). Individual tabs additionally require their PanelDesc::visible() gate: "3D scene" needs Scene3dHost::Active(), "2D package" needs Gc2dHost::Active(); Properties/Render/Live have no visible gate but only exist in the backend's panel set.
 - **effect**: ImGui::BeginTabItem(tab->tab_label) makes that panel current; on the frame it is selected ImGui::Spacing() runs and tab->draw() is invoked, drawing that panel's body (Panels::RenderPropertiesTab / RenderRenderTabModern / RenderRenderTabDdr / RenderLiveTab / Scene3dPanel::Render / Gc2dPanel::Render). Tab selection state lives in ImGui's tab bar "##inspector_tabs".
 - **source**: `src/gui/gui_inspector.cpp:446`
-- **notes**: ONE entry describing a row drawn in a loop over the PanelDesc list. Labels come from src/gui/panel_registry.cpp: afp_modern -> "Properties", "Render", "Live"; afp_ddr -> "Render", "Live", "3D scene"; scene3d -> "3D scene", "2D package". Tab bar flags are FittingPolicyResizeDown only, so tabs are not reorderable and have no close buttons.
+- **notes**: One entry describes a row drawn in a loop over the PanelDesc list. Labels come from src/gui/panel_registry.cpp: afp_modern -> "Properties", "Render", "Live"; afp_ddr -> "Render", "Live", "3D scene"; scene3d -> "3D scene", "2D package". Tab bar flags are FittingPolicyResizeDown only, so tabs are not reorderable and have no close buttons.
 - **tests**: none
 
 ### 19. Play / Replay button (label is "Replay" when this layer is already the playing animation, otherwise "Play")
@@ -250,10 +250,10 @@ reader against the source (see README.md for method).
 - **id**: `properties-play-replay-button`
 - **input**: left-click
 - **path**: `##inspector_tabs/Properties/Play  (or ##inspector_tabs/Properties/Replay)`
-- **precondition**: Properties tab active AND Scene::Current().kind != Kind::None AND state.ActiveIfs() is non-empty AND the selection kind is Kind::Layer (otherwise DrawChildProperties runs instead). When the selection is None or no IFS is active the whole body is replaced by the disabled text "Select a layer or clip in the Scene pane." at line 144.
-- **effect**: state.PostCommand(AfpCmd::Wrap(AfpCmd::SwitchAnimation{.name = sel.name, .label = ""})) - queues an afp command that switches/restarts the master stream to the selected afplist layer with no label.
+- **precondition**: Properties tab active, Scene::Current().kind != Kind::None, state.ActiveIfs() is non-empty, and the selection kind is Kind::Layer (otherwise DrawChildProperties runs instead). When the selection is None or no IFS is active the whole body is replaced by the disabled text "Select a layer or clip in the Scene pane." at line 144.
+- **effect**: state.PostCommand(AfpCmd::Wrap(AfpCmd::SwitchAnimation{.name = sel.name, .label = ""})), which queues an afp command that switches/restarts the master stream to the selected afplist layer with no label.
 - **source**: `src/gui/gui_inspector.cpp:107`
-- **notes**: Fixed size ImVec2(110,0). The button label itself changes with is_playing (sel.name == status.playing_animation), which also gates the "%u frames" mono readout and the green "playing" text above it (read-only, lines 99-105).
+- **notes**: Fixed size ImVec2(110,0). The button label itself changes with is_playing (sel.name == status.playing_animation), which also gates the "%u frames" mono readout and the green "Playing" text above it (read-only, lines 99-105).
 - **tests**: none
 
 ### 20. "(default)" entry inside the bitmap combo
@@ -275,7 +275,7 @@ reader against the source (see README.md for method).
 - **precondition**: The bitmap combo popup is open; one row exists per entry in cfg.bitmap_names.
 - **effect**: slot.bitmap = b; slot.bitmap_override = true. No command is posted from this branch (the override is picked up by the variant-slot apply path).
 - **source**: `src/gui/gui_inspector.cpp:50`
-- **notes**: ONE entry for a row drawn in a loop over cfg.bitmap_names. The currently selected row calls ImGui::SetItemDefaultFocus() so the popup opens scrolled to it.
+- **notes**: One entry for a row drawn in a loop over cfg.bitmap_names. The currently selected row calls ImGui::SetItemDefaultFocus() so the popup opens scrolled to it.
 - **tests**: none
 
 ### 22. "Background" segmented control ("default" / "grey" / "black" / "red" / "green" / "blue")
@@ -283,12 +283,12 @@ reader against the source (see README.md for method).
 - **id**: `render-background-segment`
 - **input**: left-click
 - **path**: `##bg_color/<index>/default | grey | black | red | green | blue (inside ##inspector_tabs/Render)`
-- **precondition**: Render tab active. Drawn by both RenderRenderTabModern (line 337) and RenderRenderTabDdr (line 352), i.e. for the afp_modern AND afp_ddr backends. Out-of-range stored values (bg_color_index < -1 or > 4) display as "default".
+- **precondition**: Render tab active. Drawn by both RenderRenderTabModern (line 337) and RenderRenderTabDdr (line 352), so for both the afp_modern and afp_ddr backends. Out-of-range stored values (bg_color_index < -1 or > 4) display as "default".
 - **disabled when**: Clicking the already-active segment is a no-op (Gui::Segmented's `&& !active` guard).
 - **effect**: Sets ov.bg_color_index = idx - 1 on the local LiveOverrides copy and changed=true; state.ApplyLiveOverridesDelta(before, ov) then runs (line 341 in the modern tab, line 354 in the DDR tab).
 - **source**: `src/gui/gui_inspector.cpp:270`
 - **tooltip**: yes
-- **notes**: ONE entry for the six-button segmented row drawn in Gui::Segmented's loop.
+- **notes**: One entry for the six-button segmented row drawn in Gui::Segmented's loop.
 - **tests**: none
 
 ### 23. "Continuous loop" segmented control ("OFF" / "default" / "ON")
@@ -301,7 +301,7 @@ reader against the source (see README.md for method).
 - **effect**: Sets ov.continuous_loop_mode = idx - 1 on the local LiveOverrides copy and sets changed=true; at the end of RenderRenderTabModern (line 341) state.ApplyLiveOverridesDelta(before, ov) is called with the before/after pair.
 - **source**: `src/gui/gui_inspector.cpp:205`
 - **tooltip**: yes
-- **notes**: ONE entry for the three-button segmented row. Index mapping: displayed idx = mode + 1, so OFF=-1, default=0, ON=+1.
+- **notes**: One entry for the three-button segmented row. Index mapping: displayed idx = mode + 1, so OFF=-1, default=0, ON=+1.
 - **tests**: none
 
 ### 24. "1.5x" small button
@@ -330,11 +330,11 @@ reader against the source (see README.md for method).
 - **id**: `render-mc-name-type-segment`
 - **input**: left-click
 - **path**: `##mc_name_type/<index>/at clip pos | ##mc_name_type/<index>/column (inside ##inspector_tabs/Render)`
-- **precondition**: Render tab active with the afp_modern backend AND ov.show_mc_names is true - the row is hidden entirely otherwise (`if (ov.show_mc_names)` at line 302). Drawn indented by 24px.
+- **precondition**: Render tab active with the afp_modern backend and ov.show_mc_names is true; otherwise the row is hidden entirely (`if (ov.show_mc_names)` at line 302). Drawn indented by 24px.
 - **disabled when**: Clicking the already-active segment is a no-op (Gui::Segmented's `&& !active` guard).
 - **effect**: Writes directly into ov.mc_name_type (0 = at clip pos, 1 = column) and sets changed=true; ApplyLiveOverridesDelta at line 341 applies it. Selecting "column" (1) is also what makes the Live tab's MC names list appear.
 - **source**: `src/gui/gui_inspector.cpp:305`
-- **notes**: ONE entry for the two-button segmented row. This is the only Segmented row in the file with no tooltip.
+- **notes**: One entry for the two-button segmented row. This is the only Segmented row in the file with no tooltip.
 - **tests**: none
 
 ### 27. "Reset live overrides" button
@@ -343,10 +343,10 @@ reader against the source (see README.md for method).
 - **input**: left-click
 - **path**: `##inspector_tabs/Render/Reset live overrides`
 - **precondition**: Render tab active. Drawn by both RenderRenderTabModern (line 343) and RenderRenderTabDdr (line 355).
-- **effect**: state.SetLiveOverrides(App::State::LiveOverrides{}) - replaces the whole live-override struct with a default-constructed one (clears continuous_loop_mode, trim_frames, bg_color_index, filter_enabled, show_mc_names, mc_name_type). Does not touch the persisted loop-master / root-loop / master-scale settings.
+- **effect**: state.SetLiveOverrides(App::State::LiveOverrides{}) replaces the whole live-override struct with a default-constructed one (clears continuous_loop_mode, trim_frames, bg_color_index, filter_enabled, show_mc_names, mc_name_type). Does not touch the persisted loop-master / root-loop / master-scale settings.
 - **source**: `src/gui/gui_inspector.cpp:312`
 - **tests**: `render tab reset button clears every live override`, `scenario: live overrides can be stacked then reset in one click`
-- **audit correction**: The effect enumerates the fields a default-constructed LiveOverrides clears and gets the list wrong: it omits the `paused` field entirely, and it implies bg_color_index resets to a cleared/zero value. -> App::State::LiveOverrides (src/state/live_controls.h:26-34) has SEVEN fields: continuous_loop_mode(0), trim_frames(0), bg_color_index(-1), mc_name_type(0), filter_enabled(false), paused(false), show_mc_names(false). state.SetLiveOverrides(LiveOverrides{}) assigns the whole struct after ClampOverrides (src/state/live_controls.cpp:75-79), so the button ALSO clears `paused` - a preview paused from the transport resumes when "Reset live overrides" is clicked, which is a side effect the current entry does not mention. And bg_color_index resets to -1, i.e. the "default" (transparent) Background segment, not 0 ("grey").
+- **audit correction**: The effect enumerates the fields a default-constructed LiveOverrides clears and gets the list wrong: it omits the `paused` field entirely, and it implies bg_color_index resets to a cleared/zero value. -> App::State::LiveOverrides (src/state/live_controls.h:26-34) has seven fields: continuous_loop_mode(0), trim_frames(0), bg_color_index(-1), mc_name_type(0), filter_enabled(false), paused(false), show_mc_names(false). state.SetLiveOverrides(LiveOverrides{}) assigns the whole struct after ClampOverrides (src/state/live_controls.cpp:75-79), so the button also clears `paused`: a preview paused from the transport resumes when "Reset live overrides" is clicked, a side effect the current entry does not mention. And bg_color_index resets to -1, i.e. the "default" (transparent) Background segment, not 0 ("grey").
 
 ### 28. "Loop root" segmented control ("Auto-hold" / "Force loop")
 
@@ -354,11 +354,11 @@ reader against the source (see README.md for method).
 - **input**: left-click
 - **path**: `##root_loop/<index>/Auto-hold  |  ##root_loop/<index>/Force loop  (PushID("##root_loop") then PushID(i) around each Button, inside ##inspector_tabs/Render)`
 - **precondition**: Render tab active with the afp_modern backend.
-- **disabled when**: Clicking the already-active segment is swallowed: Gui::Segmented only assigns when `ImGui::Button(...) && !active` (src/gui/gui_widgets.cpp:28), so the current segment is effectively inert.
+- **disabled when**: Clicking the already-active segment is swallowed: Gui::Segmented only assigns when `ImGui::Button(...) && !active` (src/gui/gui_widgets.cpp:28), so clicking the current segment does nothing.
 - **effect**: App::Global().SetRootLoopMode(idx == 1 ? RootLoopMode::Force : RootLoopMode::Hold) then App::SaveCurrentSettings().
 - **source**: `src/gui/gui_inspector.cpp:184`
 - **tooltip**: yes
-- **notes**: ONE entry for the two-button segmented row (Gui::Segmented loops over kItems). Each segment is a real ImGui::Button, so each is independently hoverable/clickable.
+- **notes**: One entry for the two-button segmented row (Gui::Segmented loops over kItems). Each segment is a real ImGui::Button, so each can be hovered and clicked on its own.
 - **tests**: none
 
 ### 29. "MC names (N)" list child window
@@ -366,7 +366,7 @@ reader against the source (see README.md for method).
 - **id**: `live-mc-names-list-scroll`
 - **input**: scroll
 - **path**: `##inspector_tabs/Live/mc_names_list`
-- **precondition**: Live tab active AND ov.show_mc_names is true AND ov.mc_name_type == 1 ("column") - gate at line 437 - AND status.mc_children is non-empty (early return at line 411).
+- **precondition**: Live tab active, ov.show_mc_names true and ov.mc_name_type == 1 ("column") (checked at line 437), and status.mc_children non-empty (early return at line 411).
 - **effect**: Scrolls the bordered BeginChild("mc_names_list", ImVec2(0,140), 1) region, which lists one mono-font text row per enumerated child clip (name plus "(x, y)" when c.have_pos). Read-only: no widget inside is clickable.
 - **source**: `src/gui/gui_inspector.cpp:415`
 - **notes**: Fixed 140px height with border; rows come from a loop over status.mc_children. Also drag-scrollable via ImGui's scrollbar. The rest of the Live tab (Live state section line 360, File info section line 386) is pure text with no interactive widgets, though File info is itself gated on live.have_file_info (line 436) and the Live state block falls back to "(no active layer info)" when neither live.have_layer_info nor live.have_mc_playhead is set.
@@ -383,12 +383,12 @@ reader against the source (see README.md for method).
 - **notes**: Standard ImGui combo popup scrolling; the list length is data-driven (one row per bitmap name).
 - **tests**: none
 
-### 31. Variant-slot bitmap name text field (hint: "bitmap name (blank = IFS default)")
+### 31. Variant-slot bitmap name text field (hint: "Bitmap name (blank for the IFS default)")
 
 - **id**: `properties-slot-bitmap-input`
 - **input**: text-entry
 - **path**: `##inspector_tabs/Properties/##bitmap`
-- **precondition**: Properties tab active, selection is a child with a matching VariantSlot, AND cfg.bitmap_names IS empty (no enumerated bitmap list for this IFS).
+- **precondition**: Properties tab active, selection is a child with a matching VariantSlot, and cfg.bitmap_names is empty (no enumerated bitmap list for this IFS).
 - **effect**: On every edit: slot.bitmap = buf; slot.bitmap_override = (buf[0] != '\0'). The field is seeded each frame from slot.bitmap into a 128-byte stack buffer, so typed text longer than 127 chars is truncated.
 - **source**: `src/gui/gui_inspector.cpp:66`
 - **tooltip**: yes
@@ -404,7 +404,7 @@ reader against the source (see README.md for method).
 - **effect**: ImGui::InputInt("##live_trim", &ov.trim_frames, 0, 0) writes the typed integer into the local LiveOverrides copy and sets changed=true; state.ApplyLiveOverridesDelta(before, ov) runs at line 341.
 - **source**: `src/gui/gui_inspector.cpp:225`
 - **tooltip**: yes
-- **notes**: Step and step_fast are both 0, so ImGui draws NO -/+ buttons; the only input is keyboard text entry (Enter/focus-loss commits). Item width fixed at 120px.
+- **notes**: Step and step_fast are both 0, so ImGui draws no -/+ buttons; the only input is keyboard text entry (Enter/focus-loss commits). Item width fixed at 120px.
 - **tests**: `inspector render tab controls all explain themselves`, `render tab trim input feeds the live overrides`, `scenario: live overrides can be stacked then reset in one click`
-- **audit correction**: The notes say the field's "only input is keyboard text entry (Enter/focus-loss commits)". The commit semantics are wrong: InputInt here commits on EVERY keystroke, not on Enter/focus loss. The entry also omits that the value is clamped before it lands in state, and that clicking the field selects all of it. -> ImGui::InputInt("##live_trim", &ov.trim_frames, 0, 0) -> InputScalar with p_step == NULL (step/step_fast are 0, imgui_widgets.cpp:3929), which calls InputText WITHOUT ImGuiInputTextFlags_EnterReturnsTrue (explicitly unsupported, asserted at imgui_widgets.cpp:3788) and sets value_changed = DataTypeApplyFromText(...) on any returned edit (imgui_widgets.cpp:3825). So ov.trim_frames is written and state.ApplyLiveOverridesDelta(before, ov) at line 341 fires per character typed, not on Enter or focus loss. Escape reverts the field to its value at activation and ALSO returns true (imgui_widgets.cpp:5263-5271), so the revert propagates. InputScalar adds ImGuiInputTextFlags_AutoSelectAll (imgui_widgets.cpp:3804), so clicking into the field selects the whole value and the first keystroke replaces it. A typed negative survives in the local copy but is clamped by ClampOverrides (src/state/live_controls.cpp:65, o.trim_frames = std::max(o.trim_frames, 0)) inside ApplyLiveOverridesDelta before it reaches live_overrides_. The "step and step_fast are both 0, so ImGui draws NO -/+ buttons" part of the entry is correct (has_step_buttons = (p_step != NULL), imgui_widgets.cpp:3806).
+- **audit correction**: The notes say the field's "only input is keyboard text entry (Enter/focus-loss commits)". The commit semantics are wrong: InputInt here commits on every keystroke, not on Enter or focus loss. The entry also omits that the value is clamped before it lands in state, and that clicking the field selects all of it. -> ImGui::InputInt("##live_trim", &ov.trim_frames, 0, 0) -> InputScalar with p_step == NULL (step/step_fast are 0, imgui_widgets.cpp:3929), which calls InputText without ImGuiInputTextFlags_EnterReturnsTrue (explicitly unsupported, asserted at imgui_widgets.cpp:3788) and sets value_changed = DataTypeApplyFromText(...) on any returned edit (imgui_widgets.cpp:3825). So ov.trim_frames is written and state.ApplyLiveOverridesDelta(before, ov) at line 341 fires per character typed, not on Enter or focus loss. Escape reverts the field to its value at activation and also returns true (imgui_widgets.cpp:5263-5271), so the revert propagates. InputScalar adds ImGuiInputTextFlags_AutoSelectAll (imgui_widgets.cpp:3804), so clicking into the field selects the whole value and the first keystroke replaces it. A typed negative survives in the local copy but is clamped by ClampOverrides (src/state/live_controls.cpp:65, o.trim_frames = std::max(o.trim_frames, 0)) inside ApplyLiveOverridesDelta before it reaches live_overrides_. The "step and step_fast are both 0, so ImGui draws no -/+ buttons" part of the entry is correct (has_step_buttons = (p_step != NULL), imgui_widgets.cpp:3806).
 

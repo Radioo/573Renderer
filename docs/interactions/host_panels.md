@@ -1,7 +1,7 @@
 # 3D scene and 2D package panels
 
-Every interaction on this surface. Generated inventory, cross-checked by a second
-reader against the source (see README.md for method).
+Every interaction on this surface. The inventory was generated, then checked
+against the source by a second reader (see README.md for the method).
 
 | # | id | control | input | tooltip | tests |
 |---|---|---|---|---|---|
@@ -14,11 +14,11 @@ reader against the source (see README.md for method).
 | 7 | `gc2d-animation-combo-open` | Animation picker combo (2D package) | combo-select | - | 2 |
 | 8 | `s3d-model-blend-combo-open` | Per-model blend mode combo (one per model row) | combo-select | - | 1 |
 | 9 | `gc2d-frame-slider-drag` | Frame scrubber ("frame %d", 0 .. length-1) | drag | yes | 2 |
-| 10 | `gc2d-speed-slider-drag` | "speed" slider (2D package playback speed, 0.00x - 4.00x) | drag | - | 1 |
+| 10 | `gc2d-speed-slider-drag` | "Speed" slider (2D package playback speed, 0.00x - 4.00x) | drag | - | 1 |
 | 11 | `s3d-freelook-mouse-move` | Mouse movement while holding right mouse (look around) | drag | - | **none** |
-| 12 | `s3d-move-speed-drag` | "move speed" drag float (free camera translation speed, units/s) | drag | - | 1 |
-| 13 | `s3d-speed-slider-drag` | "speed" slider (3D scene playback speed, 0.00x - 4.00x) | drag | - | 1 |
-| 14 | `s3d-time-slider-drag` | Animation time scrubber (full width, "tick %.0f") | drag | yes | 2 |
+| 12 | `s3d-move-speed-drag` | "Move speed" drag float (free camera translation speed, units/s) | drag | - | 1 |
+| 13 | `s3d-speed-slider-drag` | "Speed" slider (3D scene playback speed, 0.00x - 4.00x) | drag | - | 1 |
+| 14 | `s3d-time-slider-drag` | Animation time scrubber (full width, "Tick %.0f") | drag | yes | 2 |
 | 15 | `gc2d-frame-slider-tooltip` | Frame scrubber hover tooltip | hover | yes | 2 |
 | 16 | `s3d-animate-camera-tooltip` | "Animate camera" hover tooltip (three variants) | hover | yes | 3 |
 | 17 | `s3d-animate-models-tooltip` | "Animate models" hover tooltip | hover | yes | 1 |
@@ -33,7 +33,7 @@ reader against the source (see README.md for method).
 | 26 | `s3d-freelook-shift-fast` | Shift (move faster) | key | - | **none** |
 | 27 | `s3d-freelook-up-keys` | E or Space (move camera up) | key | - | **none** |
 | 28 | `s3d-freelook-wasd` | W / A / S / D movement keys during free look | key | - | **none** |
-| 29 | `s3d-move-speed-drag-speed-modifiers` *(audit)* | Shift / Alt held while mouse-dragging the "move speed" DragFloat | key | - | 1 |
+| 29 | `s3d-move-speed-drag-speed-modifiers` *(audit)* | Shift / Alt held while mouse-dragging the "Move speed" DragFloat | key | - | 1 |
 | 30 | `gc2d-animation-combo-item` | Animation name row inside the picker combo | left-click | - | **none** |
 | 31 | `s3d-model-blend-combo-item` | Blend mode option inside the per-model combo (opaque / alpha / additive / subtract) | left-click | - | **none** |
 | 32 | `s3d-models-collapsing-header` | "Models" collapsing header | left-click | - | **none** |
@@ -44,9 +44,9 @@ reader against the source (see README.md for method).
 | 37 | `gc2d-animation-combo-popup-scroll` *(audit)* | Scroll region inside the animation picker combo popup (##gc2danim) | scroll | - | **none** |
 | 38 | `scroll-inspector-pane` | Inspector pane scroll region containing both panels | scroll | - | 15 |
 | 39 | `gc2d-frame-slider-ctrl-click-entry` | Frame scrubber keyboard value entry | text-entry | - | 2 |
-| 40 | `gc2d-speed-slider-ctrl-click-entry` | "speed" slider keyboard value entry (2D package) | text-entry | - | 1 |
-| 41 | `s3d-move-speed-ctrl-click-entry` | "move speed" keyboard value entry | text-entry | - | 1 |
-| 42 | `s3d-speed-slider-ctrl-click-entry` | "speed" slider keyboard value entry | text-entry | - | 1 |
+| 40 | `gc2d-speed-slider-ctrl-click-entry` | "Speed" slider keyboard value entry (2D package) | text-entry | - | 1 |
+| 41 | `s3d-move-speed-ctrl-click-entry` | "Move speed" keyboard value entry | text-entry | - | 1 |
+| 42 | `s3d-speed-slider-ctrl-click-entry` | "Speed" slider keyboard value entry | text-entry | - | 1 |
 | 43 | `s3d-time-slider-ctrl-click-entry` | Animation time scrubber keyboard value entry | text-entry | - | 2 |
 | 44 | `s3d-freelook-capture-lost` | Loss of mouse capture during free look (alt-tab, focus steal) | window-message | - | n/a |
 | 45 | `s3d-freelook-rmb-up` | Release right mouse button to leave free look | window-message | - | n/a |
@@ -61,16 +61,16 @@ reader against the source (see README.md for method).
 - **precondition**: 2D package panel body is drawn, i.e. Gc2dHost::Active() (early-out at gui_gc2d_panel.cpp:55)
 - **effect**: Calls Gc2dHost::SetPaused(paused), stopping/resuming package frame advance
 - **source**: `src/gui/gui_gc2d_panel.cpp:34`
-- **notes**: Also flipped implicitly to true by scrubbing the frame slider.
+- **notes**: Scrubbing the frame slider also sets it to true.
 - **tests**: `2D package panel drives a loaded mock package`
-- **audit correction**: Precondition cites the panel early-out at gui_gc2d_panel.cpp:55. Line 55 is the ImGui::TextDisabled("No 2D package loaded.") inside the early-out body; the guard itself is line 54. -> early-out at src/gui/gui_gc2d_panel.cpp:54 (`if (!Gc2dHost::Active()) {`), with the placeholder text at :55-57. Compare the sibling entry for the 3D panel, which correctly cites gui_scene3d_panel.cpp:144 for the guard line.
+- **audit correction**: Precondition cites the panel early-out at gui_gc2d_panel.cpp:55. Line 55 is the ImGui::TextDisabled("No 2D package loaded.") inside the early-out body; the guard itself is line 54. -> early-out at src/gui/gui_gc2d_panel.cpp:54 (`if (!Gc2dHost::Active()) {`), with the placeholder text at :55-57. The sibling entry for the 3D panel cites the guard line correctly (gui_scene3d_panel.cpp:144).
 
 ### 2. "Animate camera" checkbox
 
 - **id**: `s3d-animate-camera-checkbox`
 - **input**: checkbox
 - **path**: `##inspector_tabs/3D scene/Animate camera##s3d`
-- **precondition**: 3D scene panel body is drawn AND Status::has_authored_camera is true AND Status::free_camera is false
+- **precondition**: 3D scene panel body is drawn, Status::has_authored_camera is true and Status::free_camera is false
 - **disabled when**: !st.has_authored_camera \|\| st.free_camera (wrapped in ImGui::BeginDisabled at gui_scene3d_panel.cpp:62)
 - **effect**: Calls Scene3dHost::SetAnimateCamera(camera); when off the camera is evaluated at the frozen hold time g_camera_hold (scene3d_host.cpp:109)
 - **source**: `src/gui/gui_scene3d_panel.cpp:64`
@@ -108,7 +108,7 @@ reader against the source (see README.md for method).
 - **precondition**: Models header is open and the model list is non-empty
 - **effect**: Calls Scene3dHost::SetModelVisible(index, vis) for that row's model index
 - **source**: `src/gui/gui_scene3d_panel.cpp:87`
-- **notes**: ONE entry describing a row drawn in a loop over Scene3dHost::ListModels(); each row is scoped by ImGui::PushID((int)i) at line 85.
+- **notes**: One entry for a row drawn in a loop over Scene3dHost::ListModels(); each row is scoped by ImGui::PushID((int)i) at line 85.
 - **tests**: `3D scene model list toggles visibility and blend mode`, `scenario: loading and unloading a 3D scene adds and removes its tab`, `scene pane child visibility checkbox records a sublayer override`
 
 ### 6. "Pause" checkbox (3D scene playback)
@@ -152,13 +152,13 @@ reader against the source (see README.md for method).
 - **path**: `##inspector_tabs/2D package/##gc2dframe`
 - **precondition**: 2D package panel body is drawn
 - **disabled when**: never (range collapses to 0..0 when Status::length <= 1, via std::max(st.length - 1, 0))
-- **effect**: Calls Gc2dHost::SetPaused(true) and then Gc2dHost::SetFrame(frame): scrubbing force-pauses playback and jumps the playhead to that package frame
+- **effect**: Calls Gc2dHost::SetPaused(true) and then Gc2dHost::SetFrame(frame): scrubbing pauses playback and moves the playhead to that package frame
 - **source**: `src/gui/gui_gc2d_panel.cpp:42`
 - **tooltip**: yes
-- **notes**: Item width -FLT_MIN (full pane width). The implicit auto-pause is the behavioural difference from the 3D time scrubber.
+- **notes**: Item width -FLT_MIN (full pane width). Unlike the 3D time scrubber, it pauses playback when scrubbed.
 - **tests**: `2D package frame slider explains itself on hover`, `2D package panel drives a loaded mock package`
 
-### 10. "speed" slider (2D package playback speed, 0.00x - 4.00x)
+### 10. "Speed" slider (2D package playback speed, 0.00x - 4.00x)
 
 - **id**: `gc2d-speed-slider-drag`
 - **input**: drag
@@ -180,7 +180,7 @@ reader against the source (see README.md for method).
 - **notes**: Yaw/pitch results are displayed read-only at gui_scene3d_panel.cpp:138.
 - **tests**: none
 
-### 12. "move speed" drag float (free camera translation speed, units/s)
+### 12. "Move speed" drag float (free camera translation speed, units/s)
 
 - **id**: `s3d-move-speed-drag`
 - **input**: drag
@@ -189,10 +189,10 @@ reader against the source (see README.md for method).
 - **disabled when**: never (writable even when free camera is off)
 - **effect**: Writes directly into Scene3dHost::MutCamera().speed (Scene3d::FreeCamera::speed), range 0.01 - 10000.0, step 0.05, format "%.2f /s"; consumed by Scene3d::UpdateFreeCamera
 - **source**: `src/gui/gui_scene3d_panel.cpp:127`
-- **notes**: Fixed width 140 (SetNextItemWidth at line 126). No setter call; the panel mutates the live camera struct by reference (line 125).
+- **notes**: Fixed width 140 (SetNextItemWidth at line 126). There is no setter call; the panel writes the live camera struct by reference (line 125).
 - **tests**: `3D scene move speed drag edits the camera`
 
-### 13. "speed" slider (3D scene playback speed, 0.00x - 4.00x)
+### 13. "Speed" slider (3D scene playback speed, 0.00x - 4.00x)
 
 - **id**: `s3d-speed-slider-drag`
 - **input**: drag
@@ -203,7 +203,7 @@ reader against the source (see README.md for method).
 - **notes**: Fixed item width 120 (SetNextItemWidth at line 23); display format "%.2fx".
 - **tests**: `3D scene panel drives a loaded mock scene`
 
-### 14. Animation time scrubber (full width, "tick %.0f")
+### 14. Animation time scrubber (full width, "Tick %.0f")
 
 - **id**: `s3d-time-slider-drag`
 - **input**: drag
@@ -212,7 +212,7 @@ reader against the source (see README.md for method).
 - **effect**: Calls Scene3dHost::SetTime(t) with a tick value in 0 .. max(Status::max_time, 1.0), scrubbing the .x AnimationKey playhead
 - **source**: `src/gui/gui_scene3d_panel.cpp:30`
 - **tooltip**: yes
-- **notes**: Item width is -FLT_MIN (stretches to pane width). Unlike the 2D frame slider, scrubbing does NOT auto-pause playback.
+- **notes**: Item width is -FLT_MIN (stretches to pane width). Unlike the 2D frame slider, scrubbing does not pause playback.
 - **tests**: `3D scene panel drives a loaded mock scene`, `scenario: loading and unloading a 3D scene adds and removes its tab`
 
 ### 15. Frame scrubber hover tooltip
@@ -224,7 +224,7 @@ reader against the source (see README.md for method).
 - **effect**: ImGui::SetTooltip explaining that the value is the playhead in package frames and reporting how many frames the current animation runs (Status::length)
 - **source**: `src/gui/gui_gc2d_panel.cpp:46`
 - **tooltip**: yes
-- **notes**: Only tooltip in gui_gc2d_panel.cpp.
+- **notes**: The only tooltip in gui_gc2d_panel.cpp.
 - **tests**: `2D package frame slider explains itself on hover`, `2D package panel drives a loaded mock package`
 
 ### 16. "Animate camera" hover tooltip (three variants)
@@ -238,7 +238,7 @@ reader against the source (see README.md for method).
 - **tooltip**: yes
 - **notes**: Counted as one tooltip site with branching text (lines 67-75).
 - **tests**: `3D scene camera checkbox is gated on an authored camera`, `3D scene free camera and reset drive the camera state`, `animate-camera tooltip explains why it is greyed out`
-- **audit correction**: Precondition claims "the tooltip is emitted after EndDisabled so it also shows while the control is disabled", and the effect lists three reachable messages. That is wrong: IsItemHovered() with default flags returns false for an item whose recorded ItemFlags carry ImGuiItemFlags_Disabled (imgui.cpp:4868-4870 for the mouse path, imgui.cpp:4821-4822 for the nav path). EndDisabled() at gui_scene3d_panel.cpp:65 does not clear g.LastItemData, so the checkbox submitted inside BeginDisabled still reports as disabled at line 66. -> Only ONE of the three branches is ever reachable. The two disabled-state messages at gui_scene3d_panel.cpp:68 ("This scene has no camera in its .x file.") and :70 ("Free camera is on, ...") are dead code, because they are only selected when the checkbox was disabled - exactly the case in which IsItemHovered() returns false. The user only ever sees the line-73 message ("Freeze the camera animated inside the .x file..."). Fixing it needs ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled).
+- **audit correction**: The precondition says "the tooltip is emitted after EndDisabled so it also shows while the control is disabled", and the effect lists three reachable messages. Both are wrong: IsItemHovered() with default flags returns false for an item whose recorded ItemFlags carry ImGuiItemFlags_Disabled (imgui.cpp:4868-4870 for the mouse path, imgui.cpp:4821-4822 for the nav path). EndDisabled() at gui_scene3d_panel.cpp:65 does not clear g.LastItemData, so the checkbox submitted inside BeginDisabled still reports as disabled at line 66. -> Only one of the three branches can be reached. The two disabled-state messages at gui_scene3d_panel.cpp:68 ("This scene has no camera in its .x file.") and :70 ("Free camera is on, ...") are dead code, because they are selected only when the checkbox is disabled, which is exactly when IsItemHovered() returns false. The user only ever sees the line-73 message ("Freeze the camera animated inside the .x file..."). Fixing it needs ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled).
 
 ### 17. "Animate models" hover tooltip
 
@@ -272,7 +272,7 @@ reader against the source (see README.md for method).
 - **effect**: ImGui::SetTooltip explaining that the blend mode comes from the game's per-screen setup code and can be overridden here to inspect a layer
 - **source**: `src/gui/gui_scene3d_panel.cpp:105`
 - **tooltip**: yes
-- **notes**: The IsItemHovered() call sits AFTER the row loop and after PopID, so it tests only the last row's TextUnformatted item (line 102), not every row.
+- **notes**: The IsItemHovered() call comes after the row loop and after PopID, so it tests only the last row's TextUnformatted item (line 102), not every row.
 - **tests**: none
 
 ### 20. Animation time scrubber hover tooltip
@@ -296,7 +296,7 @@ reader against the source (see README.md for method).
 - **disabled when**: The Animate camera checkbox is skipped by nav while inside BeginDisabled(!st.has_authored_camera \|\| st.free_camera) (gui_scene3d_panel.cpp:62-65)
 - **effect**: Nav focus walks the submitted items in order. Space/Enter toggles Pause##s3d, Animate models##s3d, Animate camera##s3d, the per-model ##vis checkboxes, Free camera##s3d, Pause##gc2d; presses Reset view##s3d (calling Scene3dHost::ResetCamera); toggles the Models##s3d CollapsingHeader; and opens the ##blend / ##gc2danim combo popups. Escape closes an open combo popup without selecting.
 - **source**: `src/gui/gui_window.cpp:153`
-- **notes**: This is why SetItemDefaultFocus at gui_scene3d_panel.cpp:97 and gui_gc2d_panel.cpp:26 is load-bearing rather than decorative. Also note IsItemHovered() at gui_scene3d_panel.cpp:33/:56/:66/:105/:114 and gui_gc2d_panel.cpp:46 takes the NAV branch when nav highlight is active (imgui.cpp:4817-4826), so nav-focusing an item shows its tooltip without the mouse.
+- **notes**: This is why SetItemDefaultFocus at gui_scene3d_panel.cpp:97 and gui_gc2d_panel.cpp:26 has a real effect. IsItemHovered() at gui_scene3d_panel.cpp:33/:56/:66/:105/:114 and gui_gc2d_panel.cpp:46 also takes the nav branch when nav highlight is active (imgui.cpp:4817-4826), so nav-focusing an item shows its tooltip without the mouse.
 - **tests**: `2D package panel stays hidden while no package is live`, `inspector hides host tabs while no 3D scene or 2D package is live`
 
 ### 22. Enter key on a nav-focused slider or drag (opens the value text box)
@@ -307,7 +307,7 @@ reader against the source (see README.md for method).
 - **precondition**: Keyboard nav enabled (gui_window.cpp:153) and the numeric widget has nav focus
 - **effect**: ImGuiSliderFlags_NoInput is not set on any of the five widgets, so Enter turns the slider/drag into a text input exactly like Ctrl+click (imgui.h:1939). Committing the typed value calls the widget's setter: Scene3dHost::SetSpeed / SetTime, Gc2dHost::SetSpeed, Gc2dHost::SetPaused(true)+SetFrame, or writes Scene3dHost::MutCamera().speed directly.
 - **source**: `src/gui/gui_gc2d_panel.cpp:42`
-- **notes**: The inventory has five *-ctrl-click-entry records that name only the Ctrl+click gesture; Enter is a second, equally available route into the same text box, and it is the only route when navigating without the mouse.
+- **notes**: The inventory has five *-ctrl-click-entry records that name only the Ctrl+click gesture. Enter opens the same text box, and it is the only way in when navigating without the mouse.
 - **tests**: none
 
 ### 23. Left / Right arrow keys on a nav-activated slider or drag
@@ -329,7 +329,7 @@ reader against the source (see README.md for method).
 - **disabled when**: Right mouse not held, or no scene loaded
 - **effect**: Sets CameraInput::slow (VK_MENU), scaling down the movement speed
 - **source**: `src/scene3d/scene3d_input.cpp:94`
-- **notes**: Documented at gui_scene3d_panel.cpp:133. The panel also states the mouse wheel is deliberately NOT bound to camera speed (line 134), so wheel stays available for panel scrolling.
+- **notes**: Documented at gui_scene3d_panel.cpp:133. The panel also says the mouse wheel is intentionally not bound to camera speed (line 134), so the wheel stays available for panel scrolling.
 - **tests**: none
 
 ### 25. Q or Ctrl (move camera down)
@@ -376,15 +376,15 @@ reader against the source (see README.md for method).
 - **notes**: Documented in the panel by BulletText at gui_scene3d_panel.cpp:131. One entry for the four movement keys read on lines 87-90.
 - **tests**: none
 
-### 29. Shift / Alt held while mouse-dragging the "move speed" DragFloat
+### 29. Shift / Alt held while mouse-dragging the "Move speed" DragFloat
 
 - **id**: `s3d-move-speed-drag-speed-modifiers` *(audit)*
 - **input**: key
 - **path**: `##inspector_tabs/3D scene/move speed##s3d`
 - **precondition**: The ##s3d move speed DragFloat is being dragged with the mouse (g.ActiveIdSource == ImGuiInputSource_Mouse)
-- **effect**: ImGuiSliderFlags_NoSpeedTweaks is not passed, so DragBehaviorT scales the per-pixel delta: Shift multiplies the drag rate by 10, Alt divides it by 100 (imgui_widgets.cpp:2535-2538). Fine-tuning the free-camera speed therefore requires Alt-drag; a plain drag at step 0.05 over a 0.01-10000 range is very coarse.
+- **effect**: ImGuiSliderFlags_NoSpeedTweaks is not passed, so DragBehaviorT scales the per-pixel delta: Shift multiplies the drag rate by 10, Alt divides it by 100 (imgui_widgets.cpp:2535-2538). Fine-tuning the free-camera speed therefore needs an Alt-drag, since a plain drag at step 0.05 over a 0.01-10000 range is very coarse.
 - **source**: `src/gui/gui_scene3d_panel.cpp:127`
-- **notes**: Notable collision: the BulletText four lines below (gui_scene3d_panel.cpp:133) documents Shift = faster / Alt = slower for FREE-LOOK movement. The same two modifiers do a different thing on this widget, and neither is documented in the panel.
+- **notes**: The BulletText four lines below (gui_scene3d_panel.cpp:133) documents Shift = faster / Alt = slower for free-look movement. The same two modifiers do something different on this widget, and the panel does not document that.
 - **tests**: `3D scene move speed drag edits the camera`
 
 ### 30. Animation name row inside the picker combo
@@ -395,7 +395,7 @@ reader against the source (see README.md for method).
 - **precondition**: The ##gc2danim popup is open
 - **effect**: ImGui::Selectable click calls Gc2dHost::SelectAnimation(name), switching the played animation of the loaded system.idx/idr package
 - **source**: `src/gui/gui_gc2d_panel.cpp:25`
-- **notes**: ONE entry for the row drawn in the loop over ListAnimations(); the currently selected row additionally gets SetItemDefaultFocus (line 26).
+- **notes**: One entry for the row drawn in the loop over ListAnimations(); the currently selected row also gets SetItemDefaultFocus (line 26).
 - **tests**: none
 
 ### 31. Blend mode option inside the per-model combo (opaque / alpha / additive / subtract)
@@ -440,7 +440,7 @@ reader against the source (see README.md for method).
 - **disabled when**: never (hidden instead of disabled when no package is loaded)
 - **effect**: ImGui activates the tab item inside BeginTabBar("##inspector_tabs") and calls Panels::Gc2dPanel::Render() for the tab body each frame
 - **source**: `src/gui/gui_inspector.cpp:446`
-- **notes**: Same loop as the 3D scene tab entry; separate entry because it is a distinct tab with its own visibility gate.
+- **notes**: Same loop as the 3D scene tab entry, listed separately because it is a different tab with its own visibility gate.
 - **tests**: `2D package panel stays hidden while no package is live`, `inspector hides host tabs while no 3D scene or 2D package is live`
 
 ### 35. "3D scene" inspector tab
@@ -452,9 +452,9 @@ reader against the source (see README.md for method).
 - **disabled when**: never (the tab is hidden rather than disabled when no scene is loaded)
 - **effect**: ImGui activates the tab item inside BeginTabBar("##inspector_tabs") and calls Panels::Scene3dPanel::Render() for the tab body on every subsequent frame
 - **source**: `src/gui/gui_inspector.cpp:446`
-- **notes**: Tab label comes from PanelDesc.tab_label "3D scene" (panel_registry.cpp:75). Rendered in a loop over CollectActivePanels; this entry covers the 3D scene row of that loop.
+- **notes**: The tab label comes from PanelDesc.tab_label "3D scene" (panel_registry.cpp:75). Rendered in a loop over CollectActivePanels; this entry covers the 3D scene row of that loop.
 - **tests**: `3D scene panel explains how to load a scene while none is live`, `animate-camera tooltip explains why it is greyed out`, `inspector exposes the modern backend tab set`, `inspector hides host tabs while no 3D scene or 2D package is live` (+1 more)
-- **audit correction**: Precondition says "the active game profile uses the modern or scene3d panel set". kModernPanels (panel_registry.cpp:30-55) contains renderer_view, qpro_view, properties, render and live - it has NO scene3d entry, so the 3D scene tab never appears for that set. The cited lines 74 and 87 are in kDdrPanels and kScene3dPanels. The selection key is also not the game profile slug (that is only used by QproTabVisible, panel_registry.cpp:19); it is App::Global().ActiveBackendId(). -> Precondition: Scene3dHost::Active() is true (panel_registry.cpp:21-23 Scene3dTabVisible gate) AND App::Global().ActiveBackendId() is "afp_ddr" or "scene3d", the two sets that declare the scene3d panel (panel_registry.cpp:74 in kDdrPanels, :87 in kScene3dPanels; set lookup at :105-107 and :114-116).
+- **audit correction**: The precondition says "the active game profile uses the modern or scene3d panel set". kModernPanels (panel_registry.cpp:30-55) contains renderer_view, qpro_view, properties, render and live, with no scene3d entry, so the 3D scene tab never appears for that set. The cited lines 74 and 87 are in kDdrPanels and kScene3dPanels. The selection key is also not the game profile slug (that is only used by QproTabVisible, panel_registry.cpp:19); it is App::Global().ActiveBackendId(). -> Precondition: Scene3dHost::Active() is true (panel_registry.cpp:21-23 Scene3dTabVisible gate) and App::Global().ActiveBackendId() is "afp_ddr" or "scene3d", the two sets that declare the scene3d panel (panel_registry.cpp:74 in kDdrPanels, :87 in kScene3dPanels; set lookup at :105-107 and :114-116).
 
 ### 36. Hold right mouse button in the render window to enter free look
 
@@ -472,7 +472,7 @@ reader against the source (see README.md for method).
 - **id**: `gc2d-animation-combo-popup-scroll` *(audit)*
 - **input**: scroll
 - **path**: `##inspector_tabs/2D package/##gc2danim/##Combo_00`
-- **precondition**: The ##gc2danim popup is open AND the package declares more than 8 animations (Gc2dHost::ListAnimations().size() > 8)
+- **precondition**: The ##gc2danim popup is open and the package declares more than 8 animations (Gc2dHost::ListAnimations().size() > 8)
 - **effect**: BeginCombo is called with no ImGuiComboFlags, so ImGui applies ImGuiComboFlags_HeightRegular and constrains the popup to 8 items tall (imgui_widgets.cpp:2029, :2036 CalcMaxPopupHeightFromItemCount). Beyond that the popup gets its own scrollbar; the mouse wheel over the open popup scrolls the animation list instead of the pane_right inspector child. No application state changes.
 - **source**: `src/gui/gui_gc2d_panel.cpp:22`
 - **notes**: The sibling ##blend combo (gui_scene3d_panel.cpp:90) never scrolls: it submits exactly 4 Selectables, under the 8-item cap. The inventory has combo-open and combo-item entries for ##gc2danim but no entry for the popup's own scroll region.
@@ -500,7 +500,7 @@ reader against the source (see README.md for method).
 - **notes**: Built-in ImGui SliderInt behaviour.
 - **tests**: `2D package frame slider explains itself on hover`, `2D package panel drives a loaded mock package`
 
-### 40. "speed" slider keyboard value entry (2D package)
+### 40. "Speed" slider keyboard value entry (2D package)
 
 - **id**: `gc2d-speed-slider-ctrl-click-entry`
 - **input**: text-entry
@@ -510,9 +510,9 @@ reader against the source (see README.md for method).
 - **source**: `src/gui/gui_gc2d_panel.cpp:38`
 - **notes**: Built-in ImGui SliderFloat behaviour.
 - **tests**: `2D package panel drives a loaded mock package`
-- **audit correction**: Same error as the 3D speed slider: effect says "clamped to 0.0-4.0". No slider flags are passed at gui_gc2d_panel.cpp:38, so ImGui does not clamp Ctrl+click / Enter text input (imgui_widgets.cpp:3355-3356). -> The typed value is passed through unclamped to Gc2dHost::SetSpeed, which clamps to 0.0 - 8.0 (src/gc2d/gc_host.cpp:138-140). The effective range for typed entry is 0.0 - 8.0, not 0.0 - 4.0.
+- **audit correction**: Same error as the 3D speed slider: the effect says "clamped to 0.0-4.0". No slider flags are passed at gui_gc2d_panel.cpp:38, so ImGui does not clamp Ctrl+click / Enter text input (imgui_widgets.cpp:3355-3356). -> The typed value is passed through unclamped to Gc2dHost::SetSpeed, which clamps to 0.0 - 8.0 (src/gc2d/gc_host.cpp:138-140). The effective range for typed entry is 0.0 - 8.0, not 0.0 - 4.0.
 
-### 41. "move speed" keyboard value entry
+### 41. "Move speed" keyboard value entry
 
 - **id**: `s3d-move-speed-ctrl-click-entry`
 - **input**: text-entry
@@ -522,9 +522,9 @@ reader against the source (see README.md for method).
 - **source**: `src/gui/gui_scene3d_panel.cpp:127`
 - **notes**: Built-in ImGui DragFloat behaviour.
 - **tests**: `3D scene move speed drag edits the camera`
-- **audit correction**: Effect says the typed value is written "clamped". It is NOT clamped anywhere. DragFloat is called with no flags, and imgui_widgets.cpp:2764 passes the clamp bounds to TempInputScalar only when ImGuiSliderFlags_ClampOnInput (i.e. AlwaysClamp) is set - see the comment at imgui.h:668 "Manually input values aren't clamped by default and can go off-bounds". The panel then writes straight into the live struct returned by Scene3dHost::MutCamera() (scene3d_host.cpp:179-181), which applies no clamp of its own, so the 0.01 / 10000.0 bounds are bypassed entirely. -> Committing a typed number writes it UNCLAMPED into Scene3dHost::MutCamera().speed, bypassing the DragFloat's 0.01 - 10000.0 bounds (no ImGuiSliderFlags_ClampOnInput; imgui_widgets.cpp:2764) and with no host-side clamp (scene3d_host.cpp:179). A negative value inverts free-camera movement and a huge value makes WASD teleport the camera; the only recovery is Reset view##s3d plus retyping a sane speed.
+- **audit correction**: The effect says the typed value is written "clamped", but nothing clamps it. DragFloat is called with no flags, and imgui_widgets.cpp:2764 passes the clamp bounds to TempInputScalar only when ImGuiSliderFlags_ClampOnInput (i.e. AlwaysClamp) is set; see the comment at imgui.h:668 "Manually input values aren't clamped by default and can go off-bounds". The panel then writes straight into the live struct returned by Scene3dHost::MutCamera() (scene3d_host.cpp:179-181), which applies no clamp of its own, so the 0.01 / 10000.0 bounds are bypassed entirely. -> Committing a typed number writes it unclamped into Scene3dHost::MutCamera().speed, bypassing the DragFloat's 0.01 - 10000.0 bounds (no ImGuiSliderFlags_ClampOnInput; imgui_widgets.cpp:2764) and with no host-side clamp (scene3d_host.cpp:179). A negative value inverts free-camera movement and a huge value makes WASD teleport the camera; the only recovery is Reset view##s3d plus retyping a sane speed.
 
-### 42. "speed" slider keyboard value entry
+### 42. "Speed" slider keyboard value entry
 
 - **id**: `s3d-speed-slider-ctrl-click-entry`
 - **input**: text-entry
@@ -532,9 +532,9 @@ reader against the source (see README.md for method).
 - **precondition**: Slider is hovered/active; standard ImGui Ctrl+click (or double-click) on a SliderFloat turns it into an input box
 - **effect**: Typing a number and committing calls Scene3dHost::SetSpeed(speed) with the typed value clamped to 0.0-4.0
 - **source**: `src/gui/gui_scene3d_panel.cpp:24`
-- **notes**: Built-in ImGui SliderFloat behaviour, not extra code in the panel; listed separately because it is a distinct user gesture.
+- **notes**: Built-in ImGui SliderFloat behaviour with no extra code in the panel, listed separately because it is a separate user gesture.
 - **tests**: `3D scene panel drives a loaded mock scene`
-- **audit correction**: Effect says the typed value is "clamped to 0.0-4.0". SliderScalar clamps Ctrl+click input only when ImGuiSliderFlags_ClampOnInput is set (imgui_widgets.cpp:3355-3356, and imgui.h:693), and no flags are passed at gui_scene3d_panel.cpp:24, so the slider's 4.0 maximum is not the limit. -> The typed value is NOT clamped by ImGui; it reaches Scene3dHost::SetSpeed, which clamps to 0.0 - 8.0 (scene3d_host.cpp:143-145). Typing 8 therefore yields 8x playback, double the maximum the slider handle can reach, and the handle then pins at the right edge.
+- **audit correction**: The effect says the typed value is "clamped to 0.0-4.0". SliderScalar clamps Ctrl+click input only when ImGuiSliderFlags_ClampOnInput is set (imgui_widgets.cpp:3355-3356, and imgui.h:693), and no flags are passed at gui_scene3d_panel.cpp:24, so the slider's 4.0 maximum is not the limit. -> ImGui does not clamp the typed value; it reaches Scene3dHost::SetSpeed, which clamps to 0.0 - 8.0 (scene3d_host.cpp:143-145). Typing 8 therefore yields 8x playback, double the maximum the slider handle can reach, and the handle then pins at the right edge.
 
 ### 43. Animation time scrubber keyboard value entry
 
@@ -555,7 +555,7 @@ reader against the source (see README.md for method).
 - **disabled when**: Scene3d input disabled
 - **effect**: WM_CAPTURECHANGED clears g_looking and calls ShowCursor(TRUE), ending look mode; returns false so the message still falls through to the rest of the window proc
 - **source**: `src/scene3d/scene3d_input.cpp:59`
-- **notes**: User-visible as: the cursor reappears and camera keys stop responding.
+- **notes**: The user sees the cursor reappear and the camera keys stop responding.
 
 ### 45. Release right mouse button to leave free look
 

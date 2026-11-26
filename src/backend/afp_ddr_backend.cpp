@@ -33,8 +33,8 @@ protected:
         if (!DdrAfp::Boot(g_afp_dll, g_afpu_dll, g_d3d)) {
             auto& state = App::Global();
             state.EndLoad();
-            state.SetBootError("DDR AFP 2.13.7 boot failed "
-                               "(libafp-win64 / libafputils-win64).");
+            state.SetBootError("DDR AFP 2.13.7 (libafp-win64, libafputils-win64) failed to "
+                               "boot. Check the log for details.");
             state.SetBootState(App::BootState::Failed);
             return false;
         }

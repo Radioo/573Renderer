@@ -19,7 +19,7 @@ of `Node` values in manifest order. Each node carries:
   in the editor uses, so it never changes when a nicer name is found.
 - `role`, what the entry is.
 
-**A role comes from where the entry sits, never from its bytes.** The package
+A role comes from where the entry sits, never from its bytes. The package
 layout is fixed (docs/formats.md and the package notes): `magic`, `version.xml`
 or `cversion` at the root, `tex/texturelist.xml` and the images beside it,
 `afp/afplist.xml` and the animations beside it, `afp/bsi/` for byte order
@@ -77,8 +77,9 @@ passed to each other.
 `ReadAnimation(path)` decodes an animation with its `afp/bsi/` script, and
 `WriteAnimation(path, animation)` encodes both again with
 `AfpAnimation::WriteStored`, replaces the two entries and rebuilds the outline.
-An entry that lives in a super image is refused rather than half written. `Encode()` is `Ifs::Write` over the archive, which is
-both what the preview host is fed after an edit and what `File > Save` writes.
+An entry that lives in a super image is refused, so it is never half written.
+`Encode()` is `Ifs::Write` over the archive; the preview host gets its output
+after an edit, and `File > Save` writes it.
 
 Replacing an entry's bytes also updates its stored size, which is what makes
 `Ifs::Write` lay the data region out again: the writer reuses stored offsets
@@ -112,8 +113,8 @@ pairs, and `SetPlacementField` writes one back. The value text is what the
 format stores, not a converted unit, so nothing is lost on the way through:
 a pair or a matrix is its numbers separated by commas, a name is the string it
 resolves to in the animation's table, and an empty value means the field is
-not there. That is the whole mechanism for adding and dropping a field: the
-placement writer derives every presence bit from which optionals are set
+not there. Adding and dropping a field needs nothing more: the placement
+writer derives every presence bit from which optionals are set
 (`PresenceFlags` in `afp_placement_write.cpp`), so clearing the optional clears
 the bit and its bytes.
 
@@ -148,9 +149,9 @@ undone edit back. With both in one step, undo and redo can never leave the two
 disagreeing, and an edit that only changes authored content, such as owning a
 depth, is undone the same way as any other.
 
-Snapshots rather than deltas is a deliberate choice: an undone edit is then
-proved by comparing two `Document::File` values, which is what the `ci` tests
-do, and no edit can forget to write its own inverse. The cost is a copy of the
+The history stores snapshots instead of deltas on purpose. An undone edit can
+then be proved by comparing two `Document::File` values, which is what the `ci`
+tests do, and no edit can forget to write its own inverse. The cost is a copy of the
 archive per step, so the stack is bounded (32 steps by default) and the oldest
 step is dropped when it overflows. A package is tens of megabytes, so a much
 deeper stack would need deltas instead.
@@ -182,21 +183,20 @@ label up by its name string. So `AddLabel`, `RenameLabel`, `MoveLabel` and
 `RemoveLabel` all take the name, a name must be unique in the clip, and an
 empty name is refused.
 
-**The order the labels are stored in is the game's, not ours.** With the
-animation header's `0x8` flag clear, afp-core finds a label by *binary search*
+The game decides the order labels are stored in. With the animation header's
+`0x8` flag clear, afp-core finds a label by *binary search*
 on the name (`afp_get_script_labeled_frame_no` always does), so the table has to
 be in string order or the lookup misses. With `0x8` set the normal lookup is a
 linear scan and the order does not matter, so the editor keeps those tables in
 frame order, which is what a reader expects to see. `SortLabels` picks between
-the two from that flag rather than guessing.
+the two from that flag.
 
 The install agrees. Over IIDX 33, none of the 29110 animations sets `0x8`, and
 7015 of the 7021 containers with two or more labels and 2106 of the 2108 with
-two or more script labels are already in name order, so writing them sorted by
-name is what the shipped data does rather than a choice the editor is making.
-The two tables are searched separately and have to be measured separately: a
-first pass concatenated them and reported frame order as the more common shape,
-which was an artefact of the measurement.
+two or more script labels are already in name order, so sorting them by name
+matches the shipped data. The two tables are searched separately and have to
+be measured separately: a first pass concatenated them and reported frame
+order as the more common shape, which came from the way it measured.
 
 Removing or renaming a label runs `CompactStrings`, so a string no part of the
 animation refers to any more leaves the table.
@@ -225,12 +225,12 @@ Anything else, including the scripts that hold two calls in a row and the
 `getInstanceAtDepth` pattern, is not a call, and `ScriptListing` renders it as
 one line per instruction instead.
 
-**The object and the method are built-in ids, not strings.** A push of type 19
+The object and the method are built-in ids, not strings. A push of type 19
 carries `0x300 + b` and one of type 39 carries `0x800 + b`, and afp-core
 resolves those ids to names through a table of its own. The editor carries the
 nine ids the target build's data actually uses, resolved from that table and
-recorded in the repo notes; an id outside them reads as `builtin 0x...` rather
-than a guess.
+recorded in the repo notes. An id outside them reads as `builtin 0x...`, so the
+editor never guesses a name for it.
 
 `WriteLibraryCall` re-reads the original script and replaces only the items the
 call changed, so a call written back unchanged produces the same bytes. A string
@@ -244,7 +244,7 @@ as the `this` the calls pass, keeps its original item.
 `Inputs(animation)` returns the names a game can address: every placement that
 carries an instance name, plus every frame label, each with the clip it belongs
 to. A placement's `name` is exactly the string `afp_mc_get_id_by_path` resolves
-at run time, so this is the file's whole contract with the game. The same name
+at run time, so this list is everything the file exposes to the game. The same name
 on several placements is folded into one entry with a `places` count, because
 afp writes all same-name siblings in one call. `driven` is `Frames` when the
 character placed is a sprite with more than one frame and `Texture` otherwise,
@@ -268,10 +268,10 @@ clip. `Digit(texture, at, digit)` builds the
 name of another glyph in the same family and `DigitOf` reads the digit back out,
 so a value can be written into the places and read back from them.
 
-Nothing here says which name means what. `score_this_0100` is the hundreds digit
-of this play's score only to a reader; the mapping lives in the game binary.
-What is derivable is that the four names form one number, and that is what the
-editor sets in one go.
+The surface does not say which name means what. `score_this_0100` is the
+hundreds digit of this play's score only to a human reader; the mapping lives
+in the game binary. What the editor can derive is that the four names form one
+number, and it sets that number in one go.
 
 ## Making a number out of one place (`document/number_places.h`)
 
@@ -280,9 +280,9 @@ single digit place under a name can therefore never show more than one digit,
 whatever a tool does at run time: afp's C interface has no call that creates a
 movie clip, so nothing can multiply the place while the stream is playing.
 (`duplicateMovieClip` and `createEmptyMovieClip` exist in afp-core only as
-method names inside its own ActionScript interpreter, not as exports.) The only
-way to end up with more digits is for the file to hold more places, which is an
-edit, and this is the operation that makes it.
+method names inside its own ActionScript interpreter, not as exports.) More
+digits need more places in the file, which takes an edit, and this operation
+makes that edit.
 
 `SpreadIntoPlaces(animation, spread)` takes the clip, the anchor's name, its
 depth and frame, how many places to end up with, the advance in stage pixels
@@ -290,34 +290,35 @@ between them, and which way the number runs. For each place other than the
 anchor's own it finds a free depth, duplicates the whole span onto it with
 `DuplicateSpan`, names the new span's create tag with that place's power of ten
 and shifts every positioned placement on it by whole advances. Duplicating the
-span rather than making a fresh placement is what keeps the keyframes: a place
-that fades or slides carries that animation into every digit.
+span, instead of making a fresh placement, keeps the keyframes: a place that
+fades or slides carries that animation into every digit.
 
 `grows` decides which cell the anchor becomes, and it exists because the game
 does both. Its number drawer places cell `n` at `x - n * advance` or at
 `x + (cells - n - 1) * advance` depending on a flag in a font table that is
 built at boot, so a package cannot say which one a figure wants (the read is in
 `IIDX/afp_input_surface.md`). `NumberGrows::Right`, the default, keeps the
-anchor as the MOST significant place and runs the rest to its right, which is
+anchor as the most significant place and runs the rest to its right, which is
 what an author's placeholder sitting just after a label needs;
 `NumberGrows::Left` makes the anchor the ones place and runs the rest to its
 left.
 
-Two rules keep the result honest. Only the CREATE tag of each place takes the
-name, because that is what the shipped files do and what `Inputs` counts, so a
-span of eleven keyframes stays one input rather than eleven. And a keyframe that
-sets no position is left alone instead of being given one, because writing a
-translation there would pin a placement that was inheriting its position.
+Two rules keep the result faithful to the shipped files. Only the create tag of
+each place takes the name, because that is what the shipped files do and what
+`Inputs` counts, so a span of eleven keyframes stays one input and does not
+become eleven. A keyframe that sets no position is left without one, because
+writing a translation there would pin a placement that was inheriting its
+position.
 
-The names it writes are the same power-of-ten convention `Numbers` already
-reads, so nothing downstream needs a special case: the moment the edit lands,
-the surface reports one number of that many digits.
+The names it writes follow the power-of-ten convention `Numbers` already reads,
+so nothing downstream needs a special case: as soon as the edit lands, the
+surface reports one number of that many digits.
 
 ## Structure edits (`document/frame_edit.h`)
 
 A clip stores its tags in one flat list and each frame names a range into it, so
-every structure edit is really an edit to that list plus a fix-up of the ranges
-that follow. `document/tags.h` does that once for everything that adds or drops
+every structure edit is an edit to that list plus a fix-up of the ranges that
+follow. `document/tags.h` does that once for everything that adds or drops
 a tag: `InsertTag` puts it at the end of its frame's range and bumps `first_tag`
 for every later frame, and `EraseTag` lowers the count of the frame that owned it
 and `first_tag` for every frame after it. The tags before the first frame's
@@ -357,7 +358,7 @@ its frame, so a span that now ends right before another span of the same depth
 is removed before the other is created; the other way round the game would
 remove the new object. The move is refused when it would leave the clip, run
 into another span of the depth, or leave the span looking different from what
-was moved (a span that is closed by the next span's create rather than by a
+was moved (a span that is closed by the next span's create instead of by a
 remove cannot move later, because nothing would close the span before it). It
 works on a copy and returns the new frames.
 
@@ -482,8 +483,8 @@ bound, the ties, and nothing moving out of reach.
 Layers. It takes the span each chosen depth shows on `frame`, in depth order,
 which is the order the timeline lists them, keeps the first where it is and
 moves each next one with `MoveSpan` so it starts on the frame after the one
-before it ends. Since every chosen span covers `frame`, each one after the
-first moves later. It needs two depths or more, and every one of them has to
+before it ends. Every chosen span covers `frame`, so each one after the first
+moves later. It needs two depths or more, and every one of them has to
 show something on `frame`. Whatever `MoveSpan` refuses, a span leaving the clip
 or running into another span of its depth, refuses the whole sequence, and the
 work is done on a copy, so a refusal leaves the clip alone. It returns each
@@ -499,8 +500,8 @@ the refusals.
 Area: the clip keeps only the frames in `kept`, renumbered from 0, and every
 kept frame shows what it showed. `RemoveFrame` alone cannot do that, because it
 drops the placements on a removed frame, so a span that started before `kept`
-would lose its create and every update after it would place nothing. So the
-spans go first: a span wholly outside `kept` is removed (`RemoveDepth`), and a
+would lose its create and every update after it would place nothing. The spans
+are therefore fixed first: a span wholly outside `kept` is removed (`RemoveDepth`), and a
 span crossing either end is trimmed to it with `TrimSpan`, which folds what the
 updates before the new first frame had set into a create on it. Only then are
 the frames after `kept` and before it removed, the latter one at a time from
@@ -712,7 +713,7 @@ create's. Because the folded create is now the set that sizes the curve
 controller, the trim is refused when a kept update would not fit it
 (`CheckCurvesFit`), which can happen when a skipped update gave a slot fewer
 points. Updates that carry a class name, geometry, controllers or
-discarded words are refused rather than guessed. The result is checked against
+discarded words are refused; the fold does not guess at them. The result is checked against
 `ReplayDepth`: the depth must show the same state on every frame the trim
 keeps, or the trim is refused. That replay follows only the 2D matrix and the
 colours, so for 3D spans the proof is a render: `span_trim_live_tests`
@@ -757,9 +758,8 @@ draws with, which is a pointer afp-core only changes from the script side, so
 adding a camera to a clip that never activates one leaves the viewport looking
 exactly the same. A local test pins that: the edited package loads, seeks and
 renders through the preview host, and the tag reads back with the values that
-were typed. That is the measurement, not an assumption; the note repo has the
-three functions that reach the camera list and which of them sets the active
-one.
+were typed. This was measured; the notes repo has the three functions that
+reach the camera list and which of them sets the active one.
 
 ## The project (`document/project.h`)
 
@@ -823,7 +823,7 @@ because export samples them into per-frame placements. `Placement::curves` is a
 different thing that afp-core reads itself and is not touched here.
 
 A sampled component is rounded away from zero, so a value halfway between two
-integers moves rather than sticking. `x1` and `x2` are refused outside 0 to 1
+integers still moves. `x1` and `x2` are refused outside 0 to 1
 because the timing function stops being a function of time otherwise; `y1` and
 `y2` are free, which is what lets an ease overshoot.
 
@@ -842,8 +842,8 @@ every ease `hold`. The `BakedDepth` is what the IFS keeps and the project does
 not: the create placement with its animatable properties cleared, the flags
 every update carries, and the frames whose update sets no property.
 
-That split is what makes the project file honest. Only the authored half is
-written into the manifest; `BakedFor` derives the baked half again from the IFS
+Because of that split, the project file holds only what was authored: only the
+authored half is written into the manifest; `BakedFor` derives the baked half again from the IFS
 whenever it is needed, which works because the derivation is stable under
 export. Re-deriving from what export wrote gives back the same baked half, and
 the export tests pin that by exporting twice and comparing bytes.
@@ -868,8 +868,8 @@ its written fields need plus that frame's recorded extras, and gives the create
 the bits its fields need on top of the flags it was owned with. An unedited
 frame writes exactly the fields it had, so it gets back exactly the bits it had.
 An edited frame always gets the bit that makes the game apply what was keyed
-there, which is what fixes a colour keyed on a frame that only moved being
-written and then ignored. A span whose updates differ in anything else is still
+there. Without that, a colour keyed on a frame that only moved was written and
+then ignored. A span whose updates differ in anything else is still
 refused, and a placement carrying a field without its bit is refused too,
 because own could not give that back.
 
@@ -879,14 +879,14 @@ skew, translation and the two short forms) want `0x4`, and the four colour
 fields (multiply, add and the two packed forms) want `0x8`. Both the export path
 and the raw field editor read that one rule.
 
-**Writing a field turns its bit on.** `Document::EditPlacementField` writes the
+Writing a field turns its bit on. `Document::EditPlacementField` writes the
 member the user typed and then, if the placement now carries a field the game
 would not apply, gives it the bit it needs. Without that, typing a scale into a
 placement that carried no matrix stored the number and changed nothing on
 screen, which is what the game does with it: `ApplyPlacement` reads the matrix
 fields only under `0x4` and the colours only under `0x8`.
 
-Turning a bit on cannot be the whole story, because the bit also resets the
+Turning the bit on is not enough by itself, because the bit also resets the
 group (below): an update that suddenly claims the matrix would drop the scale
 and the place earlier frames gave the depth. So `Document::CarryApplied` first
 copies the state the depth is already drawn with (`ReplayDepth` up to that
@@ -919,8 +919,8 @@ colour) and `ReplayDepth` replays a depth frame by frame the way the game does,
 fresh on a create, ignored while nothing is placed, cleared by a remove.
 `KeyedState` is the same state as the keyframes describe it. Every test that
 changes own or export compares the two on every exported frame, and the `local`
-survey compares them over every owned span of the install, which is what makes
-"what the keyframes say is what the game draws" a checked statement.
+survey compares them over every owned span of the install, so "what the
+keyframes say is what the game draws" is a tested claim.
 `WriteAuthored` makes the same comparison after it writes a depth
 (`CheckDrawnAsKeyed`) and refuses the write when any frame disagrees, so a
 future mistake in the writer stops an export with the frame it would get wrong
@@ -964,22 +964,22 @@ value would move what is drawn.
 `OwnDepth` takes the clip to own a depth in, and `BakedFor` and `WriteAuthored`
 read the clip off the `AuthoredDepth`, so a sprite depth is captured from and
 written back into its own sprite. A sprite that is gone is refused with the
-same message the clip edits use rather than being written into the root. The
-promise own makes is the same for both: the `local` survey owns every span in
+same message the clip edits use instead of being written into the root. Own
+works the same way for both: the `local` survey owns every span in
 the install, root and sprite alike, writes it straight back and requires the
 whole animation to come back identical.
 
-**Keying only the frames a property is set on is the measured shape of the
-data, not a simplification.** Over IIDX 33, 234363 spans set the same properties
+Keying only the frames a property is set on matches the measured shape of the
+data. Over IIDX 33, 234363 spans set the same properties
 on every frame but 70653 do not, so a keyframe on every frame carrying
 everything would rewrite a quarter of the install. A property is written on a
 frame when that frame has a key, or when the ease reaching it is not `hold`,
 which is what makes an ease produce the per-frame placements the game needs
 while an untouched depth writes back exactly the frames it came from.
 
-Three things own keeps that look like baked detail and are: the non-presence
-flag bits every update carries, the extended flag word, and the frames whose
-update sets no property at all. The extended word needs one more rule. A placement
+Own also keeps three pieces of baked detail: the non-presence flag bits every
+update carries, the extended flag word, and the frames whose update sets no
+property at all. The extended word needs one more rule. A placement
 has one only when flag `0x80000000` is set, and the curves and `Origin z` live
 behind it, so shipped updates that carry curves have the word while the other
 updates of the same span often do not. An empty word changes nothing in the
@@ -991,7 +991,7 @@ over the whole install and comparing: without the flags 41222 spans came back
 different, and without the blank frames 16802 did. IIDX 33 has 529434 updates
 that set nothing, so dropping them is not a corner case.
 
-Own refuses rather than losing anything. A span whose later frames change a
+Own refuses a span before it would lose anything. A span whose later frames change a
 name, a controller or anything else a keyframe cannot hold is refused and
 says which; so is a span placed twice, one whose updates disagree on their
 flags, and one whose frames end somewhere other than its first frame does. The
@@ -1045,7 +1045,7 @@ number list in the inspector.
 An IFS does not store a composited atlas bitmap. Each image has its own
 `tex/<md5 of its name>` entry holding exactly that image's pixels, and the
 texture list says where in the atlas it belongs. So packing decides rectangles,
-not pixels, which is why this is a layout problem and not a compositing one.
+not pixels.
 
 `PackAtlas` is `stb_rect_pack`'s skyline packer with two things pinned around
 it. The input is sorted by name first, and `STBRP_SORT` is pointed at
@@ -1053,7 +1053,7 @@ it. The input is sorted by name first, and `STBRP_SORT` is pointed at
 how the C library's `qsort` breaks ties. The atlas size is the smallest power of
 two by area that fits, ties broken by width, searched from 64 up to 4096, so the
 same images always land in the same atlas whatever order they were given in.
-All three of those are tests.
+Tests cover all three.
 
 The shipped data decided the rest. Measured over IIDX 33: of 12522 atlases,
 11433 are powers of two on both sides, no image falls outside its atlas, no two
@@ -1072,15 +1072,16 @@ ever repeats what is already at the edge.
 `WriteAtlas` puts all of it into the package: one `texture` node named by the
 caller, replaced rather than appended when it is already there, so exporting
 twice does not grow the list. It copies the format and the other attributes from
-a texture already in the package rather than inventing them.
+a texture already in the package instead of making them up.
 
 ## Script source (`document/script_source.h`)
 
-The source language covers every script in the shipped data, and it does that in
-two layers rather than by guessing at what an unfamiliar shape means.
+The source language covers every script in the shipped data. It has two layers
+of statements, and anything they do not cover is written as plain instructions,
+so no unfamiliar shape is guessed at.
 
-**Calls.** Nearly all of the data is a run of calls on the imported `aeplib`
-object, so that is the first layer: one call per line.
+Nearly all of the data is a run of calls on the imported `aeplib` object, so
+the first layer is calls, one per line.
 
 ```
 aep_set_set_frame(this, 30)
@@ -1095,8 +1096,8 @@ names in it can be spelled here. The rest are carried as `builtin_0x2c1`: the
 ones that are not plain identifiers (`$version`, `flash.display`,
 `FSCommand:quit`, `/`), and the three that collide with a word this language
 already uses (`this`, `push`, `pop`). afp-core resolves a call by id and not by
-name, so an id with no spellable name is carried through as the number it is
-rather than given an invented one.
+name, so an id with no spellable name is carried through as its number and
+never gets an invented name.
 
 A call written on its own compiles to the shape the data uses: a `PUSH` of the
 arguments in reverse then the count then `aeplib`, `GET_VARIABLE`, a `PUSH` of
@@ -1105,11 +1106,11 @@ on the stack instead, with no trailing `POP`, and that is written `keep
 gotoAndStop(3)`. The keyword changes nothing the game does; it exists because
 the bytes differ and this file round trips bytes.
 
-**Register statements.** The other shape the data uses binds the result of a
+The second layer is register statements. The other shape the data uses binds the result of a
 call to a register, calls a method on the register, and writes one of its
-members. afp-core's interpreter is what says how those instructions read the
+members. afp-core's interpreter defines how those instructions read the
 stack (the table in `docs/formats.md`), and the three statement forms follow
-from it rather than from a guess:
+from it:
 
 ```
 let r1 = getInstanceAtDepth(-16382)
@@ -1125,18 +1126,18 @@ copies the top of the stack without popping it, so the object the method is
 called on is the result that is already there. A `let` and a method call on the
 register it binds are therefore one statement group, and they compile as one.
 
-A method call on a register with no `let` above it is refused rather than
-guessed at, because the source would not say where the object came from. A `let`
+A method call on a register with no `let` above it is refused, because the
+source would not say where the object came from. A `let`
 whose register nothing calls compiles to its own three instructions. A member
 write is a statement only when the member is a string spelling a plain
 identifier, which is what the data uses; a member pushed as a builtin id keeps
 the instruction lines, so `.name` means one encoding in both directions.
 
-**Instructions.** Anything that is not one of those is written one instruction
+Anything that is not one of those is written one instruction
 per line, with the same names the disassembly uses: `push(...)`,
 `get_variable`, `call_method`, `call_function`, `store r1`, `set_member`,
-`pop`, `goto_frame2(flags)` or `goto_frame2(flags, bias)`, and `end`. This is
-what makes the language total: the reader emits a statement where the
+`pop`, `goto_frame2(flags)` or `goto_frame2(flags, bias)`, and `end`. This
+fallback makes the language total: the reader emits a statement where the
 instructions form one and it re-encodes to the same bytes, and falls back to
 instruction lines everywhere else, so a shape nobody has classified yet still
 opens, still edits and still compiles back to itself. The script above, had its
@@ -1152,25 +1153,25 @@ push(r1, "frameOffset", 539)
 set_member
 ```
 
-**Items.** An argument or a pushed value is a whole number, double-quoted text,
+An argument or a pushed value is a whole number, double-quoted text,
 `this`, a register `r1`, a builtin `builtin_0x390`, or, when it is none of
 those, `item(51, 4059000000000000)`: the push type and its operand bytes.
 
-**The rule that keeps the bytes exact.** Each shorthand is used only when
-re-encoding it reproduces the original item byte for byte. A number is written
+Each shorthand is used only when re-encoding it reproduces the original item
+byte for byte. A number is written
 `30` only if `NumberItem(30)` gives back the same push type the file used, a
 string only if the index re-encodes to the same short or long form, a builtin
 only if `BuiltinItem` gives back the same item. Everything else falls to
 `item(type, bytes)`. The author's choice between the compact one-byte and the
-wide four-byte form for a small number is therefore carried, not lost, which is
-what used to make a recompiled script differ.
+wide four-byte form for a small number is therefore carried through; losing it
+used to make a recompiled script differ.
 
 `goto_frame2` carries a bias exactly when bit 1 of its flags is set, because
-that is the bit the reader keys off, so source that disagrees is refused rather
-than written out as bytes the reader would then reject.
+that is the bit the reader keys off. Source that disagrees is refused instead
+of being written out as bytes the reader would then reject.
 
-**The one shape that still has no source**, deliberately: a pushed string the
-compiler could not put back in the same slot. A string item whose index is past
+One shape deliberately still has no source: a pushed string the compiler could
+not put back in the same slot. A string item whose index is past
 the end of the script's own string list, or which spells a small index in the
 wide two-byte form the compiler never emits, or whose text carries a quote or a
 newline, makes the whole script read as no source at all. The alternative would
@@ -1178,21 +1179,19 @@ be to write it as `item(8, 03)` and recompile to the same code bytes over a
 string table that no longer holds that entry, which is a broken file that passes
 a byte comparison. Neither install contains one.
 
-**How far this was checked.** Every script in both installs was read back as
-source and compiled again, and the result compared byte for byte against the
+Every script in both installs was read back as source and compiled again, and the result compared byte for byte against the
 original instructions. IIDX 33: 6146 files, 463562 scripts, all
 of them sourced, all of them recompiled to the same bytes, none differing. SDVX
 7: 935 files, 211761 scripts, the same. The survey
 (`tests/local/afp_script_survey_tests.cpp`) has a case per install and each one
 asserts those three equalities, so a translator change that loses a shape or
-moves a byte fails the local gate rather than being noticed later. That is what
-the statement forms above were held to: they were written, and then the two
-cases were run again and still reported every script sourced and none
-differing.
+moves a byte fails the local gate. The statement forms above were held to the
+same check: after they were written, both cases were run again and still
+reported every script sourced and none differing.
 
-The padding after `END` is not the script's. Scripts of 16, 17 and 18 bytes of
-instructions all end up occupying 18 bytes, so the slack belongs to the block
-that holds them, and a compiled script simply ends at its `END`.
+The padding after `END` is not part of the script. Scripts of 16, 17 and 18
+bytes of instructions all end up occupying 18 bytes, so the slack belongs to
+the block that holds them, and a compiled script ends at its `END`.
 
 A depth's script is written into its create placement's clip actions at export,
 keeping the triggers and the other fields the baked data had. A depth that
@@ -1215,10 +1214,10 @@ animation at a time, taking the animations in name order and the depths within
 one animation in clip, then depth, then frame order, with the root first, so the result does not depend on the
 order the user owned things in. For each depth it derives the baked half from
 the animation as it currently stands, asks `AuthoredPlacements` for the
-placements, and writes them; a depth it cannot write names itself in the error
-rather than leaving the package half done.
+placements, and writes them. A depth it cannot write names itself in the error,
+and the package is not left half done.
 
-ADR 0006 asks for two things and both are tests rather than claims. The same
+ADR 0006 asks for two things, and tests check both. The same
 project exported into two copies of the same package produces the same bytes.
 Exporting the same project a second time changes nothing, which is what proves
 the baked half can be re-derived; without it the project could not store only
@@ -1253,6 +1252,14 @@ sprites or the grid controllers fails it.
 With no depth chosen on the root timeline, the inspector shows the animation's
 own settings, all editable (`EditTarget::Animation`), which `AnimationSettingFields`
 reads and `SetAnimationSetting` writes into the header:
+
+- Stage size, width and height: the header rect's maximum minus its minimum.
+  An edit keeps the minimum and moves the maximum, and has to fit the u16 rect.
+- Frame rate: shown to four decimals, stored as fixed point (`x1024`,
+  rounded) when header flag `0x2` is set, which every IIDX 33 animation does,
+  otherwise as a float.
+- Background colour: r, g, b, a, 0 to 255 each.
+- Use background colour: header flag `0x1`, on or off.
 
 `StageSizeOf(animation)` is the same width and height as numbers, for callers
 such as the editor's status bar that want the stage size without the field text.
@@ -1313,18 +1320,9 @@ int16s, so a multiply of 512 (200%) or a negative add is representable. A row
 whose channels all sit between 0 and 255 is marked `ViewUnit::Colour`, which the
 editor draws as a swatch with a hex value and an alpha; anything outside that
 range is marked `ViewUnit::Channels` and drawn as four plain numbers, so a value
-the swatch cannot express is still read and written exactly rather than clamped.
+the swatch cannot express is still read and written exactly, without clamping.
 
-
-- **Stage size**, width and height: the header rect's maximum minus its minimum.
-  An edit keeps the minimum and moves the maximum, and has to fit the u16 rect.
-- **Frame rate**: shown to four decimals, stored as fixed point (`x1024`,
-  rounded) when header flag `0x2` is set, which every IIDX 33 animation does,
-  otherwise as a float.
-- **Background colour**: r, g, b, a, 0 to 255 each.
-- **Use background colour**: header flag `0x1`, on or off.
-
-What afp-core does with them (IIDX 33, notes repo `Core/afp_format.md` section
+What afp-core does with the animation settings (IIDX 33, notes repo `Core/afp_format.md` section
 2): the stage size and the colour only matter where a movie's background is
 drawn, which the host decides with movie flag `0x20`. A drawn background is the
 stage rectangle from (0, 0) through the layer's matrix, in the header colour
@@ -1414,8 +1412,8 @@ one is the user's call. `animation_entries_tests` covers the move and each
 refusal, and moving the shapes was seen to matter by leaving them out. A live
 test (`animation_rename_live_tests`, `local_dll`) renames `title` in IIDX 33's
 `title.ifs`, has the host load the result under the new name and requires frame
-400 to draw exactly as the original; asking for the old name fails to load,
-which shows the host really looked it up by the new one.
+400 to draw exactly as the original. Asking for the old name fails to load,
+which shows the host looked the animation up by its new name.
 
 `DuplicateAnimation(archive, path, name)` is a rename that keeps the
 original: it writes the whole animation again under the new name (data and byte
@@ -1683,8 +1681,8 @@ on the frame, no known box, 3D, geometry, already centred). It moves an anchor
 by a stage offset on the turned frame, chosen so the shift is whole
 twentieths, and requires the anchor there to land exactly under it with every
 frame's outline in place, and refuses a frame with nothing, an offset too small
-and a flat matrix. The proof that the
-game agrees is `anchor_live_tests` (`local_dll`): it centres the anchor of the
+and a flat matrix. `anchor_live_tests` (`local_dll`) checks that the game
+agrees: it centres the anchor of the
 first scaled or turned span in a sprite of IIDX 33's `title.ifs` that is not
 centred yet (sprite 90, depth 4, scaled by fractions such as 1155/1024) and
 renders twelve frames spread over the root animation. Every one must differ
@@ -1764,7 +1762,7 @@ deep goto, so scrubbing agrees too. A plain goto into the range restarts the
 sprite at its first frame, which the flat depths did not do, so grouping is an
 edit for content the timeline plays through.
 
-It refuses rather than guess:
+It refuses:
 
 - a span at those depths that starts before the range or ends after it;
 - a range with nothing on those depths, a range past the clip, or depths or
@@ -1874,8 +1872,8 @@ frame 0's range, so removing root frame 0 deleted most of an animation's
 sprites. afp-core handles definition tags when it initializes rather than as
 frame commands, which is why keeping them and moving them to a neighbouring
 frame does not change what the animation defines. A tag the model does not know
-is kept too, unless its code is start sound, because a frame edit has no
-business deleting what it cannot read.
+is kept too, unless its code is start sound, because a frame edit should not
+delete what it cannot read.
 
 ## Playback (`document/playback.h`)
 
@@ -1884,8 +1882,8 @@ The rate an animation plays at is in the animation, not in a setting.
 `0x2` and as a float otherwise, and falls back to 60 when the result is not
 finite or is not a rate anything could play at.
 
-That fallback is safe rather than a guess, because the two encodings do not
-overlap in the playable range: a float between 1 and 240 read as fixed point is
+The fallback is safe because the two encodings do not overlap in the playable
+range: a float between 1 and 240 read as fixed point is
 about a million, and a fixed point rate in that range read as a float is a
 denormal near zero. Reading with the wrong rule therefore always lands far
 outside the range instead of producing a plausible wrong rate. Surveyed over
@@ -1894,11 +1892,11 @@ IIDX 33, all 29110 shipped animations set the flag and land on 60, 30, 29.97 and
 numbers across that many files. The survey is a `local` test so it can be run
 again on another build.
 
-`Advance` is where playback goes next, and it takes the frame count rather than
-looking at what was drawn: the end of an animation is afp's frame count, never a
-comparison of rendered frames. It returns both the next frame and whether
+`Advance` is where playback goes next, and it takes the frame count: the end of
+an animation is afp's frame count, never a comparison of rendered frames. It
+returns both the next frame and whether
 playback continues, so a caller stops for the same reason the model does, and a
-looping animation of one frame keeps playing rather than stopping on itself.
+looping animation of one frame keeps playing.
 
 `FrameIntervalMs` is whole milliseconds and never zero, since a timer given zero
 would spin.
@@ -1926,10 +1924,9 @@ cannot show the brighter or negative values the field allows, and
 and, per row, whether the user may type into it and what an edit to it changes.
 It takes a `Selection` (the depth, the frame, the authored depth when the
 project owns one, and the selected keyframe) and nothing about a window, so what
-the panel shows is tested rather than looked at.
+the panel shows can be tested without looking at it.
 
-It lives here rather than in the widget because it is not formatting, it is
-policy. The order the rows come in, that an owned depth keeps its own rows
+It lives here and not in the widget because it decides policy, not formatting. The order the rows come in, that an owned depth keeps its own rows
 alongside the placement fields, that a depth holding nothing on a frame says so
 instead of showing an empty placement, and that only the keyframe value is
 editable on an owned depth are all decisions about the document. The one time
@@ -1985,10 +1982,9 @@ rather than a track and an index. Each function finds the track on an
 `AuthoredDepth` by property name and refuses a property the depth does not
 animate, so a stale selection cannot reach into the wrong track.
 
-`AddKeyAt` is the one with a rule worth stating. It takes the value the track
-already samples at that frame and the ease of the segment it splits, so adding
-a keyframe to a hold or a linear segment changes nothing that any frame samples.
-That is what makes a dense track safe to refine: `OwnDepth` captures a keyframe
+`AddKeyAt` takes the value the track already samples at that frame and the ease
+of the segment it splits, so adding a keyframe to a hold or a linear segment
+changes nothing that any frame samples. That makes a dense track safe to refine: `OwnDepth` captures a keyframe
 on every frame, and the user thins it out and re-eases it without the render
 moving underneath them. On a bezier segment the two halves cannot carry the
 shape of the whole, so the curve does change there.
@@ -2015,7 +2011,7 @@ form parses and then calls it.
 property's track when the depth animates it and the property is not stepped
 (`PropertyIsStepped`: character, clip depth, blend, filters and curves, which
 jump from one keyframe to the next and, for filters and curves, hold lists
-rather than numbers to plot).
+that have no numbers to plot).
 
 ## Keyframe selections (`document/key_selection.h`)
 
@@ -2104,7 +2100,7 @@ paste or a move that fails halfway leaves nothing behind.
 few that a line can carry. `OwnDepth` keys every frame a property is set on,
 and a shipped tween is baked one update per frame, so an owned depth usually
 arrives with a keyframe on every frame of its motion, each holding. That is
-exact and useless to edit; this is how it becomes a handful of keys.
+exact but useless to edit, and simplifying turns it into a handful of keys.
 
 In each property with selected keyframes, the first and last selected stay.
 From the first, the reach is pushed along the run while a straight line from
@@ -2195,12 +2191,12 @@ drift.
 `ProjectDrift` compares those recorded digests against the package as it stands
 now and returns one `DriftedEntry` per entry that disagrees: `Missing` when the
 entry is gone, `Changed` when its bytes differ. Entries the project never
-exported are not in the list and so never reported, which is what keeps drift
-about the project's own content rather than about the package.
+exported are not in the list and so never reported, so drift only ever concerns
+the project's own content and never the rest of the package.
 
-Note that one owned animation covers two entries, the animation and its
-byte-order script, because `WriteAnimation` writes both. Changing an animation
-therefore drifts two entries, and the tests assert that rather than one.
+One owned animation covers two entries, the animation and its byte-order
+script, because `WriteAnimation` writes both. Changing an animation therefore
+drifts two entries, and the tests assert two.
 
 `AwaitingExport(file, project)` counts what an export would change: every entry
 `RecordExported` would record whose digest is not the one the last export
@@ -2238,9 +2234,9 @@ modes come from, with the name and the `size` replaced and one `image` child.
 
 That child is built the way the shipped data builds it: `uvrect` first, then
 `imgrect`, both `4u16` in half pixels, with `imgrect` the whole image at the
-origin and `uvrect` the same rect inset by one pixel on every side. The inset is
-not a guess, it is what 106322 of the install's 106372 images do (docs are in
-the repo notes), and it is why an image must be at least two pixels on a side.
+origin and `uvrect` the same rect inset by one pixel on every side. The inset
+matches 106322 of the install's 106372 images (the numbers are in the repo
+notes), and it is why an image must be at least two pixels on a side.
 
 Removing an image takes its node out of the list, drops a `texture` that has no
 images left, and removes the entry. It finds the entry before touching the list,
@@ -2250,7 +2246,7 @@ so a missing entry leaves the package as it was.
 `imgrect` gives: it finds the name in the texture list, decodes the entry's blob
 with the list's `compress` setting and converts the pixels from the texture's
 format. Only `argb8888rev` converts today, and any other format is refused by
-name rather than guessed at; every texture in the IIDX 33 install is
+name; every texture in the IIDX 33 install is
 `argb8888rev` (the notes repo's `IIDX/iidx33_ifs_data_survey.md`).
 
 `ReplaceImage(archive, name, width, height, bgra)` swaps an image's pixels for

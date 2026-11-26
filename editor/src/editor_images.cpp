@@ -58,7 +58,7 @@ void Window::AddImageFromFile() {
     if (file.isEmpty()) return;
     auto picture = ReadPicture(file);
     if (!picture) {
-        ReportProblem(tr("%1 is not an image Qt can read").arg(file));
+        ReportProblem(tr("%1 is not an image the editor can read").arg(file));
         return;
     }
     const std::string logical = QFileInfo(file).completeBaseName().toStdString();
@@ -74,7 +74,7 @@ void Window::ReplaceImageWithPicture(const QString& name) {
     if (file.isEmpty()) return;
     auto picture = ReadPicture(file);
     if (!picture) {
-        ReportProblem(tr("%1 is not an image Qt can read").arg(file));
+        ReportProblem(tr("%1 is not an image the editor can read").arg(file));
         return;
     }
     const std::string image = name.toStdString();

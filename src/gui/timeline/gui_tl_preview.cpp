@@ -105,7 +105,7 @@ void DrawPreviewStrip(const std::string& key) {
     const int total = mine ? snapshot->total : 6;
     const int ready = mine ? (int)g_uploaded.size() : 0;
 
-    ImGui::TextDisabled("Preview: %d / %d sample(s) rendered on the render thread", ready, total);
+    ImGui::TextDisabled("Preview: %d / %d sample(s) rendered", ready, total);
     for (int i = 0; i < total; i++) {
         if (i > 0) ImGui::SameLine();
         const ImVec2 origin = ImGui::GetCursorScreenPos();

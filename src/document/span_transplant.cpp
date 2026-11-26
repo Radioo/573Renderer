@@ -78,8 +78,8 @@ public:
         if (Imported(*source_, id)) {
             return Support::Unexpected(
                 "character " + std::to_string(id) +
-                " is imported from another movie, and importing it into this animation is not "
-                "something the editor does");
+                " is imported from another movie, and the editor cannot import it into this "
+                "animation");
         }
         const AfpAnimation::Tag* tag = Definition(*source_, id);
         if (tag == nullptr) {

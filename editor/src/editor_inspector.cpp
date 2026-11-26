@@ -226,7 +226,8 @@ Inspector::Inspector(QWidget* parent)
     clip_depth_->setObjectName("content_clip_depth");
     clip_depth_->setRange(0, std::numeric_limits<uint16_t>::max());
     clip_depth_->setKeyboardTracking(false);
-    clip_depth_->setToolTip(tr("Depths up to this one are masked by this one; 0 masks nothing"));
+    clip_depth_->setToolTip(
+        tr("This depth masks every depth up to the number given here. 0 masks nothing."));
     connect(clip_depth_, &QSpinBox::editingFinished, this, [this] {
         if (clip_depth_->value() == shown_clip_depth_) return;
         shown_clip_depth_ = clip_depth_->value();
@@ -364,8 +365,8 @@ void Inspector::ShowSubject(const InspectorSubject& subject) {
     detail_->setText(
         detail_->fontMetrics().elidedText(subject.detail, Qt::ElideRight, detail_->width()));
     badge_->setText(!subject.depth_chosen ? QString()
-                    : subject.owned       ? tr("KEYED, edited through its keyframes")
-                                          : tr("BAKED"));
+                    : subject.owned       ? tr("Keyframed")
+                                          : tr("Baked"));
     badge_->setVisible(!badge_->text().isEmpty());
 }
 

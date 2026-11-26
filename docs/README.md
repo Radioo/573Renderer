@@ -1,8 +1,8 @@
 # 573Renderer documentation index
 
-The codebase is comment-free by policy (see gates.md "No comments"): every
-piece of RE knowledge, design rationale, and process history lives in these
-documents, which are THE source of truth. Start here to find the right one.
+The codebase has no comments by policy (see gates.md "No comments"), so all
+RE knowledge, design rationale and process history lives in these documents,
+and they are the source of truth. Start here to find the right one.
 
 ## Orientation
 
@@ -26,7 +26,7 @@ documents, which are THE source of truth. Start here to find the right one.
 | [qpro.md](qpro.md) | the IIDX Q-pro avatar extractor: part tables, composites, game-id asset naming |
 | [gui.md](gui.md) | GUI panel architecture and AFP debug-viewer parity features |
 | [judge.md](judge.md) | the SDVX 1 interpolation judge: per-layer pose interpolation through libafp detours, the logic and display clocks, the verdict file and its keys |
-| [interactions/](interactions/README.md) | you need the full inventory of what a user can DO in the app: every widget, tooltip, key, drag, scroll and CLI flag across all 13 surfaces, with test coverage per interaction |
+| [interactions/](interactions/README.md) | you need the full inventory of what a user can do in the app: every widget, tooltip, key, drag, scroll and CLI flag across all 13 surfaces, with test coverage per interaction |
 | [gui_tests.md](gui_tests.md) | the headless Dear ImGui Test Engine suite: null backend, item paths, dialog stubs, how to add a case |
 
 ## Export and formats
@@ -81,30 +81,31 @@ documents, which are THE source of truth. Start here to find the right one.
 
 ## Writing these documents
 
-These documents must stay useful across every game build and readable without
+These documents have to stay useful across game builds and readable without
 anything outside this repository:
 
-- Name a game function by its ROLE ("the SetLayer blend dispatch",
+- Name a game function by its role ("the SetLayer blend dispatch",
   `get_index_from_mc_id`) and give a re-find recipe from durable anchors:
   export names, export ordinals, and the DLL's own assert strings. Never write
   decompiler auto-labels (`sub_...`, `dword_...`, `qword_...`, `nullsub_N`),
   module-relative addresses or DLL-base offsets; they change with every build.
 - Version-stable numbers stay: export ordinals, afp opcodes and mc codes, flag
-  masks and sentinels, texture format ids, struct FIELD offsets the code reads,
-  and per-profile offset VALUES the renderer stores as its own configuration
+  masks and sentinels, texture format ids, struct field offsets the code reads,
+  and per-profile offset values the renderer stores as its own configuration
   (the `DllOffsetSet` constants, documented in engine_binding.md and
   game_profiles.md).
-- State facts timelessly. No dates, "verified on", "this session" or campaign
-  logs; a negative result is kept as a fact ("X cannot replace Y because Z").
+- State facts without a time. No dates, "verified on", "this session" or
+  campaign logs; write a negative result as a fact ("X cannot replace Y because
+  Z").
 - Reference nothing outside this repository: no other repositories, public
   projects, web links or machine-local paths. Tests and examples use neutral
   sample paths, never a real install location.
-- Contrast our output with "the real game", and call the game's own behaviour
+- Compare our output with "the real game", and call the game's own behaviour
   "the game" or "the game default". User-facing strings (labels, tooltips, CLI
-  help, log lines) are professional and objective, and the documents use the
-  same terms as the strings.
+  help, log lines) stay plain and factual, and the documents use the same terms
+  as the strings.
 
 `tools/ci/check_machine_paths.py` enforces the path rule (drive-letter game
 folders included) and `tools/ci/check_raw_dll_offsets.py` keeps raw offsets
-out of the source. The label, date and external-reference rules are held by
-convention.
+out of the source. Nothing checks the label, date and external-reference
+rules; they are kept by convention.

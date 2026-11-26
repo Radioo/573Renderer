@@ -183,7 +183,7 @@ void RenderLayerRow(App::State& state, const std::string& active, const App::Sta
         state.PostCommand(AfpCmd::Wrap(AfpCmd::SwitchAnimation{.name = name, .label = ""}));
     }
     if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("Click to select, double-click to play / replay.");
+        ImGui::SetTooltip("Click to select, double-click to play or replay.");
     }
 
     if (has_children && open) {
@@ -199,7 +199,7 @@ void RenderLayerRow(App::State& state, const std::string& active, const App::Sta
 void RenderAddSlotRow(App::IfsConfig& cfg) {
     static char buf[128] = {};
     ImGui::SetNextItemWidth(Gui::Dpi::S(-72.0F));
-    ImGui::InputTextWithHint("##new_slot", "add slot by clip path, e.g. coin", buf, sizeof(buf));
+    ImGui::InputTextWithHint("##new_slot", "Add a slot by clip path, e.g. coin", buf, sizeof(buf));
     ImGui::SameLine();
     if (ImGui::Button("Add", ImVec2(-FLT_MIN, 0)) && buf[0] != 0) {
         bool exists = false;
@@ -220,9 +220,9 @@ void RenderAddSlotRow(App::IfsConfig& cfg) {
         buf[0] = 0;
     }
     if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("Register a clip path as a variant slot. The render thread\n"
-                          "probes it next frame; unresolved slots stay listed under the\n"
-                          "playing layer until they resolve.");
+        ImGui::SetTooltip("Add a clip path as a variant slot. It is looked up on the\n"
+                          "next frame; a slot that does not resolve stays listed under\n"
+                          "the playing layer until it does.");
     }
 }
 
@@ -259,7 +259,7 @@ void RenderScenePane() {
 
     static char filter_buf[128] = {};
     ImGui::SetNextItemWidth(-FLT_MIN);
-    ImGui::InputTextWithHint("##scene_filter", "find clip...", filter_buf, sizeof(filter_buf));
+    ImGui::InputTextWithHint("##scene_filter", "Find clip...", filter_buf, sizeof(filter_buf));
     std::string const lower_filter = Lower(filter_buf);
     ImGui::Spacing();
 

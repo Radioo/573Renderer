@@ -143,7 +143,7 @@ void DoImport() {
     SaveLoadedTo(document);
     if (!renamed) return;
     RequestImportProblems(path,
-                          "id \"" + wanted + "\" already belongs to another document of this " +
+                          "The id \"" + wanted + "\" is taken by another document in this " +
                               "build, so the file was imported as \"" + document.id + "\".",
                           false);
 }
@@ -266,7 +266,7 @@ void RenderImportProblems() {
     ImGui::Separator();
     ImGui::TextWrapped("%s", g_import_message.c_str());
     ImGui::TextDisabled(g_import_blocked ? "Nothing was loaded. Fix the file and import it again."
-                                         : "The document is loaded and saved under the free id.");
+                                         : "The document was loaded and saved under the new id.");
     ImGui::Separator();
     if (ImGui::Button("Copy report###lib_import_copy")) {
         ImGui::SetClipboardText((g_import_path + "\n" + g_import_message).c_str());
@@ -401,8 +401,8 @@ void DrawFileActions(bool editable, bool built_in, const std::string& read_only)
     ImGui::SameLine();
     if (ImGui::Button("Revert###lib_revert")) RequestAction(Action::Revert);
     if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-        ImGui::SetTooltip("%s", read_only.empty() ? "Throw the edits away and read the document "
-                                                    "back from its file."
+        ImGui::SetTooltip("%s", read_only.empty() ? "Discard your edits and reload the document "
+                                                    "from its file."
                                                   : read_only.c_str());
     }
     ImGui::EndDisabled();
@@ -412,7 +412,7 @@ void DrawFileActions(bool editable, bool built_in, const std::string& read_only)
     if (ImGui::Button("Reset###lib_reset")) RequestAction(Action::Reset);
     ImGui::EndDisabled();
     if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-        ImGui::SetTooltip("Put a built-in document back to the one the renderer ships.");
+        ImGui::SetTooltip("Restore a built-in document to the version the renderer ships with.");
     }
     ImGui::SameLine();
     ImGui::BeginDisabled(!editable);
@@ -473,8 +473,8 @@ void DrawActions() {
         ImGui::SetTooltip(read_only.empty()
                               ? "Copy the loaded document under a free id, so a built-in can be "
                                 "edited."
-                              : "Copy it under a free id AND under this build, which is what makes "
-                                "the copy editable and loadable here.");
+                              : "Copy it under a free id and into this build, so the copy can be "
+                                "edited and loaded here.");
     }
     ImGui::SameLine();
     if (ImGui::Button("Import...###lib_import")) RequestAction(Action::Import);
@@ -498,7 +498,7 @@ void DrawProblems() {
     DrawRejected();
     const std::vector<Doc::Problem> problems = LoadedProblems();
     if (problems.empty()) {
-        if (State().registry.Rejected().empty()) ImGui::TextDisabled("no validation problems");
+        if (State().registry.Rejected().empty()) ImGui::TextDisabled("No validation problems");
         return;
     }
     ImGui::TextDisabled("Validation (%d)", (int)problems.size());

@@ -1,7 +1,7 @@
 # Render window
 
-Every interaction on this surface. Generated inventory, cross-checked by a second
-reader against the source (see README.md for method).
+Every interaction on this surface. The inventory was generated and then checked
+against the source by a second reader (see README.md for the method).
 
 | # | id | control | input | tooltip | tests |
 |---|---|---|---|---|---|
@@ -36,16 +36,16 @@ reader against the source (see README.md for method).
 - **input**: double-click
 - **precondition**: Window class 'AFPRendererClass' is registered with style CS_HREDRAW \| CS_VREDRAW only - CS_DBLCLKS is absent (src/window.cpp:151), so Windows never synthesises WM_LBUTTONDBLCLK / WM_RBUTTONDBLCLK for this window.
 - **disabled when**: n/a - the double-click message class is unconditionally unavailable
-- **effect**: A double-click is delivered as two independent WM_LBUTTONDOWN/WM_LBUTTONUP pairs. In crop pick mode the FIRST pair already exits pick mode (state.SetCropPickMode(false), src/window.cpp:106), so the second down/up pair is no longer routed to HandleCropPick (gate at src/window.cpp:119) and instead falls through to Scene3d / DefWindowProcA. Outside crop pick mode there is no double-click behaviour at all (no maximise-on-double-click in the client area, no reset gesture).
+- **effect**: A double-click is delivered as two independent WM_LBUTTONDOWN/WM_LBUTTONUP pairs. In crop pick mode the first pair already exits pick mode (state.SetCropPickMode(false), src/window.cpp:106), so the second down/up pair is no longer routed to HandleCropPick (gate at src/window.cpp:119) and instead falls through to Scene3d / DefWindowProcA. Outside crop pick mode there is no double-click behaviour at all (no maximise-on-double-click in the client area, no reset gesture).
 - **source**: `src/window.cpp:151`
-- **notes**: Consequence worth recording: a stationary single click in pick mode publishes a 0x0 rect and then src/window.cpp:108 resets the crop to a default-constructed CropRect, so 'click to cancel' silently CLEARS an existing crop.
+- **notes**: A stationary single click in pick mode publishes a 0x0 rect, and then src/window.cpp:108 resets the crop to a default-constructed CropRect, so 'click to cancel' silently clears an existing crop.
 - **tests**: none
 
 ### 2. Render window client area (crop pick mode) - drag to size the crop rectangle
 
 - **id**: `crop-pick-mousemove-drag`
 - **input**: drag
-- **precondition**: g_crop_drag_active == true (a WM_LBUTTONDOWN happened in crop pick mode) AND crop pick mode still on
+- **precondition**: g_crop_drag_active == true (a WM_LBUTTONDOWN happened in crop pick mode) and crop pick mode still on
 - **disabled when**: g_crop_drag_active == false - WM_MOUSEMOVE returns false and falls through to Scene3d::HandleLookMessage / DefWindowProcA
 - **effect**: On every WM_MOUSEMOVE, PublishDragRect(hwnd, current) recomputes the normalised min/max rect between anchor and current point and calls App::Global().SetCropRect(r) with x/y/w/h in render-target pixels. Message consumed.
 - **source**: `src/window.cpp:93`
@@ -58,7 +58,7 @@ reader against the source (see README.md for method).
 - **input**: drag
 - **precondition**: App::Global().GetCropPickMode() == true; press starts on a non-client hit-test area (caption, border, corner)
 - **disabled when**: n/a - non-client messages are never intercepted
-- **effect**: Non-client messages (WM_NCHITTEST, WM_NCLBUTTONDOWN, WM_NCMOUSEMOVE) hit HandleCropPick's default branch (src/window.cpp:112) and Scene3d's default branch, then DefWindowProcA runs the modal move/size loop normally. The crosshair cursor is NOT applied because the WM_SETCURSOR case only swaps the cursor when LOWORD(lParam) == HTCLIENT (src/window.cpp:78); the frame keeps the normal arrow/resize cursors. Crop pick mode stays armed across the move/resize, and because ClientToRt re-reads GetClientRect on every message (src/window.cpp:33), a resize performed while armed rescales all subsequent crop coordinates.
+- **effect**: Non-client messages (WM_NCHITTEST, WM_NCLBUTTONDOWN, WM_NCMOUSEMOVE) hit HandleCropPick's default branch (src/window.cpp:112) and Scene3d's default branch, then DefWindowProcA runs the modal move/size loop normally. The crosshair cursor is not applied because the WM_SETCURSOR case only swaps the cursor when LOWORD(lParam) == HTCLIENT (src/window.cpp:78); the frame keeps the normal arrow/resize cursors. Crop pick mode stays armed across the move/resize, and because ClientToRt re-reads GetClientRect on every message (src/window.cpp:33), a resize performed while armed rescales all subsequent crop coordinates.
 - **source**: `src/window.cpp:78`
 - **notes**: The modal size/move loop internally takes mouse capture, so a crop drag begun before the frame drag would be cancelled through the WM_CAPTURECHANGED handler at src/window.cpp:136.
 - **tests**: none
@@ -73,7 +73,7 @@ reader against the source (see README.md for method).
 - **source**: `src/window.cpp:123`
 - **notes**: Single entry covering the whole delegated input set; the specific gestures and keys live in src/scene3d/scene3d_input.* which was not part of this file.
 - **tests**: none
-- **audit correction**: Three errors. (1) The control/effect say keys are 'consumed by the scene3d input layer' via WndProc - they are not; HandleLookMessage handles only WM_RBUTTONDOWN (BeginLook: SetCapture + ShowCursor(FALSE)), WM_RBUTTONUP (EndLook: ReleaseCapture + ShowCursor(TRUE)), WM_MOUSEMOVE while looking (delta accumulate + SetCursorPos re-anchor), and WM_CAPTURECHANGED which returns FALSE (src/scene3d/scene3d_input.cpp:52-76). WASD/E/Q/Space/Ctrl/Shift/Alt are polled with GetAsyncKeyState in Scene3d::PollCameraInput (src/scene3d/scene3d_input.cpp:87-94), outside the message stream entirely, and only while g_looking. (2) The master gate is missing: HandleLookMessage returns false immediately unless Scene3d::SetInputEnabled(true) has set g_enabled (src/scene3d/scene3d_input.cpp:50). (3) 'WndProc forwards every unclaimed message' overstates it - only those four message types can ever be claimed. -> control: '3D camera look in the render window - right-button hold to look, mouse move to aim'. input: 'right-click'. precondition: 'Scene3d input enabled (g_enabled via SetInputEnabled, src/scene3d/scene3d_input.cpp:50) AND HandleCropPick declined the message first (src/window.cpp:119-122)'. disabled_when: 'Scene3d input disabled, or crop pick mode already consumed the message (left button down/move/up, Escape, WM_SETCURSOR over HTCLIENT)'. effect: 'right-button down grabs capture and hides the cursor; mouse moves while looking accumulate look deltas and re-centre the pointer; right-button up releases capture and reshows the cursor. Keyboard fly (W/A/S/D/E/Q/Space/Ctrl/Shift/Alt) is polled separately via GetAsyncKeyState and never passes through WndProc.'
+- **audit correction**: Three errors. (1) The control/effect say keys are 'consumed by the scene3d input layer' via WndProc - they are not; HandleLookMessage handles only WM_RBUTTONDOWN (BeginLook: SetCapture + ShowCursor(FALSE)), WM_RBUTTONUP (EndLook: ReleaseCapture + ShowCursor(TRUE)), WM_MOUSEMOVE while looking (delta accumulate + SetCursorPos re-anchor), and WM_CAPTURECHANGED which returns FALSE (src/scene3d/scene3d_input.cpp:52-76). WASD/E/Q/Space/Ctrl/Shift/Alt are polled with GetAsyncKeyState in Scene3d::PollCameraInput (src/scene3d/scene3d_input.cpp:87-94), outside the message stream entirely, and only while g_looking. (2) The master gate is missing: HandleLookMessage returns false immediately unless Scene3d::SetInputEnabled(true) has set g_enabled (src/scene3d/scene3d_input.cpp:50). (3) 'WndProc forwards every unclaimed message' overstates it - only those four message types can ever be claimed. -> control: '3D camera look in the render window - right-button hold to look, mouse move to aim'. input: 'right-click'. precondition: 'Scene3d input enabled (g_enabled via SetInputEnabled, src/scene3d/scene3d_input.cpp:50) and HandleCropPick declined the message first (src/window.cpp:119-122)'. disabled_when: 'Scene3d input disabled, or crop pick mode already consumed the message (left button down/move/up, Escape, WM_SETCURSOR over HTCLIENT)'. effect: 'right-button down grabs capture and hides the cursor; mouse moves while looking accumulate look deltas and re-centre the pointer; right-button up releases capture and reshows the cursor. Keyboard fly (W/A/S/D/E/Q/Space/Ctrl/Shift/Alt) is polled separately via GetAsyncKeyState and never passes through WndProc.'
 
 ### 5. Resizing the window by dragging its border/corner (WS_OVERLAPPEDWINDOW sizing frame)
 
@@ -90,7 +90,7 @@ reader against the source (see README.md for method).
 
 - **id**: `crop-pick-setcursor-crosshair`
 - **input**: hover
-- **precondition**: App::Global().GetCropPickMode() == true AND LOWORD(lParam) == HTCLIENT (pointer over client area, not the frame/caption)
+- **precondition**: App::Global().GetCropPickMode() == true and LOWORD(lParam) == HTCLIENT (pointer over client area, not the frame/caption)
 - **disabled when**: pointer is over a non-client hit-test area (border, caption, buttons) - returns false so the default arrow/resize cursors apply; also disabled when crop pick mode is off
 - **effect**: SetCursor(LoadCursor(nullptr, IDC_CROSS)) swaps the pointer to a crosshair and the handler returns TRUE from WM_SETCURSOR to suppress the class cursor (wc.hCursor = IDC_ARROW).
 - **source**: `src/window.cpp:77`
@@ -103,7 +103,7 @@ reader against the source (see README.md for method).
 - **input**: key
 - **precondition**: App::Global().GetCropPickMode() == true; window has keyboard focus
 - **disabled when**: crop pick mode is off - Escape instead hits the global Escape handler and quits the app
-- **effect**: If a drag is in progress, ReleaseCapture() and g_crop_drag_active = false; then state.SetCropPickMode(false) leaves pick mode. The crop rect keeps whatever value the in-progress drag last published (it is NOT rolled back). Message consumed, so the app does NOT quit.
+- **effect**: If a drag is in progress, ReleaseCapture() and g_crop_drag_active = false; then state.SetCropPickMode(false) leaves pick mode. The crop rect keeps whatever value the in-progress drag last published (it is not rolled back). The message is consumed, so the app does not quit.
 - **source**: `src/window.cpp:69`
 - **notes**: Any non-VK_ESCAPE WM_KEYDOWN returns false immediately (src/window.cpp:70) and falls through to the normal handlers.
 - **tests**: none
@@ -112,13 +112,13 @@ reader against the source (see README.md for method).
 
 - **id**: `global-escape-quit`
 - **input**: key
-- **precondition**: App::Global().GetCropPickMode() == false AND Scene3d::HandleLookMessage did not consume the WM_KEYDOWN; window focused
+- **precondition**: App::Global().GetCropPickMode() == false and Scene3d::HandleLookMessage did not consume the WM_KEYDOWN; window focused
 - **disabled when**: crop pick mode is active (Escape is intercepted to cancel the pick) or scene3d input consumes the key
-- **effect**: g_running = false and DestroyWindow(hwnd) - tears the window down, which produces WM_DESTROY, ends the main loop via AppWindow::IsRunning()/PumpMessages() and quits the app. Returns 0.
+- **effect**: g_running = false and DestroyWindow(hwnd), which tears the window down, which produces WM_DESTROY, ends the main loop via AppWindow::IsRunning()/PumpMessages() and quits the app. Returns 0.
 - **source**: `src/window.cpp:130`
 - **notes**: All other WM_KEYDOWN keys are swallowed here too (the case returns 0 unconditionally, src/window.cpp:135), so unhandled keys never reach DefWindowProcA - no system menu key handling, no WM_SYSCOMMAND from keyboard accelerators in this branch.
 - **tests**: none
-- **audit correction**: The precondition ('Scene3d::HandleLookMessage did not consume the WM_KEYDOWN') and disabled_when ('or scene3d input consumes the key') are hallucinated. Scene3d::HandleLookMessage has no key case whatsoever: its switch handles only WM_RBUTTONDOWN, WM_RBUTTONUP, WM_CAPTURECHANGED and WM_MOUSEMOVE, with default: return false (src/scene3d/scene3d_input.cpp:52-76). It can never swallow a WM_KEYDOWN. -> precondition: 'App::Global().GetCropPickMode() == false; window focused.' disabled_when: 'crop pick mode is active - Escape is intercepted by HandleCropPick (src/window.cpp:69-76) to cancel the pick instead.' Nothing else can intercept the key.
+- **audit correction**: The precondition ('Scene3d::HandleLookMessage did not consume the WM_KEYDOWN') and disabled_when ('or scene3d input consumes the key') are wrong. Scene3d::HandleLookMessage has no key case at all: its switch handles only WM_RBUTTONDOWN, WM_RBUTTONUP, WM_CAPTURECHANGED and WM_MOUSEMOVE, with default: return false (src/scene3d/scene3d_input.cpp:52-76). It can never swallow a WM_KEYDOWN. -> precondition: 'App::Global().GetCropPickMode() == false; window focused.' disabled_when: 'crop pick mode is active - Escape is intercepted by HandleCropPick (src/window.cpp:69-76) to cancel the pick instead.' Nothing else can intercept the key.
 - **audit correction**: The effect claims the loop ends 'via AppWindow::IsRunning()/PumpMessages()'. AppWindow::IsRunning() (src/window.cpp:211) has no caller outside window.cpp - grep -rn 'AppWindow::IsRunning' matches only the definition and src/window.h:13. The host loop is 'while (AppWindow::PumpMessages())' at src/render_loop.cpp:366. -> effect: '... DestroyWindow(hwnd) produces WM_DESTROY, whose handler posts WM_QUIT; the next AppWindow::PumpMessages() sees WM_QUIT, sets g_running = false and returns false (src/window.cpp:201-204), ending the loop at src/render_loop.cpp:366. IsRunning() is not part of the shutdown path.'
 - **audit correction**: The notes claim 'unhandled keys never reach DefWindowProcA - no system menu key handling, no WM_SYSCOMMAND from keyboard accelerators in this branch'. Only WM_KEYDOWN is swallowed by the case at src/window.cpp:130-135. WM_SYSKEYDOWN / WM_SYSCHAR / WM_SYSKEYUP are not matched by any case and do reach DefWindowProcA at src/window.cpp:144, which produces the standard SC_KEYMENU / SC_CLOSE behaviour (Alt, F10, Alt+Space, Alt+F4 all work). -> notes: 'All other non-system WM_KEYDOWN keys are swallowed (the case returns 0 unconditionally, src/window.cpp:135) and never reach DefWindowProcA. System keys are unaffected: WM_SYSKEYDOWN/WM_SYSCHAR are unmatched and fall through to DefWindowProcA, so Alt/F10/Alt+Space open the system menu and Alt+F4 still closes the app.' See the new syskey-system-menu-altf4 record.
 
@@ -138,7 +138,7 @@ reader against the source (see README.md for method).
 - **id**: `appwindow-requestclose-api` *(audit)*
 - **input**: left-click
 - **precondition**: none
-- **effect**: Sets g_running = false ONLY (src/window.cpp:214-216). It does not DestroyWindow and does not PostQuitMessage, so the HWND and the D3D device stay alive; the shutdown happens on the next AppWindow::PumpMessages() call, which drains the queue and then returns g_running == false at src/window.cpp:208, ending the host loop at src/render_loop.cpp:366. This is a distinctly softer shutdown than the Escape path (src/window.cpp:130-134), which destroys the window first.
+- **effect**: Sets g_running = false and nothing else (src/window.cpp:214-216). It does not DestroyWindow and does not PostQuitMessage, so the HWND and the D3D device stay alive; the shutdown happens on the next AppWindow::PumpMessages() call, which drains the queue and then returns g_running == false at src/window.cpp:208, ending the host loop at src/render_loop.cpp:366. This is a softer shutdown than the Escape path (src/window.cpp:130-134), which destroys the window first.
 - **source**: `src/window.cpp:214`
 - **notes**: No caller found. Searched: grep -rn 'RequestClose' across src/, tests/ and tools/ - only src/window.cpp:214 and src/window.h:14 match (all other hits are in vendor/ and build/). Reachability UNRESOLVED, not proven dead.
 - **tests**: none
@@ -149,7 +149,7 @@ reader against the source (see README.md for method).
 - **input**: left-click
 - **precondition**: hwnd != nullptr (early return at src/window.cpp:191 otherwise). Intended to be driven by a resolution change in the UI.
 - **disabled when**: hwnd == nullptr - the function returns immediately and nothing happens
-- **effect**: AdjustWindowRect inflates the requested client size by the WS_OVERLAPPEDWINDOW frame and SetWindowPos applies it with SWP_NOMOVE \| SWP_NOZORDER (src/window.cpp:192-195), so the window keeps its screen position and z-order and only the client area changes. It does NOT touch g_rt_w/g_rt_h, so crop coordinates keep mapping to the old render-target size until AppWindow::SetRenderRtSize is called separately.
+- **effect**: AdjustWindowRect inflates the requested client size by the WS_OVERLAPPEDWINDOW frame and SetWindowPos applies it with SWP_NOMOVE \| SWP_NOZORDER (src/window.cpp:192-195), so the window keeps its screen position and z-order and only the client area changes. It does not touch g_rt_w/g_rt_h, so crop coordinates keep mapping to the old render-target size until AppWindow::SetRenderRtSize is called separately.
 - **source**: `src/window.cpp:190`
 - **notes**: No caller found. Searched: grep -rn 'AppWindow::Resize' over the whole repo - only the definition (src/window.cpp:190) and the declaration (src/window.h:9) match. Recording as UNRESOLVED reachability rather than dead, per the prove-the-negative rule.
 - **tests**: none
@@ -173,16 +173,16 @@ reader against the source (see README.md for method).
 - **disabled when**: g_crop_drag_active == false - returns false and the message falls through
 - **effect**: Final PublishDragRect() -> App::Global().SetCropRect(); ReleaseCapture(); g_crop_drag_active = false; state.SetCropPickMode(false) exits pick mode; then re-reads state.GetCropRect() and, if r.w <= 0 \|\| r.h <= 0, calls state.SetCropRect({}) to clear the crop entirely. Message consumed.
 - **source**: `src/window.cpp:100`
-- **notes**: A simple click without movement therefore selects nothing and RESETS the crop rect to the default-constructed (empty) CropRect.
+- **notes**: A simple click without movement therefore selects nothing and resets the crop rect to the default-constructed (empty) CropRect.
 - **tests**: none
 
 ### 14. Turning crop pick mode off from the GUI (export panel) while the left button is still held down mid-drag
 
 - **id**: `crop-pick-mode-cleared-mid-drag` *(audit)*
 - **input**: left-click
-- **precondition**: g_crop_drag_active == true (WM_LBUTTONDOWN already happened) AND another thread/frame calls App::State::SetCropPickMode(false) - the export panel does this at src/gui/gui_export_panel.cpp:382 and :401
+- **precondition**: g_crop_drag_active == true (WM_LBUTTONDOWN already happened) and another thread/frame calls App::State::SetCropPickMode(false) - the export panel does this at src/gui/gui_export_panel.cpp:382 and :401
 - **disabled when**: n/a
-- **effect**: The gate at src/window.cpp:119 stops routing messages to HandleCropPick, so the pending WM_LBUTTONUP is never seen by the crop handler: ReleaseCapture() is never called and g_crop_drag_active stays true. The window keeps the mouse capture, and the flag is only cleared later when something else produces WM_CAPTURECHANGED (src/window.cpp:136). If pick mode is re-armed before that, the very next WM_MOUSEMOVE resumes publishing crop rects against the STALE anchor without any button press.
+- **effect**: The gate at src/window.cpp:119 stops routing messages to HandleCropPick, so the pending WM_LBUTTONUP is never seen by the crop handler: ReleaseCapture() is never called and g_crop_drag_active stays true. The window keeps the mouse capture, and the flag is only cleared later when something else produces WM_CAPTURECHANGED (src/window.cpp:136). If pick mode is re-armed before that, the very next WM_MOUSEMOVE resumes publishing crop rects against the stale anchor without any button press.
 - **source**: `src/window.cpp:119`
 - **notes**: The pick-mode gate is checked per message, and neither the WM_LBUTTONUP path (src/window.cpp:100) nor SetCropPickMode has any teardown for an in-flight drag; only the Escape path (src/window.cpp:71-74) releases capture explicitly.
 - **tests**: none
@@ -191,11 +191,11 @@ reader against the source (see README.md for method).
 
 - **id**: `render-rt-size-rebind` *(audit)*
 - **input**: left-click
-- **precondition**: w > 0 AND h > 0 (guard at src/window.cpp:219); called once during boot with the D3D9 offscreen size at src/boot.cpp:71 after g_d3d.GetOffscreenSize()
+- **precondition**: w > 0 and h > 0 (guard at src/window.cpp:219); called once during boot with the D3D9 offscreen size at src/boot.cpp:71 after g_d3d.GetOffscreenSize()
 - **disabled when**: w <= 0 or h <= 0 - the call is silently ignored and the previous values are kept
 - **effect**: Sets g_rt_w / g_rt_h, which ClientToRt uses to scale client pixels into render-target pixels (rt_x = px * g_rt_w / cw, src/window.cpp:38-39). Every crop rect the user drags is published in this space, so this call decides whether the exported crop matches the actual render target. If it never runs, the defaults 1920x1080 (src/window.cpp:17 and :20) are used and crop rects are wrong for any other resolution (e.g. SDVX 1080x1920 or IIDX 640x480).
 - **source**: `src/window.cpp:218`
-- **notes**: The existing inventory only mentions this in a note on crop-pick-lbuttondown-start-drag; it deserves its own record because the w>0/h>0 guard is a real gate and the fallback silently mis-scales user drags.
+- **notes**: The existing inventory only mentions this in a note on crop-pick-lbuttondown-start-drag. It gets its own record because the w>0/h>0 guard is a real gate and the fallback silently mis-scales user drags.
 - **tests**: none
 
 ### 16. Right-click / middle-click / mouse wheel inside the client area while crop pick mode is active
@@ -204,19 +204,19 @@ reader against the source (see README.md for method).
 - **input**: right-click
 - **precondition**: App::Global().GetCropPickMode() == true
 - **disabled when**: never (but the action has no crop effect)
-- **effect**: HandleCropPick's default: branch returns false, so the message is offered to Scene3d::HandleLookMessage and then DefWindowProcA. Crop pick mode stays active and the crop rect is unchanged - only the LEFT button drives crop selection.
+- **effect**: HandleCropPick's default: branch returns false, so the message is offered to Scene3d::HandleLookMessage and then DefWindowProcA. Crop pick mode stays active and the crop rect is unchanged; only the left button drives crop selection.
 - **source**: `src/window.cpp:112`
 - **notes**: Recorded as an explicit non-gate: crop pick mode does not swallow non-left-button input.
 - **tests**: none
-- **audit correction**: Effect claims right/middle/wheel input during crop pick mode leaves everything untouched: 'Crop pick mode stays active and the crop rect is unchanged - only the LEFT button drives crop selection.' That is wrong for the right button when Scene3d input is enabled: WM_RBUTTONDOWN starts camera look (SetCapture + ShowCursor(FALSE), src/scene3d/scene3d_input.cpp:18-23) so the crosshair vanishes, and the matching WM_RBUTTONUP calls ReleaseCapture (src/scene3d/scene3d_input.cpp:27), which fires WM_CAPTURECHANGED and clears g_crop_drag_active at src/window.cpp:136 - aborting an in-progress crop drag. -> effect: 'HandleCropPick's default branch returns false, so the message is offered to Scene3d::HandleLookMessage and then DefWindowProcA. Middle button and wheel are handled by neither and are inert. The RIGHT button is not inert when Scene3d input is enabled: it starts/stops camera look, hides and reshows the cursor, and its ReleaseCapture on button-up aborts any in-progress crop drag through the WM_CAPTURECHANGED handler. Crop pick mode itself stays armed and the published rect is not rewritten.' See the new rbutton-look-aborts-crop-drag record.
+- **audit correction**: Effect claims right/middle/wheel input during crop pick mode leaves everything untouched: 'Crop pick mode stays active and the crop rect is unchanged; only the left button drives crop selection.' That is wrong for the right button when Scene3d input is enabled: WM_RBUTTONDOWN starts camera look (SetCapture + ShowCursor(FALSE), src/scene3d/scene3d_input.cpp:18-23) so the crosshair vanishes, and the matching WM_RBUTTONUP calls ReleaseCapture (src/scene3d/scene3d_input.cpp:27), which fires WM_CAPTURECHANGED and clears g_crop_drag_active at src/window.cpp:136 - aborting an in-progress crop drag. -> effect: 'HandleCropPick's default branch returns false, so the message is offered to Scene3d::HandleLookMessage and then DefWindowProcA. Middle button and wheel are handled by neither and are inert. The right button is not inert when Scene3d input is enabled: it starts/stops camera look, hides and reshows the cursor, and its ReleaseCapture on button-up aborts any in-progress crop drag through the WM_CAPTURECHANGED handler. Crop pick mode itself stays armed and the published rect is not rewritten.' See the new rbutton-look-aborts-crop-drag record.
 
 ### 17. Right mouse button press/release inside the client area while a crop drag is in progress
 
 - **id**: `rbutton-look-aborts-crop-drag` *(audit)*
 - **input**: right-click
-- **precondition**: g_crop_drag_active == true, crop pick mode on, AND Scene3d input enabled (Scene3d::SetInputEnabled(true) set g_enabled, src/scene3d/scene3d_input.cpp:38/50)
+- **precondition**: g_crop_drag_active == true, crop pick mode on, and Scene3d input enabled (Scene3d::SetInputEnabled(true) set g_enabled, src/scene3d/scene3d_input.cpp:38/50)
 - **disabled when**: Scene3d input disabled - HandleLookMessage returns false at src/scene3d/scene3d_input.cpp:50 and the right button then does nothing at all
-- **effect**: HandleCropPick declines WM_RBUTTONDOWN (default branch, src/window.cpp:112) so Scene3d::BeginLook runs: SetCapture(hwnd) again plus ShowCursor(FALSE) - the crosshair disappears mid-drag while the crop drag continues (crop still wins WM_MOUSEMOVE because HandleCropPick runs first, src/window.cpp:121, so the camera receives no look delta). On WM_RBUTTONUP, Scene3d::EndLook calls ReleaseCapture() (src/scene3d/scene3d_input.cpp:27), which fires WM_CAPTURECHANGED; that reaches src/window.cpp:136 and sets g_crop_drag_active = false, silently ABORTING the crop drag while the left button is still held. Further mouse movement no longer updates the crop, and the subsequent WM_LBUTTONUP takes the g_crop_drag_active == false path (src/window.cpp:111), so pick mode is never exited and the degenerate-rect cleanup at src/window.cpp:108 never runs.
+- **effect**: HandleCropPick declines WM_RBUTTONDOWN (default branch, src/window.cpp:112) so Scene3d::BeginLook runs: SetCapture(hwnd) again plus ShowCursor(FALSE), so the crosshair disappears mid-drag while the crop drag continues (crop still wins WM_MOUSEMOVE because HandleCropPick runs first, src/window.cpp:121, so the camera receives no look delta). On WM_RBUTTONUP, Scene3d::EndLook calls ReleaseCapture() (src/scene3d/scene3d_input.cpp:27), which fires WM_CAPTURECHANGED; that reaches src/window.cpp:136 and sets g_crop_drag_active = false, which silently aborts the crop drag while the left button is still held. Further mouse movement no longer updates the crop, and the subsequent WM_LBUTTONUP takes the g_crop_drag_active == false path (src/window.cpp:111), so pick mode is never exited and the degenerate-rect cleanup at src/window.cpp:108 never runs.
 - **source**: `src/window.cpp:112`
 - **notes**: Cross-file interaction that only exists because the two capture owners (crop drag and camera look) share one HWND and one capture. Traced through Scene3d::HandleLookMessage src/scene3d/scene3d_input.cpp:53-64.
 - **tests**: none
@@ -227,10 +227,10 @@ reader against the source (see README.md for method).
 - **input**: window-message
 - **precondition**: g_crop_drag_active == true and WM_CAPTURECHANGED reaches WndProc (i.e. crop pick mode already returned false / is off for this message)
 - **disabled when**: g_crop_drag_active == false - the handler does nothing and still returns 0
-- **effect**: g_crop_drag_active = false, aborting the drag so subsequent WM_MOUSEMOVE no longer publishes crop rects. Crop pick mode is NOT cleared and the last published CropRect stays in App::State. Returns 0.
+- **effect**: g_crop_drag_active = false, aborting the drag so subsequent WM_MOUSEMOVE no longer publishes crop rects. Crop pick mode is not cleared and the last published CropRect stays in App::State. Returns 0.
 - **source**: `src/window.cpp:136`
-- **notes**: Note the ordering hazard: HandleCropPick has no WM_CAPTURECHANGED case (default: return false, src/window.cpp:112), so the message correctly reaches this handler even while pick mode is on.
-- **audit correction**: The precondition is inaccurate: 'WM_CAPTURECHANGED reaches WndProc (i.e. crop pick mode already returned false / is off for this message)'. Pick mode being off is not why the message arrives. It arrives because HandleCropPick's switch has no WM_CAPTURECHANGED case (default: return false, src/window.cpp:112) AND Scene3d's WM_CAPTURECHANGED case deliberately returns false after its own cleanup (src/scene3d/scene3d_input.cpp:59-64). The precondition also omits the Scene3d gate at src/window.cpp:123 entirely. -> precondition: 'g_crop_drag_active == true and WM_CAPTURECHANGED is delivered. It always reaches this handler regardless of crop pick mode, because HandleCropPick has no case for it (src/window.cpp:112) and Scene3d::HandleLookMessage returns false for it after clearing its own look state (src/scene3d/scene3d_input.cpp:59-64).'
+- **notes**: Ordering hazard: HandleCropPick has no WM_CAPTURECHANGED case (default: return false, src/window.cpp:112), so the message correctly reaches this handler even while pick mode is on.
+- **audit correction**: The precondition is inaccurate: 'WM_CAPTURECHANGED reaches WndProc (i.e. crop pick mode already returned false / is off for this message)'. Pick mode being off is not why the message arrives. It arrives because HandleCropPick's switch has no WM_CAPTURECHANGED case (default: return false, src/window.cpp:112) and Scene3d's WM_CAPTURECHANGED case deliberately returns false after its own cleanup (src/scene3d/scene3d_input.cpp:59-64). The precondition also omits the Scene3d gate at src/window.cpp:123 entirely. -> precondition: 'g_crop_drag_active == true and WM_CAPTURECHANGED is delivered. It always reaches this handler regardless of crop pick mode, because HandleCropPick has no case for it (src/window.cpp:112) and Scene3d::HandleLookMessage returns false for it after clearing its own look state (src/scene3d/scene3d_input.cpp:59-64).'
 
 ### 19. Window close (title-bar X, Alt+F4, system menu Close, task-manager close) -> WM_DESTROY
 
@@ -247,7 +247,7 @@ reader against the source (see README.md for method).
 - **id**: `window-minimise-maximise-move`
 - **input**: window-message
 - **precondition**: always
-- **effect**: Not handled by WndProc - WM_SYSCOMMAND / WM_SIZE / WM_MOVE reach DefWindowProcA and get standard behaviour. No app state is updated and the render loop keeps running (there is no minimise pause).
+- **effect**: Not handled by WndProc: WM_SYSCOMMAND / WM_SIZE / WM_MOVE reach DefWindowProcA and get standard behaviour. No app state is updated and the render loop keeps running (there is no minimise pause).
 - **source**: `src/window.cpp:141`
 - **notes**: Listed because it is a distinct user action on this surface whose handling is the explicit default: branch (src/window.cpp:141-143).
 
@@ -258,7 +258,7 @@ reader against the source (see README.md for method).
 - **precondition**: always
 - **effect**: No WM_PAINT or WM_ERASEBKGND handler; DefWindowProcA validates the update region and the frame content is refreshed only by the host's own per-frame D3D9 Present, not by the paint message.
 - **source**: `src/window.cpp:144`
-- **notes**: Included for completeness of the Win32 message inventory - paint is deliberately unhandled.
+- **notes**: Included so the Win32 message inventory is complete; paint is deliberately unhandled.
 
 ### 22. Any action that posts WM_QUIT (window destroyed, PostQuitMessage) observed by the message pump
 

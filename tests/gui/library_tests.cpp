@@ -595,7 +595,7 @@ TEST_CASE("an other-build document is still shown, with every editing control di
         IM_CHECK((ctx->ItemInfo("**/###tl_doc_badge").ItemFlags & ImGuiItemFlags_Disabled) != 0);
         IM_CHECK((ctx->ItemInfo("**/###tl_play").ItemFlags & ImGuiItemFlags_Disabled) != 0);
         const std::string text = GuiTest::CaptureFrameText(ctx);
-        IM_CHECK(text.find("read-only: built for iidx11") != std::string::npos);
+        IM_CHECK(text.find("Read-only: built for iidx11") != std::string::npos);
     };
     harness.Run(test);
 }

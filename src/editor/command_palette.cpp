@@ -162,7 +162,8 @@ std::vector<PaletteEntry> PaletteEntries(const Doc::Document& document, std::str
                                                        DurationEnd(document, track, type, frame));
             if (!blocker.empty()) {
                 entry.enabled = false;
-                entry.refusal = "refused at " + std::to_string(frame) + ": overlaps " + blocker;
+                entry.refusal =
+                    "Cannot place at frame " + std::to_string(frame) + ": overlaps " + blocker;
             }
         }
         out.push_back(std::move(entry));

@@ -56,7 +56,7 @@ Support::Expected<void, std::string> ShiftPlacement(AfpAnimation::Placement& pla
                                                     const Units& shift) {
     if ((placement.flags & kThreeD) != 0) {
         return Support::Unexpected(Named(placement.depth) +
-                                   " is placed in 3D, so its anchor has no place on the stage");
+                                   " is placed in 3D, so its anchor cannot be set on the stage");
     }
     if (placement.geometry) {
         return Support::Unexpected(Named(placement.depth) +
@@ -155,7 +155,7 @@ Support::Expected<void, std::string> MoveAnchor(AfpAnimation::Animation& animati
     if (std::abs(det) < kFlattest) {
         return Support::Unexpected(Named(depth) + " is squashed flat on frame " +
                                    std::to_string(frame) +
-                                   ", so a point on the stage has no place in its own space");
+                                   ", so a stage point cannot be mapped into its space");
     }
     const double x = ((m[3] * stage_offset[0]) - (m[2] * stage_offset[1])) / det;
     const double y = ((m[0] * stage_offset[1]) - (m[1] * stage_offset[0])) / det;

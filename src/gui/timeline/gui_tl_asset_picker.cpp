@@ -175,7 +175,7 @@ FieldEvent DrawAssetTab(const FormContext& context, Doc::Document& document,
         event = std::max(event, DrawField(refreshed, *named, command));
     }
 
-    if (!ImGui::Button("add asset...###tl_asset_add")) return event;
+    if (!ImGui::Button("Add asset...###tl_asset_add")) return event;
     const std::string picked = NativeDialog::BrowseForFolder(nullptr, App::Global().GameDir());
     if (picked.empty()) return event;
     const std::string picked_dir = RelativeToGameDir(picked);

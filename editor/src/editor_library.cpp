@@ -366,9 +366,8 @@ void Window::UseCharacterOnDepth(uint16_t character, uint16_t depth) {
 void Window::PlaceDroppedCharacter(uint16_t character, double x, double y) {
     if (!file_ || animation_path_.empty()) return;
     if (!OutlinesMatchView()) {
-        ReportProblem(tr("The stage shows the whole animation while a sprite is being edited, so "
-                         "a drop there has no place in the sprite. Show the sprite on its own "
-                         "first."));
+        ReportProblem(tr("While you edit a sprite, the stage shows the whole animation, so a drop "
+                         "there cannot go into the sprite. Show the sprite on its own first."));
         return;
     }
     const std::optional<uint16_t> depth = NextFreeDepth(0);

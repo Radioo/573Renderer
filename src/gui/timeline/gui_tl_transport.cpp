@@ -70,7 +70,7 @@ void DrawZoom(Ctx& ctx) {
                           "zooms about the cursor.");
     }
     ImGui::SameLine(0.0F, Gui::Dpi::S(4.0F));
-    if (ImGui::Button("fit###tl_fit")) {
+    if (ImGui::Button("Fit###tl_fit")) {
         view.px_per_frame = Editor::FitZoom(ctx.length, ctx.lane_w > 1.0F ? ctx.lane_w : 800.0F);
         view.scroll = 0.0;
     }
@@ -84,12 +84,12 @@ void DrawButtons(Ctx& ctx) {
     if (TransportButton(ICON_JUMP_BACK "###tl_jump_start", "Jump to frame 0 (Home).")) PostSeek(0);
     ImGui::SameLine(0.0F, Gui::Dpi::S(3.0F));
     if (TransportButton(ICON_STEP_BACK "###tl_step_back",
-                        "Step back one frame (Left, Shift x100).")) {
+                        "Step back one frame (Left; Shift+Left steps 100).")) {
         Step(ctx, -1);
     }
     ImGui::SameLine(0.0F, Gui::Dpi::S(3.0F));
     const char* play_icon = ctx.status.playing ? ICON_PAUSE "###tl_play" : ICON_PLAY "###tl_play";
-    if (TransportButton(play_icon, "Play / pause (Space).")) PostPaused(ctx.status.playing);
+    if (TransportButton(play_icon, "Play or pause (Space).")) PostPaused(ctx.status.playing);
     ImGui::SameLine(0.0F, Gui::Dpi::S(3.0F));
     if (TransportButton(ICON_STEP_FWD "###tl_step_fwd", "Step forward one frame (Right).")) {
         Step(ctx, 1);
@@ -114,29 +114,29 @@ void DrawToggles(Ctx& ctx) {
     ImGui::SameLine(0.0F, Gui::Dpi::S(12.0F));
     bool loop = ctx.status.loop;
     ImGui::BeginDisabled(ctx.editor->ReadOnly());
-    if (ImGui::Checkbox("loop###tl_loop", &loop)) {
+    if (ImGui::Checkbox("Loop###tl_loop", &loop)) {
         App::Global().PostCommand(PresetCmd::Wrap(PresetCmd::SetLoop{.loop = loop}));
     }
     ImGui::EndDisabled();
     if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-        ImGui::SetTooltip("On: the frame after the last one is 0.\nOff: playback pauses on the "
-                          "last frame and stays there.");
+        ImGui::SetTooltip("On: playback wraps from the last frame to frame 0.\nOff: playback "
+                          "stops on the last frame.");
     }
 
     ImGui::SameLine(0.0F, Gui::Dpi::S(8.0F));
     bool snap = ctx.editor->GetView().snap;
-    if (ImGui::Checkbox("snap###tl_snap", &snap)) ctx.editor->MutView().snap = snap;
+    if (ImGui::Checkbox("Snap###tl_snap", &snap)) ctx.editor->MutView().snap = snap;
     if (ImGui::IsItemHovered()) {
         ImGui::SetTooltip("Snap dragged clip edges to the playhead, other clips, tween keys,\n"
                           "the document bounds and the ruler ticks. Hold Alt to drag freely.");
     }
 
     const bool read_only = ctx.editor->ReadOnly();
-    const std::string reason = "read-only: built for " + ctx.document->build;
+    const std::string reason = "Read-only: built for " + ctx.document->build;
 
     ImGui::SameLine(0.0F, Gui::Dpi::S(12.0F));
     ImGui::BeginDisabled(read_only);
-    if (ImGui::Button("+ Command###tl_add_command")) {
+    if (ImGui::Button("Add command###tl_add_command")) {
         ctx.editor->PostRequest(Editor::Request{.kind = Editor::RequestKind::AddCommand,
                                                 .track_id = SelectedTrack(ctx),
                                                 .frame = ctx.status.frame});
@@ -148,7 +148,7 @@ void DrawToggles(Ctx& ctx) {
                                       "The palette also opens with the A key.");
     }
     ImGui::SameLine(0.0F, Gui::Dpi::S(4.0F));
-    if (ImGui::Button("+ Track###tl_add_track")) {
+    if (ImGui::Button("Add track###tl_add_track")) {
         ctx.editor->PostRequest(
             Editor::Request{.kind = Editor::RequestKind::AddTrack, .track_id = SelectedTrack(ctx)});
     }
@@ -183,8 +183,8 @@ float TailWidth(const Ctx& ctx) {
     float width = ImGui::CalcTextSize("[").x + pad + Gui::Dpi::S(3.0F) +
                   ImGui::CalcTextSize("]").x + pad + Gui::Dpi::S(12.0F);
     width += ZoomSliderW();
-    width += Gui::Dpi::S(4.0F) + ImGui::CalcTextSize("fit").x + pad;
-    width += Gui::Dpi::S(12.0F) + ImGui::CalcTextSize("undo 000").x;
+    width += Gui::Dpi::S(4.0F) + ImGui::CalcTextSize("Fit").x + pad;
+    width += Gui::Dpi::S(12.0F) + ImGui::CalcTextSize("Undo 000").x;
     if (ErrorCount() > 0) {
         width += Gui::Dpi::S(12.0F) + ImGui::CalcTextSize("000 error").x + pad;
     }
@@ -198,9 +198,10 @@ void DrawTail(Ctx& ctx) {
 
     ImGui::SameLine(0.0F, Gui::Dpi::S(12.0F));
     ImGui::AlignTextToFramePadding();
-    ImGui::TextDisabled("undo %d", ctx.editor->UndoDepth());
+    ImGui::TextDisabled("Undo %d", ctx.editor->UndoDepth());
     if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("Undo entries held (Ctrl+Z / Ctrl+Y). One drag is one entry.");
+        ImGui::SetTooltip("Undo steps held (Ctrl+Z undoes, Ctrl+Y redoes). A whole drag is one "
+                          "step.");
     }
 
     const int errors = ErrorCount();
@@ -211,8 +212,8 @@ void DrawTail(Ctx& ctx) {
         const bool clicked = ImGui::SmallButton(label.c_str());
         ImGui::PopStyleColor();
         if (ImGui::IsItemHovered()) {
-            ImGui::SetTooltip("%d validation error(s) and %d problem(s) in all. The evaluator "
-                              "skips the offending clips. Click to list them.",
+            ImGui::SetTooltip("%d validation error(s), %d problem(s) in total. Clips with errors "
+                              "are skipped during playback. Click to list them.",
                               errors, (int)CurrentProblems().size());
         }
         if (clicked) RequestProblems();
@@ -226,9 +227,9 @@ void DrawTail(Ctx& ctx) {
     }
     ImGui::EndDisabled();
     const char* dirty_note = ctx.editor->Dirty() ? "\nIt has unsaved changes." : "";
-    const char* note = read_only ? "\nread-only: built for another game build." : dirty_note;
+    const char* note = read_only ? "\nRead-only: built for another game build." : dirty_note;
     if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-        ImGui::SetTooltip("%s - the loaded document.%s", ctx.document->id.c_str(), note);
+        ImGui::SetTooltip("%s: the loaded document.%s", ctx.document->id.c_str(), note);
     }
 }
 

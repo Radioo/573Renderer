@@ -89,7 +89,7 @@ TEST_CASE("the gate row reads back the three gate forms", "[editor][problems]") 
     CHECK(Editor::GateText(clip) == "(always)");
 
     clip.when = Doc::Gate{.option = "mode", .kind = Doc::GateKind::Choice, .choices = {"7KEYS"}};
-    CHECK(Editor::GateText(clip) == "mode is choice 7KEYS");
+    CHECK(Editor::GateText(clip) == "mode is 7KEYS");
 
     clip.when->kind = Doc::GateKind::Choices;
     clip.when->choices = {"7KEYS", "EXPERT"};

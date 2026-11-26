@@ -255,7 +255,7 @@ TEST_CASE("Definitions nothing uses are removed from the package menu") {
         CHECK(tidied.Problems().isEmpty());
         return LastNotice(opened.window);
     };
-    CHECK(tidy() == "Nothing in intro is unused");
+    CHECK(tidy() == "intro has no unused definitions");
     emit timeline->DepthChosen(2);
     {
         Script removed({Choose("Remove depth 2 here")});
@@ -264,7 +264,7 @@ TEST_CASE("Definitions nothing uses are removed from the package menu") {
         CHECK(removed.Problems().isEmpty());
     }
     CHECK(tidy() == "Removed 1 unused definition(s) from intro");
-    CHECK(tidy() == "Nothing in intro is unused");
+    CHECK(tidy() == "intro has no unused definitions");
 }
 
 TEST_CASE("An animation duplicated from the package menu opens as the copy") {

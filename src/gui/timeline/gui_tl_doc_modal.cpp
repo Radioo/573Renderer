@@ -75,8 +75,8 @@ FieldEvent DrawGeneral(Doc::Document& document) {
         g_fps_requested = true;
     }
     if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("Rescale every clip edge, key, marker and the length to another fps.\n"
-                          "Frames are integers, so the rounding is explicit.");
+        ImGui::SetTooltip("Rescale every clip edge, key and marker, and the length, to another\n"
+                          "fps. Frames are whole numbers, so you choose how to round.");
     }
 
     bool automatic = !document.length.has_value();
@@ -86,7 +86,7 @@ FieldEvent DrawGeneral(Doc::Document& document) {
         event = FieldEvent::Committed;
     }
     ImGui::SameLine();
-    ImGui::TextDisabled("max clip end, else the longest content tail");
+    ImGui::TextDisabled("the latest clip end, or else the longest content tail");
     if (!automatic) {
         int length = document.length.value_or(600);
         const FieldEvent length_event = DrawIntRow("###tl_doc_length", "length", length);
@@ -161,14 +161,14 @@ FieldEvent DrawLights(Doc::Document& document) {
                                             0.01F, "rgb"));
         event = std::max(
             event, DrawVec3Row("###tl_doc_light_ambient", "ambient", light.ambient, 0.01F, "rgb"));
-        if (ImGui::SmallButton("remove###tl_doc_light_remove")) {
+        if (ImGui::SmallButton("Remove###tl_doc_light_remove")) {
             document.lights.erase(document.lights.begin() + (long long)i);
             ImGui::PopID();
             return FieldEvent::Committed;
         }
         ImGui::PopID();
     }
-    if (ImGui::Button("+ light###tl_doc_light_add")) {
+    if (ImGui::Button("Add light###tl_doc_light_add")) {
         document.lights.push_back(Doc::LightSpec{});
         event = FieldEvent::Committed;
     }
@@ -236,7 +236,7 @@ void RenderFpsModal(Editor::State& editor) {
 
     const Editor::FpsPreview preview =
         Editor::PreviewConvertFps(editor.Document(), std::max(1, g_target_fps));
-    ImGui::TextDisabled("%d clip edge(s) and %d key(s) move by a fraction of a frame",
+    ImGui::TextDisabled("%d clip edge(s) and %d key(s) land between frames and get rounded",
                         preview.edges, preview.keys);
 
     if (ImGui::Button("Cancel###tl_fps_cancel")) ImGui::CloseCurrentPopup();
@@ -299,7 +299,7 @@ void RenderDocumentModal() {
     }
 
     Doc::Document working = editor.Document();
-    ImGui::TextDisabled("every field here is one undo entry, applied live to the viewport");
+    ImGui::TextDisabled("Each change here is one undo step and shows in the viewport at once.");
     ImGui::Separator();
 
     Commit(editor, working, DrawTabs(working));

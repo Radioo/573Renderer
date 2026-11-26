@@ -55,15 +55,15 @@ public:
             Gc2dHost::SetFrame(0);
             package_frames = Gc2dHost::GetStatus().length;
         } else {
-            Export::FailSession(sess, "Load a screen preset or a 2D package first - the scene "
-                                      "browser has no timeline the exporter can bound on.");
+            Export::FailSession(sess, "Load a screen preset or a 2D package first. A 3D scene on "
+                                      "its own has no timeline to set the export length.");
             return;
         }
 
         planned_frames_ = Export::PlannedFrames(sess.max_frames, preset_frames, package_frames);
         if (planned_frames_ <= 0) {
-            Export::FailSession(sess, "This screen has no countdown and no looping animation - "
-                                      "turn on 'Limit frames' to set a length.");
+            Export::FailSession(sess, "This screen has no countdown and no looping animation. "
+                                      "Turn on 'Limit frames' to set a length.");
             return;
         }
         LOG("Export", "scene export: %d frames (%s)", planned_frames_,
@@ -77,7 +77,7 @@ public:
         int w = 0;
         int h = 0;
         if (!d3d.ReadPresentBGRA(bgra, w, h)) {
-            Export::FailSession(sess, "D3D9 presented-frame readback failed");
+            Export::FailSession(sess, "could not read the presented frame back from D3D9");
             return;
         }
         const std::span<uint8_t> frame{bgra.data(), (size_t)w * h * 4};

@@ -64,7 +64,7 @@ void DrawHeaderCard() {
     Gui::PushHeaderFont();
     ImGui::TextColored(ImGui::GetStyleColorVec4(ImGuiCol_CheckMark), "573Renderer");
     ImGui::PopFont();
-    ImGui::TextDisabled("Select a Konami game installation directory to begin.");
+    ImGui::TextDisabled("Choose a Konami game install directory to begin.");
     ImGui::Spacing();
     ImGui::Separator();
     ImGui::Spacing();
@@ -113,7 +113,7 @@ void DrawGameProfilePicker(App::State& state) {
         snprintf(auto_label, sizeof(auto_label), "Auto (matches: %s)", auto_pick->name);
     } else {
         snprintf(auto_label, sizeof(auto_label), "%s",
-                 "Auto (no match - select a profile; boot requires one)");
+                 "Auto (no match: pick a profile before loading)");
     }
 
     int sel_idx = 0;
@@ -142,12 +142,12 @@ void DrawGameProfilePicker(App::State& state) {
         ImGui::EndCombo();
     }
     if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("Selects which game-specific DLL ordinals + boot-call\n"
-                          "gating to use. Konami ships per-game builds of\n"
-                          "afp-core.dll that share the export-name scheme but\n"
-                          "diverge in which ordinal points to which function.\n"
-                          "Auto-detect picks based on the game directory path;\n"
-                          "override here if the detection is incorrect.");
+        ImGui::SetTooltip("Which game's DLL ordinals and boot calls to use.\n"
+                          "Konami ships a separate afp-core.dll build for each\n"
+                          "game. The export names match, but the same ordinal\n"
+                          "can point at a different function. Auto picks a\n"
+                          "profile from the game directory path; choose one\n"
+                          "here if it picks the wrong game.");
     }
     ImGui::Spacing();
 }
@@ -165,11 +165,11 @@ void DrawRenderFps(App::State& state) {
     ImGui::EndGroup();
     bool changed = ImGui::IsItemDeactivatedAfterEdit();
     if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-        ImGui::SetTooltip("Frames per second the preview renders + advances the\n"
-                          "animation at. Animation SPEED is unchanged (dt = 1/fps),\n"
-                          "so this is purely smoothness vs CPU. 60 matches DDR's\n"
-                          "authored rate; 120 is the historical default. Video export\n"
-                          "uses its own fps in the Export panel, independent of this.");
+        ImGui::SetTooltip("Frames per second at which the preview renders and\n"
+                          "advances the animation. Animation speed stays the same\n"
+                          "(dt = 1/fps), so this only trades smoothness for CPU.\n"
+                          "60 is DDR's authored rate; 120 is the default. Video\n"
+                          "export has its own fps setting in the Export dialog.");
     }
     ImGui::SameLine();
     ImGui::TextDisabled("fps");
@@ -209,7 +209,7 @@ void DrawRenderPresetCombo(App::State& state, int rw, int rh) {
         {.label = "1280x720 (DDR)", .w = 1280, .h = 720},
         {.label = "640x480 (legacy 4:3)", .w = 640, .h = 480},
         {.label = "1080x1920 (SDVX / jubeat portrait)", .w = 1080, .h = 1920},
-        {.label = "720x1280 (SDVX old-era)", .w = 720, .h = 1280},
+        {.label = "720x1280 (older SDVX)", .w = 720, .h = 1280},
         {.label = "520x704 (qpro avatar)", .w = 520, .h = 704},
         {.label = "Custom", .w = 0, .h = 0},
     };
@@ -252,8 +252,8 @@ void DrawRenderPresetCombo(App::State& state, int rw, int rh) {
         ImGui::EndCombo();
     }
     if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("Native screen size of the game whose IFSes you're\n"
-                          "loading. Select a preset or enter a custom WxH below.");
+        ImGui::SetTooltip("The native screen size of the game whose IFS files\n"
+                          "you are loading. Pick a preset or type a size below.");
     }
 }
 
@@ -290,7 +290,7 @@ void DrawStretchWide(App::State& state, int rw, int rh) {
             }
             ImGui::EndDisabled();
             if (!supported && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
-                ImGui::SetTooltip("This adapter's StretchRect does not support that filter.");
+                ImGui::SetTooltip("This graphics adapter cannot stretch with that filter.");
             if (selected) ImGui::SetItemDefaultFocus();
         }
         ImGui::EndCombo();
@@ -298,7 +298,7 @@ void DrawStretchWide(App::State& state, int rw, int rh) {
     if (ImGui::IsItemHovered()) {
         ImGui::SetTooltip("How the horizontal stretch resamples. Nearest keeps hard pixel "
                           "edges,\nLinear smooths them. Gaussian and Pyramidal are only "
-                          "offered when\nthe adapter reports support for them.");
+                          "available when\nthe graphics adapter supports them.");
     }
     ImGui::Spacing();
 }
@@ -339,8 +339,8 @@ void DrawArcExtractor() {
     ImGui::Separator();
     ImGui::Spacing();
     ImGui::TextDisabled("Tools");
-    ImGui::TextWrapped("Extract .arc archives: recursively unpacks every .arc under a folder "
-                       "into a new \"<folder>_extracted\" folder next to it.");
+    ImGui::TextWrapped("Unpack every .arc file in a folder and its subfolders into a new "
+                       "\"<folder>_extracted\" folder next to it.");
 
     ArcExtract::Status const st = ArcExtract::GetStatus();
 
@@ -373,7 +373,7 @@ void DrawArcExtractor() {
                                (st.failed_arcs != 0) ? "" : ".");
             if (st.failed_arcs != 0) {
                 ImGui::TextColored(ImVec4(1.0F, 0.85F, 0.5F, 1.0F),
-                                   " (%d file(s) skipped - not valid .arc)", st.failed_arcs);
+                                   " (%d file(s) skipped: not valid .arc files)", st.failed_arcs);
             }
             ImGui::TextWrapped("Output: %s", st.output_dir.c_str());
         }
@@ -383,9 +383,9 @@ void DrawArcExtractor() {
 
 void DrawCustomizeExtractor() {
     ImGui::Spacing();
-    ImGui::TextWrapped("Extract customize images: select a folder of raw game data (.arc "
-                       "files); unpacks appeal boards, characters and lane art into a "
-                       "\"customize_assets\" folder, renamed by id and losslessly optimised.");
+    ImGui::TextWrapped("Unpack the appeal boards, characters and lane art from a folder of "
+                       "raw game data (.arc files) into a \"customize_assets\" folder. Each "
+                       "image is named by its id and optimised without loss.");
 
     CustomizeExtract::Status const st = CustomizeExtract::GetStatus();
 

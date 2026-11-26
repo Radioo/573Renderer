@@ -149,7 +149,7 @@ void Window::ShowTimelineMenu(const QPoint& where, uint32_t frame, const QString
     const bool authored =
         depth_ != std::nullopt && AuthoredAt(static_cast<uint16_t>(*depth_), frame) != nullptr;
     QAction* own = (project_ && depth_ && !authored)
-                       ? menu.addAction(tr("Let the project own depth %1 from here").arg(*depth_))
+                       ? menu.addAction(tr("Keyframe depth %1 from here").arg(*depth_))
                        : nullptr;
     QAction* detach =
         authored ? menu.addAction(tr("Detach depth %1 back to baked data").arg(*depth_)) : nullptr;

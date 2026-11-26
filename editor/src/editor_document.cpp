@@ -102,7 +102,7 @@ void Window::FinishOpen(const QString& path, OpenedPackage opened) {
         statusBar()->showMessage(tr("%1 entries").arg(opened.entries), kNoticeMs);
         return;
     }
-    statusBar()->showMessage(tr("%1 problems in the package, the first is: %2")
+    statusBar()->showMessage(tr("The package has %1 problems. The first: %2")
                                  .arg(opened.problems.size())
                                  .arg(opened.problems.front()),
                              kProblemMs);

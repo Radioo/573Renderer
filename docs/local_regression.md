@@ -1,11 +1,11 @@
 # Local render-regression net
 
-`tools/local/render_regression.py` automates the standing byte-compare
-discipline the refactor uses (the "stash-dance"): run
-the reference scenarios, SHA-256 every dumped frame and encoded output, and
-compare against a locally blessed baseline. It is the P10 "one command on your
-machine validates" precursor - the L3/L4 suites the hosted CI can never run
-because it needs the game DLLs, game data, and a real GPU.
+`tools/local/render_regression.py` automates the byte-compare the refactor
+checks every render change with (the "stash-dance"): it runs the reference
+scenarios, takes the SHA-256 of every dumped frame and encoded output, and
+compares them against a locally blessed baseline. It is the precursor of P10's
+"one command on your machine validates", covering the L3/L4 suites that hosted
+CI can never run because they need the game DLLs, game data and a real GPU.
 
 ## Scenarios
 
@@ -15,8 +15,8 @@ because it needs the game DLLs, game data, and a real GPU.
 | `iidx_02005` | `R573_IIDX_DIR` | 12-frame export of `data/graphic/02005.ifs` (modern draw path, transparent bg) | 12 `.bgra` + `out.webp` |
 | `ddr_bg_0009` | `R573_DDR_DIR` | `--ddr-test` on `background_0009.arc`, capture range 0-11 (legacy backend, clip-mask path) | 12 `seq_*.png` |
 
-Scenarios whose env var is unset are SKIPPED with a loud line - never
-silently. A scenario with no baseline entry reports `NO BASELINE` and asks for
+A scenario whose env var is unset is skipped, and the tool prints a line
+saying so. A scenario with no baseline entry reports `NO BASELINE` and asks for
 a bless.
 
 ## Usage
@@ -35,12 +35,13 @@ is failing.
 
 ## Baseline semantics
 
-The baseline (`local_baselines/render_regression.json`) is MACHINE-LOCAL and
-gitignored: the hashes derive from this machine's game-data version, GPU, and
+The baseline (`local_baselines/render_regression.json`) is machine-local and
+gitignored: the hashes depend on this machine's game-data version, GPU and
 driver, so they are not portable and must never be committed. Re-bless after:
 
-- an INTENDED rendering change (verify it first against the live game per
-  CLAUDE.md - the baseline records intent, it does not define correctness),
+- an intended rendering change (verify it against the live game first, per
+  CLAUDE.md; the baseline records what was intended and does not define what
+  is correct),
 - a game-data update under one of the R573 dirs,
 - a GPU/driver change that alters output bytes.
 
@@ -50,23 +51,23 @@ Temp render output goes to a `%TEMP%` work dir (deleted afterwards);
 ## Relation to the other nets
 
 - The GPU-less CI recorder gate (`command_stream_tests`, docs/command_stream.md
-  step 3) locks the RECORDER's decisions in hosted CI with no DLLs.
-- This tool locks the PIXELS + ENCODED BYTES locally with real DLLs.
+  step 3) locks the recorder's decisions in hosted CI with no DLLs.
+- This tool locks the pixels and encoded bytes locally with real DLLs.
 - The stash-dance (build old -> dump -> pop -> build new -> dump -> SHA) is
-  still the recipe when comparing UNCOMMITTED work against a prior tree state;
-  this tool replaces it for the common "did my change perturb rendering at
-  all" check against the blessed build.
+  still the way to compare uncommitted work against a prior tree state; this
+  tool replaces it for the common "did my change perturb rendering at all"
+  check against the blessed build.
 
 ## Running and reading the net
 
 - A scenario that fails with a DLL-load or missing-file error (for example
-  "Failed to load libavs-win64.dll error 126"), rather than a hash mismatch,
+  "Failed to load libavs-win64.dll error 126") instead of a hash mismatch
   almost always means the install moved or was reorganised. Check the
-  R573_*_DIR path first, before reading your diff, then re-bless against the
-  new location.
+  R573_*_DIR path before reading your diff, then re-bless against the new
+  location.
 - For the stash-dance, run `build.bat` from PowerShell (`cmd /c .\build.bat`);
   invoked through a POSIX shell's cmd wrapper its output is swallowed.
-- IIDX 33 CLI runs that pass a RELATIVE `--ifs` wait for the background IFS
+- IIDX 33 CLI runs that pass a relative `--ifs` wait for the background IFS
   scan (`WaitForIfsScan`), which takes minutes on a cold disk cache. Give such
   runs a generous timeout (the harness allows the IIDX scenario 600 s) or pass
   an absolute path.
@@ -75,21 +76,21 @@ Temp render output goes to a `%TEMP%` work dir (deleted afterwards);
 
 ## What the byte-compare cannot see
 
-- The modern HSL (YIQ hue) shader path is exercised by exactly one known
-  asset, the IIDX 33 Q-pro hand `qp_21chronicle_07_hand` (its rainbow blade).
-  The headless Q-pro composite of that item writes a near-blank AVIF, so a
-  pixel compare there proves nothing. For code motion in the HSL and
-  additive-coverage arms, prove equivalence by diffing the lifted device calls
-  against the previous source instead.
+- Only one known asset uses the modern HSL (YIQ hue) shader path: the IIDX 33
+  Q-pro hand `qp_21chronicle_07_hand` (its rainbow blade). The headless Q-pro
+  composite of that item writes a near-blank AVIF, so a pixel compare there
+  proves nothing. When moving code in the HSL and additive-coverage arms,
+  prove equivalence by diffing the lifted device calls against the previous
+  source instead.
 - `LayerCommand` fires for no known content (docs/command_stream.md); verify a
   change to it by source diff plus a no-perturbation byte-compare.
 
 ## The local_dll contract suite (P10)
 
-`local_dll_tests` (tests/local/dll_contract_tests.cpp) runs assertions against
-the REAL game DLLs and data - the contracts our unit tests and parsers assume.
-It carries the ctest label `local_dll`, which the CI workflow excludes
-(`ctest -LE local_dll` in build-renderer.yml); every test SKIPs cleanly when
+`local_dll_tests` (tests/local/dll_contract_tests.cpp) checks the contracts
+our unit tests and parsers assume against the real game DLLs and data. It
+carries the ctest label `local_dll`, which the CI workflow excludes
+(`ctest -LE local_dll` in build-renderer.yml); every test skips cleanly when
 its R573_*_DIR env var is unset, so the target is safe to build everywhere.
 
 Run: `ctest --test-dir build -L local_dll` with R573_IIDX_DIR (and optionally
@@ -98,10 +99,10 @@ R573_SDVX_DIR / R573_DDR_DIR / R573_IIDX10_DIR) set.
 Contracts covered:
 - IIDX 10 screen presets (tests/local/iidx10_screen_data_tests.cpp, R573_IIDX10_DIR):
   every animation a `sprite.animate` clip of a built-in IIDX 10 document names
-  exists in its package, and the one frame count the documents bake in - the game
-  over document's `length` of 180 - equals the real animation's length. The game
-  reads that at runtime, so this is what keeps the built-in documents
-  (`src/preset/defaults/`) honest. The game over test names
+  exists in its package, and the one frame count the documents bake in (the game
+  over document's `length` of 180) equals the real animation's length. The game
+  reads that length at runtime, so this test is what keeps the built-in
+  documents (`src/preset/defaults/`) in step with the data. The game over test names
   `data/graph/sys/gameover` / `GAMEOVER` as a literal because the document cannot:
   that banner is classified chrome in docs/preset_layers.md, so no clip draws it,
   yet its length is where the screen's 180 frames come from. No built-in declares a
@@ -128,15 +129,16 @@ Contracts covered:
   the authored layer to draw the same pixels at 0 and at half a step after the
   advance while the interpolated layer draws different ones every time
   (docs/judge.md).
-- bm2dx qpro pattern-scan: `QproDll::Read` on the real bm2dx.dll - parses ok,
-  >= 447 heads, first head is qp_kihon, every head is a `qp_*.ifs` name.
+- bm2dx qpro pattern-scan: `QproDll::Read` on the real bm2dx.dll parses ok,
+  finds >= 447 heads, the first head is qp_kihon, and every head is a
+  `qp_*.ifs` name.
 - game profile auto-detection on the real installs (slug + legacy_afp).
 - avs2-core boot + a real IFS parse: DllLoader + AvsFuncs resolve, AVS boots,
   MountFsRoot + MountIfsImage a real IFS at /afp/packages, then
   CountExpectedTextures == CountMatches("texturelist/texture") ==
   GatherMatchAttr("name") count, every name non-empty, ReadAtlasFilters values
-  in the D3D range - the PropertyTree wrapper contract against the real
-  property engine.
+  in the D3D range. This is the PropertyTree wrapper contract checked against
+  the real property engine.
 - avs2-core writers (tests/local/avs_writer_contract_tests.cpp, R573_IIDX_DIR):
   avs2-core 2.17's cstream compressor (operator 1, resolved by ordinal in the
   test) must produce the same bytes as `AvsLz77::Compress` on synthetic
@@ -146,14 +148,14 @@ Contracts covered:
   exactly what `BinaryXml::Write` produced for a document holding every
   storable type and arrays, in both name forms.
 
-The suite has caught two real defects: (1) DDR auto-detection
-relied on "mdx" appearing in the install PATH - the live install moved to
-a folder without it and detection silently failed; AutoDetect now falls back to
-looking for the profile's own GAME DLL (bm2dx.dll / soundvoltex.dll /
-gamemdx.dll / gdxg.dll) in the same candidate dirs DiscoverDllDir probes, which
-is the install's real identity rather than a folder-name heuristic. (2)
-IfsInspect::AtlasFilter carried never-populated width/height fields
-(always 0) - removed.
+The suite has caught two real defects. (1) DDR auto-detection relied on
+"mdx" appearing in the install path; the live install moved to a folder
+without it and detection silently failed. AutoDetect now falls back to
+looking for the profile's own game DLL (bm2dx.dll / soundvoltex.dll /
+gamemdx.dll / gdxg.dll) in the same candidate dirs DiscoverDllDir probes,
+which identifies the install by its contents instead of its folder name. (2)
+IfsInspect::AtlasFilter carried width/height fields that were never filled
+in (always 0); they were removed.
 
 Not covered here (needs a D3D device + full AFP boot): afp-core playhead /
 stream semantics. Those stay on the render-regression net above.
@@ -200,7 +202,7 @@ also listed by name), and, from a second write with every
 stored offset and the tree size cleared, how many archives the packer and the
 tree size formula reproduce exactly. Progress goes to stderr for every file.
 
-Before trusting a pass, the gate was run with a one-byte pixel corruption
+To show the gate can fail, it was run with a one-byte pixel corruption
 injected into `EncodeBlob` on two real archives: it failed all 66 images. The
 same was done for the newer checks on three archives: a placement depth
 changed in the animation writer failed all 84 affected animations, naming the
@@ -219,39 +221,38 @@ minutes on a 16-thread machine.
 
 ## The edit loop against a real host (`local_dll` label)
 
-`tests/local/document_edit_tests.cpp` is the proof that an edit made through
-the editor's own writers is what afp-core ends up running. It opens
+`tests/local/document_edit_tests.cpp` checks that an edit made through the
+editor's own writers is what afp-core ends up running. It opens
 `graphic/1/title.ifs` as a `Document::File`, loads it in a real preview host,
 then moves the placement live at frame 300 on the first depth that covers it and
 adds a label `edited` at frame 100. After `WriteAnimation` and `Encode` the
-package is loaded again with the reload flag, and the check is afp-core's own
-answer: the frame count is still 840 and the labels come back as `edited` at 100
-and `loop` at 240, in frame order. Pixels are never compared; the engine's label
-list is the ground truth.
+package is loaded again with the reload flag, and the test asks afp-core: the
+frame count is still 840 and the labels come back as `edited` at 100 and `loop`
+at 240, in frame order. Pixels are never compared; the engine's label list is
+the ground truth.
 
 The same case then undoes the edit through `Document::History` and loads the
-restored document again, which is the proof that undo reaches the engine and not
-just the model: afp-core goes back to the one `loop` label at 240, and the
-history reports the document as saved again because the undo landed back on the
-depth it was opened at.
+restored document again, which shows that undo reaches the engine as well as
+the model: afp-core goes back to the one `loop` label at 240, and the history
+reports the document as saved again because the undo landed back on the depth
+it was opened at.
 
 A second case in the same file adds a camera on frame 300 with `AddCamera`, sets
 its projection centre and focal length, reloads and renders. afp-core takes the
 package, keeps the frame count and renders the frame, and the tag reads back
-with the focal length that was set. What it deliberately does not check is the
-picture: a camera tag updates a stored camera without making it the one the
-movie draws with, so the frame is unchanged, and asserting on pixels here would
-be asserting on something the tag does not control. `Core/afp_format.md` in the
+with the focal length that was set. It does not check the picture: a camera tag
+updates a stored camera without making it the one the movie draws with, so the
+frame is unchanged and its pixels say nothing about the tag. `Core/afp_format.md` in the
 notes repo has the reader, the camera list and which function picks the active
 camera.
 
 ## Own and detach against the install (`local` label)
 
 `placement_span_survey_tests` (tests/local/placement_span_survey_tests.cpp)
-walks every animation in the install, and does two jobs. It measures what a
-per-frame placement actually carries over a span, which is what the shape of
-`Document::AuthoredDepth` was decided from, and it then owns every span and
-detaches it again and requires the clip to come back identical.
+walks every animation in the install. It measures what a per-frame placement
+carries over a span, which is what the shape of `Document::AuthoredDepth` was
+decided from, and then it owns every span, detaches it again and requires the
+clip to come back identical.
 
 It owns spans in the root and in every sprite, and reports the two separately.
 On IIDX 33 it owns all 826810 spans in the install, 211152 in roots and 615658
@@ -268,17 +269,17 @@ For every span it owns it also replays the shipped placements with the game's
 rule (`Document::ReplayDepth`) and compares each frame with what the keyframes
 say (`Document::KeyedState`): 35623952 root frames and 93902985 sprite frames,
 with no disagreement. A full run reads every IFS under `data` (about 36 GB)
-and takes around half an hour, printing only at the end. That comparison is what shows own records what the game
-draws, including the 135000 or so updates that reset a matrix part and the
-375758 that reset a colour.
+and takes around half an hour, printing only at the end. This comparison shows
+that own records what the game draws, including the 135000 or so updates that
+reset a matrix part and the 375758 that reset a colour.
 
-That second half is the proof behind ticket 30's byte-for-byte line, and it is
-what found the three things own was dropping: the non-presence flag bits, the
-extended flag word and the frames whose update sets no property. Each showed up
-as a count of differing spans, and the test reports which member of the
-placement differed so the next fix does not have to be guessed. It is a `local`
-test because it needs the install and takes minutes; `document_tests` covers the
-same operations on clips built in code.
+The comparison backs ticket 30's byte-for-byte line, and it found the three
+things own was dropping: the non-presence flag bits, the extended flag word and
+the frames whose update sets no property. Each showed up as a count of
+differing spans, and the test reports which member of the placement differed,
+so the next fix starts from that member. It is a `local` test because it needs
+the install and takes minutes; `document_tests` covers the same operations on
+clips built in code.
 
 ## What an animation header holds besides its content (`local` label)
 
@@ -317,8 +318,8 @@ whose contents change also counts as a change). Across updates the colour matrix
 entries that move are 0, 1, 2, 5, 6, 7, 10, 11 and 12, the RGB rows, in about
 354000 updates each, entries 4, 9 and 14 (the offsets) in 8220, and the HSV
 values in 100552. Update lists are one colour matrix (246960), one with HSV
-(109421), or one to three lookups (109466). That is why filters became a stepped
-track rather than something own refuses.
+(109421), or one to three lookups (109466). These counts are why filters became
+a stepped track and own stopped refusing them.
 
 ## How spans use deformation curves (`local` label)
 
@@ -338,9 +339,9 @@ rule `Document::CheckCurvesFit` enforces.
 counts how much of every animation sits in its root and how much in its
 sprites, where sprite definitions sit among the root's frames, how sprite label
 tables are ordered, and how many sprites have cameras, labels and export names.
-It is what made sprites the next thing the editor had to reach: on IIDX 33, 69%
-of all placements are inside sprites. It is also what found that 145900 of
-171786 sprite definitions sit inside root frame 0, which is the reason
+It is why sprites were the next thing the editor had to reach: on IIDX 33, 69%
+of all placements are inside sprites. It also found that 145900 of 171786
+sprite definitions sit inside root frame 0, which is why
 `Document::RemoveFrame` keeps definitions. It also checks the order of every
 export table: all of them are in case-folded name order, and 1239 are in that
 order but not in byte order, which is the order the game's symbol lookup
@@ -354,11 +355,10 @@ rate that comes to, which is where `Document::FrameRate` got its rule. On IIDX 3
 it reports 29110 animations, every one of them storing the rate as fixed point,
 landing on 60, 30, 29.97 and 15, and none outside a rate anything could play at.
 
-The whole numbers are the point. The scale is a `/ 1024` divisor taken from the
-notes, and a wrong divisor would give 29110 ragged fractions rather than four
-exact rates, so the survey is what turns a documented constant into a checked
-one. Run it against another build before trusting playback there, because the
-count of animations storing a float is the thing that could change.
+The scale is a `/ 1024` divisor taken from the notes. A wrong divisor would
+give 29110 ragged fractions instead of four exact rates, so the whole numbers
+confirm the documented constant. Run it against another build before trusting
+playback there, because the count of animations storing a float could change.
 
 ## The texture list shape (`local` label)
 
@@ -368,16 +368,15 @@ the editor can write a new one that matches. It also measures how the images sit
 in their atlas, which is where the editor's packer got its rules: 11433 of 12522
 atlases are powers of two on both sides, no image falls outside its atlas or
 overlaps another, no coordinate is odd, and every atlas holding more than one
-image has a pair touching with no gap. That last one is why the editor packs
-tight and puts the guard pixel inside the image. It is what found that an image
-carries `uvrect` as well as `imgrect`, and what the inset between them is: of
+image has a pair touching with no gap. That last rule is why the editor packs
+tight and puts the guard pixel inside the image. The test also found that an
+image carries `uvrect` as well as `imgrect`, and what the inset between them is: of
 106372 images, 106370 order the children `uvrect` then `imgrect` and 2 the other
 way, and 106322 have `uvrect` inset one pixel inside `imgrect` while 50 have the
 two equal.
 
-Writing an image without that `uvrect` would have looked correct in every test
-that only reads back what the editor wrote, which is exactly why the shape is
-measured against the shipped data instead.
+An image written without that `uvrect` would pass every test that only reads
+back what the editor wrote, so the shape is measured against the shipped data.
 
 ## Shipped shapes and what a new one must look like (`local` label)
 
@@ -401,7 +400,7 @@ IIDX 33 install (2120 packages, 27878 listed animations):
 
 Those are the rules `ImageQuad` and `AddImageShape` follow.
 
-The proof that such a shape draws is in `local_dll_tests`:
+`local_dll_tests` checks that such a shape draws:
 `image_shape_live_tests.cpp` places the largest image of `graphic/1/title.ifs`
 that fits in 400x400 on a new depth over frames 0 to 20 with `PlaceImage`, loads
 the package before and after in a real preview host at 1920x1080, and reads
@@ -411,9 +410,9 @@ area must span at least half the outline each way. A second case gives the
 placement a scale, a skew, a move and a rotation origin first, which checks the
 outline formula against afp-core's own drawing. Ending the depth at frame 5
 makes the first fail with no pixel changed, and leaving the origin out of the
-formula makes the second fail with 2324 pixels outside, which is how both
-checks were shown to see what they check. These are content-drawn checks
-between two different packages, not playback state checks.
+formula makes the second fail with 2324 pixels outside, which shows that both
+checks can fail. These checks compare drawn content between two different
+packages; they do not read playback state from pixels.
 
 `preview_host_process_tests.cpp` also checks that `Frame` reports the
 1920x1080 stage of IIDX 33.
@@ -422,10 +421,9 @@ between two different packages, not playback state checks.
 
 `afp_script_survey_tests` (tests/local/afp_script_survey_tests.cpp) reads every
 `AP2_DO_ACTION` tag and every placement clip action in all 6146 IFS files,
-walks the bytecode with `AfpScript::Read`, and requires two things: that no
-script fails to read, and that every one of them writes back byte for byte. It
-also pins the numbers the repo notes record, so a reader change that quietly
-loses a call shows up as a count that moved.
+walks the bytecode with `AfpScript::Read`, and requires that every script reads
+and writes back byte for byte. It also pins the numbers the repo notes record,
+so a reader change that drops a call shows up as a count that moved.
 
 Result on IIDX 33 (2026-09-16): 6146 files, 463562 scripts, none unreadable,
 none rewritten. The opcodes are the eight the notes list, and the calls are all
@@ -433,14 +431,14 @@ on one built-in object, `aeplib`: `aep_set_set_frame` 413915,
 `aep_set_rect_mask` 55808, `deepGotoAndPlay` 9966, `aep_set_frame_control`
 6236, `gotoAndPlay` 3323, `stop` 263, `deepStop` 117, `gotoAndStop` 20.
 
-The gate earned its keep immediately: the first run reported 442107 scripts
-rewritten, which is how the padding after `END` was found.
+The first run reported 442107 scripts rewritten, which is how the padding after
+`END` was found.
 
 It also measures the source language both ways: every script is turned into
 source and compiled again, and the bytes are compared with the original. All
 463562 scripts here, and all 211761 in SDVX 7's 935
 files, read back and recompile identically, and the test asserts all three
-counts rather than only printing them. Point `R573_IIDX_DIR` at an SDVX install
+counts as well as printing them. Point `R573_IIDX_DIR` at an SDVX install
 to run it over that corpus instead; the two counts baked in are IIDX 33's, so
 the script and call totals report a mismatch there while the source columns
 stay exact.
@@ -459,26 +457,26 @@ texture describes as `argb8888rev` with a non-zero width. It needs no DLL.
 `shared_texture_tests` (tests/local/shared_texture_tests.cpp) needs a GPU but no
 game: it fills an offscreen render target on one D3D9Ex device, publishes it
 with `SharedFrame::Copy`, and reads the pixels back through
-`SharedTexture::Reader` on a second device, which is exactly what the editor
-does with a frame the preview host rendered. The `local_dll` host process case
+`SharedTexture::Reader` on a second device, the same steps the editor takes
+with a frame the preview host rendered. The `local_dll` host process case
 runs the same reader against a real rendered frame and requires it to be more
 than zeros, so a host that answers with an empty texture fails.
 
 ## The real-data format cases ([real] tag)
 
-`formats_tests` carries five cases tagged `[real]` that decode REAL game
+`formats_tests` carries five cases tagged `[real]` that decode real game
 data instead of synthetic fixtures: `tests/formats/model3d_real_tests.cpp`
 (the IIDX 18 mode_bg scene: inz manifest + gcz tiles + xfile models, keyed
 by `R573_IIDX18_DIR`) and four package sweeps in
 `tests/formats/sysidx_tests.cpp` (`R573_IIDX17_DIR` sirius index
 invariants, `R573_IIDX13_DIR` blowfish texture path, `R573_IIDX11_DIR`
 unencrypted red packages, `R573_IIDX09_DIR` big-endian 9th-style chunks).
-Each SKIPs cleanly when its env var is unset or the directory is missing,
+Each one skips cleanly when its env var is unset or the directory is missing,
 so they are registered with ctest everywhere (they show as Skipped in CI)
-and only assert on a machine with the dumps. They were previously hidden
-`[.real]` tags, which Catch's test discovery never registers - a manual-only
-path that silently returned green without data; the SKIP form replaced it
-so a data-less run is visibly a skip, not a pass.
+and only assert on a machine with the dumps. They used to be hidden
+`[.real]` tags, which Catch's test discovery never registers, so they could
+only be run by hand and silently passed without data. With SKIP, a run
+without data is reported as skipped.
 
 ## The AFP builtin name table
 
@@ -494,10 +492,10 @@ Run it from `tools/local`, which is a uv project so `pefile` is there without
 installing anything. The three addresses are the blob of names, the slot table
 and the block table, read off the name lookup in a fresh IDB; `docs/formats.md`
 says how to find that function without an offset, and what the tables mean. The
-tool refuses to write unless the nine names that were known by hand come back
+tool writes nothing unless the nine names that were known by hand come back
 right, so a wrong address leaves the header alone.
 
-The table is data about the bytecode format rather than about one build, so it
+The table describes the bytecode format and does not change per build, so it
 only needs rereading when a DLL adds names. After rereading it, run the script
 survey below over both installs: a name that changed id would show up there as a
 script that no longer recompiles to its own bytes.
@@ -515,8 +513,9 @@ R573_IIDX_DIR=<iidx33 install> R573_SDVX_DIR=<sdvx7 install> ./build/afp_script_
 Both cases require every script to be sourced, every one to recompile, and none
 to differ. IIDX 33 is 6146 files and 463562 scripts, SDVX 7 is 935 files and
 211761 scripts, and the IIDX case also re-measures the opcode and call counts
-the notes record. This is the gate for any change to the source language: a
-shape that loses a byte fails here rather than in a package somebody edited.
+the notes record. Every change to the source language must pass this gate,
+so a shape that loses a byte fails here before it reaches a package somebody
+edited.
 
 ## Scene preset sweep
 
@@ -536,6 +535,7 @@ built `bin/573Renderer.exe`. Shot names come from the document: one per marker
 passed as `--preset-option <option-id>=<label>`. It prints the current preset and
 state as it goes, and writes one PNG per state into `screenshots/` (named
 `<preset>-state<N>-<marker>.png` when the preset has options) so every state can be
-reviewed by eye, which is the other half of the check the tool cannot make. A non-zero exit means at least one
-preset was built from a screen's INIT and misses the per-frame update that drives
-its models: see `docs/game_profiles.md` and the `game-scene-preset` skill.
+reviewed by eye, since the tool cannot judge the pictures itself. A non-zero
+exit means at least one preset was built from a screen's init and misses the
+per-frame update that drives its models: see `docs/game_profiles.md` and the
+`game-scene-preset` skill.

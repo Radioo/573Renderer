@@ -165,12 +165,12 @@ void Window::AddDepthMenu() {
     }
     add(depth, {.id = "depth.flip_across",
                 .text = tr("Flip horizontally"),
-                .brief = tr("Flip across"),
+                .brief = tr("Flip horizontal"),
                 .run = [this] { ReshapeOnStage(static_cast<uint16_t>(*depth_), -1, 1, 0, true); },
                 .refusal = chosen});
     add(depth, {.id = "depth.flip_over",
                 .text = tr("Flip vertically"),
-                .brief = tr("Flip over"),
+                .brief = tr("Flip vertical"),
                 .run = [this] { ReshapeOnStage(static_cast<uint16_t>(*depth_), 1, -1, 0, true); },
                 .refusal = chosen});
     depth->addSeparator();

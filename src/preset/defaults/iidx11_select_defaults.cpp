@@ -318,7 +318,7 @@ Document Iidx11ModeSelect() {
         .lights = StandardLights(),
         .assets = {Scene3dAsset("red", "data/graph/model/red")},
         .markers = {Marker{.frame = 0, .label = "Fly in, fast wind up"},
-                    Marker{.frame = 15, .label = "Fly in, five times the accumulate"},
+                    Marker{.frame = 15, .label = "Fly in, spin slowing down"},
                     Marker{.frame = 28, .label = "Fly in, spin at its floor"},
                     Marker{.frame = 40, .label = "Interactive, unwinding"}},
         .tracks = {

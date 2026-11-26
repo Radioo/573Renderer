@@ -557,12 +557,12 @@ TEST_CASE(
     Editor::Window window;
     window.OpenDocument(ifs);
     WaitForOpen(window);
-    REQUIRE(Settle(
-        [&opening] { return opening.Problems().filter("might be incompatible").size() == 1; }));
+    REQUIRE(
+        Settle([&opening] { return opening.Problems().filter("may not work on").size() == 1; }));
     const QString kept = QSettings().value("game/directory").toString();
     QSettings().remove("game/directory");
     CHECK(QDir(kept) == QDir(chosen));
-    const QString warned = opening.Problems().filter("might be incompatible").front();
+    const QString warned = opening.Problems().filter("may not work on").front();
     CHECK(warned.contains("iidx34"));
     CHECK(warned.contains("iidx33"));
     auto* build = window.findChild<QLabel*>("start_build");

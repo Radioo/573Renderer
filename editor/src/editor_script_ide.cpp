@@ -457,8 +457,7 @@ ScriptIde::ScriptIde(QWidget* parent) : QWidget(parent) {
     names_stack->addWidget(Heading(tr("NAMES YOU CAN USE HERE")));
     names_stack->addWidget(Rule(false));
     names_stack->addWidget(names_, 1);
-    auto* names_note = new QLabel(
-        tr("Every name here is read out of the open package. Nothing is hardcoded per game."));
+    auto* names_note = new QLabel(tr("Every name here comes from the open package."));
     names_note->setWordWrap(true);
     names_note->setContentsMargins(12, 10, 12, 10);
     names_note->setStyleSheet(QString("color: %1; font-size: 11px;").arg(Theme::kFaint.name()));
@@ -811,7 +810,7 @@ void ScriptIde::Retell() {
                              : tr("%1, unchanged").arg(ScriptEditor::Bytes(bytes_written_)));
     summary_->setText(ScriptEditor::Counted(editor_->Source()) + QString("   ") +
                       ScriptEditor::Bytes(bytes_written_));
-    trip_->setText(round_trips_ && !changed_ ? tr("round trips to the original") : QString());
+    trip_->setText(round_trips_ && !changed_ ? tr("compiles to the original bytes") : QString());
 }
 
 }

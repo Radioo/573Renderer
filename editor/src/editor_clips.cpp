@@ -260,9 +260,9 @@ void Window::NameShownSpriteExport() {
     const QString current =
         QString::fromStdString(Document::SpriteExportName(*file_, animation_path_, sprite));
     bool answered = false;
-    const QString name =
-        QInputDialog::getText(this, tr("Name the export"), tr("Export name (empty removes it)"),
-                              QLineEdit::Normal, current, &answered);
+    const QString name = QInputDialog::getText(this, tr("Name the export"),
+                                               tr("Export name (leave empty to remove it)"),
+                                               QLineEdit::Normal, current, &answered);
     if (!answered || name == current) return;
     const std::string path = animation_path_;
     const std::string text = name.toStdString();

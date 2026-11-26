@@ -106,7 +106,7 @@ QString ScriptLexer::description(int style) const {
     case Punctuation:
         return tr("Punctuation");
     case Wrong:
-        return tr("Not a word this language has");
+        return tr("Not a word in this language");
     default:
         return {};
     }

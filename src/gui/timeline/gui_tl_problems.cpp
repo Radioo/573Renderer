@@ -75,8 +75,7 @@ void RenderProblems() {
     if (!ImGui::BeginPopupModal(kTitle, nullptr, ImGuiWindowFlags_AlwaysAutoResize)) return;
 
     const std::vector<Doc::Problem>& problems = CurrentProblems();
-    ImGui::TextDisabled("%zu problem(s). Clicking a row selects the clip it names.",
-                        problems.size());
+    ImGui::TextDisabled("%zu problem(s). Click a row to select its clip.", problems.size());
     ImGui::Separator();
     for (std::size_t i = 0; i < problems.size(); i++) {
         const Doc::Problem& problem = problems[i];
@@ -102,7 +101,7 @@ void RenderProblems() {
             editor.Select(problem.path);
         }
     }
-    if (problems.empty()) ImGui::TextDisabled("The document validates cleanly.");
+    if (problems.empty()) ImGui::TextDisabled("The document has no problems.");
 
     ImGui::Separator();
     const bool escape = ImGui::IsKeyPressed(ImGuiKey_Escape, false);

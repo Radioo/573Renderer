@@ -1,24 +1,25 @@
 # Untested interactions
 
 **228** of **526** interactions have no test that names their
-item path or CLI flag. Grouped by surface, ordered by how many are missing.
+item path or CLI flag. They are grouped by surface, with the surface missing the most first.
 
 ## Read this before trusting the number
 
-Coverage is matched by imgui item path (or, for the CLI, by flag string). That makes it
-a LOWER BOUND on what is tested and an UPPER BOUND on what is missing:
+Coverage is matched by imgui item path (or, for the CLI, by flag string). So the
+count is a lower bound on what is tested and an upper bound on what is missing:
 
-- An interaction driven without naming its path is not credited. The keyboard-shortcut
-  tests, the timeline track drag, the splitter drag and the crop-pick flow all drive
-  real interactions through mouse coordinates or key chords.
-- Several entries document the ABSENCE of behaviour ("dragging a tab does not reorder",
-  "clicking the loading overlay passes through"). Those are invariants, not actions.
-- Tooltips are NOT part of the residue. Every `ImGui::SetTooltip` call site in `src/gui`
-  is asserted by `tests/gui/tooltip_tests.cpp`, including the branch-dependent texts;
-  see `docs/gui_tests.md` section 16. A tooltip row appearing below means only that the
-  matcher could not tie the hover to that row's path, not that the tooltip is untested.
+- An interaction a test drives without naming its path gets no credit. The
+  keyboard-shortcut tests, the timeline track drag, the splitter drag and the crop-pick
+  flow all drive real interactions through mouse coordinates or key chords.
+- Several entries record behaviour that does not happen ("dragging a tab does not
+  reorder", "clicking the loading overlay passes through"). Those are invariants, with
+  no action to test.
+- Every tooltip is tested. `tests/gui/tooltip_tests.cpp` asserts every
+  `ImGui::SetTooltip` call site in `src/gui`, including the branch-dependent texts (see
+  `docs/gui_tests.md` section 16). A tooltip row below only means the matcher could not
+  tie the hover to that row's path.
 
-Use this list to find candidates, then read the surface doc before concluding a gap is
+Use this list to find candidates, and read the surface doc before deciding a gap is
 real.
 
 ## Shared widgets and gating (35)
@@ -35,7 +36,7 @@ Breakdown: left-click 19, drag 5, hover 4, key 4, scroll 2, double-click 1
 | `vsplitter-drag-right-instance` | Right splitter between the centre scene pane and the inspector pane | drag | `src/gui/gui_panels.cpp:416` |
 | `section-header-no-interaction` | Gui::SectionHeader (icon + label + suffix + Separator) | hover | `src/gui/gui_widgets.cpp:40` |
 | `segmented-item-hover-highlight` | Segmented control segment button hover/press feedback | hover | `src/gui/gui_widgets.cpp:21` |
-| `segmented-last-item-tooltip` | Segmented control: hovering the LAST segment surfaces the caller's tooltip | hover | `src/gui/gui_widgets.cpp:28` |
+| `segmented-last-item-tooltip` | Segmented control: hovering the last segment shows the caller's tooltip | hover | `src/gui/gui_widgets.cpp:28` |
 | `vsplitter-hover-cursor` | Splitter hover cursor | hover | `src/gui/gui_splitter.cpp:13` |
 | `inspector-tab-keyboard-activate` | Inspector tab item reached via keyboard navigation | key | `src/gui/gui_inspector.cpp:446` |
 | `main-tab-button-keyboard-activate` | Main view tab button in the top bar, reached via keyboard navigation | key | `src/gui/gui_panels.cpp:251` |
@@ -71,13 +72,13 @@ Breakdown: key 13, drag 4, right-click 4, cli-arg 2, left-click 2, hover 1, scro
 |---|---|---|---|
 | `load-scene-arms-camera` | Load a 3D scene directory (arms the free-look surface and resets the camera) | cli-arg | `src/scene3d/camera.cpp:97` |
 | `unload-scene-disarms-camera` | Unload the current 3D scene (disarms the free-look surface) | cli-arg | `src/scene3d/scene3d_input.cpp:38` |
-| `gui-move-speed-drag` | "move speed" DragFloat (drag left/right to change camera translation speed) | drag | `src/gui/gui_scene3d_panel.cpp:127` |
+| `gui-move-speed-drag` | "Move speed" DragFloat (drag left/right to change camera translation speed) | drag | `src/gui/gui_scene3d_panel.cpp:127` |
 | `lmb-crop-drag-steals-look-capture` | Left-click / drag a crop rectangle in the render window while the right button is held for free-look | drag | `src/window.cpp:100-110` |
 | `mouse-look-drag` | Move the mouse while the right button is held (free-look drag) | drag | `src/scene3d/scene3d_input.cpp:65` |
 | `pitch-clamp` | Drag the mouse vertically past the vertical look limit | drag | `src/scene3d/camera.cpp:23` |
 | `gui-freecam-checkbox-hover` | Hover the "Free camera" checkbox | hover | `src/gui/gui_scene3d_panel.cpp:114` |
 | `esc-close-during-look` | Press Escape while the render window has focus (including mid free-look) | key | `src/window.cpp:130` |
-| `gui-move-speed-ctrl-click` | Ctrl+click (or double-click) the "move speed" drag to type an exact value | key | `src/gui/gui_scene3d_panel.cpp:127` |
+| `gui-move-speed-ctrl-click` | Ctrl+click (or double-click) the "Move speed" drag to type an exact value | key | `src/gui/gui_scene3d_panel.cpp:127` |
 | `key-a-left` | Hold A (strafe left) | key | `src/scene3d/scene3d_input.cpp:89` |
 | `key-alt-slow` | Hold Alt (slow / precision movement modifier) | key | `src/scene3d/scene3d_input.cpp:94` |
 | `key-ctrl-down` | Hold Ctrl (descend / move down along world Y) | key | `src/scene3d/scene3d_input.cpp:92` |
@@ -91,7 +92,7 @@ Breakdown: key 13, drag 4, right-click 4, cli-arg 2, left-click 2, hover 1, scro
 | `multi-key-diagonal` | Hold two or more movement keys at once (e.g. W+D, or W+Space) | key | `src/scene3d/camera.cpp:64` |
 | `gui-freecam-checkbox` | "Free camera" checkbox in the 3D scene inspector tab | left-click | `src/gui/gui_scene3d_panel.cpp:113` |
 | `gui-reset-view-button` | "Reset view" button in the 3D scene inspector tab | left-click | `src/gui/gui_scene3d_panel.cpp:123` |
-| `look-armed-but-inert-freecam-off` | Hold right mouse button in the render window while "Free camera" is OFF | right-click | `src/scene3d/scene3d_host.cpp:93` |
+| `look-armed-but-inert-freecam-off` | Hold right mouse button in the render window while "Free camera" is off | right-click | `src/scene3d/scene3d_host.cpp:93` |
 | `rmb-during-crop-pick-mode` | Right-click in the render window while crop pick mode is active | right-click | `src/window.cpp:112` |
 | `rmb-press-begin-look` | Right mouse button press anywhere in the render window client area | right-click | `src/scene3d/scene3d_input.cpp:53` |
 | `rmb-release-end-look` | Right mouse button release | right-click | `src/scene3d/scene3d_input.cpp:56` |
@@ -103,7 +104,7 @@ Breakdown: key 10, hover 8, left-click 7, scroll 1, text-entry 1
 
 | id | control | input | source |
 |---|---|---|---|
-| `export-disabled-notice` | "(seek / pause disabled during export)" notice | hover | `src/gui/gui_timeline.cpp:113` |
+| `export-disabled-notice` | "(seek and pause are off during export)" notice | hover | `src/gui/gui_timeline.cpp:113` |
 | `frame-counter-readout` | "cur / total" frame counter and "loop N" wrap counter (mono font) | hover | `src/gui/gui_timeline.cpp:104` |
 | `no-scene-placeholder` | "Load an IFS to control playback." placeholder text | hover | `src/gui/gui_timeline.cpp:222` |
 | `transport-jump-back-100-tooltip` | Tooltip on the jump-back-100 button | hover | `src/gui/gui_timeline.cpp:45` |
@@ -233,7 +234,7 @@ Breakdown: hover 7, left-click 5, drag 3, key 1
 | `ifs-tree-dir-expand` | IFS directory node in the browse tree (label "<segment>   (<file_count>)") | left-click | `src/gui/gui_panels.cpp:155` |
 | `ifs-tree-file-select` | IFS file leaf row in the browse tree (Selectable named after the last path segment) | left-click | `src/gui/gui_panels.cpp:138` |
 | `main-view-tab-button` | Main-view tab button in the top bar (one per active MainTab panel: "Renderer", "qpro", …) | left-click | `src/gui/gui_panels.cpp:251` |
-| `status-export-tag-button` | Export status tag SmallButton in the status strip (dynamic label: "capturing N" / "capturing N [NVENC]", "encoding N frames...", "export done", "export failed") | left-click | `src/gui/gui_panels.cpp:319` |
+| `status-export-tag-button` | Export status tag SmallButton in the status strip (dynamic label: "capturing N" / "capturing N [NVENC]", "encoding N frames...", "Export done", "Export failed") | left-click | `src/gui/gui_panels.cpp:319` |
 | `topbar-export-button` | "Export..." button (export glyph + label) at the right of the top bar | left-click | `src/gui/gui_panels.cpp:272` |
 
 ## 3D scene and 2D package panels (14)
@@ -320,7 +321,7 @@ Breakdown: checkbox 4, left-click 3, hover 1, key 1, scroll 1
 | `cat-hair` | Hair category checkbox | checkbox | `src/gui/gui_qpro_panel.cpp:264` |
 | `cat-hand` | Hand category checkbox | checkbox | `src/gui/gui_qpro_panel.cpp:262` |
 | `part-checkbox` | Individual scanned part checkbox | checkbox | `src/gui/gui_qpro_panel.cpp:141` |
-| `animated-parts-note-tooltip` | "Animated parts -> .webm (VP9) + .mp4 (HEVC-alpha, Safari) + .avif poster" label (hover tooltip) | hover | `src/gui/gui_qpro_panel.cpp:247` |
+| `animated-parts-note-tooltip` | "Animated parts: .webm (VP9), .mp4 (HEVC with alpha) and an .avif poster" label (hover tooltip) | hover | `src/gui/gui_qpro_panel.cpp:247` |
 | `output-fps-keyboard-edit` | Output fps text field, keyboard editing keymap | key | `src/gui/gui_qpro_panel.cpp:234` |
 | `folder-picker-dialog` | Native "browse for folder" shell dialog raised by the extract button | left-click | `src/gui/gui_qpro_panel.cpp:284` |
 | `output-fps-minus` | Output fps decrement step button | left-click | `src/gui/gui_qpro_panel.cpp:234` |

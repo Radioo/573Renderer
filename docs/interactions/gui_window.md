@@ -1,7 +1,7 @@
 # GUI window and thread
 
-Every interaction on this surface. Generated inventory, cross-checked by a second
-reader against the source (see README.md for method).
+Every interaction on this surface. The inventory was generated and then checked
+against the source by a second reader (see README.md for the method).
 
 | # | id | control | input | tooltip | tests |
 |---|---|---|---|---|---|
@@ -93,7 +93,7 @@ reader against the source (see README.md for method).
 - **effect**: g_running.exchange(true) returns the previous value; when it was already true Start returns true at once, so no second window, no second std::thread and no second promise are created.
 - **source**: `src/gui/gui_thread.cpp:51`
 - **tests**: none
-- **audit correction**: The entry states the g_running.exchange(true) guard makes a second GuiThread::Start() a harmless no-op. That only holds while the first GUI thread is still alive. On the window-close path ThreadMain sets g_running = false at gui_thread.cpp:45 and returns, and nobody joins g_thread, so g_thread stays joinable. A subsequent Start() then passes the exchange gate (g_running is false) and reaches `g_thread = std::thread(&ThreadMain, hinst, std::move(init_promise));` at gui_thread.cpp:56 - a move-assignment onto a still-joinable std::thread, which by the standard calls std::terminate() and kills the process. -> The guard makes a second Start() a no-op ONLY while the GUI thread is still running (g_running == true). After the user closed the control window (g_running reset to false at gui_thread.cpp:45 with no join), a second Start() would std::terminate at gui_thread.cpp:56. Currently latent because Start is only called once, from StartGuiIfWanted (src/main.cpp:356); the path via Stop() is safe because Stop() joins (gui_thread.cpp:66), leaving g_thread non-joinable.
+- **audit correction**: The entry states the g_running.exchange(true) guard makes a second GuiThread::Start() a harmless no-op. That only holds while the first GUI thread is still alive. On the window-close path ThreadMain sets g_running = false at gui_thread.cpp:45 and returns, and nobody joins g_thread, so g_thread stays joinable. A subsequent Start() then passes the exchange gate (g_running is false) and reaches `g_thread = std::thread(&ThreadMain, hinst, std::move(init_promise));` at gui_thread.cpp:56, a move-assignment onto a still-joinable std::thread, which by the standard calls std::terminate() and kills the process. -> The guard makes a second Start() a no-op only while the GUI thread is still running (g_running == true). After the user closed the control window (g_running reset to false at gui_thread.cpp:45 with no join), a second Start() would std::terminate at gui_thread.cpp:56. Currently latent because Start is only called once, from StartGuiIfWanted (src/main.cpp:356); the path via Stop() is safe because Stop() joins (gui_thread.cpp:66), leaving g_thread non-joinable.
 
 ### 6. Launching the app with the GUI enabled (default: no --no-gui / --headless)
 
@@ -111,7 +111,7 @@ reader against the source (see README.md for method).
 - **id**: `dpi-unaware-scaling` *(audit)*
 - **input**: drag
 - **precondition**: Windows display scaling is not 100%
-- **effect**: The process never opts into DPI awareness: ImGui_ImplWin32_EnableDpiAwareness is not called, no SetProcessDpiAwareness / SetProcessDpiAwarenessContext call exists anywhere in src/, and no application manifest is produced (no *.manifest in the repo root and CMakeLists.txt contains no manifest directive). WndProc also has no WM_DPICHANGED case (gui_window.cpp:46-75). Consequence: the window is DPI-unaware, so Windows renders it at 96 DPI and bitmap-stretches it - all ImGui text and widgets are visibly blurry at 125/150/200% scaling, dragging between monitors of different scale re-stretches rather than re-laying-out, and the WM_GETMINMAXINFO clamp (kMinClientW = 932, kMinClientH = 600) is enforced in virtual rather than physical pixels.
+- **effect**: The process never opts into DPI awareness: ImGui_ImplWin32_EnableDpiAwareness is not called, no SetProcessDpiAwareness / SetProcessDpiAwarenessContext call exists anywhere in src/, and no application manifest is produced (no *.manifest in the repo root and CMakeLists.txt contains no manifest directive). WndProc also has no WM_DPICHANGED case (gui_window.cpp:46-75). Consequence: the window is DPI-unaware, so Windows renders it at 96 DPI and bitmap-stretches it: all ImGui text and widgets are visibly blurry at 125/150/200% scaling, dragging between monitors of different scale re-stretches rather than re-laying-out, and the WM_GETMINMAXINFO clamp (kMinClientW = 932, kMinClientH = 600) is enforced in virtual rather than physical pixels.
 - **source**: `src/gui/gui_window.cpp:44`
 - **notes**: kMinClientW evaluates to 240 + 320 + 280 + 2*6 + 80 = 932 (src/gui/gui_layout_constants.h:18-20). Confirmed absent via grep for EnableDpiAwareness\|WM_DPICHANGED\|SetProcessDpi\|DPI_AWARE over src/ and CMakeLists.txt.
 - **tests**: none
@@ -121,7 +121,7 @@ reader against the source (see README.md for method).
 - **id**: `imgui-layout-not-persisted`
 - **input**: drag
 - **precondition**: always
-- **effect**: io.IniFilename = nullptr, so ImGui writes no imgui.ini: any in-window layout the user changes is discarded on exit and the app always starts with the default layout.
+- **effect**: io.IniFilename = nullptr, so ImGui writes no imgui.ini. Any in-window layout the user changes is discarded on exit, and the app always starts with the default layout.
 - **source**: `src/gui/gui_window.cpp:154`
 - **notes**: Persistence gate, not a widget.
 - **tests**: none
@@ -131,7 +131,7 @@ reader against the source (see README.md for method).
 - **id**: `move-window-titlebar`
 - **input**: drag
 - **precondition**: always
-- **effect**: Not intercepted: falls through the switch default to DefWindowProcW, which performs the standard move loop. Repaints during the move come through the WM_PAINT handler.
+- **effect**: Not intercepted. It falls through the switch default to DefWindowProcW, which runs the standard move loop. Repaints during the move come through the WM_PAINT handler.
 - **source**: `src/gui/gui_window.cpp:76`
 - **notes**: Window is created at x=80, y=60, 1360x820 with WS_OVERLAPPEDWINDOW and title "573Renderer - Control" (gui_window.cpp:133).
 - **tests**: none
@@ -143,7 +143,7 @@ reader against the source (see README.md for method).
 - **precondition**: A RenderFrameLocked call is already on the stack
 - **effect**: The function-static bool in_frame short-circuits the nested call and returns immediately, so a WM_SIZE or WM_PAINT dispatched from inside a frame cannot start a second ImGui frame or a second device Reset.
 - **source**: `src/gui/gui_window.cpp:221`
-- **notes**: Gate that exists specifically because WM_SIZE calls RenderFrameLocked synchronously.
+- **notes**: This gate exists because WM_SIZE calls RenderFrameLocked synchronously.
 - **tests**: none
 
 ### 11. Window edge / corner resize grip
@@ -265,7 +265,7 @@ reader against the source (see README.md for method).
 - **input**: right-click
 - **precondition**: Window visible and not in a modal loop
 - **disabled when**: Keyboard invocation only: Alt+Space arrives as WM_SYSCOMMAND with (wp & 0xfff0) == SC_KEYMENU and is swallowed at gui_window.cpp:68, so the menu cannot be opened from the keyboard
-- **effect**: WM_NCRBUTTONUP / WM_CONTEXTMENU are not intercepted by WndProc and fall through to DefWindowProcW (gui_window.cpp:76), which opens the standard system menu. Choosing Move or Size starts the same modal move/size loop as a frame drag; Minimize and Maximize produce the WM_SIZE paths (SIZE_MINIMIZED gated out, SIZE_MAXIMIZED triggering resize_pending + RenderFrameLocked); Close produces WM_CLOSE -> DestroyWindow -> WM_DESTROY -> PostQuitMessage(0). Only the keyboard route into this menu is disabled, the mouse route is fully live.
+- **effect**: WM_NCRBUTTONUP / WM_CONTEXTMENU are not intercepted by WndProc and fall through to DefWindowProcW (gui_window.cpp:76), which opens the standard system menu. Choosing Move or Size starts the same modal move/size loop as a frame drag; Minimize and Maximize produce the WM_SIZE paths (SIZE_MINIMIZED gated out, SIZE_MAXIMIZED triggering resize_pending + RenderFrameLocked); Close produces WM_CLOSE -> DestroyWindow -> WM_DESTROY -> PostQuitMessage(0). Only the keyboard route into this menu is disabled; the mouse route works.
 - **source**: `src/gui/gui_window.cpp:76`
 - **notes**: Distinct gesture from move-window-titlebar (drag) and from alt-f10-system-menu-suppressed (keyboard). The close-window-titlebar-x entry lists "system menu Close" as an input but there is no record of the menu itself or of which routes to it work.
 - **tests**: none
@@ -294,7 +294,7 @@ reader against the source (see README.md for method).
 - **id**: `close-window-titlebar-x`
 - **input**: window-message
 - **precondition**: GUI thread started (not --no-gui / --headless) and window created
-- **effect**: DefWindowProcW turns WM_CLOSE into DestroyWindow; WM_DESTROY calls PostQuitMessage(0); the next PeekMessage loop in PumpAndRender sees WM_QUIT and returns false; GuiThread::ThreadMain breaks its loop, logs "GUI window closed - GUI thread stopping (renderer continues headlessly)" and calls Gui::Shutdown(w). The app does NOT exit - the renderer keeps running headlessly and g_current_hwnd becomes nullptr.
+- **effect**: DefWindowProcW turns WM_CLOSE into DestroyWindow; WM_DESTROY calls PostQuitMessage(0); the next PeekMessage loop in PumpAndRender sees WM_QUIT and returns false; GuiThread::ThreadMain breaks its loop, logs "GUI window closed - GUI thread stopping (renderer continues headlessly)" and calls Gui::Shutdown(w). The app does not exit: the renderer keeps running headlessly and g_current_hwnd becomes nullptr.
 - **source**: `src/gui/gui_window.cpp:70`
 - **notes**: WM_CLOSE itself is not in the switch; it falls through to DefWindowProcW at gui_window.cpp:76. The WM_QUIT check is at gui_window.cpp:280, the thread-side break at gui_thread.cpp:36-40.
 
@@ -312,7 +312,7 @@ reader against the source (see README.md for method).
 - **id**: `erase-background-suppressed`
 - **input**: window-message
 - **precondition**: always
-- **effect**: WM_ERASEBKGND returns 1 without erasing, so Windows never paints the class background - prevents flicker while the user drags the window edge.
+- **effect**: WM_ERASEBKGND returns 1 without erasing, so Windows never paints the class background, which prevents flicker while the user drags the window edge.
 - **source**: `src/gui/gui_window.cpp:57`
 
 ### 28. Uncovering / revealing the window (another window moved away, un-minimise, drag off screen edge)
@@ -368,14 +368,14 @@ reader against the source (see README.md for method).
 - **effect**: PumpAndRender drains the thread message queue with PeekMessage(PM_REMOVE) + TranslateMessage (which is what turns WM_KEYDOWN into WM_CHAR for ImGui text fields) + DispatchMessage, returns false on WM_QUIT, otherwise calls RenderFrameLocked. ThreadMain then Sleep(16) between iterations, capping the GUI at roughly 60 Hz.
 - **source**: `src/gui/gui_window.cpp:273`
 - **notes**: Sleep(16) pacing at src/gui/gui_thread.cpp:41; TranslateMessage at gui_window.cpp:278 is what makes typing in any InputText work.
-- **audit correction**: The effect claims "ThreadMain then Sleep(16) between iterations, capping the GUI at roughly 60 Hz". That is wrong: it ignores w.pp.PresentationInterval = D3DPRESENT_INTERVAL_ONE (src/gui/gui_window.cpp:91), which makes Present at gui_window.cpp:266 block for the next vblank on top of the sleep. Sleep(16) is also ~15.6 ms or worse at the default (unmodified) system timer resolution, since nothing in src/ calls timeBeginPeriod. -> Each iteration costs a Sleep(16) PLUS a vsync wait inside Present (D3DPRESENT_INTERVAL_ONE, gui_window.cpp:91), i.e. roughly two refresh intervals - about 30 Hz on a 60 Hz display, not 60 Hz. Everything else in the entry (PeekMessage PM_REMOVE drain, TranslateMessage producing WM_CHAR at gui_window.cpp:278, WM_QUIT returning false at :280, Sleep(16) at gui_thread.cpp:41) is accurate.
+- **audit correction**: The effect claims "ThreadMain then Sleep(16) between iterations, capping the GUI at roughly 60 Hz". That is wrong: it ignores w.pp.PresentationInterval = D3DPRESENT_INTERVAL_ONE (src/gui/gui_window.cpp:91), which makes Present at gui_window.cpp:266 block for the next vblank on top of the sleep. Sleep(16) is also ~15.6 ms or worse at the default (unmodified) system timer resolution, since nothing in src/ calls timeBeginPeriod. -> Each iteration costs a Sleep(16) plus a vsync wait inside Present (D3DPRESENT_INTERVAL_ONE, gui_window.cpp:91), i.e. roughly two refresh intervals - about 30 Hz on a 60 Hz display, not 60 Hz. Everything else in the entry (PeekMessage PM_REMOVE drain, TranslateMessage producing WM_CHAR at gui_window.cpp:278, WM_QUIT returning false at :280, Sleep(16) at gui_thread.cpp:41) is accurate.
 
 ### 34. Minimize title bar button
 
 - **id**: `minimize-window`
 - **input**: window-message
 - **precondition**: always
-- **effect**: WM_SIZE arrives with wp == SIZE_MINIMIZED, so the (g_win != nullptr) && wp != SIZE_MINIMIZED gate fails: resize_pending is NOT set and no frame is rendered (avoids resetting the device to a 0x0 client rect). The handler still returns 0, swallowing the message.
+- **effect**: WM_SIZE arrives with wp == SIZE_MINIMIZED, so the (g_win != nullptr) && wp != SIZE_MINIMIZED gate fails: resize_pending is not set and no frame is rendered (avoids resetting the device to a 0x0 client rect). The handler still returns 0, swallowing the message.
 - **source**: `src/gui/gui_window.cpp:48`
 - **notes**: This is the explicit SIZE_MINIMIZED gate.
 
@@ -396,5 +396,5 @@ reader against the source (see README.md for method).
 - **precondition**: w.warp_backed == true (both D3D9 HAL CreateDevice attempts failed)
 - **effect**: The fallback path sets w.pp.EnableAutoDepthStencil = FALSE (gui_window.cpp:117), and the WARP device is itself created with no depth-stencil (src/warp_device.cpp:111-120 never sets EnableAutoDepthStencil). RenderFrameLocked nevertheless clears with D3DCLEAR_TARGET \| D3DCLEAR_ZBUFFER; D3D9 rejects D3DCLEAR_ZBUFFER with D3DERR_INVALIDCALL when no depth-stencil is attached, and the whole Clear becomes a no-op, not just the depth portion. The HRESULT is discarded, so on the WARP path the backbuffer is never cleared - with SwapEffect D3DSWAPEFFECT_DISCARD the user sees undefined/stale content behind the ImGui draw list instead of the intended RGBA(16,17,20) background. The HAL path is unaffected because it requests EnableAutoDepthStencil = TRUE / D3DFMT_D16 (gui_window.cpp:89-90).
 - **source**: `src/gui/gui_window.cpp:257`
-- **notes**: User-visible only on machines that fall back to WARP. Fix would be to mask the flag on warp_backed, but that is a code change, not an inventory item; recorded here as the actual observable behaviour of the fallback.
+- **notes**: Visible only on machines that fall back to WARP. The fix would be to mask the flag when warp_backed is set; that is a code change, so this entry records the fallback's current observable behaviour.
 

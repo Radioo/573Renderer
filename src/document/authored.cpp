@@ -117,7 +117,7 @@ Support::Expected<void, std::string> CheckControls(const AfpAnimation::Placement
     if (missing == 0) return {};
     const std::string field = (missing & kUseMatrix) != 0 ? "matrix" : "colour";
     return Support::Unexpected("frame " + std::to_string(frame) + " carries a " + field +
-                               " the game would not apply, which own could not give back");
+                               " the game ignores, which keyframes could not keep");
 }
 
 bool NeedsExtended(const AfpAnimation::Placement& placement) {

@@ -64,7 +64,7 @@ void DrawSlotBitmapInput(App::VariantSlot& slot) {
     memcpy(buf, slot.bitmap.data(), n);
     buf[n] = 0;
     ImGui::SetNextItemWidth(-FLT_MIN);
-    if (ImGui::InputTextWithHint("##bitmap", "bitmap name (blank = IFS default)", buf,
+    if (ImGui::InputTextWithHint("##bitmap", "Bitmap name (blank for the IFS default)", buf,
                                  sizeof(buf))) {
         slot.bitmap = buf;
         slot.bitmap_override = (buf[0] != '\0');
@@ -85,9 +85,9 @@ void DrawSlotProperties(App::IfsConfig& cfg, App::VariantSlot& slot) {
         DrawSlotBitmapInput(slot);
     }
     if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("Swap the clip's bitmap. \"(default)\" drops the override and\n"
-                          "replays the master so the timeline re-authors the original\n"
-                          "bitmap (afp has no restore-authored call).");
+        ImGui::SetTooltip("Swap the clip's bitmap. \"(default)\" removes the override and\n"
+                          "replays the master so its timeline puts the original bitmap\n"
+                          "back, because afp has no call that restores it.");
     }
 }
 
@@ -102,7 +102,7 @@ void DrawLayerProperties(App::State& state, const Scene::Selection& sel,
             ImGui::Text("%u frames", live.mc_total);
             ImGui::PopFont();
         }
-        ImGui::TextColored(ImVec4(0.50F, 0.92F, 0.65F, 1.0F), "playing");
+        ImGui::TextColored(ImVec4(0.50F, 0.92F, 0.65F, 1.0F), "Playing");
     }
     ImGui::Spacing();
     if (ImGui::Button(is_playing ? "Replay" : "Play", ImVec2(Gui::Dpi::S(110.0F), 0.0F))) {
@@ -127,7 +127,7 @@ void DrawChildProperties(const Scene::Selection& sel, const App::Status& status,
         }
     }
     if (FindNodeByPath(status.mc_tree, sel.path) == nullptr) {
-        ImGui::TextDisabled("(not in the enumerated child tree)");
+        ImGui::TextDisabled("(not in the child clip tree)");
     }
 
     App::VariantSlot* slot = FindSlotFor(cfg, sel);
@@ -170,10 +170,9 @@ void DrawLoopMasterRow() {
         App::SaveCurrentSettings();
     }
     if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("When the master animation reaches the end of\n"
-                          "its timeline, re-play it from frame 0. Useful\n"
-                          "for short title clips that otherwise freeze\n"
-                          "on their last authored frame.");
+        ImGui::SetTooltip("Play the master animation again from frame 0\n"
+                          "when it reaches the end of its timeline. Short\n"
+                          "title clips otherwise freeze on their last frame.");
     }
 }
 
@@ -188,35 +187,36 @@ void DrawRootLoopRow() {
         App::SaveCurrentSettings();
     }
     if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("How a scene-BG root that reaches its end is driven.\n"
-                          "Auto-hold (game default): mount once, let the root\n"
-                          "  play once and HOLD while nested children keep running.\n"
-                          "Force loop: re-drive the root to frame 0 each cycle\n"
-                          "  (ForceReplay + the continuous-loop flag sequence). Needed\n"
-                          "  for one-shot masters (bg_common).\n\n"
-                          "Applies to the live preview now and to the next non-label\n"
-                          "export. Persisted across restarts.");
+        ImGui::SetTooltip("What a scene background's root does when it reaches its end.\n"
+                          "Auto-hold (the game's default): mount once, play the root\n"
+                          "  once and hold it while nested children keep running.\n"
+                          "Force loop: send the root back to frame 0 every cycle\n"
+                          "  (ForceReplay plus the continuous-loop flag sequence).\n"
+                          "  One-shot masters such as bg_common need this.\n\n"
+                          "Applies to the live preview at once and to the next export\n"
+                          "that does not use a label. Saved across restarts.");
     }
 }
 
 void DrawContinuousLoopRow(App::State::LiveOverrides& ov, bool& changed) {
     int idx = ov.continuous_loop_mode + 1;
-    const char* kItems[3] = {"OFF", "default", "ON"};
+    const char* kItems[3] = {"Off", "Default", "On"};
     ImGui::TextDisabled("Continuous loop");
     if (Gui::Segmented("##live_cont", kItems, 3, &idx)) {
         ov.continuous_loop_mode = idx - 1;
         changed = true;
     }
     if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("Continuous-loop mode applied to the active stream.\n"
-                          "OFF: clear the CLayer flag - master reverts to\n"
-                          "     gotoAndStop saturation.\n"
-                          "default: leave unchanged (engine default).\n"
-                          "ON:  apply the BG dispatcher's continuous-loop flag\n"
-                          "     sequence - master keeps advancing past total_length,\n"
-                          "     sub-clips evolve naturally; required for BG 20.\n\n"
-                          "Re-applied on the NEXT stream switch - load or hot-swap\n"
-                          "the animation to take effect.");
+        ImGui::SetTooltip("Continuous loop mode for the active stream.\n"
+                          "Off: clear the CLayer flag, so the master stops at its\n"
+                          "     end as gotoAndStop does.\n"
+                          "Default: leave the engine's setting alone.\n"
+                          "On:  apply the background dispatcher's continuous-loop\n"
+                          "     flag sequence. The master keeps advancing past\n"
+                          "     total_length and sub-clips keep running. BG 20\n"
+                          "     needs this.\n\n"
+                          "Takes effect on the next stream switch, so load or\n"
+                          "hot-swap the animation after changing it.");
     }
 }
 
@@ -228,13 +228,13 @@ void DrawTrimRow(App::State::LiveOverrides& ov, bool& changed) {
         changed = true;
     }
     if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("Live-preview trim point.\n"
-                          "0   = no trim (loop forever via engine).\n"
-                          ">0  = at frame N (rendered frames since the last\n"
-                          "      stream-switch / hot-swap), restart the master\n"
-                          "      via ForceReplay. Lets you watch a loop of\n"
-                          "      exactly N frames at full framerate to inspect\n"
-                          "      the smoothness of the wrap.");
+        ImGui::SetTooltip("Trim point for the live preview.\n"
+                          "0:  no trim; the engine loops forever.\n"
+                          "N:  restart the master with ForceReplay after N\n"
+                          "    rendered frames since the last stream switch\n"
+                          "    or hot-swap. You then watch a loop of exactly\n"
+                          "    N frames at full frame rate and can check how\n"
+                          "    smoothly it wraps.");
     }
 }
 
@@ -257,26 +257,26 @@ void DrawMasterScaleRow() {
         App::SaveCurrentSettings();
     }
     if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("Multiplies the master stream's transform matrix by the\n"
-                          "given factor. Default 1.0x.\n\n"
-                          "1.5x preview matches what SDVX 7's BG dispatcher applies to\n"
-                          "SDVX-I-through-IV-era 720x1280 select_bg variants on a\n"
-                          "1080x1920 game.");
+        ImGui::SetTooltip("Multiplies the master stream's transform matrix by this\n"
+                          "factor. Default 1.0x.\n\n"
+                          "1.5x matches what SDVX 7's background dispatcher applies\n"
+                          "to the 720x1280 select_bg variants from SDVX I to IV on\n"
+                          "a 1080x1920 game.");
     }
 }
 
 void DrawBackgroundRow(App::State::LiveOverrides& ov, bool& changed) {
     int idx = (ov.bg_color_index < -1 || ov.bg_color_index > 4) ? 0 : ov.bg_color_index + 1;
-    const char* kItems[6] = {"default", "grey", "black", "red", "green", "blue"};
+    const char* kItems[6] = {"Default", "Grey", "Black", "Red", "Green", "Blue"};
     ImGui::TextDisabled("Background");
     if (Gui::Segmented("##bg_color", kItems, 6, &idx)) {
         ov.bg_color_index = idx - 1;
         changed = true;
     }
     if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("Preview background (AFP debug viewer F4).\n"
-                          "default = transparent. Affects the live preview only;\n"
-                          "the export uses its own Background setting.");
+        ImGui::SetTooltip("Preview background (F4 in the AFP debug viewer).\n"
+                          "Default is transparent. Only the live preview uses it;\n"
+                          "the export has its own background setting.");
     }
 }
 
@@ -285,25 +285,25 @@ void DrawFilterMcNameRows(App::State::LiveOverrides& ov, bool& changed) {
         changed = true;
     }
     if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("Toggle the AFP layer filter (debug viewer F7). Calls afp-core\n"
-                          "set-filter (ord 0x032) on the active stream with the filter id\n"
-                          "0x80000000|enable - the same call the scene's CLayer slot-32\n"
-                          "wrapper makes.");
+        ImGui::SetTooltip("Turn the AFP layer filter on or off, like F7 in the debug\n"
+                          "viewer. It makes the same afp-core set-filter call (ordinal\n"
+                          "0x032, filter id 0x80000000|enable) as the scene's CLayer\n"
+                          "slot-32 wrapper.");
     }
 
     if (ImGui::Checkbox("Show MC names (F3)", &ov.show_mc_names)) {
         changed = true;
     }
     if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("Enumerate the master's named child clips (afp_mc_enumerate_\n"
-                          "children, ord 0x079). Name-type \"at clip pos\" draws each name\n"
-                          "over the preview at its clip position; \"column\" lists them in\n"
-                          "the Live tab (matches the debug viewer's F3 / F6). Also feeds\n"
-                          "the child positions shown in the Scene tree.");
+        ImGui::SetTooltip("List the master's named child clips (afp_mc_enumerate_children,\n"
+                          "ordinal 0x079), as F3 and F6 do in the debug viewer. \"At clip\"\n"
+                          "draws each name over the preview at its clip's position;\n"
+                          "\"Column\" lists them in the Live tab. The Scene tree takes its\n"
+                          "child positions from this list too.");
     }
     if (ov.show_mc_names) {
         ImGui::Indent(Gui::Dpi::S(24.0F));
-        const char* kItems[2] = {"at clip pos", "column"};
+        const char* kItems[2] = {"At clip", "Column"};
         if (Gui::Segmented("##mc_name_type", kItems, 2, &ov.mc_name_type)) changed = true;
         ImGui::Unindent(Gui::Dpi::S(24.0F));
     }
@@ -377,8 +377,8 @@ void DrawLiveStateSection(const App::Status& status, const App::State::LiveState
         ImGui::Text("frame:  %d (since last switch)", live.frames_since_switch);
         ImGui::Text("flags0: 0x%08x", live.flags0);
         ImGui::Text("stream: 0x%08x", live.stream_id);
-        ImGui::Text("master_complete: %s", live.master_complete ? "YES" : "no");
-        ImGui::Text("filter: %s", live.filter_on ? "ON" : "off");
+        ImGui::Text("master_complete: %s", live.master_complete ? "yes" : "no");
+        ImGui::Text("filter: %s", live.filter_on ? "on" : "off");
     } else {
         ImGui::TextDisabled("(no active layer info)");
     }

@@ -1,7 +1,7 @@
 # Preview host protocol (`r573_preview_protocol`)
 
-The IFS editor never loads the game DLLs itself (ADR 0005). It drives a
-preview host process through this protocol: FlatBuffers messages over a
+The IFS editor never loads the game DLLs itself (ADR 0005). Instead it drives
+a preview host process through this protocol: FlatBuffers messages over a
 Windows named pipe (ADR 0007).
 
 ## Messages
@@ -24,19 +24,18 @@ Windows named pipe (ADR 0007).
 A reply is a `ReplyMessage` holding `Done`, `Loaded` (frame count and labels),
 `Frame` (the shared texture handle as a u64, its size, the frame drawn, and
 the game render size the frame was drawn at, which is the stage size) or
-`Failure` (a message). Replies are read with
-`flatbuffers::GetRoot<PreviewProtocol::ReplyMessage>`, since the schema's root
-type is the request. A receiver checks untrusted buffers with the generated
-verifiers before reading them.
+`Failure` (a message). The schema's root type is the request, so replies are
+read with `flatbuffers::GetRoot<PreviewProtocol::ReplyMessage>`. A receiver
+runs the generated verifiers over an untrusted buffer before reading it.
 
 ## Channel (`preview/preview_channel.h`)
 
 Each message travels as a little-endian u32 length and then the message.
 `PreviewChannel::Send` and `Receive` move whole messages over a pipe opened
 for overlapped I/O, so a read can time out (`CancelIoEx` stops the pending
-read). Messages above 256 MB are refused on both sides, so a corrupt length
-never allocates. A peer that closed the pipe is reported as "the pipe was
-closed".
+read). Both sides refuse messages above 256 MB, so a corrupt length never
+causes an allocation. When the peer has closed the pipe, the error is "the pipe
+was closed".
 
 - `Listen(name)` creates the single server instance of `\.\pipe\<name>` and
   rejects remote clients; `Accept(server, timeout)` waits for the client.
@@ -56,7 +55,7 @@ client naming the unanswered request.
 
 `preview_host <pipe name>` links `r573_afp_host` and `r573_preview_protocol`
 and nothing from the renderer's app or GUI. It creates the pipe, waits for
-the editor, then answers one request at a time until the pipe closes, when it
+the editor, then answers one request at a time. When the pipe closes it
 unloads and exits with code 0.
 
 `PreviewHost::Session` (`src/preview/host/`) handles the requests:
@@ -73,37 +72,38 @@ unloads and exits with code 0.
 | `BackgroundFill` | `SetBackgroundDrawn`: sets or clears movie flag `0x20` on the stream, and remembers the choice so every later load, reload, animation switch and symbol applies it again | `Done` |
 | `SetInputs` | remembers the whole set and applies each one with `SetInputTexture`, then re-applies it after every later load | `Done` |
 
-`Loaded` carries the root clip's frame count and labels read back from
+`Loaded` carries the root clip's frame count and labels, read back from
 afp-core. `Frame` carries the root clip's current frame. A request the host
-cannot serve gets a `Failure` naming what went wrong. Any request other than
-`Boot` gets one until a boot succeeds.
+cannot serve gets a `Failure` that says what went wrong, and until a boot
+succeeds every request other than `Boot` gets one.
 
 ### Textures are loaded once
 
 Loading `graphic/1/title.ifs` takes afp-utils about 4.7 seconds, nearly all of
-it creating the package's textures, and a reload used to pay that again on
-every edit. The host therefore splits each package it is sent
-(`Document::SplitPreviewPackages`): one package holds `tex/` with the root
-files (`magic`, the version files, `_info_`), the other holds everything but
-`tex/`. The texture half is loaded as `<package>__preview_textures` through
-`AfpManager::LoadTexturePackageFromMemory`, which raises the persistent texture
-boundary over its textures so that unloading the scene package keeps them, and
-it is replaced (`AfpManager::UnloadTexturePackage`, which puts the boundary
-back) only when its bytes differ from the last ones. The content half is
-loaded and reloaded under the package's own name as before; a reload of
+it spent creating the package's textures, and a reload used to cost that again
+on every edit. So the host splits each package it receives
+(`Document::SplitPreviewPackages`) in two: one package holds `tex/` and the
+root files (`magic`, the version files, `_info_`), the other holds everything
+except `tex/`. The texture half is loaded as `<package>__preview_textures`
+through `AfpManager::LoadTexturePackageFromMemory`, which raises the persistent
+texture boundary over its textures so that unloading the scene package keeps
+them. It is replaced (`AfpManager::UnloadTexturePackage`, which puts the
+boundary back) only when its bytes differ from the last ones. The content half
+is loaded and reloaded under the package's own name as before, and a reload of
 `title.ifs` now takes about 170 ms. Shapes find their images in the texture
 package because afp-utils looks image names up across every loaded package.
-When a package has no `tex/`, or does not parse, it is loaded whole. Replacing
-the textures unloads the scene first and seeks back to the frame it was on.
+A package with no `tex/`, or one that does not parse, is loaded whole.
+Replacing the textures unloads the scene first and seeks back to the frame it
+was on.
 
 `tests/local/afp_reload_tests.cpp` renders frame 300 of `title.ifs` from the
 whole package, from the two halves and after a reload of the content half, and
-requires the three frames to be identical byte for byte (the check was seen to
-fail with the textures left out of their half). It also checks that texture
-slots come back: releasing the scene textures now rewinds the next free slot to
-the persistent boundary. Before that, every reload of `title.ifs` used 8 new
-slots of 1024 and never gave them back, so a long editing session would have
-run out and started dropping textures.
+requires the three frames to be identical byte for byte (the check has been
+seen to fail when the textures were left out of their half). It also checks
+that texture slots are returned: releasing the scene textures now rewinds the
+next free slot to the persistent boundary. Before that, every reload of
+`title.ifs` used 8 new slots of 1024 and never returned them, so a long
+editing session would have run out and started dropping textures.
 
 Test: `tests/local/preview_host_process_tests.cpp` (`local_dll`) starts
 `preview_host.exe`, boots IIDX 33, sends `graphic/1/title.ifs` as bytes,
@@ -113,67 +113,68 @@ closes the pipe and checks that the host exits with code 0.
 
 ## The client (`PreviewClient::Host`)
 
-`src/preview/preview_client.h` is the editor's half of the protocol and has no
-Qt in it, so it is testable and reusable outside the application.
+`src/preview/preview_client.h` is the editor's half of the protocol. It has no
+Qt in it, so it can be tested and reused outside the application.
 
 `Host::Start(Options)` picks a pipe name unique to the process and the call
 (`\.\pipe\r573_preview_<pid>_<n>`), starts `preview_host.exe` with
-`CREATE_NO_WINDOW`, then connects. A host that never connects is killed and
-reported as an error, so a broken build cannot leave a process behind. The
+`CREATE_NO_WINDOW`, then connects. If the host never connects, the client kills
+it and reports an error, so a broken build cannot leave a process behind. The
 destructor closes the pipe, gives the host five seconds to exit and terminates
-it if it does not.
+it if it is still running.
 
-One method per request: `Boot`, `LoadPackage`, `SelectAnimation`, `Seek`,
-`Resize`, `Render`, `ShowSymbol`, `SetBackgroundDrawn`, `SetInputs`. Each builds its FlatBuffer, calls through
-`PreviewChannel::Client` and decodes the reply into a plain struct
+There is one method per request: `Boot`, `LoadPackage`, `SelectAnimation`,
+`Seek`, `Resize`, `Render`, `ShowSymbol`, `SetBackgroundDrawn`, `SetInputs`.
+Each builds its FlatBuffer, calls through `PreviewChannel::Client` and decodes
+the reply into a plain struct
 (`Loaded{frame_count, labels}`,
 `Frame{shared_handle, width, height, frame, stage_width, stage_height}`).
 A `Failure` reply becomes an error carrying the request name and the host's
 message; a hung or dead host becomes a channel error naming the request that
 was outstanding, which `LastRequest()` also keeps.
 
-`LoadPackage` takes a `reload` flag rather than deciding for itself, because
-only the caller knows whether this package is already open in the host.
+`LoadPackage` takes a `reload` flag from the caller, because only the caller
+knows whether this package is already open in the host.
 
 Test: the `local_dll` case in `tests/local/preview_host_process_tests.cpp`
-drives a real host through the client end to end, and two smaller cases check
-that a refused request surfaces the host's message with the request name, and
-that starting against a missing executable fails instead of hanging.
+drives a real host through the client end to end. Two smaller cases check that
+a refused request reports the host's message with the request name, and that
+starting with a missing executable fails instead of hanging.
 
 ## Writing an input (`SetInputs`)
 
-The editor's Inputs panel lets a person say what a named clip should draw, and
-`SetInputs` carries that to the host. The message is the WHOLE set, not a delta:
-the host replaces what it holds, so clearing an override is the same message
-with that entry gone and nothing has to be un-done.
+The editor's Inputs panel lets a person choose what a named clip should draw,
+and `SetInputs` carries that to the host. Each message holds the complete set
+of overrides. The host replaces what it holds, so clearing an override is the
+same message without that entry, and nothing has to be undone.
 
-An entry carries a picture, a hidden flag, or both. `SetInputShown` is the other
-half of the same walk: it writes `_visible` (`0x1007`) and then invalidates over
-the same-name sibling chain, which is what the game's own show-one-hide-the-rest
-helper does. The editor uses it to leave the leading zeros of a number blank,
-because the game's number drawer does the equivalent by multiplying their alpha
-by a per-font factor that is usually zero.
+An entry carries a picture, a hidden flag, or both. `SetInputShown` uses the
+same walk for the hidden flag: it writes `_visible` (`0x1007`) and then
+invalidates over the same-name sibling chain, as the game's own
+show-one-hide-the-rest helper does. The editor uses it to leave the leading
+zeros of a number blank. The game's number drawer gets the same result by
+multiplying their alpha by a per-font factor that is usually zero.
 
-`AfpManager::SetInputTexture(path, texture)` is the game's own write, in the
-game's own order. It resolves the path with `afp_mc_get_id_by_path`, then for
+`AfpManager::SetInputTexture(path, texture)` makes the same writes as the game,
+in the same order. It resolves the path with `afp_mc_get_id_by_path`, then for
 that clip and every same-name sibling after it
 (`afp_mc_get_relative_id(mc, 6)`, up to `kMostSiblings`) it calls
 `afp_play_work_load_bitmap(mc, texture, 0)` and then reads property `0x101E`
-back to invalidate, which is what makes the change reach the screen on the next
-render. That loop is `BM2D::CMovieClip::SetTexture` in IIDX 33's `bm2dx.dll`;
-the repo notes under `IIDX/afp_input_surface.md` show the pseudocode and how to
-find it again after a build bump. Walking the siblings matters because a value
-that appears twice on a screen is authored as two clips with the same name and
-the game sets both in one call.
+back to invalidate, so the change reaches the screen on the next render. That
+loop is `BM2D::CMovieClip::SetTexture` in IIDX 33's `bm2dx.dll`; the repo notes
+under `IIDX/afp_input_surface.md` show the pseudocode and how to find it again
+after a build bump. The siblings have to be walked because a value that appears
+twice on a screen is authored as two clips with the same name, and the game
+sets both in one call.
 
 `Session::ApplyInputs` runs from `Session::Loaded`, so overrides survive a
 reload, an animation switch and a symbol attach. A path that no longer resolves
-after a switch is skipped rather than failing the request, because the editor
+after a switch is skipped and the request still succeeds, because the editor
 keeps the set while the person moves between animations.
 
 ## Reading the frame back (`SharedTexture::Reader`)
 
-`src/preview/shared_texture.h` is how a process that is not the host turns a
+`src/preview/shared_texture.h` lets a process other than the host turn a
 `Frame` reply into pixels. `Reader::Create()` makes its own D3D9Ex device on
 the desktop window; `Read(handle, width, height)` opens the host's texture on
 that device, copies it into a `D3DPOOL_SYSTEMMEM` surface with
@@ -181,11 +182,11 @@ that device, copies it into a `D3DPOOL_SYSTEMMEM` surface with
 opened texture and the staging surface are kept until the handle or the size
 changes, so scrubbing a timeline re-opens nothing.
 
-The host's own flush is what makes this correct: `SharedFrame::Copy` blocks on
-a one-pixel lockable render target after the `StretchRect`, so by the time the
-editor gets the reply the shared texture holds the finished frame. A reader
-that skips that flush sees an empty texture, which is what happens if a test
-fills the shared texture directly instead of going through `SharedFrame::Copy`.
+This depends on the host's flush: `SharedFrame::Copy` blocks on a one-pixel
+lockable render target after the `StretchRect`, so by the time the editor gets
+the reply the shared texture holds the finished frame. Without that flush the
+reader sees an empty texture, which is what happens if a test fills the shared
+texture directly instead of going through `SharedFrame::Copy`.
 
 Tests: `tests/local/shared_texture_tests.cpp` (`local`) draws a known colour on
 one device and reads it back on another, and the `local_dll` host process test
@@ -193,35 +194,35 @@ reads the real rendered frame and requires it to be more than zeros.
 
 ## Showing one symbol on its own
 
-`ShowSymbol` is how the editor previews a sprite by itself. afp-core has a call
+The editor previews a sprite by itself with `ShowSymbol`. afp-core has a call
 that makes a movie clip show a symbol of its animation in place of what it was
 showing, Flash's `attachMovie` by linkage name: `AfpFuncs::afp_mc_attach_movie`,
 bound at `0x06d`, `int (int mc_id, const char *lib)`. `AfpManager::AttachSymbol`
-calls it on the root movie clip (`afp_mc_get_id_by_path(stream, "")`). Because
-every other request already reads and drives the root clip, nothing else
-changes: `Loaded` reports the symbol's frame count and labels, `Seek` moves
+calls it on the root movie clip (`afp_mc_get_id_by_path(stream, "")`). Every
+other request already reads and drives the root clip, so nothing else has to
+change: `Loaded` reports the symbol's frame count and labels, `Seek` moves
 through the symbol's frames, and `Render` reports the symbol's frame. Selecting
 or reloading the animation puts the whole animation back.
 
-The game finds the symbol by name only, never by character id, and it looks the
-name up in the animation's export table by binary search with ASCII letters
-folded to lower case, then in the import table. So only a symbol with an export
-name can be shown this way; `Document::PreviewSymbolFor` covers the rest by
-handing the host bytes that carry an extra export name. The call is read from
-the IIDX 33 and IIDX 34 afp-core, where it is the same routine at the same
-number; to find it again, xref the log string `afp_play_work_attach_movie_as2`,
-whose one reference is the attach routine, and whose two exported callers are
-`0x06d` and `0x089` (the second takes a stream id too, to take the symbol from
-another loaded animation). A build that exports by name is bound as
-`afp_mc_attach_movie`, which is the name the routine's AS3 twin logs, but no
-such build has been checked.
+The game finds the symbol by name, never by character id. It looks the name up
+in the animation's export table by binary search with ASCII letters folded to
+lower case, then in the import table. So only a symbol with an export name can
+be shown this way; `Document::PreviewSymbolFor` handles the rest by sending the
+host bytes that carry an extra export name. The call was read from the IIDX 33
+and IIDX 34 afp-core, where it is the same routine at the same number. To find
+it again, xref the log string `afp_play_work_attach_movie_as2`: its one
+reference is the attach routine, whose two exported callers are `0x06d` and
+`0x089` (the second also takes a stream id, to take the symbol from another
+loaded animation). A build that exports by name is bound as
+`afp_mc_attach_movie`, the name the routine's AS3 twin logs, but no such build
+has been checked.
 
 Test: `tests/local/sprite_preview_tests.cpp` (`local_dll`) loads IIDX 33's
 `graphic/1/title.ifs`, picks an exported sprite whose frame count differs from
 the root's, shows it and checks afp-core reports the sprite's frame count and
 label count, seeks into it, renders and checks the frame, goes back to the
 whole animation, shows it again by its name in upper case (the lookup folds
-case, so this has to work), and checks a name nobody exports is refused. A
-second case shows a sprite with no export name: the name is refused against the
-shipped bytes and accepted once the host has the preview bytes, and afp-core
-reports that sprite's single frame rather than the root's 840.
+case, so this has to work), and checks that a name nobody exports is refused.
+A second case shows a sprite with no export name: the name is refused against
+the shipped bytes and accepted once the host has the preview bytes, and
+afp-core then reports that sprite's single frame instead of the root's 840.

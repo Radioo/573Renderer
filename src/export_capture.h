@@ -10,7 +10,7 @@ struct Capabilities {
     bool loop_count = true;
     bool blend_seam = true;
     bool transparent_bg = true;
-    const char* natural_end = "the master animation's natural end-of-timeline";
+    const char* natural_end = "the master animation reaches the end of its timeline";
 };
 
 class ICaptureDriver {

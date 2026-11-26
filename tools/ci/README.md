@@ -1,15 +1,15 @@
 # tools/ci
 
-The quality gates. Every `check_*.py` / `run_*.py` script here is run by
-`tools/checks.sh` and by the hosted `quality-gates` workflow, and each one exits
-non-zero with the offending paths on failure. Rationale for every rule lives in
-`docs/gates.md`; this file is how to run them. The ones that are NOT gates are
-`gen_layer_verdicts.py`, a build step, `stage_editor.py` /
-`check_editor_starts.py`, which package the editor, and `package_release.py`,
-which packs the release zips, all described at the bottom.
+The quality gates. `tools/checks.sh` and the hosted `quality-gates` workflow
+run every `check_*.py` / `run_*.py` script here, and each one exits non-zero
+and prints the offending paths when it fails. `docs/gates.md` explains why each
+rule exists; this file says how to run them. Four scripts here are not gates
+and are described at the bottom: `gen_layer_verdicts.py` is a build step,
+`stage_editor.py` and `check_editor_starts.py` package the editor, and
+`package_release.py` packs the release zips.
 
-This is a uv project: `uv run <script>` works with nothing to install. Commands
-below assume you are in this directory.
+This is a uv project, so `uv run <script>` works with nothing to install. The
+commands below assume you are in this directory.
 
 ## The gates
 
@@ -44,8 +44,8 @@ uv run run_tidy.py
 ## Packaging the editor
 
 `stage_editor.py` copies a runnable editor folder out of the two build trees,
-and `check_editor_starts.py` proves the folder actually runs. The `editor` job
-of the `Build` workflow uses both, and they work the same way locally:
+and `check_editor_starts.py` checks that the folder runs. The `editor` job of
+the `Build` workflow uses both, and they work the same way locally:
 
 ```bash
 uv run stage_editor.py --editor ../../build-editor --host ../../build --into ../../dist
@@ -55,27 +55,27 @@ uv run check_editor_starts.py --dist ../../dist
 `--editor` is the editor's build directory (`ifs_editor.exe`, which links Qt,
 its plugins and the C++ runtime statically), `--host` is the renderer's
 (`preview_host.exe`, which the editor runs to draw anything), and `--into` is
-emptied and rebuilt. Those two executables are the whole staged folder.
+emptied and rebuilt. The staged folder holds only those two executables.
 `--symbols` adds their `.pdb`s, which are left out by default because the
-editor's is around 700 MB. The stager fails, naming what is short, when either
-executable is missing.
+editor's is around 700 MB. If either executable is missing, the stager fails
+and names what is missing.
 
 `tools/checks.sh` runs both after the editor suites, so a packaging regression
 fails the local gate too.
 
 `check_editor_starts.py` runs the staged `ifs_editor.exe` with
-`QT_QPA_PLATFORM=minimal` for six seconds and fails if it exits, which is what a
-missing DLL or a missing platform plugin looks like. So a build that has
-slipped back to needing a DLL fails here, since the staged folder has none.
+`QT_QPA_PLATFORM=minimal` for six seconds and fails if it exits, which is what
+happens when a DLL or the platform plugin is missing. The staged folder has no
+DLLs, so a build that has started needing one again fails here.
 
 ## Packing the release zips
 
 `package_release.py` writes the two release assets, `573Renderer.zip`
 (`573Renderer.exe`, `573Renderer32.exe`, `573Encoder.exe`) and `573Editor.zip`
-(`ifs_editor.exe`, `preview_host.exe`), both flat and both with no DLL, since
-every one of those exes is fully static. The `release` job of the `Build`
-workflow runs it on a `v*` tag; locally, after `build.bat`, `build32.bat` and
-staging the editor into `dist/`:
+(`ifs_editor.exe`, `preview_host.exe`). Both are flat and contain no DLL,
+because every one of those exes is fully static. The `release` job of the
+`Build` workflow runs it on a `v*` tag. To run it locally, first run
+`build.bat` and `build32.bat` and stage the editor into `dist/`:
 
 ```bash
 uv run package_release.py --win64 ../../bin --win32 ../../bin --editor ../../dist --into ../../release
@@ -85,48 +85,48 @@ uv run package_release.py --win64 ../../bin --win32 ../../bin --editor ../../dis
 `573Renderer32.exe` (both are `bin/` locally, separate artefact folders in
 CI), `--editor` is a folder `stage_editor.py` produced, and `--into` gets the
 two zips. It takes only those five named files, so a PDB staged with
-`--symbols` never ends up in a zip, and it writes nothing and names every
-missing file when one of them is absent (`docs/ci.md`, "Release zips").
+`--symbols` never ends up in a zip. If any of them is absent it writes nothing
+and names every missing file (`docs/ci.md`, "Release zips").
 
-`run_format.py` and `run_tidy.py` resolve the pip-pinned binary out of the venv
-rather than trusting PATH, and refuse to run on a version mismatch.
+`run_format.py` and `run_tidy.py` take the pip-pinned binary from the venv
+instead of whatever is on PATH, and refuse to run on a version mismatch.
 
 ## The preset gates need a build
 
 `check_preset_layers.py` and `check_preset_states.py` read the preset documents
 the renderer dumps, so `bin/573Renderer.exe` has to exist (`build.bat`, which
-`tools/checks.sh` runs first). They shell out to
-`573Renderer.exe --preset-dump-defaults <tmpdir>` themselves; no game data and no
-window are involved. To check an existing dump instead, for example one written
+`tools/checks.sh` runs first). They run
+`573Renderer.exe --preset-dump-defaults <tmpdir>` themselves and need no game
+data and no window. To check an existing dump instead, for example one written
 by hand while debugging a gate:
 
 ```bash
 uv run check_preset_layers.py --dump ../../build/preset_dump
 ```
 
-The exe is run WITH the dump directory as its working directory, because the
-renderer writes `renderer.log` next to wherever that is: the log lands in the
-temporary dump and goes away with it instead of being left here, and when the dump
-exits non-zero the gate prints the tail of that log with the exit code. The exe's
-own stdout is not it - `Log::Init` gives the process a fresh console, so a pipe
-placed on stdout captures nothing.
+The gates run the exe with the dump directory as its working directory,
+because the renderer writes `renderer.log` into its working directory. The log
+then lands in the temporary dump and is deleted with it instead of being left
+here, and when the dump exits non-zero the gate prints the tail of that log with
+the exit code. The exe's stdout is no help: `Log::Init` gives the process a
+fresh console, so a pipe on stdout captures nothing.
 
 ## gen_layer_verdicts.py (a build step, not a gate)
 
 Compiles the classification table in `docs/preset_layers.md` into a C++ lookup
 (`Preset::VerdictFor` / `Preset::VerdictName`) so the editor can show a layer's
-verdict without shipping the markdown. CMake runs it for you; run it by hand only
-to inspect the output:
+verdict without shipping the markdown. CMake runs it; run it by hand only to
+look at the output:
 
 ```bash
 uv run gen_layer_verdicts.py ../../docs/preset_layers.md ../../build/generated/preset_layer_verdicts.cpp
 ```
 
-Two positional arguments, no flags: the markdown to read and the `.cpp` to write.
-It reads the same rows the `check_preset_layers.py` gate reads (a table line whose
-fourth column is `background` or `chrome`), sorts them, and only rewrites the
-output when the text changes. It fails only when the markdown has no such rows.
-The output lives in the build tree and is never committed.
+It takes two positional arguments and no flags: the markdown to read and the
+`.cpp` to write. It reads the same rows as the `check_preset_layers.py` gate (a
+table line whose fourth column is `background` or `chrome`), sorts them, and
+rewrites the output only when the text changes. It fails only when the markdown
+has no such rows. The output lives in the build tree and is never committed.
 
 ## Self-test
 
@@ -134,13 +134,13 @@ The output lives in the build tree and is never committed.
 uv run pytest
 ```
 
-`tests/test_host_isolation.py` builds throwaway git repositories and asserts the
-host-isolation gate passes on a command-only editor file, fails on each of the three
-hosts with the file and line named, covers the preset library, and ignores panels
-outside its scope.
+`tests/test_host_isolation.py` builds throwaway git repositories and checks that
+the host-isolation gate passes on a command-only editor file, fails on each of
+the three hosts and names the file and line, covers the preset library, and
+ignores panels outside its scope.
 
-`tests/test_preset_gates.py` builds synthetic dump directories and asserts the two
-preset gates fail on each blind spot they are supposed to catch: an empty dump, a
+`tests/test_preset_gates.py` builds synthetic dump directories and checks that
+the two preset gates fail on each case they are meant to catch: an empty dump, a
 dump with no sprite clips, a dump with no markers or choices, an unclassified
 layer, an undocumented marker, a documented state the preset lost, and a docs row
 naming a preset that does not exist. It needs no exe, so it runs in the hosted

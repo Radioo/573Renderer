@@ -206,7 +206,7 @@ TEST_CASE("status strip export tag reopens the export modal", "[gui][shell]") {
     test->TestFunc = [](ImGuiTestContext* ctx) {
         ctx->SetRef("##main");
         GuiTest::FocusChild(ctx, "status_strip");
-        ctx->ItemClick("export done");
+        ctx->ItemClick("Export done");
         ctx->Yield(2);
         IM_CHECK(ctx->WindowInfo("//Export").Window != nullptr);
     };
@@ -227,7 +227,7 @@ TEST_CASE("status strip hides the reveal button unless an export finished", "[gu
         ctx->SetRef("##main");
         GuiTest::FocusChild(ctx, "status_strip");
         IM_CHECK(ctx->ItemExists("Open folder") == false);
-        IM_CHECK(ctx->ItemExists("capturing 12"));
+        IM_CHECK(ctx->ItemExists("Capturing 12"));
     };
     harness.Run(test);
 

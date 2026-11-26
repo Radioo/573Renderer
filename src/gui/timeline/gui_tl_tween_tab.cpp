@@ -167,7 +167,7 @@ FieldEvent DrawFields(Doc::Document& document, const Doc::Clip& clip, int index,
         RowLabel(field.id.c_str());
         ImGui::TextDisabled("(not keyed)");
         ImGui::SameLine();
-        if (!ImGui::SmallButton(("+ add###tl_tween_add_" + field.id).c_str())) continue;
+        if (!ImGui::SmallButton(("Add###tl_tween_add_" + field.id).c_str())) continue;
         const std::optional<Doc::ParamValue> value =
             Editor::ResolvedFieldValue(document, clip.id, field.id, playhead);
         if (!value.has_value()) continue;
@@ -184,8 +184,8 @@ FieldEvent DrawTweenTab(Doc::Document& document, const std::string& clip_id, int
     if (clip == nullptr) return FieldEvent::None;
     const int duration = Editor::ClipDuration(document, clip_id);
     ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
-    ImGui::TextWrapped("keys hold at (frames from the clip start), the ease that reaches the next "
-                       "key, and the values they name. Clip duration %d frames.",
+    ImGui::TextWrapped("Each key has a frame (counted from the clip start), the ease toward the "
+                       "next key, and the values it sets. The clip lasts %d frames.",
                        duration);
     ImGui::PopStyleColor();
 
@@ -195,7 +195,7 @@ FieldEvent DrawTweenTab(Doc::Document& document, const std::string& clip_id, int
     const int local = playhead - clip->start;
     const bool reachable = local >= 0 && local <= duration;
     ImGui::BeginDisabled(!reachable);
-    if (ImGui::Button("+ key at playhead###tl_tween_add_key")) {
+    if (ImGui::Button("Add key at playhead###tl_tween_add_key")) {
         const int index = Editor::AddKeyAt(document, clip_id, local);
         if (index >= 0) {
             Editor::Global().SelectKey(clip_id, index);
@@ -206,10 +206,10 @@ FieldEvent DrawTweenTab(Doc::Document& document, const std::string& clip_id, int
     ImGui::EndDisabled();
     ImGui::SameLine();
     if (reachable) {
-        ImGui::TextDisabled("playhead frame %d, clip-relative %d", playhead, local);
+        ImGui::TextDisabled("Playhead at frame %d (frame %d of the clip)", playhead, local);
     } else {
-        ImGui::TextDisabled("playhead frame %d is outside this clip (clip-relative %d)", playhead,
-                            local);
+        ImGui::TextDisabled("Playhead at frame %d is outside this clip (frame %d of the clip)",
+                            playhead, local);
     }
 
     clip = Editor::ClipById(document, clip_id);
@@ -235,7 +235,7 @@ FieldEvent DrawTweenTab(Doc::Document& document, const std::string& clip_id, int
             Editor::Request{.kind = Editor::RequestKind::CurveEditor, .clip_id = clip_id});
     }
     ImGui::SameLine();
-    ImGui::TextDisabled("C on a selected clip opens the same editor");
+    ImGui::TextDisabled("C on a selected clip also opens it");
     return event;
 }
 

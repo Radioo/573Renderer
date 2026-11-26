@@ -39,8 +39,8 @@ const GameProfile::Profile* ResolveBootProfile(App::State& state, const std::str
         if (profile == nullptr) {
             FailBoot(state, "Unknown game profile '" + profile_slug +
                                 "'. Known profiles: " + known_slugs +
-                                ". Fix --profile / the Setup screen selection, or leave "
-                                "it empty to auto-detect from the game dir path.");
+                                ". Choose one with --profile or on the Setup screen, or "
+                                "leave it empty to detect it from the game folder path.");
             return nullptr;
         }
         LOG("Boot", "Game profile: %s [slug=%s] (source: explicit)", profile->name, profile->slug);
@@ -48,9 +48,9 @@ const GameProfile::Profile* ResolveBootProfile(App::State& state, const std::str
     }
     const GameProfile::Profile* profile = GameProfile::AutoDetect(game_dir);
     if (profile == nullptr) {
-        FailBoot(state, "Couldn't auto-detect a game profile from '" + game_dir +
-                            "' (no known substring in the path). Pass --profile <slug> or "
-                            "pick a profile in the Setup screen. Known profiles: " +
+        FailBoot(state, "Could not detect a game profile from '" + game_dir +
+                            "': no known game name appears in the path. Pass --profile "
+                            "<slug> or pick a profile on the Setup screen. Known profiles: " +
                             known_slugs + ".");
         return nullptr;
     }
@@ -71,7 +71,7 @@ bool CreateRenderWindowAndDevice(App::State& state, int render_w, int render_h) 
         (present.w != g_d3d.width) ? Stretch::FilterName(g_d3d.stretch_filter) : "1:1");
     HWND hwnd = AppWindow::Create(present.w, present.h);
     if ((hwnd == nullptr) || !g_d3d.Init(hwnd)) {
-        return FailBoot(state, "Render window / D3D9 init failed.");
+        return FailBoot(state, "Could not create the render window or initialise D3D9.");
     }
     int frame_w = 0;
     int frame_h = 0;

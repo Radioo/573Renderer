@@ -30,7 +30,7 @@ bool ReadbackAndSubmit(Export::Session& sess, D3D9State& d3d) {
     int w = 0;
     int h = 0;
     if (!d3d.ReadPresentBGRA(bgra_buf, w, h)) {
-        Export::FailSession(sess, "D3D9 presented-frame readback failed");
+        Export::FailSession(sess, "could not read the presented frame back from D3D9");
         return false;
     }
     Export::SubmitOneFrame(sess, bgra_buf.data(), w, h);
@@ -313,7 +313,7 @@ void AfpDdrCaptureDriver::TickCapture(Export::Session& sess, D3D9State& d3d) {
         int w = 0;
         int h = 0;
         if (!d3d.ReadPresentBGRA(bgra_buf, w, h)) {
-            Export::FailSession(sess, "D3D9 presented-frame readback failed");
+            Export::FailSession(sess, "could not read the presented frame back from D3D9");
             return;
         }
         HandleDdrLoopFrame(sess, bgra_buf, w, h);

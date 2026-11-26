@@ -558,7 +558,7 @@ TEST_CASE("A motion sketch plays the animation while the drag is held and keys w
     emit timeline->FrameChosen(kPreviewFrame);
     emit timeline->DepthChosen(*widest);
     {
-        Script owned({Choose(QString("Let the project own depth %1 from here").arg(*widest))});
+        Script owned({Choose(QString("Keyframe depth %1 from here").arg(*widest))});
         emit timeline->MenuRequested(QPoint(4, 4), kPreviewFrame, QString());
         REQUIRE(Settle([&owned] { return owned.Finished(); }));
         CHECK(owned.Problems().isEmpty());
@@ -661,7 +661,7 @@ TEST_CASE("The graph's playhead keeps up while the animation plays") {
     emit timeline->FrameChosen(kPreviewFrame);
     emit timeline->DepthChosen(*widest);
     {
-        Script owned({Choose(QString("Let the project own depth %1 from here").arg(*widest))});
+        Script owned({Choose(QString("Keyframe depth %1 from here").arg(*widest))});
         emit timeline->MenuRequested(QPoint(4, 4), kPreviewFrame, QString());
         REQUIRE(Settle([&owned] { return owned.Finished(); }));
         CHECK(owned.Problems().isEmpty());
@@ -741,7 +741,7 @@ TEST_CASE("An IIDX 34 package opened on an IIDX 33 install is reported once as i
     INFO(opening.Problems().join("|").toStdString());
     CHECK(QDir(kept) == QDir(chosen));
     REQUIRE(opening.Problems().size() == 1);
-    CHECK(opening.Problems().front().contains("might be incompatible"));
+    CHECK(opening.Problems().front().contains("may not work on"));
     CHECK(opening.Problems().front().contains("iidx34"));
     CHECK(opening.Problems().front().contains("iidx33"));
 }

@@ -119,9 +119,9 @@ void RenderClipTab() {
     Editor::State& editor = Editor::Global();
     if (!editor.Loaded() || editor.Selection().empty()) {
         EndGesture(editor);
-        ImGui::TextDisabled("no clip selected");
-        ImGui::TextDisabled("Click a clip in the timeline; double-click or Enter opens its "
-                            "properties modal.");
+        ImGui::TextDisabled("No clip selected");
+        ImGui::TextDisabled("Click a clip in the timeline. Double-click it or press Enter to "
+                            "open its properties.");
         return;
     }
 
@@ -130,7 +130,7 @@ void RenderClipTab() {
     const Editor::ClipRef ref = Editor::FindClip(working, clip_id);
     if (!ref.Valid()) {
         EndGesture(editor);
-        ImGui::TextDisabled("no clip selected");
+        ImGui::TextDisabled("No clip selected");
         return;
     }
     Doc::Track& track = working.tracks[(std::size_t)ref.track];
@@ -143,7 +143,7 @@ void RenderClipTab() {
 
     if (ImGui::Button("Properties...###insp_clip_props")) RequestClipModal(clip.id, false);
     if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("Open the full clip properties modal (Enter on the selected clip).");
+        ImGui::SetTooltip("Open all of the clip's properties (Enter on the selected clip).");
     }
     ImGui::Separator();
 

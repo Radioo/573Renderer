@@ -17,10 +17,10 @@ DriftSheet::DriftSheet(const std::vector<DriftRow>& rows, QWidget* parent)
     : QDialog(parent), rows_(new QTableWidget(static_cast<int>(rows.size()), 2)) {
     setObjectName("drift_sheet");
     setWindowTitle(tr("Changed since the last export"));
-    auto* said = new QLabel(
-        tr("These entries changed in the IFS since the project last exported them. Tick the ones "
-           "to keep as the IFS holds them, which drops the project's source for them. The rest "
-           "are exported again the next time you export."));
+    auto* said =
+        new QLabel(tr("These entries changed in the IFS after the project last exported them. Tick "
+                      "the ones to keep as they are in the IFS; the project stops writing those. "
+                      "The rest are written again at the next export."));
     said->setWordWrap(true);
 
     rows_->setObjectName("drift_rows");

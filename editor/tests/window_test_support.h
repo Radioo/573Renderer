@@ -767,7 +767,7 @@ inline QString OwnDroppedDot(Opened& opened) {
     }
     emit timeline->DepthChosen(3);
     {
-        Script owned({Choose("Let the project own depth 3 from here")});
+        Script owned({Choose("Keyframe depth 3 from here")});
         emit timeline->MenuRequested(QPoint(4, 4), 0, QString());
         REQUIRE(Settle([&owned] { return owned.Finished(); }));
         CHECK(owned.Problems().isEmpty());

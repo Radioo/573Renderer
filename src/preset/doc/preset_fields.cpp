@@ -20,13 +20,15 @@ constexpr Range kCycleFrames = {.min = 0.0F, .max = 36000.0F, .step = 1.0F};
 constexpr Range kLevel = {.min = 0.0F, .max = 255.0F, .step = 1.0F};
 
 constexpr auto kParamOverrideFields = std::to_array<FieldDesc>({
-    Field<ParamOverrideCmd, &ParamOverrideCmd::id>({.id = "id",
-                                                    .kind = FieldKind::String,
-                                                    .help = "Schema id the override writes.",
-                                                    .required = true}),
-    Field<ParamOverrideCmd, &ParamOverrideCmd::value>({.id = "value",
-                                                       .kind = FieldKind::OverrideField,
-                                                       .help = "Value typed by the schema kind."}),
+    Field<ParamOverrideCmd, &ParamOverrideCmd::id>(
+        {.id = "id",
+         .kind = FieldKind::String,
+         .help = "Schema parameter id the override sets.",
+         .required = true}),
+    Field<ParamOverrideCmd, &ParamOverrideCmd::value>(
+        {.id = "value",
+         .kind = FieldKind::OverrideField,
+         .help = "New value, of the type that parameter takes."}),
 });
 
 constexpr auto kRenderSettingsFields = std::to_array<FieldDesc>({
@@ -71,13 +73,13 @@ constexpr auto kRhythmBeatFields = std::to_array<FieldDesc>({
          .kind = FieldKind::Int,
          .range = {.min = -3600.0F, .max = 3600.0F, .step = 1.0F},
          .unit = "frames",
-         .help = "Frame grid A counts from."}),
+         .help = "Frame beat grid A counts from."}),
     Field<RhythmBeat, &RhythmBeat::offset_b>(
         {.id = "offset_b",
          .kind = FieldKind::Int,
          .range = {.min = -3600.0F, .max = 3600.0F, .step = 1.0F},
          .unit = "frames",
-         .help = "Frame grid B counts from."}),
+         .help = "Frame beat grid B counts from."}),
 });
 
 constexpr auto kRhythmJitterFields = std::to_array<FieldDesc>({
@@ -113,7 +115,7 @@ constexpr auto kOptionSelectFields = std::to_array<FieldDesc>({
 constexpr auto kFogFields = std::to_array<FieldDesc>({
     Field<FogCmd, &FogCmd::enabled>({.id = "enabled",
                                      .kind = FieldKind::Bool,
-                                     .help = "Whether the model passes are drawn with fog on."}),
+                                     .help = "Whether the models are drawn with fog."}),
     Field<FogCmd, &FogCmd::color>({.id = "color",
                                    .kind = FieldKind::Vec3,
                                    .range = kUnitInterval,
@@ -136,7 +138,7 @@ constexpr auto kFogFields = std::to_array<FieldDesc>({
         {.id = "density",
          .kind = FieldKind::Float,
          .range = kUnitInterval,
-         .help = "Carried to the device but inert: the fade is linear, not exponential.",
+         .help = "Passed to the device but has no effect, because the fade is linear.",
          .tweenable = true}),
 });
 
@@ -169,7 +171,7 @@ constexpr auto kClearCycleFields = std::to_array<FieldDesc>({
          .kind = FieldKind::Int,
          .range = kCycleFrames,
          .unit = "frames",
-         .help = "Frames added before the second window's modulo."}),
+         .help = "How many frames before the end of the strobe cycle the second window opens."}),
     Field<ClearCycleCmd, &ClearCycleCmd::strobe_window_b>({.id = "strobe_window_b",
                                                            .kind = FieldKind::Int,
                                                            .range = kCycleFrames,
@@ -180,7 +182,7 @@ constexpr auto kClearCycleFields = std::to_array<FieldDesc>({
          .kind = FieldKind::Int,
          .range = {.min = 0.0F, .max = 64.0F, .step = 1.0F},
          .unit = "frames",
-         .help = "Frames whose number divides by this stay unlit, 0 to flash every frame."}),
+         .help = "Frames whose number is a multiple of this stay unlit. 0 skips none."}),
     Field<ClearCycleCmd, &ClearCycleCmd::ramp_period>(
         {.id = "ramp_period",
          .kind = FieldKind::Int,
@@ -192,7 +194,7 @@ constexpr auto kClearCycleFields = std::to_array<FieldDesc>({
          .kind = FieldKind::Int,
          .range = kCycleFrames,
          .unit = "frames",
-         .help = "Frames the ramp falls over, from the cycle start."}),
+         .help = "Frames the ramp takes to fall, counted from the cycle start."}),
     Field<ClearCycleCmd, &ClearCycleCmd::ramp_peak>(
         {.id = "ramp_peak",
          .kind = FieldKind::Int,

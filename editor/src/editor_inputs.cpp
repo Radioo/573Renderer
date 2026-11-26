@@ -204,7 +204,7 @@ QWidget* Window::BuildInputValue() {
 
     down->addWidget(BuildInputSpread());
 
-    auto* clear = new QPushButton(tr("Put it back"));
+    auto* clear = new QPushButton(tr("Reset to the file's value"));
     clear->setObjectName("input_clear");
     connect(clear, &QPushButton::clicked, this, [this] { ClearInputValue(); });
     Shrinkable(clear);
@@ -262,7 +262,7 @@ void Window::SpreadChosenInput() {
     const double advance = InputAdvance(*slot);
     if (advance <= 0) {
         ShowRefusal(
-            tr("%1 draws nothing wide enough to lay digits out from").arg(input_chosen_name_));
+            tr("%1 draws nothing with a width to space the digits by").arg(input_chosen_name_));
         return;
     }
     const auto places = static_cast<uint32_t>(input_spread_->value());
@@ -444,8 +444,8 @@ QString Window::InputHint(const Document::InputSlot* slot) const {
     if (ChosenNumber() != nullptr) return tr("Type a number and press Enter.");
     if (input_chosen_number_ < 0) return tr("Pick the picture this clip draws.");
     const Document::InputNumber& one = input_numbers_[input_chosen_number_];
-    return tr("This name has one place in the file, so it draws one of the %1 pictures "
-              "%2. A number of several digits is several named places.")
+    return tr("This name is a single digit place, so it draws one of the %1 pictures %2. A number "
+              "with more digits needs one named place per digit.")
         .arg(kDigits)
         .arg(Family(one, *slot));
 }

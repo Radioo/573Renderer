@@ -129,7 +129,7 @@ TEST_CASE("A name with one digit place offers a picture, never a number box to r
     QApplication::processEvents();
     CHECK(number->isHidden());
     CHECK_FALSE(texture->isHidden());
-    CHECK(hint->text().contains("one place in the file"));
+    CHECK(hint->text().contains("a single digit place"));
     CHECK(hint->text().contains("num0_flat to num9_flat"));
 }
 

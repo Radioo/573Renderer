@@ -27,9 +27,9 @@ void DrawQproIssues(const QproExtract::Status& st) {
     const ImVec4 orange(1.0F, 0.80F, 0.35F, 1.0F);
     const ImVec4 red(1.0F, 0.55F, 0.45F, 1.0F);
     ImGui::Spacing();
-    ImGui::TextColored(
-        (st.failed != 0) ? red : orange,
-        "%d skipped, %d failed - the following parts were not extracted:", st.skipped, st.failed);
+    ImGui::TextColored((st.failed != 0) ? red : orange,
+                       "%d skipped, %d failed. These parts were not extracted:", st.skipped,
+                       st.failed);
     if (ImGui::SmallButton("Copy list")) {
         std::string all;
         for (const auto& is : st.issues) {
@@ -99,16 +99,16 @@ void DrawScanButton(bool busy, const QproExtract::ScanResult& scan) {
     }
     ImGui::EndDisabled();
     if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-        ImGui::SetTooltip("Enumerate every qpro part in the loaded game (read directly from "
-                          "bm2dx.dll) and group them\n"
-                          "by their source IFS's modified date, so you can render ONLY the parts "
-                          "from a recent update.\n"
-                          "The manifests (2dx_qpro.json / qpro_videos.json) always cover the FULL "
-                          "part set regardless.");
+        ImGui::SetTooltip("List every qpro part in the loaded game, read straight from "
+                          "bm2dx.dll, and group the parts\n"
+                          "by the modified date of their source IFS, so you can render just the "
+                          "parts from a recent update.\n"
+                          "The manifests (2dx_qpro.json and qpro_videos.json) always cover every "
+                          "part.");
     }
     if (scan.running) {
         ImGui::SameLine();
-        ImGui::TextDisabled("scanning bm2dx.dll ...");
+        ImGui::TextDisabled("Scanning bm2dx.dll...");
     }
     if (!scan.error.empty())
         ImGui::TextColored(ImVec4(1.0F, 0.55F, 0.45F, 1.0F), "Scan failed: %s", scan.error.c_str());
@@ -131,8 +131,8 @@ void DrawPartGroup(size_t gi) {
     }
     ImGui::SameLine();
 
-    if (ImGui::TreeNode("node", "%s  -  %d parts (%d selected)", g.date.c_str(),
-                        (int)g.parts.size(), gsel)) {
+    if (ImGui::TreeNode("node", "%s: %d parts (%d selected)", g.date.c_str(), (int)g.parts.size(),
+                        gsel)) {
         ImGuiListClipper clip;
         clip.Begin((int)g.parts.size());
         while (clip.Step()) {
@@ -192,15 +192,15 @@ bool s_ex_back = true;
 
 void DrawQproIntro(App::State& state) {
     ImGui::Spacing();
-    ImGui::TextWrapped("Extract the qpro (Q-pro DJ avatar) parts from the loaded game into a "
-                       "web-ready asset layout. The part lists are read from bm2dx.dll by "
-                       "pattern, so it survives game updates. Body parts are assembled via the "
-                       "qp_motion template; the other parts are cropped from their texture "
+    ImGui::TextWrapped("Extract the qpro (Q-pro DJ avatar) parts from the loaded game as "
+                       "assets for a website. The part lists are found in bm2dx.dll by pattern, "
+                       "so this keeps working after game updates. Body parts are assembled with "
+                       "the qp_motion template; the other parts are cropped from their texture "
                        "atlases.");
     ImGui::Spacing();
-    ImGui::TextDisabled("Select an output folder - the assets and qpro JSON are written into a "
-                        "\"qpro_assets\" subfolder inside it. Approximately 2300 parts; extraction "
-                        "takes several minutes and the live preview pauses while it runs.");
+    ImGui::TextDisabled("The assets and qpro JSON go into a \"qpro_assets\" subfolder of the "
+                        "output folder you choose. There are about 2300 parts: extraction takes "
+                        "several minutes, and the live preview pauses while it runs.");
     ImGui::Spacing();
 
     int rw = 0;
@@ -209,26 +209,27 @@ void DrawQproIntro(App::State& state) {
     const bool body_ok = (rw == 520 && rh == 704);
     if (body_ok) {
         ImGui::TextColored(ImVec4(0.6F, 0.9F, 0.6F, 1.0F),
-                           "Render size 520x704 - body parts will be assembled.");
+                           "Render size is 520x704, so body parts will be assembled.");
     } else {
         ImGui::TextColored(
             ImVec4(1.0F, 0.85F, 0.5F, 1.0F),
-            "Body parts need a 520x704 render size (current %dx%d). Select the "
-            "\"520x704 (qpro avatar)\" preset on the Setup screen and re-Load to include "
-            "bodies; the other parts (hair/hand/face/head/back) extract at any size.",
+            "Body parts need a 520x704 render size (now %dx%d). Pick the "
+            "\"520x704 (qpro avatar)\" preset on the Setup screen and load again to include "
+            "them. The other parts (hair, hand, face, head, back) extract at any size.",
             rw, rh);
     }
     ImGui::Spacing();
 }
 
 void DrawQproOptions() {
-    ImGui::Checkbox("Keep static base fills un-hue-shifted", &s_scope_hue);
+    ImGui::Checkbox("Hue-shift effect fills only", &s_scope_hue);
     if (ImGui::IsItemHovered()) {
         ImGui::SetTooltip(
-            "Effect parts (e.g. the 21chronicle rainbow sword) are one sprite with a\n"
-            "rainbow effect fill + a static gold base fill. afp hue-shifts both; the\n"
-            "live game shifts only the rainbow. On (default) scopes the hue to the\n"
-            "effect bitmap so the gold base stays gold. Off = afp-literal (whole sprite).");
+            "Effect parts such as the 21chronicle rainbow sword are one sprite with a\n"
+            "rainbow effect fill and a static gold base fill. afp hue-shifts both; the\n"
+            "live game shifts only the rainbow. On (the default) limits the shift to the\n"
+            "effect bitmap so the gold base stays gold. Off shifts the whole sprite, as\n"
+            "afp does.");
     }
     ImGui::Spacing();
 
@@ -238,21 +239,20 @@ void DrawQproOptions() {
     s_qpro_fps = std::min(s_qpro_fps, 240);
     if (ImGui::IsItemHovered()) {
         ImGui::SetTooltip(
-            "Encode / sample rate for the exported clips (like the renderer's render_fps).\n"
-            "Animations play at their NATIVE game speed; backgrounds are real-time-sampled to\n"
-            "this rate (a 30fps bg's frame is held 2x at 60). 60 matches the avatar. Nothing\n"
-            "is guessed from the clips.");
+            "Encode and sample rate for the exported clips (like the renderer's render_fps).\n"
+            "Animations play at their native game speed. Backgrounds are sampled in real time\n"
+            "at this rate, so each frame of a 30 fps background is held twice at 60. 60\n"
+            "matches the avatar.");
     }
     ImGui::Spacing();
 
-    ImGui::TextDisabled("Animated parts -> .webm (VP9) + .mp4 (HEVC-alpha, Safari) + .avif poster");
+    ImGui::TextDisabled("Animated parts: .webm (VP9), .mp4 (HEVC with alpha) and an .avif poster");
     if (ImGui::IsItemHovered()) {
         ImGui::SetTooltip(
-            "Every ANIMATED part exports three files so a website can serve transparent video to\n"
-            "any browser: a transparent WebM (VP9) for Chrome/Edge/Firefox, an HEVC-with-alpha "
-            "MP4\n"
-            "(hvc1) for Safari, and a static AVIF poster (first frame). STATIC parts stay a lone "
-            "AVIF.");
+            "Each animated part exports three files so a website can serve transparent video to\n"
+            "any browser: a transparent WebM (VP9) for Chrome, Edge and Firefox, an HEVC MP4 with\n"
+            "alpha (hvc1) for Safari, and a static AVIF poster of the first frame. A static part\n"
+            "exports a single AVIF.");
     }
     ImGui::Spacing();
 }
@@ -282,7 +282,7 @@ bool DrawCategoryChecks() {
 void DrawExtractButton(App::State& state, const QproExtract::Status& st, bool any_cat, int nsel) {
     const bool any_part = (nsel != 0);
     ImGui::BeginDisabled(st.running || !any_cat || !any_part);
-    if (ImGui::Button("Choose output folder + extract...", Gui::Dpi::S(280.0F, 32.0F))) {
+    if (ImGui::Button("Choose output folder and extract...", Gui::Dpi::S(280.0F, 32.0F))) {
         std::string const picked = NativeDialog::BrowseForFolder(Gui::GetHwnd(), "");
         if (!picked.empty()) {
             AfpCmd::QproStartExtract r;
@@ -319,7 +319,7 @@ void DrawExtractStatus(const QproExtract::Status& st) {
                                    : ImVec4(0.6F, 0.9F, 0.6F, 1.0F);
             ImGui::TextColored(col, "Done: %d images written%s.", st.images,
                                ((st.skipped != 0) || (st.failed != 0))
-                                   ? " (some parts were not extracted - see below)"
+                                   ? " (some parts were not extracted, listed below)"
                                    : "");
             ImGui::TextWrapped("Output: %s", st.output_dir.c_str());
             DrawQproIssues(st);
@@ -339,7 +339,7 @@ void RenderQproTabBody() {
     const bool any_cat = DrawCategoryChecks();
 
     ImGui::Separator();
-    ImGui::TextUnformatted("Per-part selection (by update date):");
+    ImGui::TextUnformatted("Parts by update date:");
     const int nsel = DrawPartScanList(st.running);
     ImGui::Spacing();
 

@@ -571,7 +571,7 @@ FieldEvent DrawField(const FormContext& context, const Doc::FieldDesc& field,
             field.unit.empty() ? std::string{} : "\nunit: " + std::string(field.unit);
         ImGui::SetTooltip("%s%s\n%s%s", std::string(field.id).c_str(), unit.c_str(),
                           std::string(field.help).c_str(),
-                          field.tweenable ? "\ntweenable: allowed in a key" : "");
+                          field.tweenable ? "\nCan be set in a tween key." : "");
     }
     if (!drawn || event == FieldEvent::None) return event;
     field.set(command, Editor::ClampField(field, value));
@@ -591,7 +591,7 @@ FieldEvent DrawParamForm(const FormContext& context, Doc::Command& command) {
                 event = FieldEvent::Committed;
             }
             if (ImGui::IsItemHovered()) {
-                ImGui::SetTooltip("reset to the catalog default: %s", row.default_text.c_str());
+                ImGui::SetTooltip("Reset to the catalog default: %s", row.default_text.c_str());
             }
         }
         const Doc::ParamValue current = field.get(command);

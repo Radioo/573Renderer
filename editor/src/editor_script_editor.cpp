@@ -84,7 +84,7 @@ ScriptEditor::ScriptEditor(Place place, QWidget* parent) : QWidget(parent) {
     revert_->setObjectName(lead + "_revert");
     revert_->setFixedHeight(Theme::kControlHeight);
     revert_->setEnabled(false);
-    revert_->setToolTip(tr("Put back the script the animation holds"));
+    revert_->setToolTip(tr("Discard your edits and show the script the animation holds"));
 
     place_ = new QPushButton(tr("Open full"), this);
     place_->setObjectName(lead + "_place");
@@ -92,7 +92,7 @@ ScriptEditor::ScriptEditor(Place place, QWidget* parent) : QWidget(parent) {
     place_->setStyleSheet(QString("QPushButton { background: transparent; border: 1px solid %1; "
                                   "color: %2; font-size: 10px; padding: 0 7px; }")
                               .arg(Theme::kEdge.name(), Theme::kSoft.name()));
-    place_->setToolTip(tr("Open this script in the script editor, where there is room for it"));
+    place_->setToolTip(tr("Open this script in the full script editor"));
     connect(place_, &QPushButton::clicked, this, &ScriptEditor::OpenAsked);
 
     counted_ = new QLabel(this);
@@ -488,20 +488,19 @@ void ScriptEditor::Rethink() {
 ScriptOffer ScriptEditor::OfferFor(const QString& name) const {
     const std::optional<Document::ScriptDoc> doc = Document::ScriptWordDoc(name.toStdString());
     if (!doc) {
-        return ScriptOffer{.name = name,
-                           .detail = details_.value(name),
-                           .kind = kinds_.value(name, QString("L")),
-                           .signature = name,
-                           .said = details_.value(name).isEmpty()
-                                       ? tr("A name the open package holds. A script points at it "
-                                            "by writing it in quotes.")
-                                       : tr("%1. A script points at it by writing it in quotes.")
-                                             .arg(details_.value(name)),
-                           .returns = {},
-                           .params = {},
-                           .note = details_.value(name),
-                           .example = {},
-                           .call = false};
+        return ScriptOffer{
+            .name = name,
+            .detail = details_.value(name),
+            .kind = kinds_.value(name, QString("L")),
+            .signature = name,
+            .said = details_.value(name).isEmpty()
+                        ? tr("A name from the open package. Scripts refer to it in quotes.")
+                        : tr("%1. Scripts refer to it in quotes.").arg(details_.value(name)),
+            .returns = {},
+            .params = {},
+            .note = details_.value(name),
+            .example = {},
+            .call = false};
     }
 
     QStringList params;
@@ -544,7 +543,7 @@ void ScriptEditor::Offer() {
                                                 .arg(offered.size())
                                                 .arg(names_.size())
                                                 .arg(typing.typed)
-                                          : tr("%1 of %2 words this language knows match %3")
+                                          : tr("%1 of %2 words in this language match %3")
                                                 .arg(offered.size())
                                                 .arg(words_.size())
                                                 .arg(typing.typed);

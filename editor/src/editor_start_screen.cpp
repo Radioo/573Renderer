@@ -205,8 +205,8 @@ StartScreen::StartScreen(Commands& commands, QWidget* parent)
     inside->addWidget(rule);
     host_->setObjectName("start_host");
     host_->setWordWrap(true);
-    host_->setText(tr("Without an install everything except the picture still works: the "
-                      "timeline, the inspector and every edit."));
+    host_->setText(tr("Without an install the stage stays empty, but the timeline, the inspector "
+                      "and every edit still work."));
     inside->addWidget(host_);
     inside->addStretch();
 

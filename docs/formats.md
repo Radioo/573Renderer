@@ -1,9 +1,9 @@
 # r573_formats (src/formats/)
 
-Pure container/codec parsers (stdlib plus tl-expected and hash-library). No
-AVS/AFP, no D3D9, no logging -
+Pure container/codec parsers (stdlib plus tl-expected and hash-library). There
+is no AVS/AFP, no D3D9 and no logging, so
 this module builds and unit-tests standalone (`formats_tests`, CTest label
-`ci`), and everything in it is exercised by synthetic fixtures. Real game data
+`ci`), and synthetic fixtures exercise everything in it. Real game data
 only enters through the `[real]` cases and the `local` / `local_dll` test
 executables (docs/local_regression.md).
 
@@ -21,7 +21,7 @@ A `.arc` is a flat container, all fields u32 little-endian:
 | header +4 | version |
 | header +8 | entry count |
 | header +12 | comp_flag |
-| entry +0 | name_offset - NUL-terminated logical path in a packed blob after the table |
+| entry +0 | name_offset: NUL-terminated logical path in a packed blob after the table |
 | entry +4 | data_offset |
 | entry +8 | decomp_size |
 | entry +12 | comp_len |
@@ -35,7 +35,7 @@ decompresses the `.ifs` entry for the normal IFS pipeline.
 `ReadToc` reads only the file head: header, entry table, and the name blob
 up to the smallest `data_offset` (names sit between the table and the first
 data blob in well-formed arcs). That keeps a TOC scan across thousands of
-arcs cheap - the multi-MB data region is never pulled. Name offsets pointing
+arcs cheap, because the multi-MB data region is never read. Name offsets pointing
 past the read head produce a synthetic `<name@0xNNN>` label instead of
 failing the whole arc. `ExtractFirstIfs` likewise reads only the matched
 entry's byte range, not the whole file.
@@ -46,9 +46,8 @@ entry's byte range, not the whole file.
 IFS texture images.
 
 Stream format: 4096-byte sliding window; write position starts at `0xFEE`;
-the window pre-history is ZERO-filled (the game allocates the context with
-calloc - back-references into untouched window bytes legitimately produce
-zeros). One control byte carries 8 flags, consumed LSB-first; flag 1 =
+the window pre-history is zero-filled (the game allocates the context with
+calloc, so back-references into untouched window bytes produce zeros). One control byte carries 8 flags, consumed LSB-first; flag 1 =
 literal byte, flag 0 = match. A match is two bytes forming
 `token = (b1 << 8) | b2`: `distance = token >> 4` (12-bit),
 `length = (token & 0xF) + 3`, copy source = `(write_pos - distance) & 0xFFF`,
@@ -166,7 +165,7 @@ the end of the header to the data offset, with any bytes missing from a
 truncated file counted as zeros (`ifs_digest.h`). A mismatch is an error,
 because the game refuses to mount such a file.
 
-What `Write` recomputes rather than copies:
+What `Write` recomputes instead of copying:
 
 - File placement. When every local file still has its stored size and the
   stored ranges do not overlap, files keep their stored offsets and the data
@@ -379,13 +378,13 @@ the editor does not understand survives a round trip untouched.
 
 A script does not end at its `END` opcode. afp-core stops executing there, but
 the tag is padded after it, so `Read` keeps whatever follows as the script's
-trailing bytes and `Write` puts them back. Dropping them looks harmless and is
-not: 442107 of the install's 463562 scripts carry padding, and without it every
-one of them re-encodes a byte short.
+trailing bytes and `Write` puts them back. They cannot be dropped: 442107 of the
+install's 463562 scripts carry padding, and without it every one of them
+re-encodes a byte short.
 
 The opcode set is the one afp-core's interpreter implements, and the names are
 the ones its own action data table logs with. Anything outside that set is an
-error rather than a guess, because afp-core would skip it with
+error, because afp-core would skip it with
 `unknown action(0x%02x:%s)` and the editor must not write a script the game
 cannot run:
 
@@ -432,28 +431,28 @@ handler.
 
 The argument count is read through the variant-to-integer conversion, which
 names itself in its own error calls (`afp_variant_get_integer`), and the pop
-count is the argument the handler passes to the stack's drop helper: for
-`CALL_FUNCTION` that is `count + 2`, which is what proves the name and the count
+count is the argument the handler passes to the stack's drop helper. For
+`CALL_FUNCTION` that is `count + 2`, which shows that the name and the count
 are two separate slots above the arguments.
 
 The arguments are pushed last one first, so the argument written first in source
 is the one nearest the top of the stack. A call's arguments do not have to be
 pushed by their own `PUSH`: one `PUSH` can carry the operands of a whole chain,
-and the shipped data does exactly that (see the register statements in
+and the shipped data does that (see the register statements in
 `docs/document.md`).
 
 ### What the aeplib calls do
 
-The calls the shipped scripts make were read out of afp-core rather than assumed
-from Flash. Two dispatchers exist and the object decides which one runs: the
+The calls the shipped scripts make were read out of afp-core instead of being
+assumed from Flash. Two dispatchers exist and the object decides which one runs: the
 method handler switches on the object's class, and the aeplib object takes its
 own path (an if-chain and a jump table keyed by the call id), while a clip takes
 the clip-method path. Find them from the CALL_METHOD handler and follow the
 class switch; the aeplib branch is the one whose unknown-id case logs
 `callMethod at aeplib [name:id] unsupported variable nr(N)`.
 
-Every aeplib handler tests its argument count exactly and does nothing at all on
-a mismatch, so the counts below are hard. The first argument is always the clip,
+Every aeplib handler tests its argument count exactly and does nothing on a
+mismatch, so the counts below are exact requirements. The first argument is always the clip,
 which is why the data reads `aep_set_set_frame(this, 30)`. None of them write a
 result: the value each one leaves on the stack is the empty variant the caller
 started with, which is why the compiler writes a `pop` after a call.
@@ -470,21 +469,20 @@ started with, which is why the compiler writes a `pop` after a call.
 | `aep_set_frame_control` | 0x832 | parent, depth, frame | gates the child at that depth: while its own playhead sits before `frame - 1` the draw dispatcher skips it. Re-checked on every seek |
 | `aep_set_rect_mask` | 0x833 | clip, four numbers | stores four floats on the clip (or on its `aep_dummy` child) and sets the rect-mask flag |
 | `aep_set_set_frame` | 0x836 | clip, value | stores the value in a member slot and does nothing else inside afp-core |
-| `getInstanceAtDepth` | 0x465 | depth | a CLIP method, not an aeplib call: returns the instance at that depth, or undefined |
+| `getInstanceAtDepth` | 0x465 | depth | a clip method, not an aeplib call: returns the instance at that depth, or undefined |
 
-**How a frame argument is read** differs per family, and it is the thing most
-worth knowing. `gotoAndPlay`, `gotoAndStop` and the deep pair take a number as a
+How a frame argument is read differs per family. `gotoAndPlay`, `gotoAndStop` and the deep pair take a number as a
 frame counted from 1 (the runtime subtracts one) and anything that is not a
 number as a frame label; `goto_play` and `goto_stop` take the number as a raw
 index counted from 0; the `*_label` names always look the text up as a label. A
 label the clip does not carry warns and the seek is abandoned.
 
-**Two things are measured as unresolved and must not be filled in by guessing.**
+Two things are still unresolved, and neither may be filled in by guessing.
 The four numbers `aep_set_rect_mask` stores have no reader inside afp-core (the
 immediate scans for the member slot and the flag find only the writers), so
-which edge or size each one is belongs to the renderer, not to this table. The
-value `aep_set_set_frame` stores likewise has no reader that was found, which is
-not the same as having no effect.
+which edge or size each one is belongs to the renderer, not to this table. No
+reader was found for the value `aep_set_set_frame` stores either, which does
+not prove that it has no effect.
 
 ### The builtin name table
 
@@ -496,13 +494,13 @@ block says it is past the end has no name.
 
 `src/formats/afp_script_names_data.h` is that table read out of the DLL: 1877
 ids between `0x100` and `0xd0f`, stored as runs of consecutive ids so the header
-stays a few hundred lines rather than two thousand. `AfpScript::BuiltinName`,
+stays a few hundred lines instead of two thousand. `AfpScript::BuiltinName`,
 `BuiltinNamed` and `BuiltinNames` are the lookups over it.
 
 The names are the AVM ones (`_x`, `_alpha`, `blendMode`, `gotoAndPlay`,
-`getInstanceAtDepth`) plus KONAMI's own `aeplib` calls, and the ids are part of
-the compiled bytecode rather than of one build, so the table is data about the
-format and not about a version. Not all of them are identifiers: the table also
+`getInstanceAtDepth`) plus KONAMI's own `aeplib` calls. The ids are part of
+the compiled bytecode and not of one build, so the table describes the format
+and does not change between versions. Not all of them are identifiers: the table also
 holds `$version`, `flash.display`, `FSCommand:quit`, `/` and `..`, which is why
 the source language filters what it will spell as a name.
 
@@ -516,10 +514,9 @@ it returns. Then:
 uv run afp_builtin_names.py --dll "<game>/modules/afp-core.dll" --names 0x... --index 0x... --blocks 0x...
 ```
 
-`tools/local/afp_builtin_names.py` walks the blocks, writes the header, and
-refuses to write anything unless the nine names that were known by hand before
-the table was found come back right, so a wrong address leaves the header alone
-instead of filling it with nonsense.
+`tools/local/afp_builtin_names.py` walks the blocks and writes the header. It
+writes nothing unless the nine names that were known by hand before the table
+was found come back correctly, so a wrong address leaves the header unchanged.
 
 ## GE2D shapes (`ge2d_shape.h`)
 
@@ -580,8 +577,8 @@ AFP textures arrive uncompressed (rgb565 / rgb888 / (a)rgb8888 / la88) or
 block-compressed (DXT1-5). The renderer's atlas textures are always created
 as `D3DFMT_A8R8G8B8` in `TexCreate`, so the DXT path decompresses 4x4
 source blocks into BGRA scanlines written directly at the destination
-pitch - the same memory layout the row-copy upload path uses, no scratch
-buffer. `TexUpload` in `afp_d3d9_textures.cpp` is the sole in-renderer
+pitch. That is the same memory layout the row-copy upload path uses, and it
+needs no scratch buffer. `TexUpload` in `afp_d3d9_textures.cpp` is the sole in-renderer
 caller; it sizes the source span via `EncodedSize`.
 
 Format ids are the afp-utils texture-format table (afp-utils.dll,
@@ -598,7 +595,7 @@ Format ids are the afp-utils texture-format table (afp-utils.dll,
 Decode notes:
 
 - RGB565 endpoints expand 5/6/5 -> 8/8/8 via "shift, then OR the high bits
-  back in" so max channel values map to 0xFF rather than 0xF8/0xFC.
+  back in" so max channel values map to 0xFF instead of 0xF8/0xFC.
 - BC1 color block: `color0 > color1` selects the 4-color mode (two
   interpolants at 1/3 and 2/3); `color0 <= color1` selects the 3-color +
   punchthrough mode where palette index 3 is fully transparent black.
@@ -613,23 +610,22 @@ Decode notes:
 - Tail blocks at the right/bottom edges are clipped to the surface size.
 - Truncated source data aborts the decode without writing partial blocks.
 
-Why this exists: SDVX's older `select_bg_iii.ifs` (and similar) package
-most atlas content as DXT5. Without the decoder every dxt-encoded slot
-stayed at the D3D create-time default (transparent black) - the historical
-"missing assets" symptom.
+SDVX's older `select_bg_iii.ifs` (and similar) package most atlas content
+as DXT5. Without the decoder every dxt-encoded slot stayed at the D3D
+create-time default (transparent black), which was the old "missing assets"
+symptom.
 
 ### The afp-utils texture-format id table (re-read from the DLL)
 
 Read directly out of IIDX 33 `modules/afp-utils.dll`. How to re-find it on
-a new DLL version: string-search `argb8888rev` (or `rgb565rev`, `ati2n` -
-names unique to this table), take the DATA xref to the string, then walk
-BACKWARDS to the table base. The base is named by a descriptor record that
-also carries the entry count - here `{..., "compress", 0x180021100, 61}` at
-`0x1800216c0`. Entry layout is **`[id(4), pad(4), name_ptr(8)]`**, 16 bytes,
-ids ascending from 0. Anchor the layout on the FIRST entry: it must read
-`id = 0`. (Misreading the layout as `[name_ptr, id]` shifts every name by
-one slot and produces a plausible-looking but wrong table - that mistake
-was made and caught here.)
+a new DLL version: string-search `argb8888rev` (or `rgb565rev` or `ati2n`,
+which occur only in this table), take the DATA xref to the string, then walk
+backwards to the table base. The base is named by a descriptor record that
+also carries the entry count, here `{..., "compress", 0x180021100, 61}` at
+`0x1800216c0`. Entry layout is `[id(4), pad(4), name_ptr(8)]`, 16 bytes,
+ids ascending from 0. Anchor the layout on the first entry: it must read
+`id = 0`. (Reading the layout as `[name_ptr, id]` shifts every name by
+one slot and produces a table that looks plausible but is wrong.)
 
 | id | name | id | name | id | name |
 |---|---|---|---|---|---|
@@ -649,7 +645,7 @@ was made and caught here.)
 
 Bold = an id the renderer actually decodes today, and all of those now
 agree with the table: `0x0E` rgb888 (3 bpp), `0x10` rgba8888 (4 bpp),
-`0x1F` argb4444 (our 4x4-bit-nibble x17 decode IS argb4444, 2 bpp), `0x20`
+`0x1F` argb4444 (our 4x4-bit-nibble x17 decode is argb4444, 2 bpp), `0x20`
 argb8888rev (4 bpp), and the DXT block.
 
 The id space is shared across engine generations, not per-game: the DDR
@@ -664,15 +660,15 @@ table exactly on both.
 `la88`) decode as a DXT format and left real `dxt1`/`dxt2` falling through
 to the 4-bpp raw default.
 
-Why it was invisible: DXT2/DXT3 share one block layout (explicit alpha) and
+The error stayed hidden because DXT2/DXT3 share one block layout (explicit alpha) and
 DXT4/DXT5 share the other (interpolated alpha), and the decoder only
 branches on those two families. Under the old off-by-one, real `dxt3`
 (0x18) landed on our "dxt2" label -> explicit alpha -> correct anyway, and
 real `dxt5` (0x1A) landed on "dxt4" -> interpolated -> correct anyway. Since
 dxt3 and dxt5 are what the assets actually use, output was right by
 accident. Only `0x16`/`0x17`/`0x19`/`0x1B` were wrong, and nothing in the
-net uses them - confirmed empirically: the whole 14-case byte-compare net
-is byte-identical before and after the renumber.
+net uses them: the whole 14-case byte-compare net is byte-identical before
+and after the renumber.
 
 `FormatBpp` in afp_d3d9_textures.cpp now asks `Dxt::IsDxtFormat` instead of
 carrying its own `0x18..0x1B` list, so the two ranges cannot drift apart
@@ -684,23 +680,22 @@ again (they already had: `IsDxtFormat` said `0x17..0x1B`, `FormatBpp` said
 - `0x01`: we splat 1 bpp to all four channels; the table says `a8`. Same
   bpp, different semantics (alpha-only vs luminance splat).
 - `0x1E`: we treat it as a 1 bpp splat; the table says `al88`, which is
-  2 bpp. If a real asset ever uses it the stride would be wrong - but no
-  covered asset does, so there is nothing to verify against.
+  2 bpp. If a real asset uses it the stride is wrong, but no covered asset
+  does, so there is nothing to verify against.
 - DDR `0x1F`: `afp_ddr_textures.cpp` decodes it as RGB565 while the table
-  (and the modern decoder) say argb4444. The modern side is the one that
-  matches; the DDR branch is unexercised by the net, so it is recorded here
-  rather than changed blind.
+  (and the modern decoder) say argb4444. The modern side matches the table.
+  The net does not exercise the DDR branch, so it is recorded here and left
+  unchanged until it can be checked.
 
-To settle any of these, get ground truth rather than guessing: instrument
-the live game through the afp hook and log `(format, w, h, byte_count)` for
-a texture known to use the id - the byte count divided by w*h gives the bpp
-directly.
+To settle any of these, instrument the live game through the afp hook and
+log `(format, w, h, byte_count)` for a texture known to use the id. The byte
+count divided by w*h gives the bpp directly.
 
 ## AES-256-CBC-CTS (`aes.h`)
 
 Decrypt-only AES-256 in CBC mode with ciphertext stealing, used by the IIDX 17
 (SIRIUS) encrypted sprite packages (`system.idr`, `N.gcr`). Ciphertext stealing
-matters: 136 of the 141 encrypted files have a length that is not a multiple of
+is required: 136 of the 141 encrypted files have a length that is not a multiple of
 16, and the format carries no padding, so the plaintext is exactly as long as
 the ciphertext.
 
@@ -713,13 +708,13 @@ The tail follows NIST CBC-CS3 / Kerberos CTS: with a partial last block of `d`
 bytes, `P_n = D(C_{n-1})[0:d] XOR C_n`, and `P_{n-1} = D(C_n || D(C_{n-1})[d:16])
 XOR C_{n-2}`.
 
-The S-box is generated at first use rather than shipped as a literal table:
+The S-box is generated at first use instead of being shipped as a literal table:
 multiplicative inverses come from a log/antilog pair over GF(2^8) with generator
-3, then the standard affine transform. The one trap is `a == 1`, where
-`255 - log[a]` is 255 while the antilog table only fills 0..254 - the exponent
+3, then the standard affine transform. Take care with `a == 1`, where
+`255 - log[a]` is 255 while the antilog table only fills 0..254, so the exponent
 has to be reduced modulo 255. Getting that wrong corrupts exactly two S-box
 entries, which leaves most blocks decrypting correctly and looks like a chaining
-bug rather than a cipher bug. The NIST SP 800-38A CBC-AES256 vector in
+bug instead of a cipher bug. The NIST SP 800-38A CBC-AES256 vector in
 `tests/formats/aes_tests.cpp` catches it immediately.
 
 ## DirectX .x models (`xfile.h`, `xfile_binary.h`)
@@ -730,8 +725,9 @@ encoding: `txt ` is parsed directly by the recursive-descent reader in
 `XFile::BinaryToText`, then re-entered through the same `Parse`. Anything else
 (`tzip`, `bzip`) is rejected.
 
-Transcoding rather than writing a second parser is deliberate: the two encodings
-are the same object graph, and the text reader is the one covered by tests. The
+The binary form is transcoded instead of getting a second parser, because the
+two encodings are the same object graph and the text reader is the one covered
+by tests. The
 transcoder invents the separators the binary form omits (it emits `value;` after
 every integer and float, which the reader treats as whitespace since every list
 carries its own length), drops GUIDs, and formats floats with a
@@ -743,10 +739,10 @@ shortest-round-trip conversion so model coordinates survive the trip.
 models of an IIDX 10-18 model scene. `[image_file]` lists the `.gcz` slices in
 order; `[pattern_list]` maps an authoring `.bmp` path to a rect `x,y,w,h`.
 
-Those rects are coordinates in a VIRTUAL ATLAS, not in the `.gcz` that carries
-them, and the atlas is a fixed grid of **256x256** tiles, one tile per row.
-That grid is not in any file - the game hardcodes it when it constructs the
-manifest object - so `Scene3d` owns the `Inz::AtlasGrid` constant and `Inz` only
+Those rects are coordinates in a virtual atlas, not in the `.gcz` that carries
+them. The atlas is a fixed grid of 256x256 tiles, one tile per row.
+That grid is not in any file (the game hardcodes it when it constructs the
+manifest object), so `Scene3d` owns the `Inz::AtlasGrid` constant and `Inz` only
 does the arithmetic. Slice `i` becomes the whole tile at grid cell
 `(i % tiles_per_row, i / tiles_per_row)`; a `.gcz` smaller than the tile
 occupies its top-left corner and the rest of the tile stays transparent black.
@@ -755,8 +751,8 @@ occupies its top-left corner and the rest of the tile stays transparent black.
 
 `Scene3d::ScatterSlice` (`src/scene3d/atlas.cpp`) expands a `.gcz` slice and
 then replaces every texel whose ARGB is exactly `0x0000FF00` with transparent
-black before writing it into the tile. That is the game's own step, not a
-cosmetic clean-up: IIDX 10 blits each slice with
+black before writing it into the tile. The game does the same: IIDX 10 blits
+each slice with
 
 ```c
 D3DXLoadSurfaceFromMemory(
@@ -767,13 +763,13 @@ D3DXLoadSurfaceFromMemory(
 
 and D3DX replaces colour-key matches with `0x00000000`. A1R5G5B5 `0x03E0`
 expands to `A=0, R=0, G=0xFF, B=0`, which is the packer's fill colour, so the
-unused space around the packed patterns becomes black rather than green. An
-OPAQUE green texel expands to `0xFF00FF00`, does not match, and is left alone.
+unused space around the packed patterns becomes black instead of green. An
+opaque green texel expands to `0xFF00FF00`, does not match, and is left alone.
 The game's only other `D3DXLoadSurfaceFromMemory` call (the GDI font upload)
 passes `ColorKey = 0`, so the key belongs to the model-scene atlas alone and
 `Gc2d` must not copy it.
 
-This is load-bearing because mesh UVs are NOT clamped to their pattern rect.
+The keying matters because mesh UVs are not clamped to their pattern rect.
 IIDX 10's `samurai` maps the torii crossbeam undersides with the 8x8 `red.bmp`
 swatch at `v` up to `1.13`, so the baked `v'` runs past the swatch into the
 filler. Keyed, the sampler blends red toward black and the beams get the dark
@@ -797,18 +793,18 @@ v' = (y % tile_h) / tile_h + v * (h / tile_h)
 `Scene3d` bakes that transform into the chunk vertices at load time, which is
 what the game does too (it rewrites the cloned mesh's vertex buffer once, then
 draws each material subset with the whole tile bound). Chunks are therefore
-grouped per MATERIAL, not per tile: two materials can share a tile and still
+grouped per material, not per tile: two materials can share a tile and still
 need different UV transforms.
 
 Names are matched with the extension removed on both sides: the manifest drops a
 trailing dotted 4-character suffix, the material drops a trailing `.bmp`.
 
-Why it matters: when every pattern is exactly one full tile the transform is the
-identity, which is why all three IIDX 18 scenes rendered correctly without it.
+When every pattern is exactly one full tile the transform is the identity, which
+is why all three IIDX 18 scenes rendered correctly without it.
 IIDX 10 packs several small swatches into one tile (`music`'s single 24x8
 `0.gcz` holds three 8x8 flat colours) in four of its six scenes, and IIDX 17's
 `boss_st` has one such material. Without the transform those materials sample
-the whole tile - the "bright cyan panels" symptom. RE evidence, the full
+the whole tile, which caused the "bright cyan panels" symptom. RE evidence, the full
 per-scene survey, and how to re-find the code in a new build:
 `IIDX/model_scene_texture_atlas.md` in the notes repo.
 

@@ -225,8 +225,8 @@ void Window::ShowInspectorScript(const AfpAnimation::Animation& animation,
     if (source) {
         view.source = QString::fromStdString(*source);
     } else {
-        view.refusal = tr("this script holds a value the editor cannot write back, so it is left "
-                          "as it is");
+        view.refusal = tr(
+            "this script holds a value the editor cannot write back, so it cannot be edited here");
     }
     const QStringList names = NamesFor(animation, file_->ShapeImages(animation_path_));
     inspector_panel_->ShowScript(view);

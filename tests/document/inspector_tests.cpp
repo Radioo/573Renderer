@@ -154,7 +154,7 @@ TEST_CASE("A selected keyframe is the one editable row of an owned depth") {
     REQUIRE(value != nullptr);
     CHECK(value->field.value == "90, 20");
     CHECK(value->edits == Document::EditTarget::KeyValue);
-    const Document::InspectedRow* ease = RowNamed(rows, "Keyframe leaves as");
+    const Document::InspectedRow* ease = RowNamed(rows, "Interpolation");
     REQUIRE(ease != nullptr);
     CHECK(ease->field.value == "linear");
 

@@ -5,10 +5,10 @@
 `.gitattributes` pins the working tree to LF for everything except `.bat`
 files, which check out as CRLF. LF everywhere is safe for a Windows-only
 project (MSVC, CMake, Ninja, clang tooling, and modern editors all handle
-it) and makes the ubuntu CI gates see byte-identical files. Batch files are
-the one real exception: `cmd.exe` has parsing bugs with LF-only files
-(`goto`/label scanning can misfire), so CRLF there is a correctness
-requirement. The index was already fully LF-normalized when the attributes
+it) and lets the ubuntu CI gates see byte-identical files. Batch files are
+the one exception: `cmd.exe` has parsing bugs with LF-only files
+(`goto`/label scanning can misfire), so they need CRLF to run correctly. The
+index was already fully LF-normalized when the attributes
 were added; the file only removes the dependence on each machine's
 `core.autocrlf`. After pulling the commit that adds it, refresh a stale
 working tree with: `git rm --cached -r . && git reset --hard`.
@@ -26,7 +26,7 @@ working tree with: `git rm --cached -r . && git reset --hard`.
 ## Generated sources (a Python interpreter is required to configure)
 
 `CMakeLists.txt` calls `find_package(Python3 COMPONENTS Interpreter REQUIRED)`, so a
-Python 3 interpreter on the machine is a hard CONFIGURE-time prerequisite, not just a
+Python 3 interpreter on the machine is a hard configure-time prerequisite, not only a
 quality-gate one. It drives one `add_custom_command`:
 
 | Generated | From | By |
@@ -34,17 +34,18 @@ quality-gate one. It drives one `add_custom_command`:
 | `${CMAKE_BINARY_DIR}/generated/preset_layer_verdicts.cpp`, compiled into `r573_app` | `docs/preset_layers.md` | `tools/ci/gen_layer_verdicts.py` |
 
 Both the markdown and the script are in the command's `DEPENDS`, so editing either one
-regenerates the file on the next build; the script creates the `generated/` directory
+regenerates the file on the next build. The script creates the `generated/` directory
 itself, so a clean binary dir needs no extra setup. The output is never committed
-(`build/` is ignored) and never hand-edited. Rationale: docs/gates.md, docs/preset_document.md.
+(`build/` is ignored) and never edited by hand. The reasons are in docs/gates.md and
+docs/preset_document.md.
 
 ## Why the CMake project is `Renderer573` but the exe is `573Renderer.exe`
 
 CMake does not allow project/target names to start with a digit on every
 generator. The project and target keep alpha-prefixed internal names; the
 user-facing name is applied via the `OUTPUT_NAME` target property. The exe is
-copied to `bin/` (`RUNTIME_OUTPUT_DIRECTORY`) so it sits next to nothing it
-depends on and is easy to find in Task Manager / shortcuts.
+copied to `bin/` (`RUNTIME_OUTPUT_DIRECTORY`), where it is easy to find in
+Task Manager and shortcuts and has nothing it depends on beside it.
 
 ## Toolchain and CRT
 
@@ -59,7 +60,7 @@ depends on and is easy to find in Task Manager / shortcuts.
   `/MD`; C dependencies (ffmpeg, aom) silently tolerate the mismatch but a
   C++ static dependency (x265, added for HEVC-alpha) fails the link with
   LNK2038 RuntimeLibrary errors. Switching the triplet later invalidates the
-  entire vcpkg binary cache for it - every dependency rebuilds from scratch.
+  entire vcpkg binary cache for it, so every dependency rebuilds from scratch.
 
 ### `LNK1236` on a member of a static library
 
@@ -82,7 +83,7 @@ stay.
 ### Mutation checks: force a full link for every mutant
 
 A mutation made only in a static library (`src/document/*.cpp`) has been seen
-to compile and relink `document_tests.exe` while the test still ran the OLD
+to compile and relink `document_tests.exe` while the test still ran the old
 code and passed. It stopped once the test file itself was rebuilt, and later
 attempts to reproduce it failed, so the cause is unknown (MSVC incremental
 linking and its `.ilk` are the suspect). A mutation script therefore deletes
@@ -94,8 +95,8 @@ SURVIVED result is unconfirmed until it survives a forced full link.
 
 Declared in `vcpkg.json`; resolved on first configure via the vcpkg toolchain
 file that the presets point at (`vendor/vcpkg` submodule, pinned baseline in
-`vcpkg-configuration.json`). No in-tree source builds of imgui/ffmpeg - vcpkg
-owns them.
+`vcpkg-configuration.json`). vcpkg builds imgui and ffmpeg; there are no
+in-tree source builds of them.
 
 - `imgui` with `dx9-binding` + `win32-binding` + `test-engine` features baked
   into the vcpkg build; exposes the `imgui::imgui` CMake target (headers for
@@ -108,7 +109,7 @@ owns them.
   mode): populates `FFMPEG_LIBRARIES` / `FFMPEG_INCLUDE_DIRS` for the
   components requested. Because this is variable-style (not an IMPORTED
   target), its include dirs are consumed with
-  `target_include_directories(... SYSTEM ...)` explicitly - that is what lets
+  `target_include_directories(... SYSTEM ...)` explicitly, which lets
   `/external:W0` silence third-party headers once the warnings target is
   linked.
 - `hash-library` (zlib licence) through the `unofficial::hash-library` config
@@ -135,7 +136,7 @@ owns them.
   library is built as C++23; nothing else includes them.
 - `vcpkg-overlays/` overrides registry ports. It ships an x265 overlay with
   `-DENABLE_ALPHA=ON` so ffmpeg's libx265 wrapper can emit HEVC-with-alpha
-  (Safari-compatible transparent video); stock vcpkg x265 builds alpha OFF.
+  (Safari-compatible transparent video); stock vcpkg x265 builds alpha off.
   The overlay path is a preset cache variable (`VCPKG_OVERLAY_PORTS`), so
   local and CI builds always apply it. Before presets, only build.bat set it
   via environment variable and CI silently built x265 without alpha.
@@ -146,8 +147,8 @@ Link order: our objects, then vcpkg static libs, then Windows system libs.
 ffmpeg's static libs pull in Win32 dependencies that must be linked
 explicitly: `bcrypt` (crypto helpers), `ws2_32`/`secur32` (network code that
 is feature-disabled but still referenced), `mfuuid`/`strmiids` (DirectShow
-GUIDs). `windowscodecs` + `ole32` are for WIC PNG decode/encode - the vcpkg
-ffmpeg feature set has no PNG codec; media_sink uses WIC instead. All are
+GUIDs). `windowscodecs` + `ole32` are for WIC PNG decode/encode: the vcpkg
+ffmpeg feature set has no PNG codec, so media_sink uses WIC instead. All are
 always present on Windows; the linker strips unused references.
 
 ## The warnings target (`r573::warnings`)
@@ -187,7 +188,7 @@ Flag set (MSVC, behind a `$<CXX_COMPILER_ID:MSVC>` generator expression):
 Warnings-as-errors is not part of the flag set: the `ci` preset turns it on
 via `CMAKE_COMPILE_WARNING_AS_ERROR=ON` (CMake >= 3.24), which keeps the
 built-in `--compile-no-warning-as-error` escape hatch for local refactoring
-while CI stays absolute.
+while CI allows no warnings at all.
 
 ## compile_commands.json
 

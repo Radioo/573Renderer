@@ -54,9 +54,9 @@ std::optional<Window::AnimationSource> Window::ChooseAnimationSource() {
                                .path =
                                    animation_path_.empty() ? own.front()->path : animation_path_};
     }
-    const QString chosen = QFileDialog::getOpenFileName(
-        this, tr("Take the new animation's stage, frame rate and library from"), QString(),
-        tr("IFS files (*.ifs);;All files (*)"));
+    const QString chosen =
+        QFileDialog::getOpenFileName(this, tr("Copy the stage, frame rate and library from an IFS"),
+                                     QString(), tr("IFS files (*.ifs);;All files (*)"));
     if (chosen.isEmpty()) return std::nullopt;
     auto other = Document::File::Open(ReadFileBytes(chosen));
     if (!other) {
@@ -146,7 +146,7 @@ void Window::ApplyAnimationRename(const std::string& path, const QString& name,
     if (!file_ || wanted == name || wanted.isEmpty()) return;
     if (ProjectOwnsDepthsIn(path)) {
         ReportProblem(
-            tr("The project owns depths in %1; detach them before renaming it").arg(name));
+            tr("The project owns depths in %1. Detach them before renaming it.").arg(name));
         FillTree();
         return;
     }
@@ -200,7 +200,7 @@ void Window::RemoveAnimation(const std::string& path, const QString& name) {
     if (!file_) return;
     if (ProjectOwnsDepthsIn(path)) {
         ReportProblem(
-            tr("The project owns depths in %1; detach them before removing it").arg(name));
+            tr("The project owns depths in %1. Detach them before removing it.").arg(name));
         return;
     }
     const bool open = path == animation_path_;
@@ -214,9 +214,9 @@ void Window::RemoveAnimation(const std::string& path, const QString& name) {
 void Window::RemoveUnusedDefinitionsFrom(const std::string& path, const QString& name) {
     if (!file_) return;
     if (ProjectOwnsDepthsIn(path)) {
-        ReportProblem(tr("The project owns depths in %1; detach them before removing definitions "
-                         "from it")
-                          .arg(name));
+        ReportProblem(
+            tr("The project owns depths in %1. Detach them before removing definitions from it.")
+                .arg(name));
         return;
     }
     Document::File tidied = *file_;
@@ -226,7 +226,7 @@ void Window::RemoveUnusedDefinitionsFrom(const std::string& path, const QString&
         return;
     }
     if (removed->empty()) {
-        ShowResult(tr("Nothing in %1 is unused").arg(name), false);
+        ShowResult(tr("%1 has no unused definitions").arg(name), false);
         return;
     }
     if (!EditDocument(tr("Remove unused definitions from %1").arg(name),

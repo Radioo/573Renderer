@@ -170,7 +170,7 @@ void AddCamera(const FrameState& state, FrameReport& report) {
     entity.values.push_back(Scalar("far_z", camera.far_z, camera.from.far_z));
     entity.values.push_back(Scalar("aspect", camera.aspect_value, camera.from.aspect));
     if (camera.from.ease != nullptr) {
-        entity.values.push_back(Text("ease", "toward an eye and at", camera.from.ease));
+        entity.values.push_back(Text("ease", "toward an eye and look-at point", camera.from.ease));
     }
     if (camera.from.motion != nullptr) {
         const auto& motion = std::get<Doc::CameraMotionCmd>(camera.from.motion->command);

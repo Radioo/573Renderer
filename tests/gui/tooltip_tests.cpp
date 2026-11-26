@@ -76,7 +76,7 @@ TEST_CASE("status strip export tag and reveal button explain themselves", "[gui]
     test->TestFunc = [](ImGuiTestContext* ctx) {
         ctx->SetRef("##main");
         GuiTest::FocusChild(ctx, "status_strip");
-        ExpectTooltips(ctx, {"export done", "Open folder"});
+        ExpectTooltips(ctx, {"Export done", "Open folder"});
     };
     harness.Run(test);
 }
@@ -150,10 +150,10 @@ TEST_CASE("inspector render tab controls all explain themselves", "[gui][tooltip
         ExpectTooltips(ctx, {
                                 "##inspector_tabs/Render/Loop master animation",
                                 "##inspector_tabs/Render/##root_loop/$$1/Force loop",
-                                "##inspector_tabs/Render/##live_cont/$$2/ON",
+                                "##inspector_tabs/Render/##live_cont/$$2/On",
                                 "##inspector_tabs/Render/##live_trim",
                                 "##inspector_tabs/Render/1.5x##scale_sdvx_old",
-                                "##inspector_tabs/Render/##bg_color/$$5/blue",
+                                "##inspector_tabs/Render/##bg_color/$$5/Blue",
                                 "##inspector_tabs/Render/Filter (F7)",
                                 "##inspector_tabs/Render/Show MC names (F3)",
                             });
@@ -173,8 +173,8 @@ TEST_CASE("qpro controls explain themselves on hover", "[gui][tooltip]") {
         ctx->Yield(2);
         ctx->SetRef("##main");
         GuiTest::FocusChild(ctx, "main_view");
-        ExpectTooltips(ctx, {"Scan parts from bm2dx.dll", "Keep static base fills un-hue-shifted",
-                             "Output fps"});
+        ExpectTooltips(ctx,
+                       {"Scan parts from bm2dx.dll", "Hue-shift effect fills only", "Output fps"});
     };
     harness.Run(test);
 }
@@ -197,10 +197,11 @@ TEST_CASE("export modal controls all explain themselves", "[gui][tooltip]") {
         ctx->ItemCheck("Blend loop seam##exp_blend");
         ctx->Yield(3);
         ExpectTooltips(ctx, {"##exp_stem", "##exp_fmt", "fps##exp_fps", "##exp_q", "##exp_sz",
-                             "Transparent bg", "HW accel##exp_hw", "keyframe interval##exp_keyint",
-                             "Limit frames##exp_limit", "frames##exp_maxf",
-                             "Continuous loop count##exp_loops", "Blend loop seam##exp_blend",
-                             "Blend frames##exp_blendN", "Pick region##crop_pick"});
+                             "Transparent background", "Hardware encoding##exp_hw",
+                             "Keyframe interval##exp_keyint", "Limit frames##exp_limit",
+                             "frames##exp_maxf", "Loops to capture##exp_loops",
+                             "Blend loop seam##exp_blend", "Blend frames##exp_blendN",
+                             "Pick region##crop_pick"});
         ctx->ItemClick("Close");
     };
     harness.Run(test);
@@ -264,11 +265,11 @@ TEST_CASE("hardware-accel tooltip names the reason for the chosen format", "[gui
             const bool is_h264 = (c.format == MediaSink::Format::MP4_H264);
             const char* expect = nullptr;
             if (c.format == MediaSink::Format::MP4_HEVC_Alpha) {
-                expect = "MP4 HEVC-alpha is software only";
+                expect = "MP4 HEVC with alpha is software only";
             } else if (!hw && is_h264) {
-                expect = "h264_nvenc unavailable";
+                expect = "h264_nvenc is not available";
             } else if (!hw) {
-                expect = "Hardware acceleration unavailable";
+                expect = "Hardware encoding is not available";
             } else if (c.format == MediaSink::Format::WebM_VP9) {
                 expect = "WebM VP9 has no hardware encoder";
             } else if (c.format == MediaSink::Format::WebP_Anim) {
@@ -282,7 +283,7 @@ TEST_CASE("hardware-accel tooltip names the reason for the chosen format", "[gui
             }
 
             GuiTest::ComboPick(ctx, "##exp_fmt", c.label);
-            std::string const text = GuiTest::HoverAndCaptureText(ctx, "HW accel##exp_hw");
+            std::string const text = GuiTest::HoverAndCaptureText(ctx, "Hardware encoding##exp_hw");
             if (text.find(expect) == std::string::npos) {
                 ctx->LogError("format '%s' expected '%s', captured: %s", c.label, expect,
                               text.c_str());
@@ -335,7 +336,7 @@ TEST_CASE("animate-camera tooltip explains why it is greyed out", "[gui][tooltip
         ctx->Yield(2);
         std::string const text =
             GuiTest::HoverAndCaptureText(ctx, "##inspector_tabs/3D scene/Animate camera##s3d");
-        IM_CHECK_SILENT(text.find("Freeze the camera animated inside") != std::string::npos);
+        IM_CHECK_SILENT(text.find("freeze the camera animated inside") != std::string::npos);
     };
     harness.Run(enabled);
 
@@ -367,7 +368,7 @@ TEST_CASE("export status tag tooltip carries the output path or the error", "[gu
     ok->TestFunc = [](ImGuiTestContext* ctx) {
         ctx->SetRef("##main");
         GuiTest::FocusChild(ctx, "status_strip");
-        std::string const text = GuiTest::HoverAndCaptureText(ctx, "export done");
+        std::string const text = GuiTest::HoverAndCaptureText(ctx, "Export done");
         IM_CHECK_SILENT(text.find("unique_done_name.webm") != std::string::npos);
     };
     harness.Run(ok);
@@ -381,7 +382,7 @@ TEST_CASE("export status tag tooltip carries the output path or the error", "[gu
     bad->TestFunc = [](ImGuiTestContext* ctx) {
         ctx->SetRef("##main");
         GuiTest::FocusChild(ctx, "status_strip");
-        std::string const text = GuiTest::HoverAndCaptureText(ctx, "export failed");
+        std::string const text = GuiTest::HoverAndCaptureText(ctx, "Export failed");
         IM_CHECK_SILENT(text.find("encoder_rejected_the_stream") != std::string::npos);
     };
     harness.Run(bad);
@@ -400,7 +401,7 @@ TEST_CASE("export status tag invites a click while a capture is running", "[gui]
     test->TestFunc = [](ImGuiTestContext* ctx) {
         ctx->SetRef("##main");
         GuiTest::FocusChild(ctx, "status_strip");
-        std::string const text = GuiTest::HoverAndCaptureText(ctx, "capturing 30");
+        std::string const text = GuiTest::HoverAndCaptureText(ctx, "Capturing 30");
         IM_CHECK_SILENT(text.find("Click to open the export dialog") != std::string::npos);
     };
     harness.Run(test);

@@ -1,21 +1,20 @@
 # Comment-knowledge migration (refactor P3)
 
-The method: every source file's comment content is accounted for before its
-comments are stripped - unique RE facts and load-bearing design rationale
-move into `docs/`, disposable narration just dies. During the campaign each
+Before a source file's comments were stripped, everything in them was
+accounted for: unique RE facts and the design rationale the code depends on
+moved into `docs/`, and plain narration was dropped. During the migration each
 file carried a status (`captured` = knowledge extracted to the named doc,
 comments stripped at module migration; `stripped` = comment-free and under
-the no-comments gate), and until a file was stripped its SOURCE remained the
-tie-breaker if doc and code disagreed. The migration is complete: every
+the no-comments gate), and until a file was stripped its source was the
+tie-breaker when doc and code disagreed. The migration is complete: every
 tracked file with a known comment syntax is comment-free, and `docs/` is the
-single source of truth. This doc is the factual map of which source file's
-comment knowledge lives in which doc, plus the discrepancies the audit
-surfaced.
+single source of truth. This doc maps each source file's comment knowledge to
+the doc that holds it now, and lists the discrepancies the audit found.
 
 ## Source-to-doc knowledge map
 
-The flat-monolith TUs (from src/render_executor.{h,cpp} down in this table)
-were audited from scratch during P9 rather than incrementally.
+The flat-monolith TUs (src/render_executor.{h,cpp} and every row below it)
+were audited from scratch in one pass during P9, not file by file.
 
 | File | Doc |
 |---|---|
@@ -84,35 +83,35 @@ were audited from scratch during P9 rather than incrementally.
 ## Whole-repo warnings coverage (P9)
 
 `r573::warnings` is linked into the `renderer` executable too (it was the
-last target without it). Driving the monolith warning-clean produced one new
-module - `src/support/env.{h,cpp}` (`Support::EnvVar/EnvFlag/EnvInt`, doc
-docs/support.md "Env") - which replaced ~30 raw `getenv` debug-knob reads in
-the DDR/qpro paths with a `GetEnvironmentVariableA`-backed helper (no C4996,
-and `<windows.h>` is in include-cleaner's ignore list). Dead statics
-(ApplyMat2d/ApplyOrthoIdentity, the qpro MaskProbe + HideAllMotionClips
-diagnostics), unused params, and dead locals were removed; `fopen`->`fopen_s`,
-`sscanf`->`sscanf_s`, `strncpy`->`strncpy_s`. A pre-existing include-cleaner
-gap in `tests/state/app_state_tests.cpp` (the P8 state-split moved BootState/
-IfsConfig into sub-headers the test never included directly) was fixed in the
-same pass. Verification for the pass: all no-comments-gated files, the full
-test suite, whole-tree clang-tidy, and the 3-backend byte-compare regression
-stayed green.
+last target without it). Making the monolith warning-clean added one module,
+`src/support/env.{h,cpp}` (`Support::EnvVar/EnvFlag/EnvInt`, doc
+docs/support.md "Env"). It replaced ~30 raw `getenv` debug-knob reads in the
+DDR/qpro paths with a `GetEnvironmentVariableA`-backed helper (no C4996, and
+`<windows.h>` is in include-cleaner's ignore list). The pass removed dead
+statics (ApplyMat2d/ApplyOrthoIdentity, the qpro MaskProbe + HideAllMotionClips
+diagnostics), unused params and dead locals, and changed `fopen`->`fopen_s`,
+`sscanf`->`sscanf_s`, `strncpy`->`strncpy_s`. It also fixed an older
+include-cleaner gap in `tests/state/app_state_tests.cpp` (the P8 state-split
+moved BootState/IfsConfig into sub-headers the test never included directly).
+After the pass, all no-comments-gated files, the full test suite, whole-tree
+clang-tidy and the 3-backend byte-compare regression stayed green.
 
 ## Gate end state (P9 whole-repo flip)
 
 Every tracked file with a known comment syntax is comment-free. The
 no-comments gate flipped from an allowlist (`no_comments_scope.json`, grown
 per migrated file through P8, now removed) to catch-all-minus-exempt: it
-checks all tracked source/tooling files and forbids comments in every
-one. The only exemptions live in `tools/ci/no_comments_exempt.json`:
-`.idea/*` (IDE config) and `vcpkg-overlays/*` (vendored third-party
-portfiles). New
-source files are caught by default - there is no per-file opt-in to grow.
+checks all tracked source/tooling files and forbids comments in every one.
+The only exemptions live in `tools/ci/no_comments_exempt.json`: `.idea/*`
+(IDE config) and `vcpkg-overlays/*` (vendored third-party portfiles). A new
+source file is checked from the start; there is no per-file list to add it
+to.
 
 ## Open questions and discrepancies found by the audit
 
-Discrepancies between comments, or between comments and code, preserved in
-the docs instead of silently resolved. Each needs an RE pass or a decision:
+These are disagreements between comments, or between comments and code. The
+docs record both sides as found instead of picking one, and each needs an RE
+pass or a decision:
 
 1. AVS property-traversal enum: avs_funcs.h and avs_xml.h documented
    different value maps from the same claimed source. The avs_xml.h map is
@@ -134,29 +133,28 @@ the docs instead of silently resolved. Each needs an RE pass or a decision:
 5. TexUpload format 0x1F: the comment said rgb565 (2 bpp) but the decode is
    4-bit ARGB nibbles scaled by 17 (argb4444). Verify against the
    afp-utils format table and fix label or decode.
-6. export.h claimed the exporter shells out to avifenc.exe - stale, flagged
-   historical in docs/export_pipeline.md.
+6. export.h claimed the exporter shells out to avifenc.exe. That is stale,
+   and docs/export_pipeline.md marks it as historical.
 7. game_profile.cpp carried a literal drive-letter install path in a
-   comment and an explicit rename TODO; both died at migration (the path is
-   generalized in docs/game_profiles.md).
-8. DDR layer struct: "+40" vs "+0x40" for the force-advance byte in two
-   files - possible decimal/hex notation collision; reconcile on the next
-   libafp pass (docs/ddr.md flags it).
+   comment and an explicit rename TODO; both were removed at migration (the
+   path is generalized in docs/game_profiles.md).
+8. DDR layer struct: two files give "+40" and "+0x40" for the force-advance
+   byte, possibly one notation written in decimal and the other in hex;
+   reconcile on the next libafp pass (docs/ddr.md flags it).
 9. afp_boot.cpp afpu_data tail constants are tentative ("far plane (?)"),
    and the bm2dx afp_set_flag(16/8/65537) triple has unknown semantics; both
    documented as unverified.
-10. Pixel-based legacy detectors: the static-frame export stop was
-    subsequently migrated to playhead-idle; the DDR content-loop fallback
-    was investigated for migration and proven unmigratable, so it is a
-    sanctioned exception alongside the blend-loop seam (evidence in
-    docs/loop.md); DDR_SELFDIFF remains a diagnostic.
+10. Pixel-based legacy detectors: the static-frame export stop was later
+    moved to playhead-idle. The DDR content-loop fallback was investigated
+    and proven impossible to move, so it is a sanctioned exception next to
+    the blend-loop seam (evidence in docs/loop.md). DDR_SELFDIFF remains a
+    diagnostic.
 
 ## Standing rule
 
-The migration is complete: the whole repo is comment-free and the gate is
-catch-all. The rule runs forward, not as a backlog - any NEW source
-file must land comment-free, with its unique RE facts and load-bearing
-design rationale written into the relevant `docs/` file in the SAME change.
-The gate catches a stray comment automatically; the discipline is that the
-knowledge is not lost when the comment is removed. The captured-draft
-tie-breaker era is over - `docs/` is the single source of truth.
+The whole repo is comment-free and the gate is catch-all. A new source file
+must be comment-free when it lands, with its unique RE facts and the design
+rationale the code depends on written into the relevant `docs/` file in the
+same change. The gate catches a stray comment, but only the author can make
+sure the knowledge in it reaches the docs. The source no longer breaks ties
+between doc and code: `docs/` is the single source of truth.

@@ -22,13 +22,13 @@ void DrawPlayback(const Scene3dHost::Status& st) {
     ImGui::SameLine();
     float speed = st.speed;
     ImGui::SetNextItemWidth(Gui::Dpi::S(120.0F));
-    if (ImGui::SliderFloat("speed##s3d", &speed, 0.0F, 4.0F, "%.2fx")) {
+    if (ImGui::SliderFloat("Speed##s3d", &speed, 0.0F, 4.0F, "%.2fx")) {
         Scene3dHost::SetSpeed(speed);
     }
 
     float t = st.time;
     ImGui::SetNextItemWidth(-FLT_MIN);
-    if (ImGui::SliderFloat("##s3dtime", &t, 0.0F, std::max(st.max_time, 1.0F), "tick %.0f")) {
+    if (ImGui::SliderFloat("##s3dtime", &t, 0.0F, std::max(st.max_time, 1.0F), "Tick %.0f")) {
         Scene3dHost::SetTime(t);
     }
     if (ImGui::IsItemHovered()) {
@@ -41,13 +41,13 @@ void DrawPlayback(const Scene3dHost::Status& st) {
 const char* BlendLabel(int mode) {
     switch (mode) {
     case Scene3d::kBlendAlpha:
-        return "alpha";
+        return "Alpha";
     case Scene3d::kBlendAdditive:
-        return "additive";
+        return "Additive";
     case Scene3d::kBlendSubtract:
-        return "subtract";
+        return "Subtract";
     default:
-        return "opaque";
+        return "Opaque";
     }
 }
 
@@ -55,8 +55,8 @@ void DrawAnimationToggles(const Scene3dHost::Status& st) {
     bool models = st.animate_models;
     if (ImGui::Checkbox("Animate models##s3d", &models)) Scene3dHost::SetAnimateModels(models);
     if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("Freeze every frame transform where it is now.\n"
-                          "Stops models spinning / drifting while the clock keeps running.");
+        ImGui::SetTooltip("Turn off to freeze every frame transform where it is, so the\n"
+                          "models stop spinning and drifting while the clock keeps running.");
     }
 
     ImGui::SameLine();
@@ -68,11 +68,11 @@ void DrawAnimationToggles(const Scene3dHost::Status& st) {
         if (!st.has_authored_camera) {
             ImGui::SetTooltip("This scene has no camera in its .x file.");
         } else if (st.free_camera) {
-            ImGui::SetTooltip("Free camera is on, so the authored camera is not driving\n"
+            ImGui::SetTooltip("Free camera is on, so the authored camera does not drive\n"
                               "the view. Turn free camera off to use this.");
         } else {
-            ImGui::SetTooltip("Freeze the camera animated inside the .x file.\n"
-                              "Stops the scene orbiting without pausing the models.");
+            ImGui::SetTooltip("Turn off to freeze the camera animated inside the .x file,\n"
+                              "so the scene stops orbiting while the models keep moving.");
         }
     }
 }
@@ -105,8 +105,8 @@ void DrawModelList() {
         ImGui::TextUnformatted(models[i].name.c_str());
         ImGui::PopID();
         if (blend_hovered) {
-            ImGui::SetTooltip("Blend mode comes from the game's per-screen setup code.\n"
-                              "Override it here to inspect a layer.");
+            ImGui::SetTooltip("The blend mode comes from the game's setup code for this\n"
+                              "screen. Override it here to inspect a layer.");
         }
     }
 }
@@ -115,26 +115,25 @@ void DrawCameraControls(const Scene3dHost::Status& st) {
     bool freecam = st.free_camera;
     if (ImGui::Checkbox("Free camera##s3d", &freecam)) Scene3dHost::SetFreeCamera(freecam);
     if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("OFF uses the camera animated inside the .x file.\n"
-                          "%s",
-                          st.has_authored_camera
-                              ? "This scene has one."
-                              : "This scene has NO authored camera, so free look is\n"
-                                "the only way to see it.");
+        ImGui::SetTooltip("When off, the view follows the camera animated inside the\n"
+                          ".x file. %s",
+                          st.has_authored_camera ? "This scene has one."
+                                                 : "This scene has none, so free look is\n"
+                                                   "the only way to see it.");
     }
     ImGui::SameLine();
     if (ImGui::Button("Reset view##s3d")) Scene3dHost::ResetCamera();
 
     auto& cam = Scene3dHost::MutCamera();
     ImGui::SetNextItemWidth(Gui::Dpi::S(140.0F));
-    ImGui::DragFloat("move speed##s3d", &cam.speed, 0.05F, 0.01F, 10000.0F, "%.2f /s");
+    ImGui::DragFloat("Move speed##s3d", &cam.speed, 0.05F, 0.01F, 10000.0F, "%.2f /s");
 
     ImGui::Spacing();
-    ImGui::TextDisabled("Hold RIGHT MOUSE in the render window to look around.");
+    ImGui::TextDisabled("Hold the right mouse button in the render window to look around.");
     ImGui::BulletText("W / A / S / D  move");
     ImGui::BulletText("E or Space  up,   Q or Ctrl  down");
     ImGui::BulletText("Shift  faster,   Alt  slower");
-    ImGui::BulletText("Mouse wheel is free for the panel; use 'move speed' above");
+    ImGui::BulletText("The mouse wheel scrolls this panel; set Move speed above");
 
     ImGui::Spacing();
     ImGui::Text("pos  %.1f, %.1f, %.1f", cam.x, cam.y, cam.z);

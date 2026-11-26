@@ -66,7 +66,7 @@ TEST_CASE("qpro tab warns unless the render size matches the avatar", "[gui][qpr
     ImGuiTest* test = harness.NewTest("qpro_size_warning");
     test->TestFunc = [](ImGuiTestContext* ctx) {
         OpenQproView(ctx);
-        IM_CHECK(ctx->ItemExists("Keep static base fills un-hue-shifted"));
+        IM_CHECK(ctx->ItemExists("Hue-shift effect fills only"));
         IM_CHECK(ctx->ItemExists("Head"));
     };
     harness.Run(test);
@@ -82,12 +82,12 @@ TEST_CASE("qpro category checkboxes gate the extract button", "[gui][qpro]") {
         for (const char* cat : {"Head", "Hand", "Hair", "Face", "Body", "Back"})
             ctx->ItemUncheck(cat);
         ctx->Yield(2);
-        ImGuiTestItemInfo const info = ctx->ItemInfo("Choose output folder + extract...");
+        ImGuiTestItemInfo const info = ctx->ItemInfo("Choose output folder and extract...");
         IM_CHECK_NE(info.ID, 0U);
         IM_CHECK((info.ItemFlags & ImGuiItemFlags_Disabled) != 0);
         ctx->ItemCheck("Head");
         ctx->Yield(2);
-        ImGuiTestItemInfo const after = ctx->ItemInfo("Choose output folder + extract...");
+        ImGuiTestItemInfo const after = ctx->ItemInfo("Choose output folder and extract...");
         IM_CHECK((after.ItemFlags & ImGuiItemFlags_Disabled) == 0);
     };
     harness.Run(test);
@@ -106,9 +106,9 @@ TEST_CASE("qpro extract posts the selected options", "[gui][qpro]") {
         for (const char* cat : {"Head", "Hand", "Hair", "Face", "Body", "Back"})
             ctx->ItemCheck(cat);
         ctx->ItemUncheck("Back");
-        ctx->ItemUncheck("Keep static base fills un-hue-shifted");
+        ctx->ItemUncheck("Hue-shift effect fills only");
         ctx->ItemInputValue("Output fps", 30);
-        ctx->ItemClick("Choose output folder + extract...");
+        ctx->ItemClick("Choose output folder and extract...");
     };
     harness.Run(test);
 
@@ -131,7 +131,7 @@ TEST_CASE("qpro extract is abandoned when the folder picker is cancelled", "[gui
     test->TestFunc = [](ImGuiTestContext* ctx) {
         OpenQproView(ctx);
         ctx->ItemCheck("Head");
-        ctx->ItemClick("Choose output folder + extract...");
+        ctx->ItemClick("Choose output folder and extract...");
     };
     harness.Run(test);
 
@@ -148,7 +148,7 @@ TEST_CASE("qpro output fps clamps to the accepted range", "[gui][qpro]") {
         OpenQproView(ctx);
         ctx->ItemCheck("Head");
         ctx->ItemInputValue("Output fps", 9000);
-        ctx->ItemClick("Choose output folder + extract...");
+        ctx->ItemClick("Choose output folder and extract...");
     };
     harness.Run(test);
 
@@ -215,7 +215,7 @@ TEST_CASE("qpro None then All flip the whole part selection", "[gui][qpro]") {
         OpenQproView(ctx);
         ctx->ItemClick("None");
         ctx->Yield(2);
-        ImGuiTestItemInfo const info = ctx->ItemInfo("Choose output folder + extract...");
+        ImGuiTestItemInfo const info = ctx->ItemInfo("Choose output folder and extract...");
         IM_CHECK((info.ItemFlags & ImGuiItemFlags_Disabled) != 0);
     };
     harness.Run(none_test);
@@ -225,7 +225,7 @@ TEST_CASE("qpro None then All flip the whole part selection", "[gui][qpro]") {
         OpenQproView(ctx);
         ctx->ItemClick("All");
         ctx->ItemCheck("Body");
-        ctx->ItemClick("Choose output folder + extract...");
+        ctx->ItemClick("Choose output folder and extract...");
     };
     harness.Run(all_test);
 
@@ -252,7 +252,7 @@ TEST_CASE("qpro group checkbox clears just that date group", "[gui][qpro]") {
         ctx->SetRef("##main");
         GuiTest::FocusChild(ctx, "main_view");
         ctx->ItemCheck("Body");
-        ctx->ItemClick("Choose output folder + extract...");
+        ctx->ItemClick("Choose output folder and extract...");
     };
     harness.Run(test);
 

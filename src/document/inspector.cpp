@@ -62,7 +62,7 @@ void AppendOwned(std::vector<InspectedRow>& rows, const Selection& selection) {
             InspectedRow{.field = Field{.name = "Keyframe value", .value = KeyValueText(*key)},
                          .edits = EditTarget::KeyValue});
     }
-    rows.push_back(Plain("Keyframe leaves as", std::string(EaseName(key->ease))));
+    rows.push_back(Plain("Interpolation", std::string(EaseName(key->ease))));
 }
 
 void AppendPlacement(std::vector<InspectedRow>& rows, const AfpAnimation::Animation& animation,

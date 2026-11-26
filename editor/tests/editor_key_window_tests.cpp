@@ -163,7 +163,7 @@ TEST_CASE("Easy ease smooths the selected keyframes from its keys and the lane m
 
     timeline->SelectKeys({ref(0), ref(3)});
     {
-        Script linear({Choose("How it leaves frame 0"), Choose("Linear")});
+        Script linear({Choose("Interpolation after frame 0"), Choose("Linear")});
         emit timeline->KeyMenuRequested(QPoint(4, 4), "Translation", 0, true);
         REQUIRE(Settle([&linear] { return linear.Finished(); }));
         CHECK(linear.Problems().isEmpty());
@@ -484,7 +484,7 @@ TEST_CASE("Simplifying an owned depth's keyframes keeps the ends of a straight r
     choose({ref(0), ref(1), ref(2), ref(3)});
     REQUIRE(RunCommand(opened.window, "key.simplify").isEmpty());
     SetPopoverValue(opened.window, "Largest change allowed", 0);
-    CHECK(PopoverDetail(opened.window) == "2 of 4 keyframes go");
+    CHECK(PopoverDetail(opened.window) == "Removes 2 of 4 keyframes");
     PressPopover(opened.window, "cancel");
     CHECK(timeline->SelectedKeys().size() == 4);
     choose({ref(0), ref(1), ref(2), ref(3)});

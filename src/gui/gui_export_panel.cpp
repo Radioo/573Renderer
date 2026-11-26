@@ -89,15 +89,16 @@ void DrawDocumentRange(const DocumentPlan& plan) {
     if (!plan.loaded) return;
     ImGui::Checkbox("Document range##exp_preset_range", &g_use_doc_range);
     if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("Export the range the ruler shows (Shift+drag on the ruler sets it),\n"
-                          "else the whole document. Turn it off to use the frame limit above.");
+        ImGui::SetTooltip("Export the range shown on the ruler (Shift+drag on the ruler sets it),\n"
+                          "or the whole document when no range is set. Turn this off to use\n"
+                          "the frame limit below.");
     }
     ImGui::SameLine();
     if (plan.range_active) {
         ImGui::TextDisabled("frames %d..%d (%d frames)", plan.start, plan.start + plan.frames - 1,
                             plan.frames);
     } else {
-        ImGui::TextDisabled("whole document (%d frames)", plan.frames);
+        ImGui::TextDisabled("Whole document (%d frames)", plan.frames);
     }
 }
 
@@ -123,13 +124,13 @@ void DrawFilenameAndFormat() {
     ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - ext_w);
     ImGui::InputText("##exp_stem", g_stem_buf, sizeof(g_stem_buf));
     if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("Output filename (stem only - extension is set\n"
-                          "automatically from the format below). Auto-\n"
-                          "regenerates when you switch IFS or animation.\n"
-                          "Relative paths resolve against the renderer's\n"
-                          "working directory.\n\n"
-                          "For PNG sequence, the stem becomes a folder\n"
-                          "name; frame_NNNNNN.png is written inside it.");
+        ImGui::SetTooltip("Output file name without the extension; the\n"
+                          "format below sets the extension. The name is\n"
+                          "filled in again when you switch IFS or\n"
+                          "animation. A relative path is resolved against\n"
+                          "the renderer's working directory.\n\n"
+                          "For a PNG sequence the name becomes a folder,\n"
+                          "with the frames inside as frame_NNNNNN.png.");
     }
     ImGui::SameLine(0.0F, 0.0F);
     ImGui::TextDisabled("%s", shown_ext);
@@ -145,26 +146,26 @@ void DrawFilenameAndFormat() {
         ImGui::EndCombo();
     }
     if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("AVIF: AV1 dual-stream with an auxiliary alpha plane.\n"
-                          "Plays in <img> tags with native transparency. Colour\n"
-                          "stream uses NVENC on an RTX 40-series GPU (~50x faster\n"
-                          "than software).\n\n"
-                          "WebM VP9: yuva420p single stream. Plays in <video> tags\n"
-                          "with native transparency. Software encode only - NVIDIA\n"
-                          "desktop GPUs have no VP9 encoder.\n"
-                          "<video> playback is much smoother than animated <img>\n"
-                          "for long clips because Blink's 10ms animated-image\n"
-                          "frame-duration clamp doesn't apply.\n\n"
-                          "WebM AV1: AV1 single stream in WebM. Hardware-\n"
-                          "accelerated via NVENC and plays in <video> - the\n"
-                          "fastest and smoothest option, but opaque only.\n\n"
-                          "WebP: animated WebP via libwebp_anim. Alpha + smooth\n"
-                          "playback in <img> tags on every modern browser. ~2-3x\n"
-                          "larger than AV1/AVIF but no decoder bugs at high fps.\n\n"
-                          "PNG sequence: writes a folder of frame_NNNNNN.png\n"
-                          "files (zero-padded 6 digits). Lossless, large on disk,\n"
-                          "ideal for re-encoding workflows or frame-level\n"
-                          "inspection. The 'Quality' slider is ignored.");
+        ImGui::SetTooltip("AVIF: AV1 with a separate alpha plane. Plays in <img>\n"
+                          "tags with transparency. The colour stream uses NVENC on\n"
+                          "an RTX 40-series GPU, about 50x faster than software.\n\n"
+                          "WebM VP9: a single yuva420p stream. Plays in <video>\n"
+                          "tags with transparency. Software encoding only, because\n"
+                          "NVIDIA desktop GPUs have no VP9 encoder. Long clips play\n"
+                          "more smoothly in <video> than as an animated <img>,\n"
+                          "since Blink's 10 ms frame-duration clamp for animated\n"
+                          "images does not apply.\n\n"
+                          "WebM AV1: a single AV1 stream in WebM, encoded with\n"
+                          "NVENC and played in <video>. The fastest and smoothest\n"
+                          "option, but it has no alpha.\n\n"
+                          "WebP: animated WebP through libwebp_anim. Alpha and\n"
+                          "smooth playback in <img> tags in every current browser.\n"
+                          "About 2-3x larger than AV1 or AVIF, without their\n"
+                          "decoder bugs at high frame rates.\n\n"
+                          "PNG sequence: a folder of frame_NNNNNN.png files\n"
+                          "(six-digit numbers). Lossless and large on disk. Good\n"
+                          "for re-encoding elsewhere or for checking single\n"
+                          "frames. The quality slider has no effect.");
     }
 }
 
@@ -173,49 +174,46 @@ void DrawFpsQualitySliders() {
     ImGui::InputInt("fps##exp_fps", &g_fps, 1, 10);
     g_fps = std::clamp(g_fps, 1, 240);
     if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("Output framerate (AVIF timebase). Does not\n"
-                          "change the animation's playback speed - the\n"
-                          "renderer samples the running animation at\n"
-                          "this cadence. 120 is the safest default\n"
-                          "(matches the internal tick rate, so no\n"
-                          "frames are skipped); drop to 30/60 for a\n"
-                          "smaller file.");
+        ImGui::SetTooltip("Output frame rate. The animation plays at the\n"
+                          "same speed whatever you set here: the renderer\n"
+                          "samples it at this rate. 120 matches the\n"
+                          "internal tick rate, so no frames are skipped.\n"
+                          "Use 30 or 60 for a smaller file.");
     }
     const DocumentPlan plan = CurrentDocumentPlan();
     if (plan.loaded && !Editor::FpsRatioAllowed(plan.fps, g_fps)) {
         ImGui::SameLine();
         ImGui::TextColored(ImVec4(1.0F, 0.45F, 0.45F, 1.0F),
-                           "not an integer ratio of the document's %d fps", plan.fps);
+                           "not a whole multiple or divisor of the document's %d fps", plan.fps);
     }
     ImGui::SameLine();
     ImGui::SetNextItemWidth(-FLT_MIN);
-    ImGui::SliderInt("##exp_q", &g_quality, 0, 100, "quality %d");
+    ImGui::SliderInt("##exp_q", &g_quality, 0, 100, "Quality %d");
     if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("Output quality. 0 = smallest file with strong\n"
-                          "artifacts, 100 = near lossless. Default 60.\n"
-                          "Applies to every format: libaom CRF for AVIF\n"
-                          "software, NVENC CQP for AVIF/WebM-AV1 hardware,\n"
-                          "and libvpx CRF for WebM VP9.");
+        ImGui::SetTooltip("Output quality. 0 gives the smallest file with\n"
+                          "heavy artifacts, 100 is close to lossless.\n"
+                          "Default 60. It sets the libaom CRF for software\n"
+                          "AVIF, the NVENC CQP for hardware AVIF and\n"
+                          "WebM AV1, and the libvpx CRF for WebM VP9.");
     }
 }
 
 void DrawKeyframeIntervalControl(MediaSink::Format current_format) {
     if (MediaSink::UsesKeyframeInterval(current_format)) {
         ImGui::SetNextItemWidth(Gui::Dpi::S(120.0F));
-        ImGui::InputInt("keyframe interval##exp_keyint", &g_keyframe_interval, 1, 30);
+        ImGui::InputInt("Keyframe interval##exp_keyint", &g_keyframe_interval, 1, 30);
         g_keyframe_interval = std::clamp(g_keyframe_interval, 0, 100000);
         if (ImGui::IsItemHovered()) {
-            ImGui::SetTooltip("Frames between full keyframes (video formats only).\n"
-                              "0 = auto (one keyframe per second). A larger value\n"
-                              "means fewer keyframes and a smaller file - ideal for\n"
-                              "static or slowly-scrolling scenes, which compress to\n"
-                              "almost nothing between keyframes. Set it >= your total\n"
-                              "frame count for a single keyframe (smallest file, but\n"
-                              "slower to seek). PNG and WebP ignore this.");
+            ImGui::SetTooltip("Frames between full keyframes. 0 means one keyframe\n"
+                              "per second. Fewer keyframes give a smaller file, which\n"
+                              "suits static or slowly scrolling scenes: they compress\n"
+                              "to almost nothing between keyframes. A value at or\n"
+                              "above the total frame count gives a single keyframe,\n"
+                              "the smallest file but the slowest to seek.");
         }
         ImGui::SameLine();
         if (g_keyframe_interval == 0) {
-            ImGui::TextDisabled("(auto: 1/sec)");
+            ImGui::TextDisabled("(one per second)");
         } else {
             ImGui::TextDisabled("(every %d frames)", g_keyframe_interval);
         }
@@ -225,13 +223,13 @@ void DrawKeyframeIntervalControl(MediaSink::Format current_format) {
 void DrawFrameLimitControls(const ::Export::Capabilities& caps) {
     ImGui::Checkbox("Limit frames##exp_limit", &g_limit_frames);
     if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("When ON, stop the export after a fixed number of captured\n"
-                          "frames (defaults to 60 = 1 second at 60 fps). When OFF\n"
-                          "(default), the export runs until %s.\n\n"
-                          "Use cases: clamp a long title to a short preview, capture\n"
-                          "a fixed-duration looped clip without waiting for the\n"
-                          "end-of-timeline detector, or get a deterministic file\n"
-                          "size for tests.",
+        ImGui::SetTooltip("Stop the export after a set number of captured frames\n"
+                          "(60 at first, one second at 60 fps). Off by default:\n"
+                          "the export then stops after %s.\n\n"
+                          "Use it to cut a long title down to a short preview, to\n"
+                          "capture a looped clip of fixed length without waiting\n"
+                          "for the end-of-timeline detector, or to get the same\n"
+                          "file size on every test run.",
                           caps.natural_end);
     }
     ImGui::SameLine();
@@ -248,9 +246,9 @@ void DrawFrameLimitControls(const ::Export::Capabilities& caps) {
     }
     ImGui::EndDisabled();
     if (frames_hovered) {
-        ImGui::SetTooltip("Number of frames the encoder receives before the export\n"
-                          "auto-finalises. Counted post-capture: a value of 60\n"
-                          "produces a file with exactly 60 encoded frames.");
+        ImGui::SetTooltip("How many frames the encoder receives before the export\n"
+                          "finishes. Captured frames are counted, so 60 gives a\n"
+                          "file with exactly 60 frames.");
     }
 }
 
@@ -258,31 +256,31 @@ void DrawLoopControls(const ::Export::Capabilities& caps) {
     if (!caps.loop_count && !caps.blend_seam) {
         ImGui::TextDisabled("Loop options do not apply to this content.");
         if (ImGui::IsItemHovered()) {
-            ImGui::SetTooltip("A screen preset is composited from layers with different\n"
-                              "periods and a screen timer that changes speed, so it has no\n"
-                              "single loop boundary to count or crossfade. The export runs\n"
-                              "%s;\nuse 'Limit frames' for any other length.",
+            ImGui::SetTooltip("A screen preset is built from layers with different\n"
+                              "periods and a screen timer that changes speed, so it has\n"
+                              "no single loop point to count or crossfade. The export\n"
+                              "stops after %s.\nUse Limit frames for any other length.",
                               caps.natural_end);
         }
         return;
     }
     ImGui::SetNextItemWidth(Gui::Dpi::S(120.0F));
-    if (ImGui::InputInt("Continuous loop count##exp_loops", &g_loop_count, 1, 5))
+    if (ImGui::InputInt("Loops to capture##exp_loops", &g_loop_count, 1, 5))
         g_loop_count = std::clamp(g_loop_count, 1, 1000);
     if (ImGui::IsItemHovered()) {
         ImGui::SetTooltip("How many loops of the animation to capture (default 1).\n"
-                          "The exporter keeps recording past each detected loop\n"
-                          "boundary until this many loops are in the output, so the\n"
-                          "clip plays the loop N times. 'Limit frames' still caps it.");
+                          "Recording continues past each detected loop point until\n"
+                          "the output holds this many loops. Limit frames still\n"
+                          "applies.");
     }
 
     ImGui::Checkbox("Blend loop seam##exp_blend", &g_blend_loop);
     if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("For backgrounds that don't loop cleanly (e.g. one-shot intros like\n"
-                          "select_bg_iv's _4bg). Buffers the captured cycle, picks the frame\n"
-                          "closest to the start, and crossfades the wrap so it dissolves\n"
-                          "instead of snapping. This is a synthesized loop the real game does\n"
-                          "NOT do - leave off for backgrounds that already loop cleanly.");
+        ImGui::SetTooltip("For backgrounds that do not loop cleanly, such as one-shot intros\n"
+                          "like select_bg_iv's _4bg. The captured cycle is buffered, the frame\n"
+                          "closest to the start is picked, and the wrap is crossfaded so it\n"
+                          "dissolves instead of jumping. The game itself does not do this, so\n"
+                          "leave it off for backgrounds that already loop cleanly.");
     }
     if (g_blend_loop) {
         ImGui::SameLine();
@@ -290,9 +288,9 @@ void DrawLoopControls(const ::Export::Capabilities& caps) {
         if (ImGui::InputInt("Blend frames##exp_blendN", &g_blend_frames, 1, 5))
             g_blend_frames = std::clamp(g_blend_frames, 0, 240);
         if (ImGui::IsItemHovered()) {
-            ImGui::SetTooltip("Crossfade length in frames (default 15). Longer = a softer\n"
-                              "dissolve at the wrap; shorter = crisper, with a more visible\n"
-                              "seam mismatch. 0 = no crossfade (hard cut at the best frame).");
+            ImGui::SetTooltip("Crossfade length in frames (default 15). A longer fade is softer;\n"
+                              "a shorter one is crisper but shows more of the mismatch at the\n"
+                              "seam. 0 means a hard cut at the best frame.");
         }
     }
 }
@@ -363,11 +361,10 @@ void DrawResolutionPresetCombo(int rw, int rh) {
         ImGui::EndCombo();
     }
     if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("Output resolution. Smaller sizes shrink the file and\n"
-                          "substantially reduce browser decode cost. \"Native\" tracks\n"
-                          "the render size from Setup - if you change render res,\n"
-                          "the export follows. The fixed presets pin the export\n"
-                          "to that exact pixel dim regardless of render size.");
+        ImGui::SetTooltip("Output resolution. Smaller sizes make smaller files that\n"
+                          "are much cheaper for a browser to decode. Native follows\n"
+                          "the render size from Setup, so the export changes with\n"
+                          "it. The fixed sizes always export at exactly that size.");
     }
 }
 
@@ -403,18 +400,18 @@ void DrawScaleButtons(int w_disp, int h_disp) {
     const ScaleBtn kScales[] = {
         {.label = "x0.5##exp_scl",
          .mul = 0.5F,
-         .tip = "Halve the current size (1080p->540p, 720p->360p).\n"
-                "Aspect ratio preserved."},
+         .tip = "Halve the current size (1080p to 540p, 720p to 360p).\n"
+                "Keeps the aspect ratio."},
         {.label = "x0.25##exp_scl",
          .mul = 0.25F,
-         .tip = "Quarter the current size (1080p->270p, 720p->180p).\n"
-                "Very small files; preview-quality output."},
+         .tip = "Quarter the current size (1080p to 270p, 720p to 180p).\n"
+                "Very small files at preview quality."},
         {.label = "x0.1##exp_scl",
          .mul = 0.1F,
-         .tip = "One tenth size. Useful for thumbnail strips or\n"
-                "very-low-bandwidth previews."},
+         .tip = "One tenth of the current size, for thumbnail strips\n"
+                "or previews on a very slow connection."},
     };
-    ImGui::TextDisabled("Scale current x:");
+    ImGui::TextDisabled("Scale current size:");
     ImGui::SameLine();
     for (const auto& sb : kScales) {
         int new_w = (int)std::lroundf((float)w_disp * sb.mul);
@@ -470,11 +467,10 @@ bool DrawCropPickButtons(App::State& state, bool pick_mode, int* xywh, bool& cha
         }
     }
     if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("Click to arm crop-selection mode, then\n"
-                          "click-and-drag on the render window to\n"
-                          "draw a rectangle. Esc cancels. This dialog\n"
-                          "reopens once the region is picked; the export\n"
-                          "will encode only pixels inside the rect.");
+        ImGui::SetTooltip("Click, then drag a rectangle on the render\n"
+                          "window. Esc cancels. This dialog opens again\n"
+                          "once the region is picked, and the export\n"
+                          "encodes only the pixels inside it.");
     }
     ImGui::SameLine();
     if (ImGui::Button("Clear##crop_clear", ImVec2(Gui::Dpi::S(70.0F), 0.0F))) {
@@ -491,7 +487,7 @@ bool DrawCrop(App::State& state) {
     int xywh[4] = {rect.x, rect.y, rect.w, rect.h};
     const bool pick_mode = state.GetCropPickMode();
 
-    ImGui::TextUnformatted("crop");
+    ImGui::TextUnformatted("Crop");
 
     const float avail = ImGui::GetContentRegionAvail().x;
     const ImGuiStyle& st = ImGui::GetStyle();
@@ -524,50 +520,47 @@ bool DrawCrop(App::State& state) {
 
 void DrawHwAccelTooltip(MediaSink::Format current_format, bool hw_available, bool is_h264) {
     if (current_format == MediaSink::Format::MP4_HEVC_Alpha) {
-        ImGui::SetTooltip("MP4 HEVC-alpha is software only (libx265).\n"
-                          "NVENC's HEVC encoder has no alpha path, so\n"
-                          "the alpha layer this format exists for rules\n"
-                          "hardware encode out on every GPU.");
+        ImGui::SetTooltip("MP4 HEVC with alpha is software only (libx265).\n"
+                          "NVENC's HEVC encoder cannot encode alpha, and\n"
+                          "alpha is the reason to pick this format.");
     } else if (!hw_available && is_h264) {
-        ImGui::SetTooltip("h264_nvenc unavailable on this machine.\n"
-                          "H.264 export needs an NVIDIA GPU with NVENC -\n"
-                          "this ffmpeg build has no software H.264\n"
-                          "encoder (no libx264 / openh264).");
+        ImGui::SetTooltip("h264_nvenc is not available on this machine.\n"
+                          "H.264 export needs an NVIDIA GPU with NVENC,\n"
+                          "because this ffmpeg build has no software\n"
+                          "H.264 encoder (no libx264 or openh264).");
     } else if (!hw_available) {
-        ImGui::SetTooltip("Hardware acceleration unavailable on this\n"
-                          "machine. Needs an NVIDIA GPU with AV1\n"
-                          "encode support (RTX 40-series or newer)\n"
-                          "and an ffmpeg build compiled with the\n"
-                          "nvcodec feature enabled.");
+        ImGui::SetTooltip("Hardware encoding is not available on this\n"
+                          "machine. It needs an NVIDIA GPU that can\n"
+                          "encode AV1 (RTX 40-series or newer) and an\n"
+                          "ffmpeg build with nvcodec enabled.");
     } else if (current_format == MediaSink::Format::WebM_VP9) {
-        ImGui::SetTooltip("WebM VP9 has no hardware encoder path.\n"
-                          "NVIDIA desktop GPUs don't ship a VP9\n"
-                          "encoder - switch to AVIF or WebM-AV1\n"
-                          "to enable NVENC.");
+        ImGui::SetTooltip("WebM VP9 has no hardware encoder: NVIDIA\n"
+                          "desktop GPUs have no VP9 encoder. Switch\n"
+                          "to AVIF or WebM AV1 to use NVENC.");
     } else if (current_format == MediaSink::Format::WebP_Anim) {
-        ImGui::SetTooltip("WebP (libwebp_anim) is software only -\n"
-                          "VP8 has no hardware encoder on consumer\n"
-                          "GPUs. libwebp is fast in software\n"
-                          "(~5-10x faster than libaom-av1).");
+        ImGui::SetTooltip("WebP (libwebp_anim) is software only, since\n"
+                          "consumer GPUs have no VP8 encoder. libwebp\n"
+                          "is fast anyway, about 5-10x faster than\n"
+                          "libaom-av1.");
     } else if (current_format == MediaSink::Format::PNG_Sequence) {
         ImGui::SetTooltip("PNG sequence writes lossless per-frame\n"
-                          "files through WIC. No encoder, no NVENC,\n"
-                          "no quality slider - frames are written\n"
-                          "directly from BGRA to disk.");
+                          "files through WIC, straight from the BGRA\n"
+                          "frames. There is no encoder, so NVENC and\n"
+                          "the quality slider do not apply.");
     } else if (is_h264) {
-        ImGui::SetTooltip("Encode H.264 with NVENC (h264_nvenc) -\n"
-                          "fast hardware encode, available on most\n"
-                          "NVIDIA GPUs (not only RTX 40-series). Opaque\n"
-                          "only. This ffmpeg build has no software H.264\n"
-                          "encoder, so H.264 export requires NVENC.");
+        ImGui::SetTooltip("Encode H.264 with NVENC (h264_nvenc), which\n"
+                          "most NVIDIA GPUs have, not only the RTX\n"
+                          "40-series. No alpha. This ffmpeg build has no\n"
+                          "software H.264 encoder, so H.264 export\n"
+                          "needs NVENC.");
     } else {
         ImGui::SetTooltip("Encode the AV1 stream with NVENC\n"
-                          "(av1_nvenc). ~50x faster than software\n"
+                          "(av1_nvenc), about 50x faster than\n"
                           "libaom-av1 on an RTX 40-series GPU.\n"
-                          "For AVIF the alpha stream stays on\n"
-                          "software - bitstream is tiny and NVENC\n"
-                          "has no alpha path. Falls back to software\n"
-                          "if NVENC init fails at runtime.");
+                          "AVIF's alpha stream is still encoded in\n"
+                          "software: it is tiny, and NVENC cannot\n"
+                          "encode alpha. If NVENC fails to start,\n"
+                          "the export falls back to software.");
     }
 }
 
@@ -575,19 +568,18 @@ void DrawBackgroundAndHw(MediaSink::Format current_format, bool hw_available,
                          const ::Export::Capabilities& caps) {
     if (!caps.transparent_bg) g_bg_transparent = false;
     ImGui::BeginDisabled(!caps.transparent_bg);
-    ImGui::Checkbox("Transparent bg", &g_bg_transparent);
+    ImGui::Checkbox("Transparent background", &g_bg_transparent);
     ImGui::EndDisabled();
     if (!caps.transparent_bg) {
         if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-            ImGui::SetTooltip("This content composites an opaque background of its own,\n"
-                              "so there is no alpha to keep.");
+            ImGui::SetTooltip("This content draws its own opaque background, so there\n"
+                              "is no alpha to keep.");
         }
     } else if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("Enable to export a real alpha channel (AVIF\n"
-                          "plays with transparency). Disable to composite\n"
-                          "a solid colour under the animation - useful\n"
-                          "when the target viewer does not handle\n"
-                          "animated AVIF transparency well.");
+        ImGui::SetTooltip("Export a real alpha channel (AVIF plays with\n"
+                          "transparency). Turn it off to put a solid\n"
+                          "colour under the animation, for viewers that\n"
+                          "handle animated AVIF transparency badly.");
     }
     ImGui::SameLine();
     const bool bg_colour_inert = g_bg_transparent || !caps.transparent_bg;
@@ -597,8 +589,8 @@ void DrawBackgroundAndHw(MediaSink::Format current_format, bool hw_available,
                       ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
     if (bg_colour_inert) ImGui::EndDisabled();
     if (!caps.transparent_bg && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-        ImGui::SetTooltip("This screen is opaque, so it exports exactly what the\n"
-                          "preview shows and no background shows through.");
+        ImGui::SetTooltip("This screen is opaque, so the export matches the preview\n"
+                          "and no background colour shows through.");
     }
 
     const bool is_h264 = (current_format == MediaSink::Format::MP4_H264);
@@ -608,10 +600,10 @@ void DrawBackgroundAndHw(MediaSink::Format current_format, bool hw_available,
     if (!hw_applies) {
         ImGui::BeginDisabled();
         bool tmp = false;
-        ImGui::Checkbox("HW accel##exp_hw", &tmp);
+        ImGui::Checkbox("Hardware encoding##exp_hw", &tmp);
         ImGui::EndDisabled();
     } else {
-        ImGui::Checkbox("HW accel##exp_hw", &g_prefer_hw);
+        ImGui::Checkbox("Hardware encoding##exp_hw", &g_prefer_hw);
     }
     if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
         DrawHwAccelTooltip(current_format, hw_available, is_h264);
@@ -674,8 +666,8 @@ void DrawStartAndStatus(App::State& state, const App::ExportState& ex, bool busy
         }
         ImGui::EndDisabled();
         if (!ratio_ok && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-            ImGui::SetTooltip("The export fps must be an integer multiple or divisor of the "
-                              "document's %d fps, else the screen would play at the wrong speed.",
+            ImGui::SetTooltip("The export fps must be a whole multiple or divisor of the "
+                              "document's %d fps, or the screen plays at the wrong speed.",
                               plan.fps);
         }
     } else {
@@ -691,28 +683,28 @@ void DrawStartAndStatus(App::State& state, const App::ExportState& ex, bool busy
 
     switch (ex.phase) {
     case App::ExportPhase::Idle:
-        ImGui::TextDisabled("idle");
+        ImGui::TextDisabled("Idle");
         break;
     case App::ExportPhase::Capturing:
-        ImGui::TextColored(ImVec4(1.0F, 0.85F, 0.3F, 1.0F), "capturing frame %d...%s",
+        ImGui::TextColored(ImVec4(1.0F, 0.85F, 0.3F, 1.0F), "Capturing frame %d...%s",
                            ex.frames_captured, ex.using_hardware ? "  [NVENC]" : "");
         break;
     case App::ExportPhase::Encoding: {
         const char* enc_label = MediaSink::FormatToken(MediaSink::FromIndex(ex.format));
-        ImGui::TextColored(ImVec4(1.0F, 0.85F, 0.3F, 1.0F), "encoding %s (%d frames)...%s",
+        ImGui::TextColored(ImVec4(1.0F, 0.85F, 0.3F, 1.0F), "Encoding %s (%d frames)...%s",
                            enc_label, ex.frames_captured, ex.using_hardware ? "  [NVENC]" : "");
-        ImGui::ProgressBar(-1.0F * (float)ImGui::GetTime(), ImVec2(-FLT_MIN, 0), "finalising");
+        ImGui::ProgressBar(-1.0F * (float)ImGui::GetTime(), ImVec2(-FLT_MIN, 0), "Finishing");
         break;
     }
     case App::ExportPhase::Done:
         ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.50F, 0.92F, 0.65F, 1.0F));
-        ImGui::TextWrapped("done - %s", ex.output_path.c_str());
+        ImGui::TextWrapped("Saved: %s", ex.output_path.c_str());
         ImGui::PopStyleColor();
         DrawRevealButton(ex.output_path);
         break;
     case App::ExportPhase::Failed:
         ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0F, 0.45F, 0.45F, 1.0F));
-        ImGui::TextWrapped("failed: %s", ex.error.c_str());
+        ImGui::TextWrapped("Export failed: %s", ex.error.c_str());
         ImGui::PopStyleColor();
         break;
     }

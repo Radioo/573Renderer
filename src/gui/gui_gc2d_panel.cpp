@@ -36,11 +36,11 @@ void DrawPlayback(const Gc2dHost::Status& st) {
     ImGui::SameLine();
     float speed = st.speed;
     ImGui::SetNextItemWidth(Gui::Dpi::S(120.0F));
-    if (ImGui::SliderFloat("speed##gc2d", &speed, 0.0F, 4.0F, "%.2fx")) Gc2dHost::SetSpeed(speed);
+    if (ImGui::SliderFloat("Speed##gc2d", &speed, 0.0F, 4.0F, "%.2fx")) Gc2dHost::SetSpeed(speed);
 
     int frame = st.frame;
     ImGui::SetNextItemWidth(-FLT_MIN);
-    if (ImGui::SliderInt("##gc2dframe", &frame, 0, std::max(st.length - 1, 0), "frame %d")) {
+    if (ImGui::SliderInt("##gc2dframe", &frame, 0, std::max(st.length - 1, 0), "Frame %d")) {
         Gc2dHost::SetPaused(true);
         Gc2dHost::SetFrame(frame);
     }

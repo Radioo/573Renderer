@@ -12,8 +12,7 @@ The renderer and the editor both link everything statically
 ship as one file (ADR 0009). They still need different dependency sets (ffmpeg
 and imgui against Qt) and so different `vcpkg_installed` trees, and a binary
 directory holds one, so the editor builds into its own binary directory
-(`build-editor/`). The two live in the same CMake project as two configure
-presets rather than as two projects:
+(`build-editor/`). Both are configure presets of the same CMake project:
 
 - `dev` (and `ci`, `dev32`, ...) build the renderer. `R573_BUILD_EDITOR` is
   off, so `editor/` is never added.
@@ -28,11 +27,11 @@ behind an `editor` feature. The `editor` preset asks for the `editor` feature
 with `VCPKG_MANIFEST_NO_DEFAULT_FEATURES`, so building the editor does not
 build ffmpeg, and building the renderer does not build Qt.
 
-Being one project is what lets an IDE list both sets of targets: pick the
-profile and the run configurations follow. The two still share source rather
-than targets: `cmake/r573_shared_sources.cmake` lists the support, format and
-preview sources both consume, so a file added to the renderer's format layer is
-picked up by the editor with no second list to keep in step.
+Because it is one project, an IDE lists both sets of targets: pick the profile
+and the run configurations follow. The two share sources but no targets:
+`cmake/r573_shared_sources.cmake` lists the support, format and preview sources
+both consume, so a file added to the renderer's format layer reaches the editor
+without a second list to keep in step.
 
 The editor links no renderer app, GUI or backend code. Everything it needs
 from the engine happens in the preview host process (docs/preview_host.md).
@@ -43,22 +42,22 @@ from the engine happens in the preview host process (docs/preview_host.md).
 editor\build.bat
 ```
 
-Same shape as the renderer's `build.bat`: vswhere locates Visual Studio,
+It works like the renderer's `build.bat`: vswhere locates Visual Studio,
 `vcvarsall x64` sets the toolchain up, vcpkg is bootstrapped if needed, then
-`cmake --preset editor` and `cmake --build --preset editor` from the repository
-root. The preset writes to `build-editor/` (gitignored) and sets
-`VCPKG_HOST_TRIPLET` to `x64-windows-static`, the same as its target triplet:
-`flatc` is found as a host tool, and vcpkg does not treat the build as a cross
-build, which would make the qtbase port build a second Qt for `moc` and `rcc`. Running plain `cmake` from a
-shell with no Visual Studio environment fails at the compiler check with
-`LNK1104: cannot open file 'kernel32.lib'`, which is what the batch file
-exists to prevent.
+`cmake --preset editor` and `cmake --build --preset editor` run from the
+repository root. The preset writes to `build-editor/` (gitignored) and sets
+`VCPKG_HOST_TRIPLET` to `x64-windows-static`, the same as its target triplet.
+That way `flatc` is found as a host tool and vcpkg does not treat the build as
+a cross build, which would make the qtbase port build a second Qt for `moc` and
+`rcc`. Plain `cmake` from a shell with no Visual Studio environment fails at
+the compiler check with `LNK1104: cannot open file 'kernel32.lib'`; the batch
+file sets that environment up.
 
 CI builds the same preset and runs both suites on every push and pull request
 to master (the `editor` job of `.github/workflows/build-renderer.yml`; the
-cache, the packaging and the checks it makes are in docs/gates.md). A build that only works locally is a build that
-drifts: the runner has its own MSVC, so `CMAKE_COMPILE_WARNING_AS_ERROR` from
-the `base` preset is checked against a second compiler there.
+cache, the packaging and the checks it makes are in docs/gates.md). The runner
+has its own MSVC, so `CMAKE_COMPILE_WARNING_AS_ERROR` from the `base` preset is
+also checked against a second compiler there.
 
 ## Widget tests
 
@@ -66,13 +65,13 @@ the `base` preset is checked against a second compiler there.
 graph and the ease curve with synthetic mouse events, with no window shown and
 no host. Its cases live in `editor/tests/editor_widget_tests.cpp`,
 `editor/tests/editor_timeline_widget_tests.cpp` (dragging, snapping and dropping
-on the timeline, labels and zoom) and `editor/tests/editor_graph_widget_tests.cpp`
-(the graph panel), with the mouse helpers (`Send`, `Click`, `Drag`, `Wheel`),
-the timeline geometry and the sample scene shared from
-`editor/tests/widget_test_support.h`, with the panel tab strip's corner layout
-in `editor/tests/editor_panel_tabs_widget_tests.cpp`;
-its `main` sets `QT_QPA_PLATFORM=minimal` before creating the `QApplication`,
-and the minimal platform plugin is deployed next to it. The cases cover
+on the timeline, labels and zoom), `editor/tests/editor_graph_widget_tests.cpp`
+(the graph panel) and `editor/tests/editor_panel_tabs_widget_tests.cpp` (the
+panel tab strip's corner layout). The mouse helpers (`Send`, `Click`, `Drag`,
+`Wheel`), the timeline geometry and the sample scene are shared from
+`editor/tests/widget_test_support.h`. Its `main` sets `QT_QPA_PLATFORM=minimal`
+before creating the `QApplication`, and the minimal platform plugin is deployed
+next to it. The cases cover
 clicking, Ctrl-clicking and box-selecting keyframes, dragging a selection by
 whole frames, a selection losing keyframes that are gone, stage clicks in stage
 pixels, moving, scaling and turning a selection with its handles, and dragging
@@ -93,22 +92,24 @@ ones that start the preview host live in
 `R573_IIDX34_DIR`). The `Script`, its steps and the package helpers are shared
 from `editor/tests/window_test_support.h`, including `OwnDroppedDot`, which
 drops the dot shape on depth 3 at frame 0, makes a project and lets it own that
-depth, the start of every test that edits an owned depth. A case that compares
-pictures of a widget takes them through `Picture`, never `grab()` directly: the
-window is never shown, so its docked layout is still at its constructed size
-until something forces a pass, and the first `grab()` is that pass. It returns a
-picture of the pre-layout geometry and the widget is a different size
-immediately afterwards, which made a later capture of the same frame compare
-unequal to the first one. `Picture` grabs, processes events and grabs again
-until the widget's size stops changing. Its `main` points
-`QSettings` at a temporary INI directory under its own organisation name, so it
-never reads the user's game install or layout, and it asks for the minimal
-platform only when `QT_QPA_PLATFORM` is not already set, so
+depth, which is how every test that edits an owned depth starts.
+
+A case that compares pictures of a widget takes them through `Picture` and
+never calls `grab()` directly. The window is never shown, so its docked layout
+stays at its constructed size until something forces a layout pass, and the
+first `grab()` is that pass. It returns a picture of the pre-layout geometry
+and the widget changes size right afterwards, so a later capture of the same
+frame compared unequal to the first. `Picture` grabs, processes events and
+grabs again until the widget's size stops changing.
+
+Its `main` points `QSettings` at a temporary INI directory under its own
+organisation name, so it never reads the user's game install or layout. It asks
+for the minimal platform only when `QT_QPA_PLATFORM` is not already set, so
 `QT_QPA_PLATFORM=windows ./build-editor/editor_window_tests.exe` runs the same
-cases against the real platform. Layout answers can differ between the two (the
-minimal plugin lays a panel out where the real one leaves it stale), so a case
-about geometry is worth running both ways. Each case writes a small package
-to a temporary directory and opens it. Context menus are raised by emitting the
+cases against the real platform. Layout results can differ between the two (the
+minimal plugin lays a panel out where the real one leaves it stale), so run a
+case about geometry both ways. Each case writes a small package to a temporary
+directory and opens it. Context menus are raised by emitting the
 widget's `customContextMenuRequested` signal; a `Script` of steps, run from a
 timer while the menu and its dialogs block, picks a menu item by selecting it
 and pressing Return (which is what makes `QMenu::exec` return it), fills in
@@ -116,26 +117,25 @@ and pressing Return (which is what makes `QMenu::exec` return it), fills in
 check what was reported. The cases cover opening an animation without a host,
 editing and undoing an animation setting, making and removing an animation from
 the package menu, refusing a taken name, and the background option. Putting back
-the old early return for a missing host was seen to fail four assertions.
-Every wait is bounded: `Settle` gives up after a minute, and a `Script` still
+the old early return for a missing host failed four assertions.
+
+Every wait is bounded. `Settle` gives up after a minute, and a `Script` still
 running after that closes whatever dialog or menu is open and records a timeout,
-so a step that never matches fails the case instead of hanging the gate (seen by
-giving the duplicate case a step that cannot match). The bound is only a guard
-against hanging, and every wait expects something to happen, so a longer one
-slows only a case that is failing anyway. It was ten seconds, which a busy
-machine outlasts: with every core kept busy by other processes, a script that
-opens a `QFileDialog` and reloads the host, or renders twice through it, ran
-past ten seconds and failed on every one of four runs, which is how the suite
-came to fail now and then right after a build. With a minute, the same four
-loaded runs all passed. A case that needs a second
-script closes the first one first, because a live script also takes the warning
-boxes.
+so a step that never matches fails the case instead of hanging the gate
+(checked by giving the duplicate case a step that cannot match). The bound only
+guards against hanging. Every wait expects something to happen, so a longer
+bound slows down only a case that is failing anyway. The bound used to be ten
+seconds, which a busy machine outlasts: with every core kept busy by other
+processes, a script that opens a `QFileDialog` and reloads the host, or renders
+twice through it, ran past ten seconds and failed on each of four runs. That is
+why the suite sometimes failed right after a build. With a minute, the same four
+loaded runs all passed. A case that needs a second script closes the first one
+before starting it, because a live script also takes the warning boxes.
 
 ## Nothing heavy runs on the window's thread
 
-The window never blocks. Every piece of work that takes more than an instant
-runs on a thread pool the window owns (`pool_`, a `QThreadPool` member), is
-started through `Editor::Jobs::Start` (`editor/src/editor_jobs.h`, a thin
+Every piece of work that takes more than an instant runs on a thread pool the
+window owns (`pool_`, a `QThreadPool` member), is started through `Editor::Jobs::Start` (`editor/src/editor_jobs.h`, a thin
 wrapper over `QtConcurrent::run` with a `QPromise` for progress and a
 `QFutureWatcher` that delivers the result back on the window's thread), and
 reports what it is doing while it runs. `Window::Loading` is true while any job
@@ -144,76 +144,77 @@ on (`WaitForOpen` in `window_test_support.h`).
 
 The jobs, and what each one shows:
 
-- **Opening a package** (`Window::OpenDocument` → `OpenPackage`,
+- Opening a package (`Window::OpenDocument` → `OpenPackage`,
   `editor/src/editor_open.cpp`). The worker reads the file, parses the IFS,
   then decodes every animation and every texture to build the package rows,
   reporting `Reading <name>` per entry. The window switches to the Busy page
-  the moment the open starts, so no panel is ever shown empty before its
-  content is on the way. `Window::FinishOpen` moves the parsed document in and
-  fills the trees from prepared rows, which is pure widget work.
-- **Refreshing the package rows after a structural edit** (`Window::ReloadRows`).
+  as soon as the open starts, so no panel is shown empty while its content is
+  still loading. `Window::FinishOpen` moves the parsed document in and fills
+  the trees from prepared rows, which is only widget work.
+- Refreshing the package rows after a structural edit (`Window::ReloadRows`).
   `EditDocument` compares the entry paths before and after a change and starts
-  this job only when the set of entries moved, so a keyframe edit costs
-  nothing. The old rows stay on screen until the new ones land.
-- **Reading a clip for the timeline, the library and the inspector**
+  this job only when the set of entries changed, so a keyframe edit costs
+  nothing. The old rows stay on screen until the new ones arrive.
+- Reading a clip for the timeline, the library and the inspector
   (`Window::ShowClipTimeline` → `ReadClipView`, `editor/src/editor_clip_view.cpp`).
-  This is the work that used to cost 219 ms on IIDX 33's `title.ifs` every time
-  an animation was opened or an edit landed: decoding the animation, listing
-  the characters, decoding a tile for each one, and walking the depth rows. The
-  timeline says `Reading <name>` while its first read is in flight.
-- **Loading the preview host with a package** (`Window::LoadIntoHost` →
+  This used to cost 219 ms on IIDX 33's `title.ifs` every time an animation was
+  opened or an edit landed: decoding the animation, listing the characters,
+  decoding a tile for each one, and walking the depth rows. The timeline says
+  `Reading <name>` while its first read is in flight.
+- Loading the preview host with a package (`Window::LoadIntoHost` →
   `Editor::LoadIntoHost`, `editor/src/editor_host_load.cpp`): the encode, the
   optional hidden-depth filtering or sprite preview, the upload and the symbol
-  switch. The stage says what it is doing, and while it runs
+  switch. The stage says what it is doing. While the load runs,
   `Window::HostReady` is false, so seeks, renders, resizes, onion skins and
-  snapshots stand aside instead of talking to a host that is mid-load. Requests
+  snapshots wait instead of talking to a host that is mid-load. Requests
   coalesce: a new one made while a load is in flight replaces the pending one,
-  which is what keeps a drag on the stage smooth. A resize asked for during a
-  load re-arms its timer rather than being dropped, and a stage preview waits
-  for the host instead of throwing its change away.
-- **Booting the preview host** (`Window::StartHost`): the process start and the
+  which keeps a drag on the stage smooth. A resize asked for during a load
+  re-arms its timer and is not dropped, and a stage preview waits for the host
+  and keeps its change.
+- Booting the preview host (`Window::StartHost`): the process start and the
   DLL load, which take seconds. The status bar says `Booting the preview
   host...` and the window stays usable.
-- **Saving** (`Window::WriteDocument`): the encode and the write, on the Busy
-  page. `Save` and `OfferToSave` take a continuation rather than returning a
-  verdict, so the flows that need the save to finish first (opening another
-  file, closing the window) carry on in that continuation; `closeEvent` ignores
+- Saving (`Window::WriteDocument`): the encode and the write, on the Busy
+  page. `Save` and `OfferToSave` take a continuation instead of returning a
+  result, so the flows that need the save to finish first (opening another
+  file, closing the window) carry on in that continuation. `closeEvent` ignores
   the first close, offers the save, and closes again once the answer is in.
-- **Exporting a project** (`Window::ExportToPackage`): the export, which
-  rewrites entries, on the Busy page.
-- **Saving frames** (`Window::SaveFramesAs`): the loop is chunked, one frame per
+- Exporting a project (`Window::ExportToPackage`): the export, which rewrites
+  entries, on the Busy page.
+- Saving frames (`Window::SaveFramesAs`): the loop is chunked, one frame per
   turn of the event loop, with the PNG encode of each frame on the pool. The
   Busy page shows `Frame N, x of y` and a Stop button (`Busy::StopAsked`).
 
 The window's destructor clears and drains the pool before its members are
-destroyed, because a QFutureWatcher only waits when it is destroyed, and by
-then the window's own members would already be gone.
+destroyed. A QFutureWatcher only waits when it is destroyed, and by then the
+window's own members would already be gone.
 
-What is left on the window's thread is widget work plus two small reads: the
-host render round trip (a few ms to about 100 ms for a big stage, and skipped
-entirely while a load is in flight) and `Window::ShowFrame`, which decodes the
-open animation to fill the inspector and the outlines. That measured 6 to 9 ms
-on IIDX 33's `title.ifs`, and it does not run during playback, so it is left
-uncached rather than risking a stale-document cache.
+The window's thread keeps widget work and two small reads. One is the host
+render round trip (a few ms to about 100 ms for a big stage, skipped entirely
+while a load is in flight). The other is `Window::ShowFrame`, which decodes the
+open animation to fill the inspector and the outlines. It measured 6 to 9 ms
+on IIDX 33's `title.ifs` and does not run during playback, so it has no cache
+that could go stale against the document.
 
-Two layout defects fell out of this work and are fixed: the selection bar and
-the timeline bar put their contents in a `QScrollArea`, so their minimum widths
-no longer force the whole window wider than the screen (the selection bar alone
-demanded 2283 px, which pushed the stage off the edge of a 1600 px window).
+This work also fixed two layout defects: the selection bar and the timeline bar
+now put their contents in a `QScrollArea`, so their minimum widths no longer
+force the whole window wider than the screen (the selection bar alone demanded
+2283 px, which pushed the stage off the edge of a 1600 px window).
 
 ## The look, and how it is checked
 
 A behaviour test cannot see a wrong colour, font or metric, so every visual
 change is checked by looking at the running window.
 
-The interaction rule the design follows: choose the thing first, and its
-actions appear beside it (the selection bar, the inspector, popovers, command
-search). Commands do not live only in position-dependent right-click menus, and
-no dialog asks the user to type a depth or a frame number; the redesign replaced
-the earlier chains of number prompts and the raw inspector field table for that
-reason.
+The design follows one interaction rule: the user chooses the thing first, and
+its actions appear beside it (the selection bar, the inspector, popovers,
+command search). Every command is reachable somewhere other than a
+position-dependent right-click menu, and no dialog asks the user to type a
+depth or a frame number. The redesign replaced the earlier chains of number
+prompts and the raw inspector field table for that reason.
 
-The accent is Windows's, not the artboard's. `Theme::SystemAccent` reads
+The accent colour comes from Windows, not from the artboard.
+`Theme::SystemAccent` reads
 `HKEY_CURRENT_USER\Software\Microsoft\Windows\DWM`: `AccentColor` is a DWORD
 in `0xAABBGGRR` order, `ColorizationColor` the same colour in `0xAARRGGBB`, and
 `Theme::AccentFromDwm` unpacks either, refusing pure black and pure white as
@@ -231,9 +232,10 @@ toward the text and then pushed further until it clears 4.5:1 on `Chosen`.
 (4.5:1 for `OnAccent`) and it must be visible as a mark on the interface
 (`Theme::kLeastMark`, 3:1 against `kField`), because the accent is a focus
 ring, a tab underline and a slider fill as much as it is a button. It only ever
-LIFTS, `lighter` by 15 percent a step, keeping the hue, and blends toward the
-text once `lighter` has nothing left to give. It used to darken an accent whose
-lightness was under half, which met the ink bar by making the mark disappear:
+lightens, applying `lighter` by 15 percent a step and keeping the hue, and
+blends toward the text once `lighter` has nothing left to give. It used to
+darken an accent whose lightness was under half, which met the ink bar by
+making the mark disappear:
 Windows's own default blue `#0078d4` came out as `#0068b8`, 2.98:1 against a
 field, and a dark navy accent came out at 1.05:1, invisible. The editor's CI
 job caught it, because a runner reports the default blue where this machine
@@ -250,26 +252,26 @@ anything numeric or key-capped) and the heights (44 top bar, 24 status bar, 28
 controls, 30 panel tab strip). `Theme::Apply` sets the application font, a full
 `QPalette` and one global stylesheet; `Theme::DockStyle` is the separate sheet
 the dock manager needs. Panels key off object names and properties
-(`QToolButton[transport="true"]`, `QWidget[section="true"]`, ...) rather than
-inline styles, so a colour exists in one place.
+(`QToolButton[transport="true"]`, `QWidget[section="true"]`, ...) instead of
+inline styles, so each colour is defined in one place.
 
-**Every control says what kind of control it is.** A dropdown carries a chevron
-on its right and a spin box carries a stacked plus and minus. Qt makes this a
-thing you have to do on purpose: once a stylesheet gives a `QComboBox` a border,
-a background or padding, `QStyleSheetStyle` stops asking the base style for the
+Every control shows what kind of control it is. A dropdown carries a chevron
+on its right and a spin box carries a stacked plus and minus. In Qt this has to
+be done on purpose: once a stylesheet gives a `QComboBox` a border, a
+background or padding, `QStyleSheetStyle` stops asking the base style for the
 arrow, so a sheet that styles the box and says nothing about `::down-arrow`
-leaves a dropdown that is pixel for pixel a `QLineEdit`. This sheet did exactly
-that, and set `QSpinBox::up-button { width: 0px }` besides, so neither control
-could be told from a plain field.
+leaves a dropdown that is pixel for pixel a `QLineEdit`. This sheet did that,
+and also set `QSpinBox::up-button { width: 0px }`, so neither control could be
+told from a plain field.
 
-A checkbox is the same story: `QCheckBox::indicator` had no rule at all, so a
-ticked box and an empty one were the same empty square. Unchecked is now an
-outlined field-coloured box and checked is filled with the accent and carries a
-tick.
+Checkboxes had the same problem: `QCheckBox::indicator` had no rule at all, so
+a ticked box and an empty one were the same empty square. Unchecked is now an
+outlined field-coloured box, and checked is filled with the accent and carries
+a tick.
 
-The marks come from the vendored icon set, not from hand-drawn paths, but a
-stylesheet `image:` cannot be recoloured the way `Icons::Drawn` recolours a
-pixmap, so `chevron-down`, `plus` and `minus` each have a `-faint` copy beside
+The marks come from the vendored icon set. A stylesheet `image:` cannot be
+recoloured the way `Icons::Drawn` recolours a pixmap, so `chevron-down`,
+`plus` and `minus` each have a `-faint` copy beside
 them whose `stroke` is the faint token instead of `currentColor`. The tick has
 two copies, `check-ink` and `check-text`, because it sits on the accent and the
 accent follows the user's Windows colour: `Theme::Sheet` substitutes `%tick`
@@ -281,18 +283,18 @@ dropdown and a spin box carry a mark a plain field does not` renders a blank
 `QLineEdit`, `QComboBox` and `QSpinBox` and counts pixels in the right sixth of
 each that differ from the field colour; the two with an affordance must beat the
 plain field by ten. `A ticked checkbox does not look like an empty one` does the
-same over the indicator on the left. Take the images back out and every
-difference falls to zero.
+same over the indicator on the left. With the images removed, every difference
+falls to zero.
 
-**A control's own icon is centred by the control, so nothing else may resize
-it.** The filter fields put their magnifier in through
+A control centres its own icon, so no other rule may resize it. The filter
+fields put their magnifier in through
 `QLineEdit::addAction(..., LeadingPosition)`, which Qt draws in an internal
 `QToolButton`. The sheet's blanket `QToolButton { padding: 0px 8px;
 min-height: 26px; }` was hitting that button and pushing the icon four pixels
-below the centre line of a 26px field, which is what a person sees as "the
-search icon is off-centre". `QLineEdit QToolButton` now clears the padding and
-the minimum, and the icon is built at 16px rather than 13 so the pixmap Qt asks
-for is one it actually has instead of a rescale. `The search icon sits on the
+below the centre line of a 26px field, so the search icon looked off-centre.
+`QLineEdit QToolButton` now clears the padding and the minimum, and the icon is
+built at 16px instead of 13, so Qt gets a pixmap at the size it asks for and
+does not rescale one. `The search icon sits on the
 filter field's centre line` builds a real `WithFilter` field and requires the
 ink's midpoint to be within a pixel of the field's; it reads 4px out with the
 blanket rule back in.
@@ -306,7 +308,7 @@ fills it through `CompositionMode_SourceIn` so the whole glyph takes the asked
 colour whatever the file strokes or fills; `Of` makes a QIcon with a 1x and a
 2x pixmap, and `Toggling` adds an On pixmap in the chosen colour for a
 checkable button. `qtsvg` is in `vcpkg.json`'s `editor` feature and the
-`qsvg`/`qsvgicon` plugins are deployed like the others. Nothing is
+`qsvg`/`qsvgicon` plugins are deployed like the others. No icon is
 hand-painted.
 
 `icons.qrc` belongs to every target that draws, the test binaries included: a
@@ -328,7 +330,7 @@ head's vertex sits at y 12 while the tail it belongs to runs at y 7, so the
 head floated five pixels under the curve and the pair read as a detached loop
 rather than an arrow. Lucide's `undo-2` is
 `<path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11"/>`,
-where both start at (4, 9). **Do not type path data for a new icon.** Fetch the
+where both start at (4, 9). For a new icon, do not type path data: fetch the
 file (`https://unpkg.com/lucide-static@1.47.0/icons/<name>.svg`), put it in
 `editor/icons/`, add it to `icons.qrc` and name it from `Named`.
 
@@ -339,16 +341,16 @@ so the two buttons look alike. The artboards draw them directionally, with the
 same shapes as previous and next frame, which is ambiguous in the other
 direction. Neither is settled.
 
-**A crash leaves a stack.** Both the editor and the shot harness call
-`Support::InstallCrashReporter()` before anything else, which is the same
+A crash leaves a stack trace. Both the editor and the shot harness call
+`Support::InstallCrashReporter()` before anything else. It is the same
 vectored handler the renderer has always used: on an access violation it logs
 the fault address and module, then a symbolised frame list from the PDBs through
 `Support::CaptureStackTrace`. The editor had never installed it, so an editor
-crash printed nothing at all and left nothing to go on. The handler now flushes
-every stream before returning, because without a sink `Log::Write` goes to
-`std::printf` and a redirected stdout is block buffered: the report was being
-written and then thrown away with the process. That is why the first attempts at
-the thumbnail crash below produced an empty terminal.
+crash printed nothing at all. The handler now flushes every stream before
+returning, because without a sink `Log::Write` goes to `std::printf` and a
+redirected stdout is block buffered, so the report was written and then thrown
+away with the process. That is why the first attempts at the thumbnail crash
+below produced an empty terminal.
 
 `build-editor/ifs_editor_shot.exe` (`editor/src/editor_shot_main.cpp`) is how
 the window is looked at:
@@ -363,44 +365,50 @@ PNG into the given directory (`screenshots/` is gitignored). The window is a
 `Qt::Tool` with `WindowDoesNotAcceptFocus` and `WA_ShowWithoutActivating`
 moved to -32000, so it never takes focus or interrupts anything on screen, and
 it clears its own `QSettings` first so the shot is the same every time.
-Options: `--ifs <file>` opens a package, `--animation <name>` picks that
-animation out of the Animations list the way a click does (without it the shot
-shows the first one), `--clip N` descends into a clip of it by its index in
-`Document::Clips`, 0 being the root, which is the breadcrumb the stage bar
-draws, `--depth N` and `--frame N` choose one
-(so the inspector, the selection bar and the timeline have something to show),
-`--game <dir>` points at an install, `--panel <title>` brings that dock tab to
-the front, `--hover <objectName>` puts the named widget under the pointer,
-`--press <objectName>` clicks the named button (which is how the script IDE gets
-screenshotted, by pressing `script_place`), `--report <file>` writes a text line per named widget
-(object name, class, position in the window, size, size hint, font size and
-whether it is shown) next to the PNG, `--input <name>` selects that row of the
-Inputs panel, `--number <value>` types it into the panel's Number box and
-presses Enter, `--enter <character>` double-clicks the first Library row whose
-label starts with that text, which descends into a sprite the way a
-double-click does (`--enter "Sprite 18"` is how the timeline shows what a clip
-holds), `--notes <file>` writes a line per frame note of the open clip (its frame, whether
-it carries a script or a camera, and the x the lane draws it at), which is how
-the mark-picking bug above was measured rather than guessed from a screenshot,
-`--frame <n>` seeks there on its own (with `--depth` it picks that depth too,
-without it the depth selection is cleared so a frame script shows),
-`--spread <n>` sets the panel's digit count and presses
-"Make it a number", `--dump <file>` writes a tab separated line per row of every
-tree in the window (the tree's object name, the row's text and its detail
-line), `--size WxH` (default 1600x1000, the
-artboard's size), `--platform <name>` and `--keep-settings`.
+Options:
 
-`--dump` answers questions about lists the same way `--report` answers
-questions about layout. `--input score_this --number 1234 --grab viewport`
-against IIDX 33's `result.ifs` is what proved the digit places reach the
-screen: the SCORE row of the rendered frame reads 1234 while MISS COUNT still
-reads 0000.
+- `--ifs <file>` opens a package.
+- `--animation <name>` picks that animation out of the Animations list the way
+  a click does (without it the shot shows the first one).
+- `--clip N` descends into a clip of it by its index in `Document::Clips`, 0
+  being the root. That index is the breadcrumb the stage bar draws.
+- `--depth N` and `--frame N` choose one, so the inspector, the selection bar
+  and the timeline have something to show.
+- `--game <dir>` points at an install.
+- `--panel <title>` brings that dock tab to the front.
+- `--hover <objectName>` puts the named widget under the pointer.
+- `--press <objectName>` clicks the named button. The script IDE is
+  screenshotted this way, by pressing `script_place`.
+- `--report <file>` writes a text line per named widget next to the PNG:
+  object name, class, position in the window, size, size hint, font size and
+  whether it is shown.
+- `--input <name>` selects that row of the Inputs panel.
+- `--number <value>` types the value into the panel's Number box and presses
+  Enter.
+- `--enter <character>` double-clicks the first Library row whose label starts
+  with that text, which descends into a sprite the way a double-click does
+  (`--enter "Sprite 18"` makes the timeline show what a clip holds).
+- `--notes <file>` writes a line per frame note of the open clip: its frame,
+  whether it carries a script or a camera, and the x the lane draws it at. The
+  mark-picking bug above was measured with it.
+- `--frame <n>` seeks there on its own. With `--depth` it picks that depth too;
+  without it the depth selection is cleared so a frame script shows.
+- `--spread <n>` sets the panel's digit count and presses "Make it a number".
+- `--dump <file>` writes a tab separated line per row of every tree in the
+  window: the tree's object name, the row's text and its detail line.
+- `--size WxH` (default 1600x1000, the artboard's size), `--platform <name>`
+  and `--keep-settings`.
 
-`--report` is how a layout question gets an answer instead of a guess. Reading
-a screenshot tells you two things overlap; the report tells you the label sits
-at x 248 with width 5 while its hint is 34, which names the defect. Use it
-whenever a widget looks wrong in a shot, and quote its numbers rather than
-estimating them from pixels.
+`--dump` answers questions about lists the way `--report` answers questions
+about layout. Running `--input score_this --number 1234 --grab viewport`
+against IIDX 33's `result.ifs` proved that the digit places reach the screen:
+the SCORE row of the rendered frame reads 1234 while MISS COUNT still reads
+0000.
+
+`--report` gives a layout question a measured answer. A screenshot shows that
+two things overlap; the report shows that the label sits at x 248 with width 5
+while its hint is 34, which names the defect. Use it whenever a widget looks
+wrong in a shot, and quote its numbers instead of estimating them from pixels.
 
 `--hover` goes through `Editor::Hover` (`editor_hover.h`), which the window
 tests use too. Faking a hover needs more than `WA_UnderMouse`: a `QPushButton`
@@ -408,11 +416,11 @@ only keeps `State_MouseOver` when `QPushButtonPrivate::hovering` agrees, and
 that flag is set solely by `QPushButton::mouseMoveEvent` with `WA_Hover` on
 (`qpushbutton.cpp`, `styleButtonState`). So `Hover` sets `WA_Hover` and
 `WA_UnderMouse`, sends `Enter`, then sends a `MouseMove` at the widget's
-middle; `Unhover` clears the attribute and sends `Leave`. Setting the
-attribute alone leaves the button painting its resting rule and a shot that
-proves nothing.
+middle; `Unhover` clears the attribute and sends `Leave`. With only the
+attribute set, the button keeps painting its resting rule and the shot proves
+nothing.
 
-Colours are not left to the eye either: `Theme::Contrast` is the WCAG
+Colours are measured as well: `Theme::Contrast` is the WCAG
 relative-luminance ratio, `Theme::kLeastContrast` is 4.5:1, and the cases in
 `editor/tests/editor_contrast_window_tests.cpp` fail when any word the editor
 draws lands under it. They grab the real window and measure the painted
@@ -479,13 +487,13 @@ right, so the last split is the one that spans the whole height.
 a panel closed from a menu can be opened again, and `View > Show the history`
 brings the History tab to the front. Qt 6 Widgets is ADR 0003.
 
-The dock chrome is the design's, not ADS's default: config flags (set before
-the manager is built, because they are static) take away the close, undock and
-tab-menu buttons and the per-tab close button, and hide the title bar of the
-single central widget. The package and the library areas each set
+The dock chrome follows the design instead of the ADS default. Config flags
+(set before the manager is built, because they are static) remove the close,
+undock and tab-menu buttons and the per-tab close button, and hide the title
+bar of the single central widget. The package and the library areas each set
 `HideSingleWidgetTitleBar`, because their own 30 px tab strip is the design's
-panel header; the timeline and the inspector keep theirs, since Timeline/Graph
-and Inspector/History are exactly the tabs the design draws there.
+panel header. The timeline and the inspector keep theirs, since Timeline/Graph
+and Inspector/History are the tabs the design draws there.
 `Theme::DockStyle` gives those tabs the panel colours and the 2 px accent
 underline.
 
@@ -494,9 +502,9 @@ The default sizes are set once the panels exist, with
 package against library, the left column against the stage, the stage against
 the timeline, and everything against the inspector. That call only lands when
 the count of sizes matches the splitter's child count, so each one names the
-area whose parent splitter holds exactly those two children. The left column
-was the one nobody sized for a while, which left its width to whatever ADS
-worked out from size hints. The panels also carry their own minimum sizes
+area whose parent splitter holds exactly those two children. For a while
+nothing sized the left column, so its width was whatever ADS worked out from
+size hints. The panels also carry their own minimum sizes
 (220 px for the package and the library, 260 px for the inspector, 180 px high
 for the timing area), so a restored layout can never squeeze them down to a
 strip of icons.
@@ -504,20 +512,20 @@ strip of icons.
 `SaveLayout` and `RestoreLayout` (`editor_layout.cpp`) keep that layout in
 `QSettings` between runs, and both refuse a dead one:
 
-- **Saving** writes the dock state only when the dock manager is visible. It
+- Saving writes the dock state only when the dock manager is visible. It
   lives on a page of `centre_stack`, and `QStackedLayout` gives geometry to the
   current page alone, so a window closed while the start screen or the busy
-  page was up has never laid its splitters out. Its state is a set of zeroes.
-  The window geometry and `QMainWindow` state are still written, since those
-  are real whatever page is up.
-- **Restoring** checks the stored state with `LayoutSized` before handing it to
+  page was up has never laid its splitters out, and its state is a set of
+  zeroes. The window geometry and `QMainWindow` state are still written, since
+  those are valid whatever page is up.
+- Restoring checks the stored state with `LayoutSized` before handing it to
   ADS: it uncompresses the XML (ADS compresses it by default) and reads every
   `<Sizes>` list. A list that is all zeroes means that splitter was never laid
   out, and `QSplitter::setSizes` with zeroes collapses each panel to its
   minimum and gives the rest to the stage. One such list is enough to throw the
   whole state away and keep the built-in defaults.
 
-That is what a user saw as "the default layout": the package and the library at
+A user saw this as "the default layout": the package and the library at
 60 px, the inspector clipped off the right edge and the timeline reduced to its
 transport bar, all of it restored from a `window/docks` value whose every
 `<Sizes>` read `0 0`. `A layout saved before a package was opened...` in
@@ -550,11 +558,11 @@ the window exists.
 A fixed tool bar (`top_bar`, `editor_shell.cpp`) is the window's only visible
 chrome above the panels. The menus live in a real `QMenuBar` (`menus`, built in
 `BuildMenus` and placed on the bar); the window's own `menuBar()` is never
-created. A `QMenuBar` and not one `QToolButton` per menu, because only the menu
-bar behaves like every other app: with one menu open, pointing at another title
-opens that one, and Left/Right and Alt mnemonics move between them. A tool
-button's `InstantPopup` runs its menu modally, so hovering the next title did
-nothing. `With a menu open, pointing at another title...` in
+created. It is a `QMenuBar` instead of one `QToolButton` per menu because only
+a menu bar behaves like the menus in other apps: with one menu open, pointing
+at another title opens that one, and Left/Right and Alt mnemonics move between
+them. A tool button's `InstantPopup` runs its menu modally, so hovering the
+next title did nothing. `With a menu open, pointing at another title...` in
 `editor/tests/editor_shell_window_tests.cpp` covers it. Menu icons are anchored
 to the item's content box (`QMenu::icon { subcontrol-origin: content; }`):
 Qt's default puts them against the menu's left border while the label still
@@ -572,8 +580,8 @@ Under the pointer the search field lifts its background from `kField` to
 `kLine` and `SearchHover` (`editor_shell.cpp`) repaints the glyph and the
 placeholder from `kFaint` to `kSoft`. The border stays `kEdge` on both the
 field and the chip: brightening only the field's border left two borders of
-different colours a few pixels apart at the right end, which is what the
-design never shows. The glyph and the placeholder are not stylable from the
+different colours a few pixels apart at the right end, which the design never
+shows. The glyph and the placeholder are not stylable from the
 hover rule, because a Qt style sheet does not track an ancestor's
 pseudo-state: `QPushButton#search:hover QLabel#search_text` paints the label
 whether or not the field is hovered, so both live in the event filter
@@ -591,9 +599,9 @@ project folder, export and closing the project) and the Export button
 (`export`) join it. The Export button's count is `Document::AwaitingExport`:
 the IFS entries the project writes whose bytes no longer match what the last
 export recorded, plus the project images the IFS does not hold yet. Every
-keyframe edit is written into the open document straight away, so the count is
-not "edits the IFS is missing"; it is the entries the drift check at the next
-opening would report if the file were saved without exporting. The Save button
+keyframe edit is written into the open document straight away, so the count
+does not mean "edits the IFS is missing". It counts the entries the drift check
+at the next opening would report if the file were saved without exporting. The Save button
 carries the `file.save` command. With no document open the whole group and Save
 are hidden, which is the start screen's bar in the design. Everything on the
 bar runs through the command registry, so it greys out and refuses the same way
@@ -632,7 +640,7 @@ one sentence saying what it needs otherwise ("Choose a depth first", "Select
 two or more keyframes first", "The project owns depth 3 here. Detach it before
 splitting it."). The menus File, Edit, Depth, Keyframe, Clip, View and Playback
 are built from the registry (`editor_menus.cpp`, `editor_depth_menu.cpp`), so
-every command is in a menu and a menu is a full index of what the editor can do.
+every command is in a menu and the menus list everything the editor can do.
 
 Running a command, by its menu item, its shortcut or `Commands::Run`, asks the
 refusal check first. A refused command changes nothing and its reason goes to
@@ -640,7 +648,7 @@ refusal check first. A refused command changes nothing and its reason goes to
 of its commands is greyed while it is refused, with the reason as its tooltip,
 and put back as it was when the menu closes, so a shortcut is never left dead
 by a menu that happened to be opened while its command was refused. Undo and
-Redo are the exception that is also disabled outside menus, since
+Redo are the only commands that are also disabled outside menus, since
 `RefreshState` keeps them in step with the history.
 
 The refusal checks live in `editor_refusals.cpp` and the command bodies use the
@@ -670,11 +678,11 @@ reports can be undone, and a timer that takes it away after eight seconds.
 sends what an edit did beyond the obvious: how many keyframes a simplify
 removed, how many clips a trim, extract or lift left restarting, what owning a
 depth captured, what an export wrote, how many unused definitions went. Undo on
-a notice runs the `edit.undo` command, so it undoes exactly one step, the one the
-notice is about.
+a notice runs the `edit.undo` command, so it undoes one step, the one the notice
+reports.
 
-The status bar keeps what is about the session rather than the edit: the preview
-host, opening and saving, playback, the project, and errors.
+The status bar keeps the messages about the session instead of an edit: the
+preview host, opening and saving, playback, the project, and errors.
 
 ### The selection bar
 
@@ -720,8 +728,8 @@ so the preview and the applied wiggle are the same jitter; simplify's detail
 line says how many of the selected keyframes would go at the tolerance shown
 (`Window::KeysAfterSimplify`, which runs the document's own simplify on a copy);
 group into a sprite starts from the chosen depths and the work area, or the
-widest span under the playhead when there is no work area, and its fields are
-there to adjust that rather than to be typed from nothing.
+widest span under the playhead when there is no work area, so its fields start
+filled in and only need adjusting.
 
 ### Command search
 
@@ -734,8 +742,8 @@ menu it belongs to, its text and its shortcut, the depths of the clip on screen
 package. A command that is refused right now stays in the list, greyed, with
 its refusal under its name, and cannot be run from there; a toggle shows
 whether it is on. Typing keeps the results that hold every typed word,
-ignoring case, anywhere in the menu name and the text; this is a filter, not a
-fuzzy match, which is what a list of a hundred named commands needs. The
+ignoring case, anywhere in the menu name and the text. It is a plain filter
+with no fuzzy matching, which suits a list of a hundred named commands. The
 arrow keys move to the next result that can run, Enter runs it after closing
 the popup (so a command that opens a dialog opens it over the window, not over
 the popup), and Escape closes it. Going to a depth seeks to its first frame
@@ -769,8 +777,8 @@ and leaves the window and its document alone.
 
 The host is told a build slug at boot, and that slug picks the afp offsets
 (`AfpProfiles::For`) and the stage size (`GameProfile::BySlug`) it runs the
-install's DLLs with. A slug that does not belong to the DLLs is not a smaller
-picture but a dead host: IIDX 34 ZINRAI's afp-utils keeps its heap callback table
+install's DLLs with. A slug that does not match the DLLs kills the host:
+IIDX 34 ZINRAI's afp-utils keeps its heap callback table
 somewhere else than IIDX 33's, so booting ZINRAI as `iidx33` hands afp-core a
 garbage malloc slot (docs/game_profiles.md, "How the IIDX 34 set was derived").
 
@@ -797,7 +805,7 @@ compare it with.
 
 A package from another build's install is not followed. The editor works on one
 build at a time, the one the chosen install (or the project) names, and opening an
-IFS never changes it. What it does is say so: the open job also walks up from the
+IFS never changes it. It warns instead: the open job also walks up from the
 IFS to the first folder that holds a game DLL (`Editor::InstallHolding`, using
 `GameProfile::HoldsGameDll`, the profiles' own `game_dll` list in the places the
 host looks for DLLs), and `Window::WarnForeignPackage` compares that install's
@@ -864,12 +872,11 @@ Character row uses, as After Effects replaces a layer's source. Duplicating a
 sprite and using the copy on a depth is how a variant is made without touching
 the other places the original is shown. The menu always offers `New empty
 sprite...`, with or without a character under the cursor, as After Effects
-offers New Composition: it asks for a frame count (the current clip's is
-suggested), defines an empty sprite of that many frames (`Document::NewSprite`,
-one undo step), refills the clip list and opens the new sprite
+offers New Composition: it defines an empty sprite as long as the clip it was
+asked from (`Window::NewEmptySprite`, `Document::NewSprite`, one undo step), refills the clip list and opens the new sprite
 (`Window::ShowLibrarySprite`, as a double-click does), so depths can be added to
 it straight away, for one by dropping a character on the timeline. The window
-test makes a five frame sprite from a library with nothing selected, sees it in
+test makes a sprite from a library with nothing selected, sees it in
 the crumb and the library, drops a character into it on its fifth frame, and
 sees the entry offered with an item selected too; dropping the refill, the
 opening, the entry or its handling fails it.
@@ -961,10 +968,9 @@ Every field the format holds is still there: `Raw placement fields` at the
 bottom of the panel is the old two-column table (`raw_fields`), collapsed by
 default, with the same rows, the same `Document::InspectFrame` model and the
 same edit targets, so animation settings, cameras, library call arguments,
-keyframe values and filters are edited exactly as before, and the unknown data
+keyframe values and filters are edited as before, and the unknown data
 is still shown and protected. Selecting an entry in the package tree prints
 `Document::Fields` into that table as it always did.
-
 
 **Start screen.** With no IFS open the window's central widget shows
 `Editor::StartScreen` instead of the whole dock manager (both are pages of one
@@ -1000,14 +1006,11 @@ a package, a folder opens as a project, and anything else is refused by name.
 own so it has no tile), its name and how many depths use it, greyed when
 nothing does. Above the list, four buttons narrow it by kind: Sprites, Images,
 Shapes and Imported. `Window::ShowLibraryKinds` applies the text filter first
-and then hides whatever kind is switched off, so the two filters stack instead
-of fighting. Return on a chosen character places it on the next free depth from
+and then hides whatever kind is switched off, so the two filters combine. Return on a chosen character places it on the next free depth from
 the playhead to the end of the clip (`Window::PlaceLibraryCharacter`), the same
 edit the Place menu item makes. A character dragged onto the inspector's
 Character row replaces what the chosen depth places
-(`Editor::CharacterDrop`, `Window::UseCharacterOnDepth`). `New empty sprite`
-no longer asks how many frames to make: it makes one as long as the clip it was
-asked from.
+(`Editor::CharacterDrop`, `Window::UseCharacterOnDepth`).
 
 **Package panel.** The panel is three tabs over the same package
 (`Window::BuildPackageTabs`), drawn as the design's 30 px strip: an
@@ -1024,7 +1027,7 @@ A corner widget that changes width after the panel has been laid out needs
 `QEvent::LayoutRequest` sent to the tab widget, never because the corner's own
 size hint grew. Qt would normally post that request through the corner's
 layout, but `QLayout::update` posts only while the layout is `activated`, and a
-layout invalidated while its widget was hidden stays quiet, which is exactly
+layout invalidated while its widget was hidden stays quiet, which is
 what a panel on a hidden page of `centre_stack` does. So `Relayout` activates
 the corner's layout and sends the tab widget a `LayoutRequest` itself. The
 library calls it after writing the animation name, since that name is what
@@ -1079,7 +1082,7 @@ their own. A zoom also asks the host for a larger render
 (`Viewport::FittedSize`, reached through `ZoomChanged` and the same debounce a
 resize uses), up to the stage's own size or the fitted size when that is
 larger. Past that the game's pixels are shown enlarged, which is what the game
-would draw, rather than a render the game never makes.
+would draw.
 
 **Stage bar and tool strip.** `Editor::StageBar` (36 px) sits above the
 viewport and `Editor::ToolStrip` (40 px) down its left edge. Both are views
@@ -1095,15 +1098,14 @@ a divider, the zoom chip (`stage_zoom`: the current percentage in the mono font
 with a chevron, opening a menu with zoom in, zoom out and fit), then Fit and
 the save-the-frame icon. Zoom in and out (Ctrl+- and Ctrl++) step
 `Viewport::ZoomStep` by the same 1.25 a wheel notch uses, around the middle of
-the view rather than the pointer.
+the view instead of the pointer.
 
 The strip holds the five tools, one at a time: Select (V), Anchor (A), Pan (H),
 Zoom (Z) and Motion sketch (Y). They are ordinary commands made checkable and
 put in one exclusive `QActionGroup`, and each one's `run` sets the viewport's
 tool and checks its own action, so choosing a tool from the menu, the strip,
-its shortcut or the command search all end in the same place and running the
-chosen tool again is not an unchoosing. Select is what the editor has always
-done. Anchor makes every drag on the chosen depth an anchor move, so the cross
+its shortcut or the command search all end in the same place, and running the
+chosen tool again keeps it chosen. Select behaves as the editor always has. Anchor makes every drag on the chosen depth an anchor move, so the cross
 does not have to be hit. Pan drags the stage the way the middle button does,
 and Zoom clicks in where it is clicked, out with Alt, both through the same
 `Viewport::ZoomBy` the wheel uses. Holding Space pans whatever the tool is: the
@@ -1127,7 +1129,7 @@ onion skin remembered on put "Seek failed: seeking failed" on screen before
 anything was open: the boot renders one frame through `DrawBackground`, and
 that render asked for the ghosts, whose seek back the host refused. The live
 test "Starting with onion skin on and no file open says nothing about seeking"
-builds exactly that window and fails on the message box. The live window test
+builds that window and fails on the message box. The live window test
 turns it on at frame 401, sees the picture change, and checks a later render
 that does not seek still shows frame 401; it also sees the picture come back
 when onion skin is turned off. Leaving out the seek back, the ghost renders,
@@ -1205,7 +1207,8 @@ depth to the width and sees it scaled and moved, and is refused inside a new
 sprite. Dropping the sprite check, either move, or a shortcut's mode fails it.
 
 The Motion sketch tool (`tool.sketch`, Y, on the tool strip and in the
-Playback menu) is After Effects' Motion Sketch. While it is the chosen tool, dragging a depth the project owns on the stage starts playback
+Playback menu) is After Effects' Motion Sketch. While it is the chosen tool,
+dragging a depth the project owns on the stage starts playback
 (`Window::SketchMove`, which `Window::MoveOnStage` asks first), and every frame
 the playhead shows while the button is held records the pointer's offset from
 where it was pressed: `Window::SeekTo` records the latest offset for each frame
@@ -1299,8 +1302,8 @@ view is reloaded from the document. On `graphic/1/title.ifs` one preview takes
 about a quarter of a second, most of it encoding and splitting the 28 MB
 package (the textures are not reloaded, see `docs/preview_host.md`).
 
-Outlines are shown only when the viewport shows the clip
-being edited, that is the root or a sprite shown on its own. Shape boxes are
+Outlines are shown only when the viewport shows the clip being edited, that
+is, the root or a sprite shown on its own. Shape boxes are
 read once per animation and read again after every edit.
 
 Dragging a depth's bar by at least four pixels moves that span along the
@@ -1328,8 +1331,7 @@ a click does. Dropping the Shift check while dragging or on release, any of
 the marks, either edge rule, the reach, the deferred seek or choosing the depth
 on the press fails them.
 
-The timeline menu
-offers to move the span under the playhead to another depth number
+The timeline menu offers to move the span under the playhead to another depth number
 (`Document::ChangeSpanDepth`), which moves an owned depth's record with it, and
 to duplicate it onto another depth (`Window::DuplicateSpanToDepth`, suggesting
 the first depth above every depth the clip uses), after which the copy is the
@@ -1436,8 +1438,8 @@ eye toggle. The window keeps the hidden depths per animation and clip
 (`Window::hidden_`), and `LoadViewportClip` sends the host a copy of the
 document without them (`Document::ViewWithout`), so every reload, stage preview
 and sprite view leaves them out while the document, the undo history and the
-saved file keep them. Only when something is hidden is the copy made, so the
-usual preview pays nothing. A hidden depth cannot be picked on stage and has no
+saved file keep them. The copy is made only when something is hidden, so the
+usual preview costs nothing. A hidden depth cannot be picked on stage and has no
 outline (`Window::VisibleOutlines`), and its bars are grey on the timeline
 (`Timeline::SetHiddenDepths`). Opening another document shows everything again.
 
@@ -1507,6 +1509,7 @@ The window test drops a second depth, removes both with Delete, undoes, and
 sees the removal refused once the project owns one of them; removing only the
 first depth, dropping the ownership check or leaving Delete to keyframes only
 fails it.
+
 With a sprite open, the menu also names that sprite's export
 (`Window::NameShownSpriteExport`, through `Document::NameSpriteExport`): the box
 starts on the current name and an empty answer removes it. It is an undoable
@@ -1547,7 +1550,7 @@ zooms out past fitting the whole clip, so a slider dragged below that snaps back
 on the next `ZoomChanged`, which `Window::RefreshTimelineBar` listens for. The
 slider's top is the larger of 48 (the most pixels a frame the timeline zooms to)
 and the fit, so a short clip that already fits at more than that still reads its
-true scale rather than sitting pinned at the end.
+true scale instead of sitting pinned at the end.
 
 + Depth (`depth.add`, `Window::AddDepthHere`) asks which character or package
 image to place with the same `ChoosePlaceable` list the timeline menu uses, then
@@ -1555,7 +1558,7 @@ puts it on the next free depth from the playhead to the clip's last frame. The
 window test places one, sees the timeline picture change, and undoes it back to
 what it was.
 
-**A thumbnail owns its pixels** (`editor/src/editor_thumbnail.h`). The library
+A thumbnail owns its pixels (`editor/src/editor_thumbnail.h`). The library
 tiles and the image rows both come from `Document::File::ReadImage`, whose
 pixels live in a buffer that dies with the call. Both used to wrap that buffer
 in a `QImage` with the raw-data constructor and return `scaled(...)` of it, on
@@ -1566,17 +1569,17 @@ pointing at the freed buffer. The editor then crashed inside
 `QPixmap::fromImage`, in `convertARGBToARGB32PM_avx2` reading off the end of
 memory that was no longer there, at the moment `FillLibrary` built the icons.
 
-It was flaky and package dependent for the reason dangling reads always are: it
-only matters when the freed pages have been reused or unmapped. Measured on IIDX
+It was flaky and depended on the package, as dangling reads do: the read only
+fails once the freed pages have been reused or unmapped. Measured on IIDX
 33's `arena.ifs` with the preview host attached it faulted 5 times in 40 runs,
 and never once on `result.ifs`, which has no image that lands on the tile size.
 `Thumbnail(bgra, width, height, into)` scales, then compares the result's
 `constBits` with the borrowed image's: equal means `scaled` handed back the same
 image and the pixels must be copied, different means it already allocated its
-own and nothing more is needed. So what it returns always owns its pixels, and
-the copy only happens on the path that would otherwise dangle rather than on
-every character. It also refuses a buffer too small for the size it was given
-rather than reading past it. `A thumbnail keeps its pixels when the
+own and nothing more is needed. What it returns always owns its pixels, and
+the copy happens only on the path that would otherwise dangle, not for every
+character. It also refuses a buffer too small for the size it was given instead
+of reading past it. `A thumbnail keeps its pixels when the
 buffer it was read from is gone` in
 `editor/tests/editor_thumbnail_widget_tests.cpp` fills a 32x32 buffer, takes a
 32x32 thumbnail, clears the buffer and requires the thumbnail to be unchanged;
@@ -1595,13 +1598,13 @@ sprite shows that sprite's scripts.
 
 Clicking a script mark emits `ScriptChosen`, and the window answers by seeking
 to that frame, clearing the depth selection and bringing the Inspector to the
-front, because a panel that is behind another tab is the same as no panel at
-all. The lane used to only seek, and nothing anywhere showed a frame's script:
-the inspector read `clip_actions` off the selected placement and never looked at
-the frame's own `Action` tag, so the marks pointed at something with no way in.
+front, because a panel behind another tab cannot be seen. The lane used to
+only seek, and nothing anywhere showed a frame's script: the inspector read
+`clip_actions` off the selected placement and never looked at the frame's own
+`Action` tag, so the marks pointed at scripts nobody could open.
 
-Two things about the lane itself were wrong and are fixed with them. It took the
-FIRST mark within `kNoteReach` rather than the nearest, so on a long clip, where
+Two things about the lane itself were wrong and were fixed at the same time. It
+took the first mark within `kNoteReach` instead of the nearest, so on a long clip, where
 marks sit a few pixels apart, clicking one mark jumped the playhead to its
 neighbour: `reward_result` in IIDX 33's `arena.ifs` has scripts on frames 89 and
 119, and clicking 119 chose 89. `LabelNear` and `KeyNear` had always tracked the
@@ -1609,7 +1612,7 @@ nearest; the notes loop now does too. A click in the lane that hits no mark
 still does nothing, which is deliberate and has its own case in that file: the
 lane is a strip of marks, not a second ruler.
 
-**The Script section is a code editor** (`Editor::ScriptEditor`,
+The Script section is a code editor (`Editor::ScriptEditor`,
 editor/src/editor_script_editor.h). It appears whenever the playhead is on a
 frame that holds an `Action`. `Document::FrameScriptTag(clip, frame)` finds the
 tag, the same way `CameraTag` finds a camera, and
@@ -1620,22 +1623,23 @@ read-only listing.
 
 The widget is QScintilla, added to `vcpkg.json` under the `editor` feature and
 linked as `unofficial::qscintilla::qscintilla`. It brings the gutter, the caret
-line, wrapping, selection and the completion list, so none of that is
-hand-rolled. What is ours is the lexer (`Editor::ScriptLexer`) and the
-completion vocabulary, and both are fed from the compiler's own lists:
+line, wrapping, selection and the completion list. The editor's own code is
+the lexer (`Editor::ScriptLexer`) and the completion vocabulary, and both are
+fed from the compiler's own lists:
 `Document::ScriptCalls`, `ScriptInstructions` and `ScriptWords`. A word the
 compiler would refuse is painted in the wrong-word red as you type, so the
 highlighting cannot drift from what will compile.
 
-**Completion is synchronous on purpose.** QScintilla's `QsciAPIs` prepares its
-word list on a worker thread and posts the result back; with a panel that is
-rebuilt whenever the playhead moves, that worker outlived its object and
-crashed inside `QsciAPIs::event`. The editor uses `showUserList` instead, which
-is the same library's list widget without the thread. Inside a quoted argument
+Completion is synchronous. QScintilla's `QsciAPIs` prepares its word list on a
+worker thread and posts the result back; with a panel that is rebuilt whenever
+the playhead moves, that worker outlived its object and crashed inside
+`QsciAPIs::event`, so Scintilla's own completion is switched off
+(`setAutoCompletionSource(QsciScintilla::AcsNone)`) and the editor draws its own
+list (`ScriptOffers`, below). Inside a quoted argument
 the list offers the package's own names, from `Document::Inputs`: every frame
 label and every placement instance name. Outside one it offers the language.
 
-**Open full replaces the whole view with the script IDE** (`Editor::ScriptIde`,
+Open full replaces the whole view with the script IDE (`Editor::ScriptIde`,
 editor/src/editor_script_ide.h), the window on the left of the design canvas. It
 is a page of `centre_`, the same `QStackedWidget` that swaps between the start
 screen, the docks and the Busy page, so opening it takes over everything below
@@ -1649,13 +1653,13 @@ source. The dot is the design's four: blue when every line is a call
 (`Document::ScriptIsCalls`), violet when the script binds registers or falls
 back to instruction lines, red when it cannot be read as source at all, and
 amber on the one script the editor is holding unsaved edits to. The filter box
-narrows the list, and the footer is the legend for the dots plus the count. In the middle, a tab for the open script, the editor
-itself, the Problems pane and a status line carrying the line and byte counts
-and the caret position. On the right, the names panel: every frame label, every
+narrows the list, and the footer is the legend for the dots plus the count. In
+the middle are a tab for the open script, the editor itself, the Problems pane
+and a status line carrying the line and byte counts and the caret position. On the right, the names panel: every frame label, every
 clip instance name and every call this animation's own scripts make
 (`Document::CallsIn`), each with the badge the design gives it, all read out of
-the open package rather than hardcoded. The calls are the ones used here rather
-than the 1693 names afp-core knows, which would bury the handful that matter;
+the open package, not hardcoded. The calls listed are the ones used here, not
+all 1693 names afp-core knows, which would bury the handful that matter;
 completion still offers the whole vocabulary.
 
 `Document::ScriptsIn` and `ScriptAt` (src/document/script_index.h) are the
@@ -1663,8 +1667,7 @@ document half: one walks every clip and frame collecting what carries a script,
 the other fetches one back by the same `ScriptPlace`, so the list and the editor
 cannot disagree about what a row points at.
 
-**The metrics come off the artboards rather than from the widget defaults.**
-The top bar is 44px with the 22px rounded IFS badge, the breadcrumb runs
+The metrics come from the artboards, not from the widget defaults. The top bar is 44px with the 22px rounded IFS badge, the breadcrumb runs
 package, animation, clip, then the script in the brighter ink, and Compile
 carries its `Ctrl+B` in the mono face beside the word. The scripts list is
 274px: 40px rows of a right aligned frame number, a 6px dot and the first line
@@ -1677,8 +1680,8 @@ the font. A lexer font must carry a point size: QScintilla reads `pointSize()`
 when it hands the font to Scintilla, so a font built with `setPixelSize` arrives
 as size -1 and the code renders at a few pixels tall.
 
-Three things are deliberately not what the artboards draw. The accent is the
-one Windows is set to, not the artboard's blue, because the editor follows the
+Three things differ from the artboards on purpose. The accent is the one
+Windows is set to, not the artboard's blue, because the editor follows the
 system accent everywhere; the gutter numbers are `kFaint` rather than the
 artboard's `#4f545e`, which is 2.48:1 and fails the contrast gate; and the top
 bar carries a Close button the artboard has no room for, because the window
@@ -1691,14 +1694,14 @@ translation is installed. `ScriptEditor::Counted` and `ScriptEditor::Bytes` are
 the one place that wording lives, and the window's status line and the docked
 header both use them.
 
-**The docked Script section keeps the compact editor** for a quick look and a
-one-line change, with `Open full` beside its title. A 300px column is no place
-to write code, so that button is how you get to the window above. The two are
+The docked Script section keeps the compact editor for a quick look and a
+one-line change, with `Open full` beside its title. A 300px column is too
+narrow to write code in, so that button opens the window above. The two are
 the same widget class: `ScriptEditor::Place` decides only whether it carries its
 own title and buttons (docked) or leaves them to the window around it, and what
 its children are named, so a test can tell `script_text` from `script_ide_text`.
 
-**A project-owned depth's script uses the same editor too.** `EditOwnedScript`
+A project-owned depth's script uses the same editor. `EditOwnedScript`
 opened a bare `QInputDialog` text box; it now opens a dialog holding a
 `ScriptEditor` in its `Window` place, fed the package's names, so an owned
 script gets the same highlighting, completion and wrong-name marking as every
@@ -1706,7 +1709,7 @@ other. Saving still goes through `EditAuthored`, and a depth whose baked data
 carries no clip actions still refuses to be given a script, because what makes
 the game run one has not been measured.
 
-**A placement's own script edits the same way.** The list shows one group per
+A placement's own script is edited the same way. The list shows one group per
 placement that carries `clip_actions`, and choosing one loads it into the same
 editor. `Window::CompileIdeScript` routes by whether the chosen place has a
 depth: `Document::WriteFrameScript` for a frame's `Action`, and
@@ -1714,94 +1717,94 @@ depth: `Document::WriteFrameScript` for a frame's `Action`, and
 actions. Both compile against a copy first, so a refusal reaches the Problems
 pane instead of a dialog and the typed text is left alone.
 
-**The Problems pane, and what sits beside it.** The pane carries the three tabs
-the design gives it. **Problems** is recomputed on every keystroke by
+The Problems pane carries the three tabs the design gives it. The Problems tab
+is recomputed on every keystroke by
 `Document::ScriptProblems` (src/document/script_problems.h): it reads each
 quoted argument and, when the open package holds no such name, says so and
 offers the nearest one it does hold. The nearest match comes from
-`rapidfuzz-cpp`, added to `vcpkg.json` rather than hand-rolling an edit
+`rapidfuzz-cpp`, added to `vcpkg.json` instead of a hand-rolled edit
 distance. A problem also marks the script itself: the Lucide `triangle-alert`
 in the marker margin on that line, and a dotted red indicator under the name.
-**Bytes** is the compiled bytecode as hex, and **History** is the document's own
-undo steps with the ones already applied in the brighter ink. The status line
-under them carries the line and byte counts, `round trips to the original` in
+The Bytes tab is the compiled bytecode as hex, and the History tab is the
+document's own undo steps with the ones already applied in the brighter ink. The status line
+under them carries the line and byte counts, `compiles to the original bytes` in
 green when recompiling the shown source reproduces the stored instructions
 exactly, the caret position, and the object every call goes through.
 
-**Completion is the editor's own widget, not Scintilla's.** `ScriptOffers`
+Completion is the editor's own widget, not Scintilla's. `ScriptOffers`
 (editor/src/editor_script_offers.h) is the list the design draws: a 366px frame
 of 28px rows, each one a kind badge, the name in the mono face, and where it
 lives on the right, over a footer that counts what matched. Beside it sits a
-second frame that describes whatever row is current, which is the part a real
-IDE has and the artboard does not. Scintilla's own `showUserList` cannot draw
+second frame that describes whatever row is current, which real IDEs have and
+the artboard does not. Scintilla's own `showUserList` cannot draw
 any of that: it takes one flat list of strings with no per-row colour, no right
 hand column and no footer. The popup is a child of the editor rather than a
 top-level window, so it needs no screen and shows up in an off-screen shot.
 
-**It opens on the first letter, which needed the caret timing fixed.**
+Completion opens on the first letter, which needed the caret timing fixed.
 `textChanged` is emitted from Scintilla's modification notification, which
 arrives *before* the caret has moved onto the character just typed. Reading the
 prefix there gave the text one character behind: at the first letter the prefix
 was empty and nothing was ever offered, at the second it filtered on the first.
 `Rethink` now defers the work to the next turn of the event loop
 (`QTimer::singleShot(0, ...)`, coalesced by a flag), so `Typing` reads a settled
-caret. That is what makes a single keystroke offer anything at all.
+caret and a single keystroke already offers completions.
 
-**The panel teaches, because the reader may never have seen AFP.**
+The description frame is written for a reader who may never have seen AFP.
 `Document::ScriptWordDoc` (src/document/script_docs.h) answers with a signature,
 a plain-language description, one entry per argument (its name, what type it is
 read as, and what it is for), what the call gives back, and the builtin id. The
-aeplib entries are the ones read out of afp-core, so they say real things: that
+aeplib entries are the ones read out of afp-core, so they describe what the game
+does: that
 a frame argument counts from 1 and text is a label, that `goto_play` is the one
 family counting from 0, that `aep_set_frame_control` keeps a depth out of the
 picture until its own playhead reaches a frame. Where the game was not read, the
-entry says so rather than inventing: the four numbers of `aep_set_rect_mask`
+entry says so: the four numbers of `aep_set_rect_mask`
 are described as unread, and a call with no measured entry says that what it
 does has not been read out of the game yet. `docs/formats.md` holds the table
 those entries come from.
 
-**Every word carries a description.** `Document::ScriptWordHelp` names what each
+Every word carries a description. `Document::ScriptWordHelp` names what each
 word of the language does (`let` binds a call's result to a register, `store`
 copies the top of the stack into a register, and so on). A call gets its builtin
 id (`builtin_0x442`), because the id is what afp-core resolves and what the
-bytes will hold; what a KONAMI builtin *does* is not something the editor may
-invent. Inside quotes the description is where the name lives, the same text the
+bytes will hold; the editor must not invent what a KONAMI builtin does. Inside quotes the description is where the name lives, the same text the
 row and the names panel show.
 
-**Call tips come from the package.** Typing a call's opening bracket shows
-*another real call to that name in this animation*, so the tip is measured
-rather than invented, with the arguments highlighted the way the design
+Call tips come from the package. Typing a call's opening bracket shows
+another real call to that name in this animation, so the tip shows real usage,
+with the arguments highlighted the way the design
 highlights them; a call with no other example in the package gets no tip. The
 tip is a Scintilla popup and needs a screen, so `Hint` returns early when the
 editor is off-screen: Scintilla asks `QGuiApplication::screenAt` for the caret
 and dereferences the answer without checking it, which crashes an off-screen
 window.
 
-**Ctrl+click a name the package does hold to go to it.** The editor filters its
+Ctrl+click a name the package holds to go to it. The editor filters its
 own viewport for a control-click, asks Scintilla which character is under the
 pointer, and reads the quoted name around it (`ScriptEditor::QuotedAt`). When
 that name is one of the ones the package holds, it emits `NameChosen` instead of
 moving the caret, and the window looks it up in `Document::Inputs`: a frame
 label seeks the timeline to its frame, a clip instance name selects its depth.
-The IDE closes first when it is open, because going to the timeline is not
-something you can watch from a window that covers it. A name the package does
+The IDE closes first when it is open, because its window covers the
+timeline. A name the package does
 not hold is left alone, so the click stays an ordinary click.
 
-**A name the package does not hold is painted as wrong.** `ScriptLexer::KnowNames`
+A name the package does not hold is painted as wrong. `ScriptLexer::KnowNames`
 takes the same list the completion uses, and a quoted argument that is not one
 of those names is painted in the wrong-word red, so a mistyped frame label shows
-up as you type rather than as a script that compiles and then does nothing. The
+up as you type instead of as a script that compiles and then does nothing. The
 marking only runs once the names are known, so a lexer with no package behind it
 leaves every string alone.
 
-**The gutter does not use the artboard's own colour.** The design canvas paints
+The gutter does not use the artboard's own colour. The design canvas paints
 line numbers `#4f545e` on `#101114`, which is 2.48:1 and fails even the 3:1 mark
 rule, let alone the 4.5:1 the contrast gate holds text to. They are painted in
-`Theme::kFaint` instead, and the pair is in the painted-pairs case. The same
-went for the disabled Compile button, which sits on `kPanel` rather than `kLine`
-so its label clears the bar.
+`Theme::kFaint` instead, and the pair is in the painted-pairs case. The
+disabled Compile button got the same treatment: it sits on `kPanel` instead of
+`kLine` so its label clears the bar.
 
-**Nothing reaches the file unless it compiles.** `Compile` (or Ctrl+Return)
+Nothing reaches the file unless it compiles. `Compile` (or Ctrl+Return)
 emits the source; `Window::CompileFrameScript` compiles it against a copy of the
 animation first, and a refusal is shown in the status strip under the buttons
 rather than as a dialog, leaving the typed text alone so it can be fixed. Only a
@@ -1878,11 +1881,11 @@ picks a frame, which seeks the host and re-renders. The widget lives in a
 ## What the editor remembers
 
 `QSettings` (organisation `573Renderer`, application `IFS Editor`) keeps the
-window geometry, the `QMainWindow` state, the dock manager state (only when it
-is worth keeping, see **Window layout**), the last game install and the last
-directory an IFS was opened from. The game install is
-booted at startup when it is set, so the preview is ready without going through
-the menu; the first animation in a freshly opened package is selected, so
+window geometry, the `QMainWindow` state, the dock manager state (only when its
+splitters have real sizes, see **Window layout**), the last game install and the
+last directory an IFS was opened from. The game install is booted at startup
+when it is set, so the preview is ready without going through the menu; the
+first animation in a freshly opened package is selected, so
 opening a file shows something.
 
 ## Editing
@@ -1910,14 +1913,16 @@ pixels it was added with, alpha included. On an image, replace reads a picture
 the same way adding one does (`Window::ReplaceImageWithPicture`,
 `Document::ReplaceImage`) rather than taking the file's bytes as they are, which
 would have put PNG bytes where the texture blob belongs; every other entry is
-still replaced with a file's raw bytes. So an image can be saved, edited in
-another program and put back, and a picture of a different size is refused.
+still replaced with a file's raw bytes. An image can therefore be saved, edited
+in another program and put back, and a picture of a different size is refused.
 Adding, replacing and saving images live in `editor_images.cpp`.
+
 A new animation asks for a name and a frame count and copies its header from the
 open animation, or the package's first one (`Window::AddNewAnimation`), then
 opens it. In a package with no animation it first asks for another IFS and which
-of its animations to copy (`Window::ChooseAnimationSource`). Removing an animation goes through `Document::RemoveAnimation`, is
-refused while the project owns depths in it, and closes it first when it is the
+of its animations to copy (`Window::ChooseAnimationSource`). Removing an
+animation goes through `Document::RemoveAnimation`, is refused while the project
+owns depths in it, and closes it first when it is the
 one on screen. `Rename <name>...` on an animation asks for the new name
 (`Window::RenameAnimationEntry`, `Document::RenameAnimation`), is refused the
 same way while the project owns depths in it, closes it first when it is on
@@ -1933,14 +1938,15 @@ to remove says so in the status bar without adding an undo step; otherwise it
 applies the result as one undo step, refills the clip list when that animation
 is on screen (falling back to the root when the shown sprite was removed) and
 says how many definitions went. It is refused while the project owns depths in
-the animation, like rename and remove. The image path goes
-through `QImage`, so the editor reads image formats through Qt rather than
-carrying a decoder of its own, and converts to the BGRA the package stores.
-That means the qtbase features decide what can be added: the editor asks for
-`png` and `jpeg` on top of `gui` and `widgets` in the root manifest's `editor`
-feature. Without them Qt reads only BMP, PPM, XBM and XPM, which is what the
-dialog's own filter promised and could not deliver until the features were
-turned on. Removing a texture goes through `RemoveImage` so the texture list
+the animation, like rename and remove.
+
+The image path goes through `QImage`, so the editor reads image formats through
+Qt instead of carrying a decoder of its own, and converts to the BGRA the
+package stores. The qtbase features therefore decide what can be added: the
+editor asks for `png` and `jpeg` on top of `gui` and `widgets` in the root
+manifest's `editor` feature. Without them Qt reads only BMP, PPM, XBM and XPM,
+so the dialog's own filter offered formats it could not open until the features
+were turned on. Removing a texture goes through `RemoveImage` so the texture list
 loses its node too; removing anything else is a plain entry removal.
 
 Ctrl and the mouse wheel zoom the timeline around the frame under the cursor,
@@ -1973,8 +1979,9 @@ the cursor, and rename, move or remove the label the cursor is near. Below the
 labels it offers the structure edits: insert or remove a frame at that point,
 and add or remove the selected depth over a range; adding one asks which of the
 animation's characters it places, or which of the package's images to place as
-a new shape (`Document::PlaceImage`), which is recorded as one undo step. Last it offers the camera:
-add one on that frame when it has none, remove the one it has. The widget
+a new shape (`Document::PlaceImage`), which is recorded as one undo step. Last
+it offers the camera: add one on that frame when it has none, remove the one it
+has. The widget
 does not own the dialogs; it emits the position, the frame and the label it
 found and the window builds the menu.
 
@@ -1997,8 +2004,9 @@ the manifest again, so the keyframes, the owned depths and the scripts follow
 undo exactly as the package does. Owning a depth and editing a script are steps
 of their own; a script edit goes through `EditAuthored`, so it is compiled and
 shown straight away and changes only the owned depth it was made on. Each step
-is named after the field and depth it changed, and `Edit > Undo` / `Edit > Redo` restore
-the document and run the same reload loop so the viewport follows. The menu
+is named after the field and depth it changed, and `Edit > Undo` /
+`Edit > Redo` restore the document and run the same reload loop so the viewport
+follows. The menu
 items carry the name of the step they would undo or redo and are disabled when
 there is nothing to do.
 
@@ -2006,8 +2014,8 @@ there is nothing to do.
 naming the open IFS; `Open project...` reads one and opens the IFS it names, and
 `Close project` drops it and leaves the IFS open on its own. The title carries
 the project folder's name next to the file's while one is open, and the two menu
-items are enabled only when they can do anything. A project is only adopted once
-its IFS has actually opened, so a manifest pointing at a file that no longer
+items are enabled only when they can do anything. A project is adopted only once
+its IFS has opened, so a manifest pointing at a file that no longer
 loads leaves the window as it was. Opening a project restarts the preview host
 when one is running, because the target build comes from the project; when the
 project's build is not the install's, the host is stopped instead (see **Which
@@ -2033,13 +2041,12 @@ typed straight away.
 
 An owned depth's timeline menu also offers to edit its script. The box opens on
 the source the project holds, or on the depth's baked script read back as source
-when it has none yet, so owning a script is something the user asks for rather
-than something that happens on its own. Clearing the box hands the script back
+when it has none yet, so the project owns a script only when the user asks it
+to. Clearing the box hands the script back
 to the baked data.
 
 `File > Export into the IFS` writes the project's images and every owned depth's
-keyframes into the
-document as baked data. It is one undoable step like any other edit, and it runs
+keyframes into the document as baked data. It is one undoable step like any other edit, and it runs
 the same reload loop, so the viewport shows what was exported. Export changes the
 open document and not the file on disk; `File > Save` is still what writes it
 out.
@@ -2050,8 +2057,9 @@ longer match and shows them all in one sheet (`Editor::DriftSheet`): a row an
 entry, saying whether it changed or is gone, each ticked to keep what the IFS
 holds, with a button to tick or untick every row at once. Closing the sheet
 calls `KeepIfsVersion` for the ticked ones, which drops the project's source for
-them; the rest are left owned, so the next export overwrites them. The choices are written to the manifest straight away, the same as owning
-and detaching, so a decision is never held only in memory. A project whose IFS
+them; the rest are left owned, so the next export overwrites them. The choices
+are written to the manifest straight away, the same as owning and detaching, so
+a decision is never held only in memory. A project whose IFS
 nobody touched asks nothing.
 
 `Depth > Keyframe this depth` no longer needs a project open: with none,
@@ -2059,8 +2067,8 @@ nobody touched asks nothing.
 names, beside the IFS and called after it, and the depth is owned in it. The
 File menu's New project is still there for putting one somewhere else.
 
-**What the timeline keeps when a clip is shown again.** `Timeline::ShowKeys` is
-the only place that decides which keyframes stay selected: it clears the
+When a clip is shown again, `Timeline::ShowKeys` is the only place that
+decides which keyframes stay selected: it clears the
 selection when it is handed a different depth than the one it holds, and
 otherwise drops the keys whose property or frame is no longer there.
 `Timeline::ShowAnimation` keeps the shown depth, its lanes and the selection,
@@ -2133,8 +2141,9 @@ The lane menu also offers `Time-stretch N keyframe(s)...` for two or more
 selected keyframes (`Window::StretchSelectedKeys`, through
 `Document::StretchKeys`). It asks for the stretch factor as a percentage, as
 After Effects' Time Stretch does, and spreads the selection from its earliest
-keyframe (a `KeyStretch` of that frame and `percent / 100`), as one undo step. Like the reverse, it keeps the moved keyframes
-selected and the focused one focused where it went (`Window::SelectMovedKeys`
+keyframe (a `KeyStretch` of that frame and `percent / 100`), as one undo step.
+Like the reverse, it keeps the moved keyframes selected and the focused one
+focused where it went (`Window::SelectMovedKeys`
 does both for the two). The window test owns the dot's depth, keys frames 0
 and 1, cancels the dialog and sees nothing change, stretches them to 200% and
 reads the values on frames 0, 2 and 3, the selection and the focus, undoes,
@@ -2205,6 +2214,7 @@ or value changed, to move it (`Window::ApplyGraphMove`: `Document::ShiftKeys`
 for the frame, then `Document::SetKeyValuesAt`) as one undo step, after which
 the keyframe is focused on its new frame. A move the document refuses, onto
 another keyframe for one, changes nothing.
+
 Clicking elsewhere seeks to the nearest frame. Its signals are sent on release,
 because focusing a keyframe refills the graph, which would end a drag begun on
 the press. The widget tests read where each value is drawn (`KeyPoint`), the
@@ -2218,8 +2228,7 @@ it focused on its new frame, sees a move onto another keyframe refused, and
 sees the graph empty for a depth the project does not own. Dropping either
 neighbour bound, the live frame, either Shift rule, the frame check on release,
 the bound itself, the refocus, the retime or the new frame of the value also
-fails them. Dropping the axis flip, the reach, the
-component, the change check, the focus, the rounding, the keyframe boxes, the
+fails them. Dropping the axis flip, the reach, the component, the change check, the focus, the rounding, the keyframe boxes, the
 line, the live value, the empty graph, the value edit, either connection or
 the dock fails one of them. Whether a keyframe is drawn as a box or a dot is
 not tested.
@@ -2255,7 +2264,7 @@ Fit all and Fit keys (`graph.fit_all`, `graph.fit_keys`, on the panel and in the
 View menu) set the value range `GraphEditor::Fit` works out: every sampled frame
 of the shown tracks, or only their keyframes. A bezier ease can overshoot
 between two keys, so the two ranges differ exactly when the curve leaves the
-values it joins, which is what the widget test pins.
+values it joins. The widget test pins that.
 
 A key with a bezier ease carries two handles on the way to the next key, drawn
 at the curve's control points in the graph's own space. Dragging one moves that
@@ -2263,11 +2272,12 @@ control point (time clamped to the segment) and letting go emits `EaseEdited`,
 which `Window::ApplyGraphEase` writes with `Document::SetKeysEase` for that one
 keyframe, as one undo step. The numbers it writes are the same four the
 inspector's Keyframes section shows.
- How a keyframe leaves its frame applies to the whole
-selection when the right-clicked keyframe is part of it, and to that keyframe
-alone otherwise. Bezier sets the curve the keyframe already had, or the first
+
+How a keyframe leaves its frame applies to the whole selection when the
+right-clicked keyframe is part of it, and to that keyframe alone otherwise.
+Bezier sets the curve the keyframe already had, or the first
 `Document::EasePresets` curve, and the curve itself is then edited in the
-inspector rather than in a dialog.
+inspector instead of in a dialog.
 
 **The Content section.** Above Transform, the inspector says what the depth
 places and how it is drawn: the character's name with a Replace button
@@ -2277,7 +2287,7 @@ dropdown, a Masks up to depth number, and the placement's filters. The blend
 names come from `Document::BlendModes` (`src/document/blend_modes.cpp`), which
 carries every mode `Blend::MapAfpMode` handles, including the second and third
 codes the game gives additive and subtractive, so a file that uses mode 8 keeps
-mode 8 rather than being rewritten to 4. A value outside that list is shown as
+mode 8 instead of being rewritten to 4. A value outside that list is shown as
 "Mode N" and kept. The dropdown and the number write through
 `Window::EditPlacementFieldOnDepth`, which is `Document::EditPlacementField` on
 the same "Blend" and "Clip depth" fields the raw table edits.
@@ -2285,8 +2295,8 @@ the same "Blend" and "Clip depth" fields the raw table edits.
 Filters are listed as "Filter 1: colour matrix". Adding and removing them goes
 through the keyframe path (`Document::AddKeyFilterAt`,
 `Document::RemoveKeyFilterAt`), so the buttons are there only for a depth the
-project owns, and a depth with no Filters keyframe at the playhead is told so
-rather than silently doing nothing. `Window::ShowInspectorExtras` fills the
+project owns, and on a depth with no Filters keyframe at the playhead the
+editor says so instead of doing nothing. `Window::ShowInspectorExtras` fills the
 section from the same `Document::InspectFrame` rows the raw table uses.
 
 **The Keyframes section.** `Editor::EaseEditor` (`editor_ease_editor.cpp`) is
@@ -2307,8 +2317,8 @@ or the shown keys change. There is no modal ease dialog any more.
 With a keyframe selected the inspector carries three rows for it above the
 placement fields: which property and frame it is, its value, and the ease it
 leaves on. A Filters keyframe shows its filters as rows instead of the value,
-and an edit to one of them goes through `Window::ApplyKeyFilterEdit`. Right-clicking
-the inspector with a Filters keyframe selected offers to add a colour matrix or
+and an edit to one of them goes through `Window::ApplyKeyFilterEdit`.
+Right-clicking the inspector with a Filters keyframe selected offers to add a colour matrix or
 an HSV filter, and, on a filter's rows, to remove that filter
 (`Window::ShowInspectorMenu`).
 
@@ -2317,11 +2327,11 @@ Right-clicking an editable colour row (a placement's `Multiply colour` or
 which opens Qt's colour dialog on the current value, alpha included, and
 writes the choice into the cell (`Window::PickColour`). Writing the cell is the
 same as typing into it, so the edit is checked and recorded the usual way. The
-dialog is opened after the menu closes, not from inside it: opened from the
-menu's own event loop it never received its input in the window tests.
+dialog is opened after the menu closes: opened from the menu's own event loop,
+it never received its input in the window tests.
 
-The value row is the one editable cell an owned depth has, because
-the placement rows below it are produced from the keyframes rather than edited.
+The value row is the one editable cell an owned depth has, because the
+placement rows below it are produced from the keyframes and cannot be edited.
 
 With no depth selected on the root timeline the inspector shows the
 animation's settings instead (stage size, frame rate, background colour and
@@ -2335,16 +2345,16 @@ What those rows are is `Document::InspectFrame`, not window code: `ShowFrame`
 reads the animation, works out which depth the project owns here, and hands the
 selection to it. `FillInspector` copies the rows into the table and stores each
 row's `EditTarget` on its item, and `ApplyFieldEdit` switches on that target
-rather than on the row's name, so a renamed row cannot quietly become
+instead of on the row's name, so a renamed row cannot silently become
 uneditable or reach the wrong setter.
 
 Every keyframe edit goes through `Window::EditAuthored`, which applies the change
 to a copy of the `AuthoredDepth`, rebakes and writes it into the open document
 through the same `EditAnimation` step as every other edit, and only then keeps
-the change and writes the manifest. So a keyframe edit is undoable, reloads the
-viewport, and is never recorded in the project when the write into the package
-failed. It also means the open document always shows what the project says
-rather than waiting for an export.
+the change and writes the manifest. A keyframe edit is therefore undoable,
+reloads the viewport, and is never recorded in the project when the write into
+the package failed. The open document also always shows what the project says,
+without waiting for an export.
 
 The Playback menu also steps the playhead as After Effects does: Page Up and
 Page Down go one frame back and forward, Home and End go to the clip's first
@@ -2433,7 +2443,7 @@ fails it.
 `Playback > Loop` decides whether it wraps at the end; the choice is remembered
 between runs. The timer's interval is `Document::FrameIntervalMs` of the
 animation's own rate, read when playback starts, so an animation authored at 30
-plays at 30 rather than at whatever the editor felt like.
+plays at 30.
 
 Each tick asks `Document::Advance` for the next frame and seeks there, which
 moves the timeline playhead with it. While playing, `SeekTo` does not rebuild the
@@ -2462,15 +2472,16 @@ double-clicked a character on IIDX 33's `x_logo_loop`, read that, and went
 looking for a sprite that does not exist. `EnterSpriteAt` now asks
 `Timeline::IsSprite` first: a sprite is entered, and anything else chooses that
 depth and says "Shape 67: 33title_chara_01 has no timeline of its own: its
-keyframes are on depth 7", which is where they are. Those two characters are
+keyframes are on depth 7". Those two characters are
 shapes placed straight onto root depths 7 and 6, re-placed nearly every frame,
 so the bob is a row of marks on the root row, not a nested clip.
 `A shape double-clicked on the stage...` in
 `editor/tests/editor_bar_window_tests.cpp` drops the sample's dot shape, double
 clicks it and checks the notice names a shape and its depth; it caught the old
-message saying "Sprite". Opening a clip shows that sprite's depths,
-labels and frames on the timeline and its placements and cameras in the
-inspector. Placement fields, library call arguments, cameras, labels and the
+message saying "Sprite".
+
+Opening a clip shows that sprite's depths, labels and frames on the timeline
+and its placements and cameras in the inspector. Placement fields, library call arguments, cameras, labels and the
 structure edits all apply to the clip that is open.
 
 **The Inputs panel.** A third tab beside Inspector and History
@@ -2486,14 +2497,14 @@ means it is chosen by seeking. A name placed on several depths is one input,
 because the game writes it once and afp walks the same-name siblings. Frame
 labels are listed under their own group, since jumping to a label is the other
 channel. The evidence for all of this is in the repo notes under
-`IIDX/afp_input_surface.md`; the panel is what the file says, not what any
+`IIDX/afp_input_surface.md`. The panel shows what the file says, not what any
 particular game does with it.
 
 The surface comes off the clip view job (`ClipView::inputs`), so reading it
 never runs on the window's thread. Clicking a row goes to that input: the clip
 if it is not already open, then the frame, then the depth, so the inspector
 fills with the placement the name refers to. The panel does not say what an
-input MEANS. `score_this_0100` is the hundreds digit of this play's score only
+input means. `score_this_0100` is the hundreds digit of this play's score only
 to a reader; that mapping lives in the game binary and is deliberately out of
 scope here.
 
@@ -2504,7 +2515,7 @@ this row takes, and offers the two writes the file supports.
 A row that draws a picture gets **Picture**, an editable combo of every image in
 the package. Picking one swaps what that clip draws.
 
-A name with SEVERAL digit places gets **Number**. `Document::Numbers` (see
+A name with several digit places gets **Number**. `Document::Numbers` (see
 `docs/document.md`) folds `score_this_0001`, `_0010`, `_0100` and `_1000` into
 one number, so the panel shows a single `score_this` row reading "a number of 4
 digits" with the four places nested under it. Typing `1234` and pressing Enter
@@ -2517,31 +2528,30 @@ Picture combo is there for when it is. A value too wide for its places is
 refused by name ("score_this has 4 digit places in the file, so it cannot show
 55555") instead of being truncated into a wrong number.
 
-A name with ONE place is not a number yet, however digit-shaped its picture is.
+A name with one place is not a number yet, however digit-shaped its picture is.
 Writing a name writes one clip, so one place can only ever show one glyph. Its
-row says what it really is, "Sprite 18, one of dead_0 to dead_9", the form says
+row says what it is, "Sprite 18, one of dead_0 to dead_9", the form says
 so in a line, and under it sits a **Make it a number** block.
 
-That row is how a one-place name becomes a real number, and it is an edit, not a
-preview trick. afp's C interface has no call that creates a movie clip (see
+That block turns a one-place name into a real number, and it edits the file.
+afp's C interface has no call that creates a movie clip (see
 `docs/document.md`), so more digits can only come from more places in the file.
 `Window::SpreadChosenInput` runs `Document::SpreadIntoPlaces` through
 `EditAnimation`, so it lands in the history with everything else and Ctrl+Z
 takes it back. When it returns, `deadpoint` is four places, the panel shows one
 `deadpoint` row reading "a number of 4 digits", and typing 1234 into it works
-exactly like `score_this`. The new row is selected for you rather than leaving
-you to find it.
+like `score_this`. The new row is selected afterwards.
 
-The three things that block asks for are the three the layout needs, and they
-are asked rather than guessed because the game keeps them in a font table built
-at boot that no package can see (`IIDX/afp_input_surface.md` reads the drawer).
+The block asks for the three things the layout needs. It has to ask, because
+the game keeps them in a font table built at boot that no package can see
+(`IIDX/afp_input_surface.md` reads the drawer).
 **Digits** is the cell count. **px** is the advance, prefilled with the anchor's
 own drawn width measured from its stage outline. **Growing right** or **growing
 left** decides whether the anchor is the most significant place with the rest to
 its right, or the ones place with the rest to its left. Right is the default: an
 authored placeholder usually sits just after its label, and growing left from
-there draws the number over the label, which is exactly what the first version of
-this did.
+there draws the number over the label, which is what the first version of this
+did.
 
 A number also carries **Blank leading zeros**. The game's drawer multiplies the
 clip's alpha by a per-font factor once the rest of the value is zero, so some
@@ -2550,7 +2560,7 @@ same runtime table. Ticking the box hides the places above the most significant
 digit through the preview host's visibility channel, and their row shows an empty
 picture slot so the list says so too.
 
-**The form never scrolls sideways.** The panel is a side dock and a person can
+The form never scrolls sideways. The panel is a side dock and a person can
 drag it narrow, so every control in the form is full width with its caption on
 its own line above it, and the only pair that shares a line is the two small
 spin boxes. Each control is built through `Shrinkable`, which gives it an
@@ -2565,11 +2575,11 @@ panel instead of growing a sideways scrollbar` in
 `minimumSizeHint` under 200px for both the picture and the number cases; it fails
 at 232 if any one control stops being shrinkable.
 
-Nothing in any of this knows about a game. The rule is: the picture belongs to a
-complete ten, the name says how many places there are, and the layout choices the
-file cannot answer are put in front of a person instead of guessed.
+None of this is specific to a game: the picture belongs to a complete ten, the
+name says how many places there are, and the layout choices the file cannot
+answer are left to a person.
 
-"Put it back" drops the overrides for the whole number, or for the one input
+"Reset to the file's value" drops the overrides for the whole number, or for the one input
 when it is not part of one, and the preview goes back to what the file draws.
 
 **How the list is drawn.** The panel is a flat list, not a nested tree: the
@@ -2588,7 +2598,7 @@ the package can show keep the empty slot so the names stay on one line.
 `Window::RefreshInputRows` re-reads the chips and pictures after every value
 change, so the list and the stage never disagree.
 
-The list is rebuilt only when the surface or the package images actually change.
+The list is rebuilt only when the surface or the package images change.
 It used to be rebuilt whenever the clip view reloaded, which is every time a
 click opened the clip an input lives in, and that threw the selection away: the
 first click on an input in a nested sprite cleared itself and you had to click
@@ -2648,20 +2658,20 @@ back to the root.
 Owning, detaching, keyframes and scripts work in whichever clip is picked. The
 window matches an owned depth by animation, clip, depth and frame range, so a
 sprite depth and a root depth with the same number are never confused, and
-detaching removes exactly the record that was detached rather than anything
-that shares its depth and first frame.
+detaching removes only the record that was detached, not other records that
+share its depth and first frame.
 
 Scrubbing now refreshes the inspector whether or not a depth is picked, so the
 camera rows of the frame under the playhead follow the playhead; before, they
 only did while a depth was picked.
 
 `File > Save the frame as PNG...` (Ctrl+Alt+S) writes what the viewport shows
-to a PNG. It asks the host for one render at the stage size rather than the
+to a PNG. It asks the host for one render at the stage size instead of the
 fitted viewport size, restores the viewport size afterwards, and composites the
-frame onto black exactly as the viewport paints it, so the file is opaque and
-matches the screen. What the host's alpha means has not been read, so this is
-deliberately not a transparent export; the renderer's own export path is where
-that belongs. Without a preview host it says so rather than writing a file.
+frame onto black as the viewport paints it, so the file is opaque and matches
+the screen. What the host's alpha means has not been read, so the file is
+opaque on purpose; transparent export belongs in the renderer's own export
+path. Without a preview host it says so and writes nothing.
 
 `File > Save the work area as PNG frames...` (Ctrl+Alt+Shift+S,
 `Window::SaveFramesAs`) does the same for every frame of the work area, or of
@@ -2669,7 +2679,7 @@ the whole clip when no work area is set, into a chosen folder as
 `<animation>_<frame>.png`, the frame number padded to four digits so the files
 sort in order. Each frame is a host seek and one render at the stage size,
 composited onto black by the same `Opaque` step as a single frame, so frame N
-of a sequence is the file saving frame N on its own gives; a modal progress
+of a sequence matches the file a single save of frame N gives; a modal progress
 dialog shows the frame and how many of how many, and stopping it keeps the
 frames already written. Afterwards the viewport is resized back and the host
 sought back to the playhead, so the next render that does not seek (a resize,

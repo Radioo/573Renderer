@@ -343,7 +343,7 @@ void Window::ShowKeyMenu(const QPoint& where, const QString& property, uint32_t 
     QAction* remove =
         on_key ? menu.addAction(tr("Remove the %1 keyframe at frame %2").arg(property).arg(frame))
                : nullptr;
-    QMenu* ease = on_key ? menu.addMenu(tr("How it leaves frame %1").arg(frame)) : nullptr;
+    QMenu* ease = on_key ? menu.addMenu(tr("Interpolation after frame %1").arg(frame)) : nullptr;
     QAction* hold = ease != nullptr ? ease->addAction(tr("Hold")) : nullptr;
     QAction* linear = ease != nullptr ? ease->addAction(tr("Linear")) : nullptr;
     QAction* bezier = ease != nullptr ? ease->addAction(tr("Bezier")) : nullptr;

@@ -67,7 +67,7 @@ constexpr auto kModelDrawFields = std::to_array<FieldDesc>({
                                                   .kind = FieldKind::Vec3,
                                                   .range = kSpin,
                                                   .unit = "rad/frame",
-                                                  .help = "Rate the per model spin integrates.",
+                                                  .help = "Spin added to the rotation each frame.",
                                                   .tweenable = true}),
     Field<ModelDraw, &ModelDraw::clip_time>({.id = "clip_time",
                                              .kind = FieldKind::ClipTimeField,
@@ -84,16 +84,16 @@ constexpr auto kModelMotionFields = std::to_array<FieldDesc>({
         {.id = "spin_kick",
          .kind = FieldKind::Float,
          .range = {.min = 0.0F, .max = 64.0F, .step = 0.05F},
-         .help = "Spin multiplier armed once at the clip start."}),
+         .help = "Spin multiplier set once at the clip start."}),
     Field<ModelMotionCmd, &ModelMotionCmd::spin_kick_decay>(
         {.id = "spin_kick_decay",
          .kind = FieldKind::Float,
          .range = {.min = 0.0F, .max = 8.0F, .step = 0.005F},
          .help = "Amount the kick multiplier moves back toward one per frame."}),
-    Field<ModelMotionCmd, &ModelMotionCmd::pulse>({.id = "pulse",
-                                                   .kind = FieldKind::PulseField,
-                                                   .help = "Beat driven scale pulse, null for "
-                                                           "none."}),
+    Field<ModelMotionCmd, &ModelMotionCmd::pulse>(
+        {.id = "pulse",
+         .kind = FieldKind::PulseField,
+         .help = "Beat-driven scale pulse, null for none."}),
 });
 
 constexpr auto kCameraSetFields = std::to_array<FieldDesc>({
@@ -132,9 +132,10 @@ constexpr auto kCameraSetFields = std::to_array<FieldDesc>({
                                          .range = {.min = 0.1F, .max = 10000.0F, .soft = true},
                                          .help = "Far plane.",
                                          .tweenable = true}),
-    Field<CameraSet, &CameraSet::aspect>({.id = "aspect",
-                                          .kind = FieldKind::Aspect,
-                                          .help = "Positive number or auto from the render size."}),
+    Field<CameraSet, &CameraSet::aspect>(
+        {.id = "aspect",
+         .kind = FieldKind::Aspect,
+         .help = "Aspect ratio: a positive number, or auto to use the render size."}),
 });
 
 constexpr auto kLightSetFields = std::to_array<FieldDesc>({
@@ -160,8 +161,8 @@ constexpr auto kLightSetFields = std::to_array<FieldDesc>({
          .kind = FieldKind::Vec3,
          .range = kColor,
          .unit = "rgb",
-         .help = "Specular colour. Inert on models: the renderer leaves SPECULARENABLE off, as "
-                 "the game does.",
+         .help = "Specular colour. Has no effect on models, because specular lighting stays off, "
+                 "as in the game.",
          .tweenable = true}),
     Field<LightSet, &LightSet::ambient>({.id = "ambient",
                                          .kind = FieldKind::Vec3,
@@ -169,8 +170,9 @@ constexpr auto kLightSetFields = std::to_array<FieldDesc>({
                                          .unit = "rgb",
                                          .help = "Ambient colour the slot adds everywhere.",
                                          .tweenable = true}),
-    Field<LightSet, &LightSet::enabled>(
-        {.id = "enabled", .kind = FieldKind::Bool, .help = "Whether the slot is lit."}),
+    Field<LightSet, &LightSet::enabled>({.id = "enabled",
+                                         .kind = FieldKind::Bool,
+                                         .help = "Whether the light in this slot is on."}),
 });
 
 constexpr auto kCameraEaseFields = std::to_array<FieldDesc>({
@@ -210,7 +212,7 @@ constexpr auto kCameraEaseFields = std::to_array<FieldDesc>({
     Field<CameraEaseCmd, &CameraEaseCmd::start_at_target>(
         {.id = "start_at_target",
          .kind = FieldKind::Bool,
-         .help = "Seed the ease at its target the first time any camera.ease arms."}),
+         .help = "Start the ease at its target the first time any camera.ease arms."}),
 });
 
 constexpr auto kModelEaseFields = std::to_array<FieldDesc>({
@@ -232,16 +234,18 @@ constexpr auto kModelEaseFields = std::to_array<FieldDesc>({
         {.id = "rate",
          .kind = FieldKind::Float,
          .range = kEaseRate,
-         .help = "Geometric fraction closed, or the linear step, each frame."}),
+         .help = "Fraction of the gap closed each frame (geometric), or the step taken each frame "
+                 "(linear)."}),
     Field<ModelEaseCmd, &ModelEaseCmd::mode>(
         {.id = "mode",
          .kind = FieldKind::Enum,
-         .help = "Geometric closes a fraction of the gap, linear steps by rate and stops.",
+         .help = "Geometric closes a fraction of the gap each frame. Linear moves by rate each "
+                 "frame and stops at the target.",
          .enum_names = kEaseModeNames}),
     Field<ModelEaseCmd, &ModelEaseCmd::start_at_target>(
         {.id = "start_at_target",
          .kind = FieldKind::Bool,
-         .help = "Seed the ease at its target the first time any model.ease arms this model."}),
+         .help = "Start the ease at its target the first time any model.ease arms this model."}),
 });
 
 constexpr auto kCameraMotionFields = std::to_array<FieldDesc>({
@@ -251,7 +255,7 @@ constexpr auto kCameraMotionFields = std::to_array<FieldDesc>({
          .range = kDegrees,
          .unit = "deg/frame",
          .help = "Degrees the up vector turns about the view axis through the eye each frame, "
-                 "from +X toward -Y. It integrates and is never reset.",
+                 "from +X toward -Y. The roll accumulates and never resets.",
          .tweenable = true}),
 });
 
@@ -268,14 +272,14 @@ constexpr auto kPolyTileGridFields = std::to_array<FieldDesc>({
         {.id = "lattice_amplitude",
          .kind = FieldKind::Float,
          .range = kUnitInterval,
-         .help = "Step the one-time lattice jitter draws from. Each drawn point moves by half "
-                 "this, either way."}),
+         .help = "Step size of the one-time lattice jitter. Each point moves by half this in "
+                 "either direction."}),
     Field<PolyTileGrid, &PolyTileGrid::lattice_seed>(
         {.id = "lattice_seed",
          .kind = FieldKind::Int,
          .range = kLatticeSeed,
-         .help = "Seed of the CRT generator the lattice jitter draws from. The game seeds it from "
-                 "the clock, so a preset has to name one."}),
+         .help = "Seed of the C runtime random generator behind the lattice jitter. The game "
+                 "seeds it from the clock, so the preset sets a fixed seed."}),
     Field<PolyTileGrid, &PolyTileGrid::spacing>(
         {.id = "spacing",
          .kind = FieldKind::Vec2,
@@ -321,11 +325,11 @@ constexpr auto kPolyTileGridFields = std::to_array<FieldDesc>({
         {.id = "burst_delay_per_tile",
          .kind = FieldKind::Float,
          .range = kWorld,
-         .help = "Counter each further tile waits for before it starts moving in +Z."}),
+         .help = "Extra counter value each later tile waits for before it starts moving in +Z."}),
     Field<PolyTileGrid, &PolyTileGrid::alpha>({.id = "alpha",
                                                .kind = FieldKind::Float,
                                                .range = kUnitInterval,
-                                               .help = "Vertex diffuse alpha of every tile.",
+                                               .help = "Opacity of every tile.",
                                                .tweenable = true}),
     Field<PolyTileGrid, &PolyTileGrid::texture>(
         {.id = "texture",

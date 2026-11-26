@@ -228,7 +228,7 @@ void Window::SimplifySelectedKeys() {
                     const std::optional<std::size_t> kept =
                         KeysAfterSimplify(chosen, static_cast<int64_t>(values.at(0)));
                     if (!kept) return QString();
-                    return tr("%1 of %2 keyframes go")
+                    return tr("Removes %1 of %2 keyframes")
                         .arg(chosen.size() - *kept)
                         .arg(chosen.size());
                 },

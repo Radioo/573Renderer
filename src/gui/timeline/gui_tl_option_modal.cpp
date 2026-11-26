@@ -79,8 +79,8 @@ FieldEvent DrawTransition(Doc::Transition& transition) {
 
     event = std::max(event, DrawDoubleRow("###tl_option_kick", "spin kick", transition.spin_kick,
                                           0.1F, "x spin"));
-    ImGui::TextDisabled("applied on a choice change to the models this option moves; it decays by "
-                        "each model's motion clip spin_kick_decay");
+    ImGui::TextDisabled("Applied to the models this option moves when the choice changes.\n"
+                        "It decays by the spin_kick_decay of each model's motion clip.");
     return event;
 }
 
@@ -116,7 +116,7 @@ FieldEvent DrawChoiceValues(const Doc::Document& document, Doc::ChoiceSpec& choi
     g_target = std::clamp(g_target, 0, (int)targets.size() - 1);
     DrawEnumRow("###tl_option_value_target", "target", g_target, targets);
     RowLabel("");
-    if (!ImGui::Button("+ add target value###tl_option_add_value")) return event;
+    if (!ImGui::Button("Add target value###tl_option_add_value")) return event;
     const std::string& id = targets[(std::size_t)g_target];
     const bool known = std::ranges::any_of(
         choice.values, [&id](const Doc::ChoiceValue& value) { return value.id == id; });
@@ -150,13 +150,13 @@ FieldEvent DrawChoices(Doc::Document& document, Doc::OptionSpec& option) {
         ImGui::SameLine();
         ImGui::TextDisabled("%zu value(s)", option.choices[i].values.size());
         ImGui::SameLine();
-        if (ImGui::SmallButton(("up###tl_option_choice_up_" + suffix).c_str()) &&
+        if (ImGui::SmallButton(("Up###tl_option_choice_up_" + suffix).c_str()) &&
             Editor::MoveChoice(document, g_option, (int)i, -1)) {
             if (std::cmp_equal(i, g_choice)) g_choice--;
             return FieldEvent::Committed;
         }
         ImGui::SameLine();
-        if (ImGui::SmallButton(("down###tl_option_choice_down_" + suffix).c_str()) &&
+        if (ImGui::SmallButton(("Down###tl_option_choice_down_" + suffix).c_str()) &&
             Editor::MoveChoice(document, g_option, (int)i, 1)) {
             if (std::cmp_equal(i, g_choice)) g_choice++;
             return FieldEvent::Committed;
@@ -168,7 +168,7 @@ FieldEvent DrawChoices(Doc::Document& document, Doc::OptionSpec& option) {
             return FieldEvent::Committed;
         }
     }
-    if (ImGui::Button("+ choice###tl_option_add_choice")) {
+    if (ImGui::Button("Add choice###tl_option_add_choice")) {
         option.choices.push_back(
             Doc::ChoiceSpec{.label = "Choice " + std::to_string(option.choices.size() + 1)});
         return FieldEvent::Committed;
@@ -264,7 +264,7 @@ void RenderOptionModal() {
     }
 
     Doc::Document working = editor.Document();
-    ImGui::Text("option %s", working.options[(std::size_t)g_option].id.c_str());
+    ImGui::Text("Option %s", working.options[(std::size_t)g_option].id.c_str());
     ImGui::SameLine();
     ImGui::TextDisabled("%s", working.id.c_str());
     ImGui::Separator();

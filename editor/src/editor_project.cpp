@@ -69,10 +69,9 @@ void Window::WarnForeignPackage(const QString& path, const QString& install) {
     foreign_build_ = theirs;
     const QString target = QString::fromStdString(ours);
     ReportProblem(
-        tr("%1 comes from %2, an install of %3, but the editor is working on %4. The "
-           "package might be incompatible with %4: the preview may not load it, and "
-           "what you save has to load on %4. To work on %3, choose its install under "
-           "File > Choose game install.")
+        tr("%1 comes from %2, an install of %3, but the editor targets %4. The package may not "
+           "work on %4: the preview might not load it, and anything you save has to load on %4. To "
+           "work on %3, choose its install under File > Choose game install.")
             .arg(QFileInfo(path).fileName(), install, QString::fromStdString(theirs), target));
 }
 
@@ -125,7 +124,7 @@ bool Window::MakeProjectIn(const QString& folder) {
         return false;
     }
     if (!QDir().mkpath(folder)) {
-        ReportProblem(tr("%1 could not be made").arg(folder));
+        ReportProblem(tr("%1 could not be created").arg(folder));
         return false;
     }
     Document::Project project{
@@ -146,7 +145,7 @@ bool Window::MakeProjectIn(const QString& folder) {
 
 void Window::CreateProject() {
     if (!file_ || document_path_.isEmpty()) {
-        ReportProblem(tr("Open an IFS before making a project for it"));
+        ReportProblem(tr("Open an IFS before creating a project for it"));
         return;
     }
     QSettings settings;
@@ -173,7 +172,7 @@ void Window::CreateProject() {
     project_folder_ = folder;
     authored_.clear();
     RefreshState();
-    statusBar()->showMessage(tr("Project made in %1").arg(folder));
+    statusBar()->showMessage(tr("Project created in %1").arg(folder));
 }
 
 void Window::ChooseProject() {
@@ -200,7 +199,7 @@ void Window::OpenProject(const QString& folder) {
     const QString ifs =
         QString::fromStdString(Document::ResolvedIfsPath(folder.toStdString(), *project));
     if (!QFileInfo::exists(ifs)) {
-        ReportProblem(tr("The project names %1, which is not there").arg(ifs));
+        ReportProblem(tr("The project points to %1, which does not exist").arg(ifs));
         return;
     }
     OfferToSave([this, ifs, folder, kept = std::move(*project)](bool go) mutable {
@@ -258,7 +257,7 @@ void Window::CloseProject() {
     project_folder_.clear();
     RefreshState();
     ShowFrame();
-    statusBar()->showMessage(tr("Project closed. The IFS is open on its own."));
+    statusBar()->showMessage(tr("Project closed. The IFS stays open."));
 }
 
 const Document::AuthoredDepth* Window::AuthoredAt(uint16_t depth, uint32_t frame) const {
@@ -322,7 +321,7 @@ void Window::AddProjectImage() {
         QString::fromUtf8(Document::kProjectSourceDirectory.data(),
                           static_cast<int>(Document::kProjectSourceDirectory.size()));
     if (!QDir().mkpath(sources)) {
-        ReportProblem(tr("%1 could not be made").arg(sources));
+        ReportProblem(tr("%1 could not be created").arg(sources));
         return;
     }
     const QString file = QString::fromStdString(std::string(Document::kProjectSourceDirectory)) +
@@ -393,7 +392,7 @@ void Window::EditOwnedScript() {
         return;
     }
     statusBar()->showMessage(taken.empty()
-                                 ? tr("Depth %1 keeps the script it was given").arg(*depth_)
+                                 ? tr("Depth %1 keeps its original script").arg(*depth_)
                                  : tr("The project writes the script of depth %1").arg(*depth_));
 }
 
@@ -463,7 +462,7 @@ void Window::OwnSelectedDepth(uint32_t frame) {
     SaveProject();
     RefreshState();
     ShowFrame();
-    ShowResult(tr("Depth %1 is now the project's, from frame %2 to %3")
+    ShowResult(tr("The project now owns depth %1, frames %2 to %3")
                    .arg(*depth_)
                    .arg(authored_.back().first_frame)
                    .arg(authored_.back().last_frame),

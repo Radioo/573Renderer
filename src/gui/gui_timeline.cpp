@@ -51,7 +51,7 @@ void DrawLabelCombo(App::State& state, const App::Status& status) {
     ImGui::SameLine(0.0F, Gui::Dpi::S(12.0F));
     ImGui::SetNextItemWidth(Gui::Dpi::S(170.0F));
     const char* preview =
-        status.active_label.empty() ? "go to label..." : status.active_label.c_str();
+        status.active_label.empty() ? "Go to label..." : status.active_label.c_str();
     if (ImGui::BeginCombo("##tl_labels", preview)) {
         for (size_t i = 0; i < status.labels.size(); i++) {
             const auto& l = status.labels[i];
@@ -68,8 +68,8 @@ void DrawLabelCombo(App::State& state, const App::Status& status) {
     }
     if (ImGui::IsItemHovered()) {
         ImGui::SetTooltip("Jump to a frame label and play from there (label playback).\n"
-                          "Labels are also the ticks on the track; hover a tick for its\n"
-                          "name, click it to jump.");
+                          "The labels are also the ticks on the track: hover a tick to see\n"
+                          "its name, click it to jump.");
     }
 }
 
@@ -85,9 +85,9 @@ void DrawTransportRow(App::State& state, const App::Status& status,
     if (TransportButton(ICON_STEP_BACK, "Step back 1 frame (Left).")) StepWrapped(state, live, -1);
     ImGui::SameLine(0.0F, Gui::Dpi::S(3.0F));
     if (TransportButton(ov.paused ? ICON_PLAY : ICON_PAUSE,
-                        "Play / pause (Space). Sets the stream playback speed to\n"
-                        "1 / 0 (afp_stream_set_speed), matching the debug viewer's\n"
-                        "RETURN+SHIFT toggle. Forced to running while exporting.")) {
+                        "Play or pause (Space). Sets the stream speed to 1 or 0,\n"
+                        "like RETURN+SHIFT in the debug viewer. Always plays while\n"
+                        "exporting.")) {
         PostTogglePause(state);
     }
     ImGui::SameLine(0.0F, Gui::Dpi::S(3.0F));
@@ -104,14 +104,14 @@ void DrawTransportRow(App::State& state, const App::Status& status,
     ImGui::AlignTextToFramePadding();
     ImGui::Text("%u / %u", live.mc_cur, live.mc_total);
     ImGui::SameLine(0.0F, Gui::Dpi::S(12.0F));
-    ImGui::TextDisabled("loop %u", live.mc_wrap_count);
+    ImGui::TextDisabled("Loop %u", live.mc_wrap_count);
     ImGui::PopFont();
 
     if (!status.labels.empty()) DrawLabelCombo(state, status);
 
     if (exporting) {
         ImGui::SameLine(0.0F, Gui::Dpi::S(14.0F));
-        ImGui::TextDisabled("(seek / pause disabled during export)");
+        ImGui::TextDisabled("(seek and pause are off during export)");
     }
 }
 
@@ -174,7 +174,7 @@ void DrawTrack(App::State& state, const App::Status& status, const App::State::L
         (hovered && !scrubbing) ? LabelHitTest(status, total, p0.x, w, mouse_x) : -1;
     if (label_hit >= 0) {
         const auto& l = status.labels[(size_t)label_hit];
-        ImGui::SetTooltip("label %s (frame %d) - click to play from here",
+        ImGui::SetTooltip("Label %s (frame %d): click to play from here",
                           l.name.empty() ? "(unnamed)" : l.name.c_str(), l.frame);
         if (ImGui::IsItemClicked(ImGuiMouseButton_Left)) {
             state.PostCommand(AfpCmd::Wrap(AfpCmd::GotoLabel{.name = l.name}));
@@ -183,7 +183,7 @@ void DrawTrack(App::State& state, const App::Status& status, const App::State::L
     }
     if (hovered) {
         ImGui::SetTooltip("Drag to seek (afp_mc_control 0xF08). Seeking pauses playback,\n"
-                          "mirroring the AFP debug viewer's TIME controls.");
+                          "as the AFP debug viewer's TIME controls do.");
     }
     if (active) {
         int const maxf = (int)total - 1;

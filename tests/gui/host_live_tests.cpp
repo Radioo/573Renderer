@@ -51,7 +51,7 @@ TEST_CASE("2D package panel drives a loaded mock package", "[gui][hosts][live]")
     test->TestFunc = [](ImGuiTestContext* ctx) {
         OpenHostTab(ctx, "##inspector_tabs/2D package");
         ctx->ItemClick("##inspector_tabs/2D package/Pause##gc2d");
-        ctx->ItemInputValue("##inspector_tabs/2D package/speed##gc2d", 2.5F);
+        ctx->ItemInputValue("##inspector_tabs/2D package/Speed##gc2d", 2.5F);
         ctx->ItemInputValue("##inspector_tabs/2D package/##gc2dframe", 12);
     };
     harness.Run(test);
@@ -114,7 +114,7 @@ TEST_CASE("3D scene panel drives a loaded mock scene", "[gui][hosts][live]") {
     test->TestFunc = [](ImGuiTestContext* ctx) {
         OpenHostTab(ctx, "##inspector_tabs/3D scene");
         ctx->ItemClick("##inspector_tabs/3D scene/Pause##s3d");
-        ctx->ItemInputValue("##inspector_tabs/3D scene/speed##s3d", 0.5F);
+        ctx->ItemInputValue("##inspector_tabs/3D scene/Speed##s3d", 0.5F);
         ctx->ItemInputValue("##inspector_tabs/3D scene/##s3dtime", 300.0F);
         ctx->ItemUncheck("##inspector_tabs/3D scene/Animate models##s3d");
     };
@@ -205,7 +205,7 @@ TEST_CASE("3D scene move speed drag edits the camera", "[gui][hosts][live]") {
     ImGuiTest* test = harness.NewTest("scene3d_move_speed");
     test->TestFunc = [](ImGuiTestContext* ctx) {
         OpenHostTab(ctx, "##inspector_tabs/3D scene");
-        ctx->ItemInputValue("##inspector_tabs/3D scene/move speed##s3d", 42.0F);
+        ctx->ItemInputValue("##inspector_tabs/3D scene/Move speed##s3d", 42.0F);
     };
     harness.Run(test);
 
@@ -230,7 +230,7 @@ TEST_CASE("3D scene model list toggles visibility and blend mode", "[gui][hosts]
     test->TestFunc = [](ImGuiTestContext* ctx) {
         OpenHostTab(ctx, "##inspector_tabs/3D scene");
         ctx->ItemClick("##inspector_tabs/3D scene/$$0/##vis");
-        GuiTest::ComboPick(ctx, "##inspector_tabs/3D scene/$$0/##blend", "additive");
+        GuiTest::ComboPick(ctx, "##inspector_tabs/3D scene/$$0/##blend", "Additive");
     };
     harness.Run(test);
 

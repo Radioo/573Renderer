@@ -88,7 +88,7 @@ void RenderFrameTab() {
     App::Global().RequestPresetFrameReport();
     const App::PresetStatus status = App::Global().GetPresetStatus();
     if (status.frame_report == nullptr) {
-        ImGui::TextDisabled("no preset document is playing");
+        ImGui::TextDisabled("No preset document is playing");
         ImGui::TextDisabled("Pick a screen in the preset library to see the frame it resolves.");
         return;
     }
@@ -102,10 +102,10 @@ void RenderFrameTab() {
                         report.fps);
     ImGui::PopFont();
     ImGui::SameLine(0.0F, Gui::Dpi::S(12.0F));
-    ImGui::TextDisabled("%s", status.playing ? "playing" : "paused");
+    ImGui::TextDisabled("%s", status.playing ? "Playing" : "Paused");
     if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("What the evaluator resolved for the frame under the playhead, and "
-                          "which clip wrote each value. Read-only: edit the clip that won.");
+        ImGui::SetTooltip("The values resolved for the frame under the playhead, and the clip "
+                          "that wrote each one. To change a value, edit that clip.");
     }
     ImGui::Separator();
 

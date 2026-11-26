@@ -156,7 +156,7 @@ bool IsOverlay(const IfsTreeCtx& ctx, const std::string& path) {
 const char* AlongsideBlockedReason(const IfsTreeCtx& ctx, const App::State::IfsEntry& entry) {
     if (!ctx.backend_has_overlays) return "This game's backend cannot stack packages.";
     if (!ctx.scene_loaded) return "Load an IFS first, then load others alongside it.";
-    if (entry.full_path == ctx.active_path) return "This IFS is the one already loaded.";
+    if (entry.full_path == ctx.active_path) return "This IFS is already loaded.";
     if (entry.from_arc) return "Only .ifs files can be loaded alongside.";
     return nullptr;
 }
@@ -166,7 +166,7 @@ void RenderEntryContextMenu(App::State& state, const IfsTreeCtx& ctx,
     if (!ImGui::BeginPopupContextItem("entry_menu")) return;
 
     if (IsOverlay(ctx, entry.full_path)) {
-        if (ImGui::MenuItem("Unload from alongside###browse_menu_unload_alongside")) {
+        if (ImGui::MenuItem("Unload###browse_menu_unload_alongside")) {
             state.PostCommand(AfpCmd::Wrap(AfpCmd::UnloadAlongside{.path = entry.full_path}));
             LOG("Gui", "Unloading alongside IFS: '%s'", entry.full_path.c_str());
         }
@@ -261,13 +261,13 @@ void RenderIfsPicker() {
         return;
     }
     if (list.empty()) {
-        ImGui::TextDisabled("No .ifs files found under the game dir.");
+        ImGui::TextDisabled("No .ifs files found in the game directory.");
         return;
     }
 
     static char filter_buf[128] = {};
     ImGui::SetNextItemWidth(-FLT_MIN);
-    ImGui::InputTextWithHint("##ifsfilter", "filter by path...", filter_buf, sizeof(filter_buf));
+    ImGui::InputTextWithHint("##ifsfilter", "Filter by path...", filter_buf, sizeof(filter_buf));
     std::string filter = filter_buf;
     for (auto& c : filter)
         c = (char)tolower((unsigned char)c);
@@ -352,7 +352,7 @@ void RenderTopBar(const App::Status& status) {
     ImGui::SameLine(0.0F, Gui::Dpi::S(18.0F));
     Gui::PushMonoFont();
     if (status.current_ifs_path.empty()) {
-        ImGui::TextDisabled("no IFS loaded");
+        ImGui::TextDisabled("No IFS loaded");
     } else {
         ImGui::TextDisabled("%s", PrettifyPath(status.current_ifs_path).c_str());
     }
@@ -369,7 +369,7 @@ void RenderTopBar(const App::Status& status) {
     }
     ImGui::EndDisabled();
     if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-        ImGui::SetTooltip("Export the playing animation to video / image (Ctrl+E).");
+        ImGui::SetTooltip("Export the playing animation as a video or images (Ctrl+E).");
     }
     ImGui::SameLine(ImGui::GetWindowWidth() - fps_w - Gui::Dpi::S(18.0F));
     ImGui::AlignTextToFramePadding();
@@ -387,22 +387,22 @@ void DrawExportStatusTag(App::State& state) {
     char buf[64];
     switch (ex.phase) {
     case App::ExportPhase::Capturing:
-        snprintf(buf, sizeof(buf), "capturing %d%s", ex.frames_captured,
+        snprintf(buf, sizeof(buf), "Capturing %d%s", ex.frames_captured,
                  ex.using_hardware ? " [NVENC]" : "");
         label = buf;
         color = ImVec4(1.0F, 0.85F, 0.3F, 1.0F);
         break;
     case App::ExportPhase::Encoding:
-        snprintf(buf, sizeof(buf), "encoding %d frames...", ex.frames_captured);
+        snprintf(buf, sizeof(buf), "Encoding %d frames...", ex.frames_captured);
         label = buf;
         color = ImVec4(1.0F, 0.85F, 0.3F, 1.0F);
         break;
     case App::ExportPhase::Done:
-        label = "export done";
+        label = "Export done";
         color = ImVec4(0.50F, 0.92F, 0.65F, 1.0F);
         break;
     case App::ExportPhase::Failed:
-        label = "export failed";
+        label = "Export failed";
         color = ImVec4(1.0F, 0.45F, 0.45F, 1.0F);
         break;
     case App::ExportPhase::Idle:
@@ -473,7 +473,7 @@ void RenderStatusStripImpl(const App::Status& status) {
 
     const GameProfile::Profile* profile = GameProfile::BySlug(state.GetGameProfileSlug());
     ImGui::AlignTextToFramePadding();
-    ImGui::TextDisabled("%s", profile != nullptr ? profile->name : "no profile");
+    ImGui::TextDisabled("%s", profile != nullptr ? profile->name : "No profile");
 
     int rw = 0;
     int rh = 0;
@@ -483,7 +483,7 @@ void RenderStatusStripImpl(const App::Status& status) {
 
     ImGui::SameLine(0.0F, Gui::Dpi::S(14.0F));
     if (status.last_error.empty()) {
-        ImGui::TextColored(ImVec4(0.50F, 0.92F, 0.65F, 1.0F), "render ok");
+        ImGui::TextColored(ImVec4(0.50F, 0.92F, 0.65F, 1.0F), "Render OK");
     } else {
         ImGui::TextColored(ImVec4(1.0F, 0.45F, 0.45F, 1.0F), "%s",
                            PrettifyPath(status.last_error, 60).c_str());

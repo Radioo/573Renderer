@@ -1,8 +1,8 @@
 # Engine binding: Konami DLL interfaces
 
-This document captures the reverse-engineered knowledge behind the renderer's DLL binding layer
+This document holds the reverse-engineered knowledge behind the renderer's DLL binding layer
 (function-pointer tables, export resolution, raw data offsets, MovieClip control, AVS binary XML,
-logging). It is the doc-of-record for the comments that used to live in:
+logging). It replaces the comments that used to live in:
 `src/afp_funcs.h`, `src/afpu_funcs.h`, `src/avs_funcs.h`, `src/afp_ddr_funcs.h`,
 `src/dll_offsets.h`, `src/app_globals.h`, `src/com_ptr.h`, `src/dll_loader.{h,cpp}`,
 `src/mc_control.{h,cpp}`, `src/avs_xml.{h,cpp}`, `src/log.{h,cpp}`.
@@ -24,7 +24,7 @@ Calling convention everywhere: x64 Microsoft (default __cdecl on x64 = __fastcal
 
 ## 1. DLL export naming schemes and DllLoader
 
-Two export-naming schemes exist across Konami DLLs:
+Konami DLLs use two export-naming schemes:
 
 - Mangled (avs2-core, modern afp-core / afp-utils, DDR's libavs-win64): every export is
   `<prefix><NNNNNN>` where the shared prefix identifies the library and the 6-char suffix is the
@@ -39,37 +39,37 @@ Detection rule: a DLL is treated as mangled iff its first export name ends in ex
 digits (readable AFP names like `afp_boot` do not). `DllLoader::IsByName()` reports which mode
 was detected.
 
-The export COUNT is cached as a coarse version fingerprint: different game/build versions of
-afp-core.dll have different export counts, so a count mismatch is an early tell that offsets and
+The export count is cached as a coarse version fingerprint: different game/build versions of
+afp-core.dll have different export counts, so a count mismatch is an early sign that offsets and
 ordinals may have moved.
 
-Design rationale: DLL load failures are routed through LOG() rather than printf because the
-renderer is a WIN32-subsystem app, so stdout is dropped on the floor. Before that, DLL load
-failures (the most likely cause of "renderer crashed at boot" reports) were invisible in the log
-file. The `DLL_LOAD(loader, field, ord)` macro passes the field name as the human-readable name
-for resolve-failure warnings.
+DLL load failures go through LOG() instead of printf because the renderer is a WIN32-subsystem
+app, so stdout goes nowhere. Before this change, DLL load failures (the most likely cause of
+"renderer crashed at boot" reports) did not appear in the log file. The
+`DLL_LOAD(loader, field, ord)` macro passes the field name as the human-readable name for
+resolve-failure warnings.
 
 ### The proc tables are the complete engine surface
 
 Every engine call resolves through one of the typed structs `AfpFuncs`,
 `AfpuFuncs`, `AvsFuncs` (modern) or `DdrAfp`'s accessors (legacy). Each
 struct's `Load(DllLoader&)` populates its function-pointer fields once at
-boot via `DLL_LOAD`. There are NO ad-hoc `DllLoader::GetFunc(ordinal)`
-resolutions anywhere else in the codebase; the P4 seam pass folded the
-last stragglers (afpu 0x062
+boot via `DLL_LOAD`. No other code in the codebase resolves an ordinal
+with an ad-hoc `DllLoader::GetFunc(ordinal)`; the P4 seam pass moved the
+last remaining ones (afpu 0x062
 afpu_afp_get_info_in_package, 0x046 afpu_image_lookup, 0x04c
 afpu_image_to_stream_args; afp 0x021 afp_stream_play_bitmap_by_name, 0x022
 afp_image_stream_create, 0x032 afp_set_filter; avs 0x05c/0x05d/0x05e
-opendir/readdir/closedir, 0x068 dump_mountpoint) into their structs. This
-is the seam a test uses: populate the structs with C-linkage fakes and the
+opendir/readdir/closedir, 0x068 dump_mountpoint) into their structs. Tests
+use this seam: they populate the structs with C-linkage fakes, and the
 whole manager layer runs without a Konami DLL.
 
-The `DllLoader` itself is still passed to `AfpManager::Boot` (only) because
-boot needs `DllLoader::Module()` - the loaded base ADDRESS - for the
-VirtualProtect data-segment patches (section 6), which are raw memory
-writes, not function calls. That is a base-pointer need, distinct from the
-proc-table surface, so a fake cannot drive the boot-time patch path (it
-mutates real DLL memory) but can drive everything downstream.
+The `DllLoader` itself is still passed to `AfpManager::Boot` (and nowhere
+else) because boot needs `DllLoader::Module()`, the loaded base address, for
+the VirtualProtect data-segment patches (section 6). Those patches are raw
+memory writes, not function calls, and need the base pointer rather than the
+proc tables. A fake therefore cannot drive the boot-time patch path (it
+changes real DLL memory) but can drive everything after it.
 
 ## 2. afp-core (modern, AFP 2.14.18) - ordinals and semantics
 
@@ -132,8 +132,8 @@ afp_do_update, afp_do_sort_render, afp_stream_create, afp_stream_play.
 
 The 4-arg form matches what soundvoltex.dll calls in the SDVX 7 live trace:
 `(callback_table, 0, 0x320, heap_ctx)`. IIDX 33 uses fewer args (the function reads only what it
-needs from RCX), but x64 fastcall lets the binding declare the extras safely - they travel in
-RDX / R8 / R9 and IIDX's function just does not read them. Callers pass 0 / nullptr for the
+needs from RCX), but x64 fastcall lets the binding declare the extras safely: they travel in
+RDX / R8 / R9 and IIDX's function does not read them. Callers pass 0 / nullptr for the
 extras when not on SDVX.
 
 ### afp_set_verbose (0x008) - per-game arg count
@@ -143,7 +143,7 @@ passing flags=0 keeps IIDX behaviour while letting the SDVX caller supply the re
 
 ### afp_stream_destroy (0x020)
 
-`afp_stream_destroy(type, selector, schedule)` - verified against afp-core `XCd229cc000020`.
+`afp_stream_destroy(type, selector, schedule)`, verified against afp-core `XCd229cc000020`.
 
 - `type` picks what to destroy: 1 = every stream; 5 = one stream by id; 7/8 = streams matching a
   byte at stream+36.
@@ -151,25 +151,25 @@ passing flags=0 keeps IIDX behaviour while letting the SDVX caller supply the re
 - `schedule`: 0 = destroy immediately; 1 = set the destroy-later flag (bit 0x2000 at stream+8) so
   AFP cleans it up on the next tick.
 
-Note: afp_stream_destroy leaves MovieClip children behind; the proper release path is
+afp_stream_destroy leaves MovieClip children behind; the proper release path is
 afpu_package_control cmd 6 (see section 3).
 
 ### afp_get_layers_by_nr (0x04b)
 
 `(category, out_buf, max_out)`: iterates Table A, filters by
-`stream->+14 == category`, writes stream_ids into `out_buf[0..min(count,max_out))`, returns the
-TOTAL match count. It does NOT walk Table B (bitmap streams). Useful for counting live Table A
-streams to verify destroy-sweeps work as expected.
+`stream->+14 == category`, writes stream_ids into `out_buf[0..min(count,max_out))`, and returns
+the total match count. It does not walk Table B (bitmap streams). It is useful for counting live
+Table A streams to check that destroy-sweeps work.
 
 ### afp_get_layer_info (0x046)
 
-`afp_get_layer_info(layer_id, info_buf[60])` - afp-core `XCd229cc000046`. Fills a
-60-byte info struct. Accepts a LAYER id (0x1xxx / 0x2xxx), NOT a stream id (0x3xxx) - the internal
-id lookup rejects stream tags. Relevant fields:
+`afp_get_layer_info(layer_id, info_buf[60])`, afp-core `XCd229cc000046`. Fills a
+60-byte info struct. It takes a layer id (0x1xxx / 0x2xxx); the internal id lookup rejects
+stream tags, so a stream id (0x3xxx) does not work. Relevant fields:
 
-- `info+4` (u32): flags dword. Top-nibble bits observed empirically on IIDX 33 afp-core 2.14.18 by
+- `info+4` (u32): flags dword. Top-nibble bits observed on IIDX 33 afp-core 2.14.18 by
   running exp00.ifs (a one-shot 10-tick animation):
-  - `0x10000000` = "stream currently in a layer slot" - set on every live layer from the moment
+  - `0x10000000` = "stream currently in a layer slot": set on every live layer from the moment
     afp_stream_play returns until destroy.
   - `0x20000000` = "stream has finished its scripted timeline" latch. Set the moment the frame
     tick would otherwise advance past the last authored frame. Never cleared by afp-core; a fresh
@@ -192,7 +192,7 @@ stream+36 = create_level at play time.
 
 ### afp_mc_attach_stream (0x06e)
 
-`afp_mc_attach_stream(mc_id, data_id)` - afp-core `XCd229cc00006e`. Mounts a clip stream
+`afp_mc_attach_stream(mc_id, data_id)`, afp-core `XCd229cc00006e`. Mounts a clip stream
 (`data_id` = `(u32)info[3]` from afpu_afp_get_info_in_package) onto a movie clip as a child
 instance. bm2dx's CLayer item-clip mount uses this to put the qpro item's hand
 clip onto the avatar's qp_hand_l_neutral layer, so the item's per-frame HSL (the rainbow) plays
@@ -204,19 +204,19 @@ in the composite.
 per-op:
 
 - `0x1003` = set_xscale_yscale: arg = pointer to `{float x, float y}`. Verified in the afp-core
-  scale-property handler - writes to MC work +272 (_xscale) and +276 (_yscale), then flags
+  scale-property handler: it writes to MC work +272 (_xscale) and +276 (_yscale), then flags
   `+32 |= 0x40000` and `+36 |= 0x8` for re-render.
 - `0x1007` = visible: arg = int (0/1).
 - `0x101E` = invalidate: arg = int (1 to force re-evaluation of the MC's transform after a
   property change like _xscale).
 
 The binding types the arg as `intptr_t` so callers can pass either an integer (cast in) or a
-pointer to a stack-local struct - the dispatch reads r8 the same way regardless.
+pointer to a stack-local struct; the dispatch reads r8 the same way in both cases.
 
 ### afp_mc_set (0x072) - where the LABEL getters live
 
-`afp_mc_set(mc_id, code, ...)` - afp-core `XCd229cc000072`. Despite the "set" name this is where
-the label getters live (the label codes in afp_mc_get are stubbed to return -2; these are real).
+`afp_mc_set(mc_id, code, ...)`, afp-core `XCd229cc000072`. Despite the "set" name, the label
+getters live here (the label codes in afp_mc_get are stubs that return -2; these are real).
 Codes:
 
 - `0x101F` = label count: `afp_mc_set(mc, 0x101F, int* out_count)`.
@@ -225,11 +225,11 @@ Codes:
 
 The mc work must be "refered" first via `afp_stream_control(6, mc_id)` or it returns -4.
 Verified identical in SDVX 7 and IIDX 33 afp-core; the IIDX AFP debug viewer (CAfpViewerScene)
-uses exactly this.
+uses these codes.
 
 ### afp_mc_control (0x071) - op dispatcher, label and frame forms
 
-`afp_mc_control(mc_id, op, ...)` - afp-core `XCd229cc000071`, varargs
+`afp_mc_control(mc_id, op, ...)`, afp-core `XCd229cc000071`, varargs
 (`__int64(__int64 mc_id, unsigned int op, ...)`). Op codes:
 
 | Op | Meaning | 3rd arg |
@@ -243,35 +243,35 @@ uses exactly this.
 | 0xF0A | deep goto + stop (by frame, recursive) | int frame |
 | 0xF0B | deep_goto_stop_label (recursive) | const char* label |
 
-bm2dx uses 0xF09 deep_goto_play_label to kick the fcombo animation from its "in" label - see
+bm2dx uses 0xF09 deep_goto_play_label to start the fcombo animation from its "in" label; see
 `BM2D::CMovieClip::SetFrameLabel` in bm2dx.
 
 Frame-op internals (verified): for the frame ops the export reads the 3rd vararg as a QWORD and
-truncates to u32 for the target frame. Case 0xF08 -> the frame-clamp helper
+truncates it to u32 for the target frame. Case 0xF08 -> the frame-clamp helper
 (called as `(work, (unsigned int)frame)`) clamps frame >= total to total-1, then the deep-goto
-worker performs the deep goto. On x64 the 3rd
-arg sits in r8 for BOTH `int` and `const char*`, so reinterpret-casting the loaded 0x071 pointer
-to an `(int mc_id, uint32_t op, int frame)` signature is ABI-sound - the handler masks to 32
-bits. This is exactly how the binding creates `afp_mc_control_frame`: the SAME 0x071 pointer,
-reinterpret_cast in Load, NOT a second GetFunc.
+worker performs the deep goto. On x64 the 3rd arg sits in r8 for both `int` and `const char*`,
+so reinterpret-casting the loaded 0x071 pointer to an `(int mc_id, uint32_t op, int frame)`
+signature is ABI-sound, since the handler masks to 32 bits. The binding creates
+`afp_mc_control_frame` this way: it reinterpret_casts the same 0x071 pointer in Load instead of
+calling GetFunc a second time.
 
-The renderer's SEEK uses op 0xF08: the CAfpViewerScene LEFT/RIGHT seek wraps the bm2dx seek
-dispatcher -> SetFrame with a3=1, a4=1 -> op 0xF08. The frame is treated UNSIGNED by afp (a
-negative wraps huge and then clamps to total-1), so callers must low-clamp to 0 themselves. See
-the bm2dx AFP debug viewer's SEEK/STEP handling.
+The renderer's seek uses op 0xF08: the CAfpViewerScene LEFT/RIGHT seek wraps the bm2dx seek
+dispatcher -> SetFrame with a3=1, a4=1 -> op 0xF08. afp treats the frame as unsigned (a
+negative value wraps to a huge one and then clamps to total-1), so callers must clamp to 0
+themselves. See the bm2dx AFP debug viewer's SEEK/STEP handling.
 
 ### afp_mc_enumerate_children (0x079)
 
-`afp_mc_enumerate_children(mc_id, buf, buf_size, flags, out_ptr)` - afp-core `XCd229cc000079`
+`afp_mc_enumerate_children(mc_id, buf, buf_size, flags, out_ptr)`, afp-core `XCd229cc000079`
 (worker: the child-walk routine, verified in IIDX 33 afp-core). Walks the named child movie
 clips of mc_id, writes their names into `buf`, and publishes a pointer to the populated header
 into `*out_ptr`. Header layout (aligned to 4 inside buf):
 
-- u16 @ +0: WRITTEN count (names actually stored).
-- u16 @ +2: TOTAL count (children seen; may exceed written if buf ran short).
+- u16 @ +0: written count (names actually stored).
+- u16 @ +2: total count (children seen; may exceed written if buf ran short).
 - char* @ +8 + 8*i: pointer to child i's name string (8-byte stride).
 
-`flags`: bit0 = recurse into nested clips; bit1 = emit FULL "parent/child" paths (each name then
+`flags`: bit0 = recurse into nested clips; bit1 = emit full "parent/child" paths (each name then
 resolvable by afp_mc_get_id_by_path). The CAfpViewerScene F3 overlay passes flags=3.
 
 Returns: 0 ok; 0xFFFFFFFD (-3) null/too-small buf; 0xFFFFFFFC (-4) bad mc; 0xFFFFFFFB (-5)
@@ -280,14 +280,14 @@ the bm2dx AFP debug viewer's F3 DISP MC handling.
 
 ### afp_play_work_load_image (0x088) vs load_bitmap (0x087)
 
-`afp_play_work_load_image(mc_id, image_info, attach)` - afp-core `XCd229cc000088`.
-Binds a RAW image descriptor to the movie clip's bitmap, whereas 0x087
-(afp_play_work_load_bitmap) looks up a NAMED package bitmap in the IFS dictionary. SDVX's
+`afp_play_work_load_image(mc_id, image_info, attach)`, afp-core `XCd229cc000088`.
+Binds a raw image descriptor to the movie clip's bitmap, whereas 0x087
+(afp_play_work_load_bitmap) looks up a named package bitmap in the IFS dictionary. SDVX's
 submonitor bg uses 0x088 to attach a loose, runtime-decoded subbg_*.png frame to the
-subbg_usr/bg_usr placeholder layers (loose pngs are NOT in the package dictionary, so 0x087
+subbg_usr/bg_usr placeholder layers (loose pngs are not in the package dictionary, so 0x087
 cannot reach them).
 
-The two ops converge on the SAME final bind: the 0x088 worker builds a 16-byte
+Both ops end in the same final bind: the 0x088 worker builds a 16-byte
 descriptor from image_info via the descriptor builder, then the bind-store
 routine stores it in the work's afp property (23,81) and redraws.
 
@@ -303,20 +303,20 @@ routine stores it in the work's afp property (23,81) and redraws.
 | +0x14 | f32 | v0 |
 | +0x18 | f32 | v1 (UVs are 0..1 fractional) |
 
-`attach != 0` makes afp validate that the mc has a non-zero authored size. NOTE on the attach
-value: the afp_funcs.h note said "we pass 1 to mirror the game", but the actual mc_control
+`attach != 0` makes afp validate that the mc has a non-zero authored size. On the attach
+value: the afp_funcs.h note said "we pass 1 to mirror the game", but the mc_control
 helpers (BindImageToMc / BindClipImages, mirroring soundvoltex.dll SdvxSubmoniBg_Load's
 bind loop) pass attach=0 "per the game". The shipping code path uses attach=0; treat the
 "pass 1" note as superseded unless re-verified.
 
-**Re-pointing a clip's bitmap to a COMPANION package's image** (the qpro body-equip pattern):
+Re-pointing a clip's bitmap to a companion package's image (the qpro body-equip pattern):
 `SwapClipBitmapFromCompanion(pkg_id, stream_id, clip_name)` reproduces bm2dx's body-piece
 binder. It resolves the piece bitmap from the companion package by name (afpu image lookup ord
 0x046 into a 64-byte image_info, then image-to-stream-args ord 0x04c into a 40-byte descriptor)
 and re-points the whole clip sibling chain: find the clip via afp_mc_get_id_by_path, then for
 each sibling (walk with afp_mc_get_relative_id(mc, 6)) call afp_play_work_load_image(mc,
 descriptor, 0) and invalidate with afp_mc_get(mc, 0x101E, 1). This is how the game equips a
-body: each torso/limb clip (qp_body_f/b, qp_arm_*, qp_leg_*) adopts the companion bitmap's own
+body: each torso/limb clip (qp_body_f/b, qp_arm_*, qp_leg_*) takes the companion bitmap's own
 size and anchor, so pieces of any size (including empty placeholders and oversized pieces) bind
 correctly without touching a shared atlas. bm2dx's own binder walks the same chain and calls
 the same ords; the descriptor source is the companion package's afp data id.
@@ -326,7 +326,7 @@ the same ords; the descriptor source is the companion package's afp data id.
 `afp_set_flag_mask(stream_id, flags, mask)`: ORs `flags & mask` into the stream's flag byte at
 stream+8. bm2dx uses two bits:
 
-- bit 0x001 = "timeline advancing" (goes from 0 to 1 to kick animation).
+- bit 0x001 = "timeline advancing" (goes from 0 to 1 to start the animation).
 - bit 0x200 = "main stream" (set on the master at stream_play time).
 
 ## 3. afp-utils (AFPU 1.2.19) - ordinals and semantics
@@ -374,19 +374,19 @@ afpu_package_open_streams.
 
 ### afpuloc_get_first_package_id (0x038) - the "no package" sentinel
 
-`afpuloc_get_first_package_id()` - afp-utils `XE592acd000038`. Returns the id of the first
-loaded package, or **0xFFFFFFFE** when afpu holds no package at all. Its sibling
+`afpuloc_get_first_package_id()`, afp-utils `XE592acd000038`. Returns the id of the first
+loaded package, or 0xFFFFFFFE when afpu holds no package at all. Its sibling
 `afpuloc_get_package_id(name)` (0x037, `XE592acd000037`) returns the same 0xFFFFFFFE for an
 unknown name. Both are two-line wrappers: call the package-table lookup helper, return `*result`
 if non-null, else the literal `0xFFFFFFFE`. `afpu_package_control` (0x036) uses the same value as
-its "not found" return and logs `"%s package[%s] is not exist"` on that path, which is how the
-sentinel's meaning is confirmed rather than assumed.
+its "not found" return and logs `"%s package[%s] is not exist"` on that path, which confirms
+what the sentinel means.
 
 The renderer treats 0xFFFFFFFE (and 0) as "this archive has no AFP package" and fails the load
 with a message, instead of reporting success and drawing an empty screen
 (`AfpPackage::Resolve`, src/afp_package_id.cpp; see docs/boot_and_render_loop.md 4.3).
 
-**Re-finding it after a game update:** the export names are stable across versions
+To re-find it after a game update: the export names are stable across versions
 (`XE592acd0000NN` where NN = ordinal - 1, because `DllLoader` resolves by mangled name, not by
 ordinal number), so ordinals do not need re-deriving per build. To re-verify the sentinel, search
 the afp-utils string table for `package[%s] is not exist` and read the function that references
@@ -396,18 +396,18 @@ pop'n music 29 (afp-utils 1.2.28); both export 128 functions with the same ordin
 
 ### afpuloc_get_package_info (0x03f)
 
-`afpuloc_get_package_info(pkg_id, sel)` - afp-utils `XE592acd00003f`. Returns a
+`afpuloc_get_package_info(pkg_id, sel)`, afp-utils `XE592acd00003f`. Returns a
 packed version DWORD for the loaded package. `sel`: 1 = converter, 3 = package, 4 = afp (each a
 u32 read from the package info at +120 / +124 / +128 respectively). The DWORD packs the version
 as major = bits 16-31, minor = bits 8-15, patch = bits 0-7 (bm2dx's CAfpViewerScene prints
-`%d.%d.%d` = HIWORD, BYTE1, (u8) - verified in the bm2dx version-print routine). Returns 0 when the
+`%d.%d.%d` = HIWORD, BYTE1, (u8), verified in the bm2dx version-print routine). Returns 0 when the
 package id fails the resolver gate (which requires the
 `(id & 0x78000000) == 0x30000000` tag that the renderer's g_pkg_id carries). See
 the bm2dx AFP debug viewer's [FILE INFO] panel.
 
 ### afpuloc_get_version_string (0x03e)
 
-`afpuloc_get_version_string(pkg_id, sel)` - afp-utils `XE592acd00003e`. Returns a
+`afpuloc_get_version_string(pkg_id, sel)`, afp-utils `XE592acd00003e`. Returns a
 const char* engine-name string for the package (a table-stored char* via the string-table
 lookup).
 `sel` = 2 returns the converter engine name (null when the engine byte at info+42 is 0xFF).
@@ -416,19 +416,19 @@ null fallback.
 
 ### afpu_package_control (0x036)
 
-`afpu_package_control(cmd, pkg_id, reserved)` - per-package lifecycle op. Decoded from afp-utils
+`afpu_package_control(cmd, pkg_id, reserved)`: per-package lifecycle op. Decoded from afp-utils
 `XE592acd000036`; matches the call pattern of the bm2dx scene-teardown routine.
 
 - cmd == 6 with pkg_id = some id: unload that specific package.
-- cmd == 6 with pkg_id = 0x78000000: unload EVERY loaded package (sentinel value).
+- cmd == 6 with pkg_id = 0x78000000: unload every loaded package (sentinel value).
 - other cmds filter a locale-priority table (not used by the renderer).
 
-This is what properly releases MovieClip children left behind by afp_stream_destroy.
+This call properly releases the MovieClip children that afp_stream_destroy leaves behind.
 
 ## 4. avs2-core (2.17.00) - ordinals and the property (binary XML) API
 
 Ordinal table as loaded by `AvsFuncs::Load` (avs2-core 2.17.00 export table; the five property
-ordinals marked * were additionally confirmed via afp-utils.dll's import table against the same
+ordinals marked * were also confirmed via afp-utils.dll's import table against the same
 shipped avs2-core.dll):
 
 | Ordinal | Function |
@@ -475,18 +475,17 @@ casts.
 
 ### avs_gheap_allocate - 3 args, not 2 (burned by this)
 
-`avs_gheap_allocate(0, size, 0)` - signature verified via the decompilation of the bm2dx
-allocation wrapper: THREE
-args. The first and third are flags/tags the normal bm2dx caller leaves zero (internally AVS
-probably treats them as an allocation strategy hint and a debug/heap-tracking tag; zero =
-"default + untagged"). A 2-arg typedef is silently wrong on x64: with fastcall, `size`
+`avs_gheap_allocate(0, size, 0)` takes three args (signature verified via the decompilation of
+the bm2dx allocation wrapper). The first and third are flags/tags the normal bm2dx caller leaves
+zero (AVS probably treats them as an allocation strategy hint and a debug/heap-tracking tag;
+zero = "default + untagged"). A 2-arg typedef is silently wrong on x64: with fastcall, `size`
 lands in rcx (the first-arg slot) instead of rdx, and `alignment` in rdx instead of r8,
 corrupting the call.
 
 ### Binary-XML read chain (the pattern afp-utils itself uses)
 
-This is the exact chain afp-utils' own xml loader (the `afpu-ngp` xml loader)
-performs. All signatures verified against the raw disassembly.
+afp-utils' own xml loader (the `afpu-ngp` xml loader) performs this chain. All signatures are
+verified against the raw disassembly.
 
 1. Open the file: `fd = avs_fs_open(path, 1, 420)`.
 2. Query how many bytes the property tree will need:
@@ -495,13 +494,13 @@ performs. All signatures verified against the raw disassembly.
    through to the `_long` variant (which takes an extra 40-byte / 10-DWORD scratch buffer) that
    handles files too big for the short path; re-seek again after it.
 3. Allocate `memsize` bytes as the property-tree heap.
-4. `tree = property_create(flags, heap, memsize)` - flags 0x11 on the short path, 0x1011 on the
-   long path (bit 0x1000 differentiates them internally). See section 8 for the flag meanings.
+4. `tree = property_create(flags, heap, memsize)`: flags 0x11 on the short path, 0x1011 on the
+   long path (bit 0x1000 tells them apart internally). See section 8 for the flag meanings.
 5. `property_insert_read(tree, NULL /*parent*/, avs_fs_read, fd)` drives the parse; AVS calls the
    reader repeatedly until the stream is exhausted. Returns > 0 on success.
 6. `avs_fs_close(fd)`. The tree now owns a fully materialized DOM.
 
-The reader is a classic fd-style callback: `int reader(int fd, void* buf, int size)` - exactly
+The reader is a classic fd-style callback, `int reader(int fd, void* buf, int size)`, which is
 avs_fs_read's shape. Any compatible reader can be plugged in if the data is not on the AVS
 filesystem.
 
@@ -513,29 +512,29 @@ reader's first arg). The reader is called repeatedly with `(ctx, buf, size)` unt
 
 ### property_node_traversal directions - two conflicting notes
 
-Two different direction mappings were documented in the code and MUST be reconciled against
-the avs2-core E_PROPERTY_TRAVERSE enum when next touched:
+The code documented two different direction mappings, and they must be reconciled against the
+avs2-core E_PROPERTY_TRAVERSE enum the next time this code changes:
 
 - avs_funcs.h claimed: 0 = first
   child, 1 = next sibling, 2 = parent, 3 = previous sibling.
-- avs_xml.h (this is the one exercised by working
-  code - TRAVERSE_NEXT_MATCH = 7 is used successfully by the shipping XML walker):
+- avs_xml.h (the one working code uses: the shipping XML walker uses
+  TRAVERSE_NEXT_MATCH = 7 successfully):
   0 = PARENT, 1 = FIRST_CHILD, 2 = FIRST_ATTR, 3 = FIRST_SIBLING, 4 = NEXT_SIBLING,
   5 = PREV_SIBLING, 6 = LAST_SIBLING, 7 = NEXT_MATCH (next sibling with the same tag name),
   8 = LAST_MATCH.
 
-Treat the avs_xml.h enum as authoritative (it is verified by use); the avs_funcs.h comment is
-likely a stale paraphrase.
+Treat the avs_xml.h enum as authoritative, since working code uses it; the avs_funcs.h comment
+is likely a stale paraphrase.
 
 ## 5. DDR World (AFP 2.13.7) - libafp-win64 / libafputils-win64
 
-These tables are the 2.13.7 equivalent of the modern afp/afpu tables, NOT a substitute: they
-drive DDR's own DLLs, resolved BY NAME (readable exports; DllLoader auto-detects this scheme).
-Signatures were RE'd from gamemdx's API usage plus libafp/libafputils decomp.
+These tables are the 2.13.7 counterpart of the modern afp/afpu tables and exist alongside them:
+they drive DDR's own DLLs, resolved by name (readable exports; DllLoader auto-detects this
+scheme). Signatures were RE'd from gamemdx's API usage plus libafp/libafputils decomp.
 
-Load-gate (afp): afp_boot, afp_do_render, afp_do_display. afp_mc_op is deliberately OPTIONAL
-(like afp_layer_set_attribute) - seek fails soft if a future libafp build drops the export, so
-it is kept OUT of the return gate. Load-gate (afpu): afpu_boot, afpu_set_afp_render_params,
+Load-gate (afp): afp_boot, afp_do_render, afp_do_display. afp_mc_op is optional on purpose
+(like afp_layer_set_attribute): seek fails soft if a future libafp build drops the export, so
+it is kept out of the return gate. Load-gate (afpu): afpu_boot, afpu_set_afp_render_params,
 afpu_set_render_params.
 
 ### Core loop
@@ -545,24 +544,24 @@ afpu_set_render_params.
   depth-sorts and draws.
 - `afp_stream_do_create(data_id, a2, a3)` makes a stream from loaded package data.
 
-### afp_system_set_attribute - TWO args (burned by this)
+### afp_system_set_attribute - two args (burned by this)
 
 `afp_system_set_attribute(mask, value)`: the global system-flags word becomes
-`value | (flags & ~mask)`. It takes
-TWO args - calling it with one leaves `value` as a garbage register, polluting the global system
-flags. Those flags are read by afp_layer_create_with_property, the draw routine,
-and the shape creators; bit 1 gates the set_mask stencil clip.
+`value | (flags & ~mask)`. It takes two args; calling it with one leaves `value` as whatever is
+in the register, which corrupts the global system flags. Those flags are read by
+afp_layer_create_with_property, the draw routine, and the shape creators; bit 1 gates the
+set_mask stencil clip.
 
 The afputils twin has the same trap: `afpu_system_set_attributes(mask, value)`: the afputils
-global becomes `value | (*g & ~mask)` (libafputils). One-arg calls leave `value` garbage,
-polluting the afputils global that governs shape/stream interpretation.
+global becomes `value | (*g & ~mask)` (libafputils). One-arg calls leave `value` as garbage and
+corrupt the afputils global that governs shape/stream interpretation.
 
 ### Layers
 
 - `afp_layer_create_with_property(stream_id, path, 0, 0) -> layer_id`.
-  Creates a visible layer instance of a stream; the LAYER is what afp_do_render/afp_do_display
-  actually iterate. `afp_id_is_valid(5, id)` checks a layer id. `afp_layer_set_priority(layer,
-  prio)` sets draw order.
+  Creates a visible layer instance of a stream; afp_do_render/afp_do_display iterate layers.
+  `afp_id_is_valid(5, id)` checks a layer id. `afp_layer_set_priority(layer, prio)` sets draw
+  order.
 - `afp_layer_set_attribute(layer_id, mask, value)` (flags live at layer+0;
   default flags from create = 0x1000001F): clears the `mask` bits in the layer flag word and
   sets the `value` bits. gamemdx's BM2D layer-attach calls
@@ -571,15 +570,15 @@ polluting the afputils global that governs shape/stream interpretation.
   routine).
 - `afp_layer_mc_refer(layer_id, "/") -> root mc id`, for per-clip control.
 - `afp_layer_stop(layer_id)` = afp_movie_work_free: frees the layer's
-  play-data and RE-INITIALIZES it to frame 0 with the SAME stream (calls the layer-init
-  routine). Effectively a rewind-to-frame-0 that keeps the texture streams - used to
-  loop a background's authored section. The real game loops e.g. background_0009 over subpos
+  play-data and re-initializes it to frame 0 with the same stream (calls the layer-init
+  routine). In effect it rewinds to frame 0 and keeps the texture streams, which is how a
+  background's authored section is looped. The real game loops e.g. background_0009 over subpos
   10..132 and never free-runs into the frame ~316 "swipe" outro.
 - `afp_layer_play(layer_id, rate)`: sets the layer's play rate (layer+44)
   and clears the stopped flag. afp_layer_stop leaves rate = 0 (frozen), so after a stop-rewind
   call `afp_layer_play(layer, 1.0f)` to resume normal 1x playback.
 - `afp_layer_get_info(layer_id, out_info, 0)`: fills out_info (>= 60 bytes). Fields used:
-  `out_info[1]` (+4) = layer flags - bit 0x40000000 is set on the frame the ROOT timeline wraps
+  `out_info[1]` (+4) = layer flags; bit 0x40000000 is set on the frame the root timeline wraps
   back to frame 0 (afp_advance_play_data). `out_info[6]` = frame divisor,
   `out_info[13]` = current sub-frame position.
 
@@ -598,33 +597,32 @@ from their embedded `pw_get_*` error-string names):
 | 0x101F | pw_get_label_nr | label count |
 | 0x1020 | pw_get_label_name | by index -> frame + a NUMERIC name token (not text) |
 
-The authored VISIBLE loop length is no single field: it is (current_frame wrap point minus the
-"loop" label frame), read live during playback. The movie clip is still the right object to read
-the timeline from - afp_layer_get_info reads the LAYER (a container whose integer frame stays
-0), not the clip. Because 0x1020 returns a numeric token rather than text, query-by-name via
-0x1012 is the reliable path for known label names.
+No single field holds the authored visible loop length: it is (current_frame wrap point minus
+the "loop" label frame), read live during playback. Read the timeline from the movie clip:
+afp_layer_get_info reads the layer (a container whose integer frame stays 0), not the clip.
+Because 0x1020 returns a numeric token instead of text, query-by-name via 0x1012 is the
+reliable path for known label names.
 
 ### afp_mc_op - MovieClip op dispatcher
 
 `afp_mc_op(mc_id, op, ...)`. Op 0xF08 (decimal 3848) = afp_mc_deep_goto_play(frame): seek +
-resume play, recursing into child clips (DDR's bg_root has children). The frame is the FIRST
-vararg (read as a 32-bit int) and is clamped to [0, total-1] internally. This is the SAME
-op-code family the modern afp-core path drives via afp_mc_control (section 2, ord 0x071); it
-CONTRADICTS an earlier "no goto-label API" assumption - the dispatcher is
-present, just renamed (modern afp-core mangles it as afp_mc_control / ordinal 0x071). The
-binding creates a typed frame overload by reinterpreting the same pointer (on x64 the frame
-lands in r8 for both the varargs and typed forms and the handler masks it to a DWORD - identical
-to the modern afp_mc_control / afp_mc_control_frame pair). Label ops take a `const char*`
-instead.
+resume play, recursing into child clips (DDR's bg_root has children). The frame is the first
+vararg (read as a 32-bit int) and is clamped to [0, total-1] internally. This is the same
+op-code family the modern afp-core path drives via afp_mc_control (section 2, ord 0x071). An
+earlier assumption that there was no goto-label API was wrong: the dispatcher is present under
+another name (modern afp-core mangles it as afp_mc_control / ordinal 0x071). The binding
+creates a typed frame overload by reinterpreting the same pointer (on x64 the frame lands in r8
+for both the varargs and typed forms and the handler masks it to a DWORD, the same as the
+modern afp_mc_control / afp_mc_control_frame pair). Label ops take a `const char*` instead.
 
 ### afp_stream_get_info - version word trap
 
-`afp_stream_get_info(stream_id, out_info)`: `out_info+2` (u16) is the AFP DATA FORMAT VERSION
-word (= `*(stream_data + 12)`; it reads 512 = 0x200 for EVERY clip - the raw parser
-gates it with `if (ver < 256) "afp data version ... not supported"`), NOT a
+`afp_stream_get_info(stream_id, out_info)`: `out_info+2` (u16) is the AFP data format version
+word (= `*(stream_data + 12)`; it reads 512 = 0x200 for every clip, and the raw parser
+gates it with `if (ver < 256) "afp data version ... not supported"`). It is not a
 frame count. Only `out_info+16` / `out_info+18` (u16 width/height) are usable from this struct.
-There is NO timeline-length field on it: afp's frame count is
-`afp_mc_get_param(mc, 0x1011)` (pw_get_total_frame), and the authored VISIBLE loop is the
+It has no timeline-length field: afp's frame count is
+`afp_mc_get_param(mc, 0x1011)` (pw_get_total_frame), and the authored visible loop is the
 current_frame (0x1010) wrap versus the "loop" label (0x1012).
 
 ### libafputils specifics
@@ -633,12 +631,12 @@ current_frame (0x1010) wrap versus the "loop" label (0x1012).
   entry; exact args to be refined when wiring more content).
 - `afpu_get_afp_info_at_package(out_info, data_id, clip_name)`: finds the afp clip in the
   package whose name == clip_name (strcmp via avs `XCnbrep70000e4`) and fills out_info - path at
-  +16, stream_id at +24 (out+24 = clip+32, out+16 = clip+16). CRITICAL: the THIRD arg (r8,
-  clip_name) is real - Hex-Rays shows only 2 args, but the wrapper does `mov r15, r8` and the
-  walk compares each clip name against it; passing garbage there faults. Mirrors the gamemdx
-  BM2D layer-attach, which forwards its own path arg through r8.
+  +16, stream_id at +24 (out+24 = clip+32, out+16 = clip+16). The third arg (r8, clip_name) is
+  real: Hex-Rays shows only 2 args, but the wrapper does `mov r15, r8` and the walk compares
+  each clip name against it, so passing garbage there faults. This mirrors the gamemdx BM2D
+  layer-attach, which forwards its own path arg through r8.
 - `afpu_get_texture_bind_id(afp_tex_id) -> bind slot index` (the order the create_texture
-  callback returned ids in). draw_primitive's `params[2]` is an afp texture id that MUST be run
+  callback returned ids in). draw_primitive's `params[2]` is an afp texture id that must go
   through this to index the renderer's texture array.
 
 ## 6. Raw data offsets (dll_offsets.h)
@@ -706,25 +704,25 @@ Image binding (the SDVX submonitor path):
   (floats). texid = slot-1 so SubmitGeometry's legacy resolve (`(tex_ref & 0xFFFF) + 1`) maps it
   back to `g_textures[slot]`. Full-frame UVs (0..1). It calls afp_play_work_load_image with
   attach = 0, matching the game, then fires invalidate (0x101E).
-- BindClipImages mirrors SdvxSubmoniBg_Load's bind loop EXACTLY (soundvoltex.dll): bind
-  frame[0]'s image to the resolved holder AND every
+- BindClipImages mirrors SdvxSubmoniBg_Load's bind loop (soundvoltex.dll) step for step: bind
+  frame[0]'s image to the resolved holder and every
   same-name sibling (dir 6), attach = 0. The slideshow cross-fade path instead uses
   BindImageToMc per sibling (driven from the render loop).
-- ResolveSiblings exists because SDVX's r3_fade cross-fade clip "bg_usr" has TWO same-name
-  siblings - the depth-2 base and the depth-3 overlay - that the slideshow cycles frames
+- ResolveSiblings exists because SDVX's r3_fade cross-fade clip "bg_usr" has two same-name
+  siblings (the depth-2 base and the depth-3 overlay) that the slideshow cycles frames
   through.
 
-EnumerateClips: an EMPTY path passed to afp_mc_get_id_by_path resolves to the stream's root
+EnumerateClips: an empty path passed to afp_mc_get_id_by_path resolves to the stream's root
 clip. The walker steps to "first in tree" (dir 2) and then advances with "next in DFS pre-order"
 (dir 3), with a max_clips safety cap.
 
 ## 8. AVS binary XML (avs_xml)
 
-IFS files ship their manifests (texturelist.xml, afplist.xml, etc.) as AVS-binary-XML: a
-compact, typed binary format that starts with the magic bytes 0xA0 0x42 and is NOT plain text.
-History note: an earlier parser in ifs_inspect.cpp did a brittle string-search over the raw
-bytes and silently returned zero matches whenever the file was binary-encoded - which is every
-shipping IFS. The AvsXml module instead drives AVS's own property API, mirroring afp-utils' own
+IFS files ship their manifests (texturelist.xml, afplist.xml, etc.) as AVS-binary-XML, a
+compact, typed binary format that starts with the magic bytes 0xA0 0x42 and is not plain text.
+An earlier parser in ifs_inspect.cpp did a brittle string-search over the raw bytes and
+silently returned zero matches whenever the file was binary-encoded, which every shipping IFS
+is. The AvsXml module drives AVS's own property API instead, mirroring afp-utils' own
 xml loader; all constants and call shapes are verified against afp-utils' xml loader and its
 layoutlist.xml walker.
 
@@ -747,43 +745,42 @@ E_PROPERTY_TYPE values used:
 - TYPE_STR = 0x0B.
 - TYPE_4U16 = 0x27 (four u16s from a child node, e.g. texture rects).
 
-Attribute-read convention: the path is the attribute name with a TRAILING '@' (e.g. "name@").
+Attribute-read convention: the path is the attribute name with a trailing '@' (e.g. "name@").
 Verified against the afp-utils layoutlist.xml walker:
 `XCgsqzn00000af(0, v8, "name@", 46, v18, 64)` which is
-`property_node_refer(tree=0, node=v8, "name@", 46, buf, 64)` - note the tree argument may be
+`property_node_refer(tree=0, node=v8, "name@", 46, buf, 64)`; the tree argument may be
 NULL for node-relative reads. property_search usage `(tree, starting_node=null, path)` with a
 slash-separated tag chain including the root element (e.g. "texturelist/texture") matches
 the afp-utils layoutlist.xml walker, which does
 `property_search(tree, null, "layoutlist/group")`.
 
 File-open parameters: `avs_fs_open(path, 1, 420)` (flags 1, mode 420 = octal 0644). An fd <= 0
-is normal for optional files - callers treat an empty PropertyTree as "file absent, move on".
+is normal for optional files; callers treat an empty PropertyTree as "file absent, move on".
 AVS auto-detects binary vs plain-text XML in property_insert_read.
 
-Lifetime rules (PropertyTree): the handle owns BOTH the parsed tree and the heap buffer it lives
-in. Teardown order matters: property_destroy the tree FIRST (it may touch the heap memory it was
-built into), THEN avs_gheap_free the heap. Both calls tolerate null. The handle is move-only -
-copying would double-free the heap.
+Lifetime rules (PropertyTree): the handle owns both the parsed tree and the heap buffer it lives
+in. Call property_destroy on the tree first (it may touch the heap memory it was built into),
+then avs_gheap_free on the heap. Both calls tolerate null. The handle is move-only, because
+copying it would double-free the heap.
 
 ## 9. Process globals, COM guard, logging
 
 app_globals.h holds process-wide singletons (one DLL set, one set of resolved function tables,
 one D3D9 device, one AFP render context), defined `inline` so main.cpp, boot.cpp and
-render_loop.cpp all see the SAME instance - these used to be file-statics in main.cpp before it
+render_loop.cpp all see the same instance. They were file-statics in main.cpp before main.cpp
 was split for the 1000-line file limit.
 
 Backend routing history: the old `g_ddr_mode` global (and later the
 `profile->legacy_afp` flag) chose between the legacy AFP 2.13.7 (DDR World)
 path (DdrAfp) and the modern afp-core path (AfpManager). Both are gone: the
 choice is `Profile::backend_id` resolved by the `Backend::CreateActive`
-registry (docs/backend.md). The load-bearing mechanism is unchanged: in DDR
-mode the modern g_afp / g_afpu tables stay null so any modern per-frame code
-self-skips on its null checks.
+registry (docs/backend.md). The mechanism the code relies on is unchanged: in DDR
+mode the modern g_afp / g_afpu tables stay null, so any modern per-frame code
+skips itself on its null checks.
 
 ComPtr (com_ptr.h) is a minimal COM release guard for D3D9 interfaces, not a full CComPtr.
-Contract worth keeping: `operator&` Resets (releases) before handing out the address (for
-overwrite-style APIs), while `GetAddressOf()` does NOT reset - use it only when the pointer is
-known to be null.
+`operator&` Resets (releases) before handing out the address (for overwrite-style APIs), while
+`GetAddressOf()` does not reset, so use it only when the pointer is known to be null.
 
 Logging (log.{h,cpp}): Log::Init allocates a console, redirects stdout/stderr to it, and opens
 `renderer.log` in the current working directory (so the log path is CWD-relative). Both the file
@@ -801,4 +798,4 @@ and stdout are set unbuffered so output survives crashes without fflush calls. L
   SdvxSubmoniBg_Load). The code path in use is attach = 0; re-verify against the live game if the
   submonitor bind ever misbehaves.
 - afp_stream_do_create / afpu_do_create_stream_all (DDR): argument shapes were only partially
-  RE'd ("refined when wiring content") - treat trailing args as unknown until re-verified.
+  RE'd ("refined when wiring content"); treat trailing args as unknown until re-verified.
